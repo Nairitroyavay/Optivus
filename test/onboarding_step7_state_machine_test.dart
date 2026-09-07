@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/skin_care_product_draft.dart';
 import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_state.dart';
 import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_controller.dart';
 import 'package:optivus/state/app_state.dart';
@@ -28,6 +29,22 @@ List<TimelineBlockDraft> _fullWeekSkinBlocks(int timesPerDay) {
     }
   }
   return blocks;
+}
+
+List<TimelineBlockDraft> _tagBlocks(
+  List<TimelineBlockDraft> blocks,
+  String fingerprint,
+) {
+  final token = 'skin-care-generation:$fingerprint';
+  return blocks
+      .map(
+        (b) => b.section == 'skin_care'
+            ? b.copyWith(
+                provenanceSourceIds: {...b.provenanceSourceIds, token}.toList(),
+              )
+            : b,
+      )
+      .toList();
 }
 
 void main() {
@@ -334,6 +351,291 @@ void main() {
         expect(
           container.read(skinCareFlowControllerProvider).state,
           SkinCareFlowState.hasProductsInput,
+        );
+      },
+    );
+
+    test(
+      'Exact null-optional rollback restores null fields and routine currentness',
+      () {
+        final controller = container.read(
+          skinCareFlowControllerProvider.notifier,
+        );
+
+        // Valid has-products Plan A with null optional fields
+        var base = const BaseTimelineDraft().copyWith(
+          skinCareSetupPath: 'has_products',
+          skinCareSetupStep: 1,
+          skinCareProductNames: 'Gentle Cleanser',
+          skinCareReviewedProducts: const [
+            SkinCareDetectedProduct(name: 'Gentle Cleanser'),
+          ],
+        );
+        final fp = base.computeSkinCareRoutineFingerprint();
+        final taggedBlocks = _tagBlocks([
+          _bathBlock(),
+          ..._fullWeekSkinBlocks(2),
+        ], fp);
+        base = base.copyWith(
+          skinCareRoutineFingerprint: fp,
+          blocks: taggedBlocks,
+        );
+
+        container
+            .read(mockOnboardingProvider.notifier)
+            .updateDraft((d) => d.copyWith(baseTimeline: base));
+
+        expect(base.skinCareSkinType, isNull);
+        expect(base.skinCareBudget, isNull);
+        expect(base.skinCarePreference, isNull);
+        expect(base.isSkinCareRoutineCurrent(testUid), isTrue);
+
+        // Start editing: snapshot has null optional fields
+        controller.startEditing(base);
+        expect(
+          container.read(skinCareFlowControllerProvider).state,
+          SkinCareFlowState.hasProductsEditing,
+        );
+
+        // Mutate optional fields to non-null values
+        container
+            .read(mockOnboardingProvider.notifier)
+            .updateDraft(
+              (d) => d.copyWith(
+                baseTimeline: d.baseTimeline.copyWith(
+                  skinCareSkinType: 'oily',
+                  skinCareBudget: 'high',
+                  skinCarePreference: 'balanced',
+                ),
+              ),
+            );
+
+        final dirtyBase = container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline;
+        expect(dirtyBase.skinCareSkinType, 'oily');
+        expect(dirtyBase.isSkinCareRoutineCurrent(testUid), isFalse);
+
+        // Cancel editing: must restore exact null values
+        controller.cancelEditing();
+
+        final restoredBase = container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline;
+        expect(restoredBase.skinCareSkinType, isNull);
+        expect(restoredBase.skinCareBudget, isNull);
+        expect(restoredBase.skinCarePreference, isNull);
+        expect(restoredBase.skinCareRoutineFingerprint, fp);
+        expect(restoredBase.isSkinCareRoutineCurrent(testUid), isTrue);
+        expect(
+          container.read(skinCareFlowControllerProvider).state,
+          SkinCareFlowState.hasProductsReview,
+        );
+      },
+    );
+
+    test('handleBack during edit mode restores exact null optional fields', () {
+      final controller = container.read(
+        skinCareFlowControllerProvider.notifier,
+      );
+
+      var base = const BaseTimelineDraft().copyWith(
+        skinCareSetupPath: 'has_products',
+        skinCareSetupStep: 1,
+        skinCareProductNames: 'Gentle Cleanser',
+        skinCareReviewedProducts: const [
+          SkinCareDetectedProduct(name: 'Gentle Cleanser'),
+        ],
+      );
+      final fp = base.computeSkinCareRoutineFingerprint();
+      final taggedBlocks = _tagBlocks([
+        _bathBlock(),
+        ..._fullWeekSkinBlocks(2),
+      ], fp);
+      base = base.copyWith(
+        skinCareRoutineFingerprint: fp,
+        blocks: taggedBlocks,
+      );
+
+      container
+          .read(mockOnboardingProvider.notifier)
+          .updateDraft((d) => d.copyWith(baseTimeline: base));
+
+      controller.startEditing(base);
+
+      container
+          .read(mockOnboardingProvider.notifier)
+          .updateDraft(
+            (d) => d.copyWith(
+              baseTimeline: d.baseTimeline.copyWith(
+                skinCareSkinType: 'dry',
+                skinCareBudget: 'low',
+                skinCarePreference: 'active',
+              ),
+            ),
+          );
+
+      final handled = controller.handleBack();
+      expect(handled, isTrue);
+
+      final restoredBase = container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline;
+      expect(restoredBase.skinCareSkinType, isNull);
+      expect(restoredBase.skinCareBudget, isNull);
+      expect(restoredBase.skinCarePreference, isNull);
+      expect(restoredBase.isSkinCareRoutineCurrent(testUid), isTrue);
+    });
+
+    test(
+      'Skip -> Back is durable and survives subsequent draft updates and cold derivation',
+      () {
+        final controller = container.read(
+          skinCareFlowControllerProvider.notifier,
+        );
+
+        // Setup skipped state
+        container
+            .read(mockOnboardingProvider.notifier)
+            .updateDraft(
+              (d) => d.copyWith(
+                baseTimeline: d.baseTimeline.copyWith(
+                  skinCareSetupPath: 'skip',
+                  skinCareSetupStep: 1,
+                  skinCareSkipped: true,
+                ),
+              ),
+            );
+
+        controller.transitionTo(SkinCareFlowState.skipped);
+        expect(
+          container.read(skinCareFlowControllerProvider).state,
+          SkinCareFlowState.skipped,
+        );
+
+        // Tap Back from skipped
+        final handled = controller.handleBack();
+        expect(handled, isTrue);
+        expect(
+          container.read(skinCareFlowControllerProvider).state,
+          SkinCareFlowState.choice,
+        );
+
+        final draftAfterBack = container.read(mockOnboardingProvider).draft;
+        expect(draftAfterBack.baseTimeline.skinCareSkipped, isFalse);
+        expect(draftAfterBack.baseTimeline.skinCareSetupPath, isNull);
+        expect(draftAfterBack.baseTimeline.skinCareSetupStep, 0);
+
+        // An unrelated draft update must not revert back to skipped
+        container
+            .read(mockOnboardingProvider.notifier)
+            .updateDraft((d) => d.copyWith(welcomeSaved: true));
+        expect(
+          container.read(skinCareFlowControllerProvider).state,
+          SkinCareFlowState.choice,
+        );
+
+        // Cold derivation also reconstructs choice
+        final derived = deriveSkinCareFlowState(
+          container.read(mockOnboardingProvider).draft.baseTimeline,
+          testUid,
+        );
+        expect(derived, SkinCareFlowState.choice);
+      },
+    );
+
+    test(
+      'User A editing -> User B account switch discards User A transient state',
+      () {
+        final controller = container.read(
+          skinCareFlowControllerProvider.notifier,
+        );
+
+        var baseA = const BaseTimelineDraft().copyWith(
+          skinCareSetupPath: 'has_products',
+          skinCareSetupStep: 1,
+          skinCareProductNames: 'User A Products',
+          blocks: [_bathBlock(), ..._fullWeekSkinBlocks(2)],
+        );
+        baseA = baseA.copyWith(
+          skinCareRoutineFingerprint: baseA.computeSkinCareRoutineFingerprint(),
+        );
+
+        container
+            .read(mockOnboardingProvider.notifier)
+            .updateDraft((d) => d.copyWith(uid: 'user-a', baseTimeline: baseA));
+        controller.syncFromDraft(baseA, 'user-a', authGeneration: 1);
+
+        controller.startEditing(baseA);
+        final editingState = container.read(skinCareFlowControllerProvider);
+        expect(editingState.state, SkinCareFlowState.hasProductsEditing);
+        expect(editingState.ownerUid, 'user-a');
+        expect(editingState.planASnapshot, isNotNull);
+
+        // Switch to User B (different UID and authGeneration)
+        final baseB = const BaseTimelineDraft(); // User B has no setup yet
+        controller.syncFromDraft(baseB, 'user-b', authGeneration: 2);
+
+        final stateB = container.read(skinCareFlowControllerProvider);
+        expect(stateB.state, SkinCareFlowState.choice);
+        expect(stateB.ownerUid, 'user-b');
+        expect(stateB.authGeneration, 2);
+        expect(stateB.planASnapshot, isNull);
+      },
+    );
+
+    test(
+      'completeGeneration routes intermediate generations correctly based on origin',
+      () {
+        final controller = container.read(
+          skinCareFlowControllerProvider.notifier,
+        );
+
+        // 1. Rebuild no-products: origin is noProductsEditing
+        controller.transitionTo(SkinCareFlowState.noProductsEditing);
+        controller.startGeneration(SkinCareFlowState.noProductsFindingProducts);
+        expect(
+          container.read(skinCareFlowControllerProvider).generationOrigin,
+          SkinCareFlowState.noProductsEditing,
+        );
+
+        controller.completeGeneration();
+        // Must stay in noProductsEditing so user can select recommendations in the editor
+        expect(
+          container.read(skinCareFlowControllerProvider).state,
+          SkinCareFlowState.noProductsEditing,
+        );
+
+        // 2. Rebuild has-products: origin is hasProductsEditing
+        controller.transitionTo(SkinCareFlowState.hasProductsEditing);
+        controller.startGeneration(SkinCareFlowState.hasProductsGenerating);
+        expect(
+          container.read(skinCareFlowControllerProvider).generationOrigin,
+          SkinCareFlowState.hasProductsEditing,
+        );
+
+        controller.completeGeneration();
+        // Must stay in hasProductsEditing so user can review detected products in the editor
+        expect(
+          container.read(skinCareFlowControllerProvider).state,
+          SkinCareFlowState.hasProductsEditing,
+        );
+
+        // 3. First time setup no-products: origin is noProductsInput
+        controller.transitionTo(SkinCareFlowState.noProductsInput);
+        controller.startGeneration(SkinCareFlowState.noProductsFindingProducts);
+        expect(
+          container.read(skinCareFlowControllerProvider).generationOrigin,
+          SkinCareFlowState.noProductsInput,
+        );
+
+        controller.completeGeneration();
+        expect(
+          container.read(skinCareFlowControllerProvider).state,
+          SkinCareFlowState.noProductsProductSelection,
         );
       },
     );

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/skin_care_product_draft.dart';
 import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_controller.dart';
 import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_state.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
@@ -385,6 +386,204 @@ void main() {
         expect(
           container.read(skinCareFlowControllerProvider).state,
           SkinCareFlowState.noProductsReview,
+        );
+      },
+    );
+
+    test(
+      'No-products rebuild: details -> find products stays in noProductsEditing with snapshot preserved, and cancel restores Plan A recommendations',
+      () {
+        final controller = container.read(
+          skinCareFlowControllerProvider.notifier,
+        );
+        final baseBefore = container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline;
+
+        expect(baseBefore.isSkinCareRoutineCurrent(testUid), isTrue);
+
+        // Enter rebuild/edit
+        controller.startEditing(baseBefore);
+        expect(
+          container.read(skinCareFlowControllerProvider).state,
+          SkinCareFlowState.noProductsEditing,
+        );
+
+        // Change details and trigger find products
+        controller.startGeneration(SkinCareFlowState.noProductsFindingProducts);
+        expect(
+          container.read(skinCareFlowControllerProvider).generationOrigin,
+          SkinCareFlowState.noProductsEditing,
+        );
+
+        // New recommendations received from AI
+        const newRecs = [
+          SkinCareProductRecommendationDraft(
+            category: 'cleanser',
+            brand: 'CeraVe',
+            name: 'CeraVe Hydrating Cleanser',
+            estimatedPrice: '15',
+            currencyCode: 'USD',
+            reason: 'Gentle hydration',
+          ),
+          SkinCareProductRecommendationDraft(
+            category: 'moisturizer',
+            brand: 'CeraVe',
+            name: 'CeraVe Moisturizing Cream',
+            estimatedPrice: '18',
+            currencyCode: 'USD',
+            reason: 'Barrier support',
+          ),
+          SkinCareProductRecommendationDraft(
+            category: 'sunscreen',
+            brand: 'CeraVe',
+            name: 'CeraVe AM Facial Lotion SPF 30',
+            estimatedPrice: '19',
+            currencyCode: 'USD',
+            reason: 'Daily UV filter',
+          ),
+        ];
+
+        container.read(mockOnboardingProvider.notifier).updateDraft((d) {
+          final withRecs = d.baseTimeline.copyWith(
+            skinCareProductRecommendations: newRecs,
+            skinCareSelectedProductNames: const ['CeraVe Hydrating Cleanser'],
+          );
+          return d.copyWith(
+            baseTimeline: withRecs.copyWith(
+              skinCareRecommendationFingerprint: withRecs
+                  .computeSkinCareRecommendationFingerprint(),
+            ),
+          );
+        });
+
+        // completeGeneration must keep user in noProductsEditing
+        controller.completeGeneration();
+
+        final stateAfterFind = container.read(skinCareFlowControllerProvider);
+        expect(stateAfterFind.state, SkinCareFlowState.noProductsEditing);
+        expect(stateAfterFind.planASnapshot, isNotNull);
+
+        // Plan A blocks are still preserved in draft
+        final currentBase = container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline;
+        final currentBlocks = currentBase.confirmedBlocksForSection(
+          'skin_care',
+        );
+        expect(currentBlocks, hasLength(2));
+        expect(
+          currentBlocks.every((b) => b.title.startsWith('Plan A')),
+          isTrue,
+        );
+        expect(currentBase.skinCareProductRecommendations, newRecs);
+
+        // Now cancel editing: must restore original Plan A recommendations and fingerprints
+        controller.cancelEditing();
+
+        final restoredBase = container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline;
+        expect(restoredBase.skinCareProductRecommendations, _testRecs);
+        expect(restoredBase.skinCareSelectedProductNames, _testSelected);
+        expect(
+          restoredBase.skinCareRecommendationFingerprint,
+          baseBefore.skinCareRecommendationFingerprint,
+        );
+        expect(
+          restoredBase.skinCareRoutineFingerprint,
+          baseBefore.skinCareRoutineFingerprint,
+        );
+        expect(restoredBase.isSkinCareRoutineCurrent(testUid), isTrue);
+        expect(
+          container.read(skinCareFlowControllerProvider).state,
+          SkinCareFlowState.noProductsReview,
+        );
+      },
+    );
+
+    test(
+      'Has-products photo rebuild: photo re-analysis stays in hasProductsEditing with snapshot preserved',
+      () {
+        final controller = container.read(
+          skinCareFlowControllerProvider.notifier,
+        );
+
+        // Setup has-products Plan A
+        var hpBase = const BaseTimelineDraft().copyWith(
+          skinCareSetupPath: 'has_products',
+          skinCareSetupStep: 1,
+          skinCareProductNames: 'Original Cleanser',
+          skinCareReviewedProducts: const [
+            SkinCareDetectedProduct(name: 'Original Cleanser'),
+          ],
+        );
+        final hpRoutineFp = hpBase.computeSkinCareRoutineFingerprint();
+        final hpBlocks = _tagBlocks([
+          _bathBlock(),
+          ..._fullWeekSkinBlocks(2, prefix: 'HP Plan A'),
+        ], hpRoutineFp);
+        hpBase = hpBase.copyWith(
+          skinCareRoutineFingerprint: hpRoutineFp,
+          blocks: hpBlocks,
+        );
+
+        container
+            .read(mockOnboardingProvider.notifier)
+            .updateDraft((d) => d.copyWith(baseTimeline: hpBase));
+
+        expect(hpBase.isSkinCareRoutineCurrent(testUid), isTrue);
+
+        // Start rebuild
+        controller.startEditing(hpBase);
+        expect(
+          container.read(skinCareFlowControllerProvider).state,
+          SkinCareFlowState.hasProductsEditing,
+        );
+
+        // Start photo analysis
+        controller.startGeneration(SkinCareFlowState.hasProductsGenerating);
+        expect(
+          container.read(skinCareFlowControllerProvider).generationOrigin,
+          SkinCareFlowState.hasProductsEditing,
+        );
+
+        // Photo analysis completes
+        container
+            .read(mockOnboardingProvider.notifier)
+            .updateDraft(
+              (d) => d.copyWith(
+                baseTimeline: d.baseTimeline.copyWith(
+                  skinCareReviewedProducts: const [
+                    SkinCareDetectedProduct(name: 'New Cleanser'),
+                    SkinCareDetectedProduct(name: 'New Cream'),
+                  ],
+                ),
+              ),
+            );
+
+        // completeGeneration must keep user in hasProductsEditing
+        controller.completeGeneration();
+
+        final stateAfterAnalysis = container.read(
+          skinCareFlowControllerProvider,
+        );
+        expect(stateAfterAnalysis.state, SkinCareFlowState.hasProductsEditing);
+        expect(stateAfterAnalysis.planASnapshot, isNotNull);
+
+        // Blocks are still HP Plan A
+        final draftBlocks = container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline
+            .confirmedBlocksForSection('skin_care');
+        expect(draftBlocks, hasLength(2));
+        expect(
+          draftBlocks.every((b) => b.title.startsWith('HP Plan A')),
+          isTrue,
         );
       },
     );

@@ -441,9 +441,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           _recommendationRetryAvailable = false;
         });
         if (_flowController.currentEpoch == requestEpoch) {
-          _flowController.transitionTo(
-            SkinCareFlowState.noProductsProductSelection,
-          );
+          _flowController.completeGeneration();
         }
       } else if (run.error != null) {
         setState(() {
@@ -806,7 +804,6 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final generated = widget.blocks.isNotEmpty;
     final draft = ref.watch(mockOnboardingProvider).draft;
     final base = draft.baseTimeline;
     final restored = ref.watch(restoredUploadsProvider);
@@ -852,7 +849,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final flowStateHolder = ref.watch(skinCareFlowControllerProvider);
     final flowState = flowStateHolder.state;
     final isEditing = flowState == SkinCareFlowState.noProductsEditing;
-    final inReviewMode = generated && !isEditing;
+    final inReviewMode = flowState == SkinCareFlowState.noProductsReview;
 
     ref.listen(skinCareFlowControllerProvider, (previous, next) {
       if (previous?.state.isEditing == true && !next.state.isEditing) {
@@ -935,7 +932,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       );
     }
 
-    if (generated && !isEditing) {
+    if (flowState == SkinCareFlowState.noProductsReview) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

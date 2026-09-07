@@ -644,7 +644,7 @@ class _HasProductsModeScreenState
         });
         if (isPhotoAnalyze) {
           if (_flowController.currentEpoch == requestEpoch) {
-            _flowController.transitionTo(SkinCareFlowState.hasProductsInput);
+            _flowController.completeGeneration();
           }
         } else {
           _flowController.commitRebuildSuccess(
@@ -662,13 +662,12 @@ class _HasProductsModeScreenState
 
   @override
   Widget build(BuildContext context) {
-    final generated = widget.blocks.isNotEmpty;
     final restored = ref.watch(restoredUploadsProvider);
     final draft = ref.watch(mockOnboardingProvider).draft;
     final flowStateHolder = ref.watch(skinCareFlowControllerProvider);
     final flowState = flowStateHolder.state;
     final isEditing = flowState == SkinCareFlowState.hasProductsEditing;
-    final inReviewMode = generated && !isEditing;
+    final inReviewMode = flowState == SkinCareFlowState.hasProductsReview;
 
     ref.listen(skinCareFlowControllerProvider, (previous, next) {
       if (previous?.state.isEditing == true && !next.state.isEditing) {
@@ -897,7 +896,7 @@ class _HasProductsModeScreenState
       );
     }
 
-    if (!generated || isEditing) {
+    if (flowState != SkinCareFlowState.hasProductsReview) {
       if (!isEditing && MediaQuery.viewInsetsOf(context).bottom > 0) {
         return _SkinCareProductNamesTarget(
           key: _productNamesTargetKey,

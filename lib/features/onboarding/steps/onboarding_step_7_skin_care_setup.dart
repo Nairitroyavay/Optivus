@@ -100,15 +100,13 @@ class _SkinCareSelectedModeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final flowState = ref.watch(skinCareFlowControllerProvider).state;
-    if (flowState == SkinCareFlowState.skipped ||
-        base.skinCareSkipped ||
-        base.skinCareSetupPath == 'skip') {
+    if (flowState == SkinCareFlowState.skipped) {
       return const _SkipModeScreen();
     }
 
     final blocks = base.confirmedBlocksForSection('skin_care');
 
-    if (flowState.isHasProducts || base.skinCareSetupPath == 'has_products') {
+    if (flowState.isHasProducts) {
       return _HasProductsModeScreen(base: base, blocks: blocks);
     }
 

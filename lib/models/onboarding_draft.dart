@@ -1615,9 +1615,12 @@ class BaseTimelineDraft {
     bool clearSkinCareSelectedProductNames = false,
     bool clearSkinCareSuggestedProducts = false,
     bool clearSkinCareRecommendationRegion = false,
+    bool clearSkinCareRecommendationCountryCode = false,
+    bool clearSkinCareRecommendationCurrencyCode = false,
     bool clearSkinCareReviewedProducts = false,
     bool clearSkinCareRecommendationFingerprint = false,
     bool clearSkinCareRoutineFingerprint = false,
+    bool clearSkinCareSetupPath = false,
     bool clearSkinCarePlanning = false,
     bool clearClassData = false,
     bool clearWorkData = false,
@@ -1679,7 +1682,7 @@ class BaseTimelineDraft {
       extraSnackMinute: clearMealPlanning
           ? null
           : (extraSnackMinute ?? this.extraSnackMinute),
-      skinCareSetupPath: clearSkinCarePlanning
+      skinCareSetupPath: clearSkinCarePlanning || clearSkinCareSetupPath
           ? null
           : (skinCareSetupPath ?? this.skinCareSetupPath),
       skinCareProductNames: clearSkinCarePlanning || clearSkinCareProductNames
@@ -1780,12 +1783,16 @@ class BaseTimelineDraft {
           ? const []
           : (skinCareSuggestedProducts ?? this.skinCareSuggestedProducts),
       skinCareRecommendationCountryCode:
-          clearSkinCarePlanning || clearSkinCareRecommendationRegion
+          clearSkinCarePlanning ||
+              clearSkinCareRecommendationRegion ||
+              clearSkinCareRecommendationCountryCode
           ? null
           : (skinCareRecommendationCountryCode ??
                 this.skinCareRecommendationCountryCode),
       skinCareRecommendationCurrencyCode:
-          clearSkinCarePlanning || clearSkinCareRecommendationRegion
+          clearSkinCarePlanning ||
+              clearSkinCareRecommendationRegion ||
+              clearSkinCareRecommendationCurrencyCode
           ? null
           : (skinCareRecommendationCurrencyCode ??
                 this.skinCareRecommendationCurrencyCode),

@@ -5,12 +5,15 @@ import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/skin_care_product_draft.dart';
+import 'package:optivus/state/auth_generation.dart';
 import 'skin_care_action_bridge.dart';
 import 'skin_care_flow_state.dart';
 
 /// Snapshot of reversible Plan A draft fields taken before entering edit mode.
 @immutable
 class PlanASnapshot {
+  final String? ownerUid;
+  final int authGeneration;
   final String? productNames;
   final List<SkinCareDetectedProduct> reviewedProducts;
   final String? skinType;
@@ -28,6 +31,8 @@ class PlanASnapshot {
   final String? recommendationCurrencyCode;
 
   const PlanASnapshot({
+    this.ownerUid,
+    this.authGeneration = 0,
     this.productNames,
     this.reviewedProducts = const [],
     this.skinType,
@@ -45,8 +50,14 @@ class PlanASnapshot {
     this.recommendationCurrencyCode,
   });
 
-  factory PlanASnapshot.fromBaseTimeline(BaseTimelineDraft base) {
+  factory PlanASnapshot.fromBaseTimeline(
+    BaseTimelineDraft base, {
+    String? ownerUid,
+    int authGeneration = 0,
+  }) {
     return PlanASnapshot(
+      ownerUid: ownerUid,
+      authGeneration: authGeneration,
       productNames: base.skinCareProductNames,
       reviewedProducts: List.unmodifiable(base.skinCareReviewedProducts),
       skinType: base.skinCareSkinType,
@@ -72,20 +83,34 @@ class PlanASnapshot {
   BaseTimelineDraft restoreOnto(BaseTimelineDraft base) {
     return base.copyWith(
       skinCareProductNames: productNames,
+      clearSkinCareProductNames: productNames == null,
       skinCareReviewedProducts: reviewedProducts,
+      clearSkinCareReviewedProducts: reviewedProducts.isEmpty,
       skinCareSkinType: skinType,
+      clearSkinCareSkinType: skinType == null,
       skinCareProblems: problems,
+      clearSkinCareProblems: problems.isEmpty,
       skinCareBudget: budget,
+      clearSkinCareBudget: budget == null,
       skinCarePreference: preference,
+      clearSkinCarePreference: preference == null,
       skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
       skinCareSpecialCareNotes: specialCareNotes,
       skinCareProductRecommendations: productRecommendations,
+      clearSkinCareProductRecommendations: productRecommendations.isEmpty,
       skinCareSelectedProductNames: selectedProductNames,
+      clearSkinCareSelectedProductNames: selectedProductNames.isEmpty,
       skinCareSuggestedProducts: suggestedProducts,
+      clearSkinCareSuggestedProducts: suggestedProducts.isEmpty,
       skinCareRecommendationFingerprint: recommendationFingerprint,
+      clearSkinCareRecommendationFingerprint: recommendationFingerprint == null,
       skinCareRoutineFingerprint: routineFingerprint,
+      clearSkinCareRoutineFingerprint: routineFingerprint == null,
       skinCareRecommendationCountryCode: recommendationCountryCode,
+      clearSkinCareRecommendationCountryCode: recommendationCountryCode == null,
       skinCareRecommendationCurrencyCode: recommendationCurrencyCode,
+      clearSkinCareRecommendationCurrencyCode:
+          recommendationCurrencyCode == null,
     );
   }
 }
@@ -97,6 +122,8 @@ class SkinCareFlowStateHolder {
   final String? activeError;
   final PlanASnapshot? planASnapshot;
   final SkinCareFlowState? generationOrigin;
+  final String? ownerUid;
+  final int authGeneration;
 
   const SkinCareFlowStateHolder({
     required this.state,
@@ -104,6 +131,8 @@ class SkinCareFlowStateHolder {
     this.activeError,
     this.planASnapshot,
     this.generationOrigin,
+    this.ownerUid,
+    this.authGeneration = 0,
   });
 
   SkinCareFlowStateHolder copyWith({
@@ -115,6 +144,9 @@ class SkinCareFlowStateHolder {
     bool clearSnapshot = false,
     SkinCareFlowState? generationOrigin,
     bool clearGenerationOrigin = false,
+    String? ownerUid,
+    bool clearOwner = false,
+    int? authGeneration,
   }) {
     return SkinCareFlowStateHolder(
       state: state ?? this.state,
@@ -126,6 +158,8 @@ class SkinCareFlowStateHolder {
       generationOrigin: clearGenerationOrigin
           ? null
           : (generationOrigin ?? this.generationOrigin),
+      ownerUid: clearOwner ? null : (ownerUid ?? this.ownerUid),
+      authGeneration: authGeneration ?? this.authGeneration,
     );
   }
 }
@@ -144,8 +178,32 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
       );
 
   /// Synchronizes current state from the durable draft.
-  void syncFromDraft(BaseTimelineDraft base, String uid) {
-    // If currently editing or generating, preserve the state and snapshot.
+  void syncFromDraft(
+    BaseTimelineDraft base,
+    String uid, {
+    int authGeneration = 0,
+  }) {
+    final ownerChanged =
+        state.ownerUid != null &&
+        (state.ownerUid != uid || state.authGeneration != authGeneration);
+
+    if (ownerChanged) {
+      ref.read(step7ActionBridgeProvider.notifier).clearAll();
+      final derived = deriveSkinCareFlowState(base, uid);
+      state = SkinCareFlowStateHolder(
+        state: derived,
+        epoch: state.epoch + 1,
+        ownerUid: uid,
+        authGeneration: authGeneration,
+      );
+      return;
+    }
+
+    if (state.ownerUid == null) {
+      state = state.copyWith(ownerUid: uid, authGeneration: authGeneration);
+    }
+
+    // If currently editing or generating for the same user & session, preserve state.
     if (state.state.isEditing || state.state.isGenerating) return;
 
     final derived = deriveSkinCareFlowState(base, uid);
@@ -153,6 +211,8 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
       state = state.copyWith(
         state: derived,
         epoch: state.epoch + 1,
+        ownerUid: uid,
+        authGeneration: authGeneration,
         clearError: true,
       );
     }
@@ -171,25 +231,98 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
 
   /// Begins editing an existing retained routine (Plan A).
   void startEditing(BaseTimelineDraft base) {
+    final authState = ref.read(authProvider);
+    final draft = ref.read(mockOnboardingProvider).draft;
+    final uid = authState.user?.uid ?? draft.uid;
+    final authGen = ref.read(authGenerationProvider);
+
     final nextState = base.skinCareSetupPath == 'no_products'
         ? SkinCareFlowState.noProductsEditing
         : SkinCareFlowState.hasProductsEditing;
     state = state.copyWith(
       state: nextState,
       epoch: state.epoch + 1,
-      planASnapshot: PlanASnapshot.fromBaseTimeline(base),
+      ownerUid: uid,
+      authGeneration: authGen,
+      planASnapshot: PlanASnapshot.fromBaseTimeline(
+        base,
+        ownerUid: uid,
+        authGeneration: authGen,
+      ),
       clearError: true,
     );
   }
 
   /// Begins generation and bumps epoch.
   void startGeneration(SkinCareFlowState generatingState) {
+    final authState = ref.read(authProvider);
+    final draft = ref.read(mockOnboardingProvider).draft;
+    final uid = authState.user?.uid ?? draft.uid;
+    final authGen = ref.read(authGenerationProvider);
+
     state = state.copyWith(
       state: generatingState,
       epoch: state.epoch + 1,
+      ownerUid: uid,
+      authGeneration: authGen,
       generationOrigin: state.state.isGenerating
           ? state.generationOrigin
           : state.state,
+      clearError: true,
+    );
+  }
+
+  /// Completes an active generation operation based on origin and operation type.
+  ///
+  /// For rebuild/edit intermediate generations (finding products, photo analysis),
+  /// keeps the editor open ([noProductsEditing] or [hasProductsEditing]) with new
+  /// data available, preserving the Plan A snapshot.
+  ///
+  /// For routine generation commits ([isRoutineCommit] == true), atomically replaces
+  /// the routine, returns to review ([hasProductsReview] or [noProductsReview]),
+  /// and clears the Plan A snapshot.
+  void completeGeneration({
+    bool isRoutineCommit = false,
+    BaseTimelineDraft? updatedBase,
+  }) {
+    final origin = state.generationOrigin;
+    SkinCareFlowState nextState;
+
+    if (isRoutineCommit) {
+      nextState =
+          (updatedBase?.skinCareSetupPath == 'no_products' ||
+              state.state.isNoProducts)
+          ? SkinCareFlowState.noProductsReview
+          : SkinCareFlowState.hasProductsReview;
+
+      state = state.copyWith(
+        state: nextState,
+        epoch: state.epoch + 1,
+        clearSnapshot: true,
+        clearGenerationOrigin: true,
+        clearError: true,
+      );
+      ref.read(step7ActionBridgeProvider.notifier).clearAll();
+      return;
+    }
+
+    // Intermediate generation success (finding products or photo analysis)
+    if (origin == SkinCareFlowState.noProductsEditing) {
+      nextState = SkinCareFlowState.noProductsEditing;
+    } else if (origin == SkinCareFlowState.hasProductsEditing) {
+      nextState = SkinCareFlowState.hasProductsEditing;
+    } else if (state.state == SkinCareFlowState.noProductsFindingProducts) {
+      nextState = SkinCareFlowState.noProductsProductSelection;
+    } else if (state.state == SkinCareFlowState.hasProductsGenerating) {
+      nextState = SkinCareFlowState.hasProductsInput;
+    } else {
+      nextState = origin ?? state.state;
+    }
+
+    state = state.copyWith(
+      state: nextState,
+      epoch: state.epoch + 1,
+      clearGenerationOrigin: true,
       clearError: true,
     );
   }
@@ -233,24 +366,47 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
         .setStepDirty(onboardingSkinCareStepIndex, true);
   }
 
-  /// Cancels editing and restores Plan A snapshot onto the draft.
+  /// Cancels editing and restores Plan A snapshot onto the draft if session is valid.
   void cancelEditing() {
-    final nextState = state.state == SkinCareFlowState.noProductsEditing
-        ? SkinCareFlowState.noProductsReview
-        : SkinCareFlowState.hasProductsReview;
+    final currentDraft = ref.read(mockOnboardingProvider).draft;
+    final authState = ref.read(authProvider);
+    final currentUid = authState.user?.uid ?? currentDraft.uid;
+    final currentAuthGen = ref.read(authGenerationProvider);
 
     final snapshot = state.planASnapshot;
-    if (snapshot != null) {
-      _updateBase((base) => snapshot.restoreOnto(base));
-    }
+    final canRestore =
+        snapshot != null &&
+        (snapshot.ownerUid == null || snapshot.ownerUid == currentUid) &&
+        (snapshot.authGeneration == currentAuthGen) &&
+        (state.ownerUid == null || state.ownerUid == currentUid) &&
+        (state.authGeneration == currentAuthGen);
 
-    state = state.copyWith(
-      state: nextState,
-      epoch: state.epoch + 1,
-      clearSnapshot: true,
-      clearGenerationOrigin: true,
-      clearError: true,
-    );
+    if (canRestore) {
+      _updateBase((base) => snapshot.restoreOnto(base));
+      final nextState = state.state == SkinCareFlowState.noProductsEditing
+          ? SkinCareFlowState.noProductsReview
+          : SkinCareFlowState.hasProductsReview;
+      state = state.copyWith(
+        state: nextState,
+        epoch: state.epoch + 1,
+        clearSnapshot: true,
+        clearGenerationOrigin: true,
+        clearError: true,
+      );
+    } else {
+      // Discard mismatched/stale snapshot without applying to new user/session
+      ref.read(step7ActionBridgeProvider.notifier).clearAll();
+      final derived = deriveSkinCareFlowState(
+        currentDraft.baseTimeline,
+        currentUid,
+      );
+      state = SkinCareFlowStateHolder(
+        state: derived,
+        epoch: state.epoch + 1,
+        ownerUid: currentUid,
+        authGeneration: currentAuthGen,
+      );
+    }
 
     // Clear any custom footer action so shell regains Next Step ownership.
     ref.read(step7ActionBridgeProvider.notifier).clearAll();
@@ -258,19 +414,7 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
 
   /// Commits successful Plan B rebuild and returns to review.
   void commitRebuildSuccess(BaseTimelineDraft updatedBase) {
-    final nextState = updatedBase.skinCareSetupPath == 'no_products'
-        ? SkinCareFlowState.noProductsReview
-        : SkinCareFlowState.hasProductsReview;
-
-    state = state.copyWith(
-      state: nextState,
-      epoch: state.epoch + 1,
-      clearSnapshot: true,
-      clearGenerationOrigin: true,
-      clearError: true,
-    );
-
-    ref.read(step7ActionBridgeProvider.notifier).clearAll();
+    completeGeneration(isRoutineCommit: true, updatedBase: updatedBase);
   }
 
   /// Current epoch of the flow controller.
@@ -317,8 +461,19 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
 
       case SkinCareFlowState.hasProductsInput:
       case SkinCareFlowState.noProductsInput:
-      case SkinCareFlowState.skipped:
         _updateBase((base) => base.copyWith(skinCareSetupStep: 0));
+        ref.read(step7ActionBridgeProvider.notifier).clearAll();
+        transitionTo(SkinCareFlowState.choice);
+        return true;
+
+      case SkinCareFlowState.skipped:
+        _updateBase(
+          (base) => base.copyWith(
+            skinCareSetupStep: 0,
+            skinCareSkipped: false,
+            clearSkinCareSetupPath: true,
+          ),
+        );
         ref.read(step7ActionBridgeProvider.notifier).clearAll();
         transitionTo(SkinCareFlowState.choice);
         return true;
@@ -352,18 +507,45 @@ final skinCareFlowControllerProvider =
       ref,
     ) {
       final controller = SkinCareFlowController(ref);
+
       ref.listen(mockOnboardingProvider, (previous, next) {
         final authState = ref.read(authProvider);
+        final authGen = ref.read(authGenerationProvider);
         controller.syncFromDraft(
           next.draft.baseTimeline,
           authState.user?.uid ?? next.draft.uid,
+          authGeneration: authGen,
         );
       });
+
+      ref.listen(authGenerationProvider, (previous, next) {
+        final authState = ref.read(authProvider);
+        final draft = ref.read(mockOnboardingProvider).draft;
+        controller.syncFromDraft(
+          draft.baseTimeline,
+          authState.user?.uid ?? draft.uid,
+          authGeneration: next,
+        );
+      });
+
+      ref.listen(authProvider, (previous, next) {
+        final authGen = ref.read(authGenerationProvider);
+        final draft = ref.read(mockOnboardingProvider).draft;
+        controller.syncFromDraft(
+          draft.baseTimeline,
+          next.user?.uid ?? draft.uid,
+          authGeneration: authGen,
+        );
+      });
+
       final initialDraft = ref.read(mockOnboardingProvider).draft;
       final authState = ref.read(authProvider);
+      final initialAuthGen = ref.read(authGenerationProvider);
       controller.syncFromDraft(
         initialDraft.baseTimeline,
         authState.user?.uid ?? initialDraft.uid,
+        authGeneration: initialAuthGen,
       );
+
       return controller;
     });
