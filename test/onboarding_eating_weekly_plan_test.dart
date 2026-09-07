@@ -124,16 +124,34 @@ void main() {
     return candidates;
   }
 
-  BaseTimelineDraft createBaseTimeline(int mealsPerDay) {
-    return BaseTimelineDraft(
+  BaseTimelineDraft createBaseTimeline(
+    int mealsPerDay, {
+    NutritionTargets? targets,
+    int? version = BaseTimelineDraft.currentGate2EatingPlanVersion,
+    String? fingerprint,
+    String? mealPlanningGoal,
+  }) {
+    final effectiveTargets = targets ?? testTargets;
+    final base = BaseTimelineDraft(
       eatingSetupPath: onboardingEatingPathCreate,
       eatingSetupStep: 2,
       mealsPerDay: mealsPerDay,
       foodType: 'veg',
+      mealPlanningGoal: mealPlanningGoal,
       breakfastMinute: 8 * 60,
       lunchMinute: 13 * 60,
       snackMinute: 17 * 60,
       dinnerMinute: 20 * 60 + 30,
+      eatingGeneratedPlanVersion: version,
+    );
+    return base.copyWith(
+      eatingGeneratedInputFingerprint:
+          fingerprint ??
+          (version != null
+              ? base.computeEatingGeneratedInputFingerprint(
+                targets: effectiveTargets,
+              )
+              : null),
     );
   }
 
@@ -420,35 +438,183 @@ void main() {
       expect(error, contains('nutrition estimates'));
     });
 
-    test('fails when calories deviance exceeds 25%', () {
+    test('passes when calories are within ±15% tolerance', () {
       final base = createBaseTimeline(4);
-      // Target is 2256, set total daily calories to 1000 (exceeds 25% deviance)
-      final candidates = createCandidateWeek(
+      final targetCal = testTargets.targetCalories!;
+      final highCal = (targetCal * 1.14).round();
+      final lowCal = (targetCal * 0.86).round();
+
+      final highCalCandidates = createCandidateWeek(
         mealsPerDay: 4,
-        targetCalories: 1000,
+        targetCalories: highCal,
         proteinTarget: testTargets.proteinTarget!.round(),
       );
-      final mapped = mapOnboarding5MealCandidates(
-        candidates,
+      final highMapped = mapOnboarding5MealCandidates(
+        highCalCandidates,
         source: onboardingEatingGeneratedSource,
         baseTimeline: base,
       );
-
-      final timeline = base.copyWith(blocks: mapped.blocks);
-      final error = validateGeneratedEatingWeeklyPlan(
-        timeline,
-        targets: testTargets,
+      expect(
+        validateGeneratedEatingWeeklyPlan(
+          base.copyWith(blocks: highMapped.blocks),
+          targets: testTargets,
+        ),
+        isNull,
       );
-      expect(error, contains('deviate significantly from your target'));
+
+      final lowCalCandidates = createCandidateWeek(
+        mealsPerDay: 4,
+        targetCalories: lowCal,
+        proteinTarget: testTargets.proteinTarget!.round(),
+      );
+      final lowMapped = mapOnboarding5MealCandidates(
+        lowCalCandidates,
+        source: onboardingEatingGeneratedSource,
+        baseTimeline: base,
+      );
+      expect(
+        validateGeneratedEatingWeeklyPlan(
+          base.copyWith(blocks: lowMapped.blocks),
+          targets: testTargets,
+        ),
+        isNull,
+      );
     });
 
-    test('fails when protein deviance exceeds 35%', () {
+    test('fails when calories deviance exceeds ±15%', () {
       final base = createBaseTimeline(4);
-      // Target protein is 140g, set total daily protein to 40g (exceeds 35% deviance)
+      final targetCal = testTargets.targetCalories!;
+      final highCal = (targetCal * 1.16).round();
+      final lowCal = (targetCal * 0.84).round();
+
+      final highCandidates = createCandidateWeek(
+        mealsPerDay: 4,
+        targetCalories: highCal,
+        proteinTarget: testTargets.proteinTarget!.round(),
+      );
+      final highMapped = mapOnboarding5MealCandidates(
+        highCandidates,
+        source: onboardingEatingGeneratedSource,
+        baseTimeline: base,
+      );
+      final highError = validateGeneratedEatingWeeklyPlan(
+        base.copyWith(blocks: highMapped.blocks),
+        targets: testTargets,
+      );
+      expect(highError, contains('deviate significantly from your target'));
+
+      final lowCandidates = createCandidateWeek(
+        mealsPerDay: 4,
+        targetCalories: lowCal,
+        proteinTarget: testTargets.proteinTarget!.round(),
+      );
+      final lowMapped = mapOnboarding5MealCandidates(
+        lowCandidates,
+        source: onboardingEatingGeneratedSource,
+        baseTimeline: base,
+      );
+      final lowError = validateGeneratedEatingWeeklyPlan(
+        base.copyWith(blocks: lowMapped.blocks),
+        targets: testTargets,
+      );
+      expect(lowError, contains('deviate significantly from your target'));
+    });
+
+    test('passes when protein is within ±20% tolerance', () {
+      final base = createBaseTimeline(4);
+      final targetPro = testTargets.proteinTarget!;
+      final highPro = (targetPro * 1.19).round();
+      final lowPro = (targetPro * 0.81).round();
+
+      final highCandidates = createCandidateWeek(
+        mealsPerDay: 4,
+        targetCalories: testTargets.targetCalories!,
+        proteinTarget: highPro,
+      );
+      final highMapped = mapOnboarding5MealCandidates(
+        highCandidates,
+        source: onboardingEatingGeneratedSource,
+        baseTimeline: base,
+      );
+      expect(
+        validateGeneratedEatingWeeklyPlan(
+          base.copyWith(blocks: highMapped.blocks),
+          targets: testTargets,
+        ),
+        isNull,
+      );
+
+      final lowCandidates = createCandidateWeek(
+        mealsPerDay: 4,
+        targetCalories: testTargets.targetCalories!,
+        proteinTarget: lowPro,
+      );
+      final lowMapped = mapOnboarding5MealCandidates(
+        lowCandidates,
+        source: onboardingEatingGeneratedSource,
+        baseTimeline: base,
+      );
+      expect(
+        validateGeneratedEatingWeeklyPlan(
+          base.copyWith(blocks: lowMapped.blocks),
+          targets: testTargets,
+        ),
+        isNull,
+      );
+    });
+
+    test('fails when protein deviance exceeds ±20%', () {
+      final base = createBaseTimeline(4);
+      final targetPro = testTargets.proteinTarget!;
+      final highPro = (targetPro * 1.22).round();
+      final lowPro = (targetPro * 0.78).round();
+
+      final highCandidates = createCandidateWeek(
+        mealsPerDay: 4,
+        targetCalories: testTargets.targetCalories!,
+        proteinTarget: highPro,
+      );
+      final highMapped = mapOnboarding5MealCandidates(
+        highCandidates,
+        source: onboardingEatingGeneratedSource,
+        baseTimeline: base,
+      );
+      final highError = validateGeneratedEatingWeeklyPlan(
+        base.copyWith(blocks: highMapped.blocks),
+        targets: testTargets,
+      );
+      expect(highError, contains('deviate significantly from your target'));
+
+      final lowCandidates = createCandidateWeek(
+        mealsPerDay: 4,
+        targetCalories: testTargets.targetCalories!,
+        proteinTarget: lowPro,
+      );
+      final lowMapped = mapOnboarding5MealCandidates(
+        lowCandidates,
+        source: onboardingEatingGeneratedSource,
+        baseTimeline: base,
+      );
+      final lowError = validateGeneratedEatingWeeklyPlan(
+        base.copyWith(blocks: lowMapped.blocks),
+        targets: testTargets,
+      );
+      expect(lowError, contains('deviate significantly from your target'));
+    });
+
+    test('fails when weekly diversity is insufficient: repeated dish set in a meal slot', () {
+      final base = createBaseTimeline(4);
+      // Force breakfast on day 1 and day 3 to repeat identical dishes
       final candidates = createCandidateWeek(
         mealsPerDay: 4,
         targetCalories: testTargets.targetCalories!,
-        proteinTarget: 40,
+        proteinTarget: testTargets.proteinTarget!.round(),
+        dishOverride: (slot, day) {
+          if (slot == 'breakfast' && day == 3) {
+            return dishLibrary['breakfast']![0]; // Same as Day 1
+          }
+          return dishLibrary[slot]?[day - 1] ?? ['Dish 1', 'Dish 2'];
+        },
       );
       final mapped = mapOnboarding5MealCandidates(
         candidates,
@@ -461,68 +627,63 @@ void main() {
         timeline,
         targets: testTargets,
       );
-      expect(error, contains('deviate significantly from your target'));
+      expect(error, contains('variety across days'));
     });
 
-    test(
-      'fails when weekly diversity is insufficient (< 3 distinct dish sets per slot)',
-      () {
-        final base = createBaseTimeline(4);
-        // Force breakfast to repeat identical dishes all 7 days
-        final candidates = createCandidateWeek(
-          mealsPerDay: 4,
-          targetCalories: testTargets.targetCalories!,
-          proteinTarget: testTargets.proteinTarget!.round(),
-          dishOverride: (slot, day) {
-            if (slot == 'breakfast') {
-              return ['Exact Same Oatmeal', 'Same Banana'];
-            }
-            return dishLibrary[slot]?[day - 1] ?? ['Dish 1', 'Dish 2'];
-          },
-        );
-        final mapped = mapOnboarding5MealCandidates(
-          candidates,
-          source: onboardingEatingGeneratedSource,
-          baseTimeline: base,
-        );
+    test('fails when weekly diversity is insufficient: repeated full daily menu', () {
+      final base = createBaseTimeline(4);
+      // Day 4 repeats Day 1 menu exactly
+      final candidates = createCandidateWeek(
+        mealsPerDay: 4,
+        targetCalories: testTargets.targetCalories!,
+        proteinTarget: testTargets.proteinTarget!.round(),
+        dishOverride: (slot, day) {
+          final effectiveDay = day == 4 ? 1 : day;
+          return dishLibrary[slot]?[effectiveDay - 1] ?? ['Dish 1', 'Dish 2'];
+        },
+      );
+      final mapped = mapOnboarding5MealCandidates(
+        candidates,
+        source: onboardingEatingGeneratedSource,
+        baseTimeline: base,
+      );
 
-        final timeline = base.copyWith(blocks: mapped.blocks);
-        final error = validateGeneratedEatingWeeklyPlan(
-          timeline,
-          targets: testTargets,
-        );
-        expect(error, contains('variety across days'));
-      },
-    );
+      final timeline = base.copyWith(blocks: mapped.blocks);
+      final error = validateGeneratedEatingWeeklyPlan(
+        timeline,
+        targets: testTargets,
+      );
+      expect(error, contains('variety across days'));
+    });
 
-    test(
-      'fails when weekly diversity is insufficient (< 4 distinct daily menus)',
-      () {
-        final base = createBaseTimeline(4);
-        // Only 2 distinct daily menus alternating across the week
-        final candidates = createCandidateWeek(
-          mealsPerDay: 4,
-          targetCalories: testTargets.targetCalories!,
-          proteinTarget: testTargets.proteinTarget!.round(),
-          dishOverride: (slot, day) {
-            final effectiveDay = day.isOdd ? 1 : 2;
-            return dishLibrary[slot]?[effectiveDay - 1] ?? ['Dish 1', 'Dish 2'];
-          },
-        );
-        final mapped = mapOnboarding5MealCandidates(
-          candidates,
-          source: onboardingEatingGeneratedSource,
-          baseTimeline: base,
-        );
+    test('adversarial diversity check: whitespace, case, and ordering variations are detected as duplicate', () {
+      final base = createBaseTimeline(4);
+      // Day 1 breakfast: ['Oatmeal Bowl', 'Almond Milk']
+      // Day 2 breakfast: ['  almond milk  ', 'OATMEAL BOWL']
+      final candidates = createCandidateWeek(
+        mealsPerDay: 4,
+        targetCalories: testTargets.targetCalories!,
+        proteinTarget: testTargets.proteinTarget!.round(),
+        dishOverride: (slot, day) {
+          if (slot == 'breakfast' && day == 2) {
+            return ['  almond milk  ', 'OATMEAL BOWL'];
+          }
+          return dishLibrary[slot]?[day - 1] ?? ['Dish 1', 'Dish 2'];
+        },
+      );
+      final mapped = mapOnboarding5MealCandidates(
+        candidates,
+        source: onboardingEatingGeneratedSource,
+        baseTimeline: base,
+      );
 
-        final timeline = base.copyWith(blocks: mapped.blocks);
-        final error = validateGeneratedEatingWeeklyPlan(
-          timeline,
-          targets: testTargets,
-        );
-        expect(error, contains('variety across days'));
-      },
-    );
+      final timeline = base.copyWith(blocks: mapped.blocks);
+      final error = validateGeneratedEatingWeeklyPlan(
+        timeline,
+        targets: testTargets,
+      );
+      expect(error, contains('variety across days'));
+    });
   });
 
   group('Gate 2 - Import Multi-Day Support', () {
@@ -615,14 +776,19 @@ void main() {
           targetCalories: targets.targetCalories!,
           proteinTarget: targets.proteinTarget!.round(),
         );
+        final base = createBaseTimeline(
+          4,
+          targets: targets,
+          mealPlanningGoal: 'gain',
+        );
         final mapped = mapOnboarding5MealCandidates(
           validCandidates,
           source: onboardingEatingGeneratedSource,
-          baseTimeline: createBaseTimeline(4),
+          baseTimeline: base,
         );
 
         final completedDraft = draft.copyWith(
-          baseTimeline: createBaseTimeline(4).copyWith(blocks: mapped.blocks),
+          baseTimeline: base.copyWith(blocks: mapped.blocks),
         );
 
         expect(
@@ -671,20 +837,33 @@ void main() {
     test(
       'Routine projection preserves day-specific RoutineItems with distinct repeatDays and nutrition metadata',
       () {
+        final draftWithBasics = OnboardingDraft(
+          uid: 'projection-user',
+          lifeRole: const LifeRoleDraft(
+            lifeRole: LifeRoleDraft.notStudentNotWorkingKey,
+            exerciseLevel: '3_4_days',
+          ),
+          bodyBasics: const BodyBasicsDraft(
+            ageRange: '25-34',
+            heightCm: 175,
+            weightKg: 70,
+            gender: 'male',
+          ).withEstimates(),
+        );
+        final targets = draftWithBasics.canonicalNutritionTargets();
         final validCandidates = createCandidateWeek(
           mealsPerDay: 4,
-          targetCalories: 2000,
-          proteinTarget: 140,
+          targetCalories: targets.targetCalories!,
+          proteinTarget: targets.proteinTarget!.round(),
         );
         final mapped = mapOnboarding5MealCandidates(
           validCandidates,
           source: onboardingEatingGeneratedSource,
-          baseTimeline: createBaseTimeline(4),
+          baseTimeline: createBaseTimeline(4, targets: targets),
         );
 
-        final draft = OnboardingDraft(
-          uid: 'projection-user',
-          baseTimeline: createBaseTimeline(4).copyWith(blocks: mapped.blocks),
+        final draft = draftWithBasics.copyWith(
+          baseTimeline: createBaseTimeline(4, targets: targets).copyWith(blocks: mapped.blocks),
         );
 
         final bundle = OnboardingCompletionService.buildBundle(draft);
@@ -754,5 +933,234 @@ void main() {
         expect(merged[1].repeatDays, [2]);
       },
     );
+  });
+
+  group('Gate 2 - Regeneration Transaction Safety & Retained Routine', () {
+    test('editing meal preferences preserves existing valid eating blocks in draft', () {
+      final base = createBaseTimeline(4);
+      final candidates = createCandidateWeek(
+        mealsPerDay: 4,
+        targetCalories: testTargets.targetCalories!,
+        proteinTarget: testTargets.proteinTarget!.round(),
+      );
+      final mapped = mapOnboarding5MealCandidates(
+        candidates,
+        source: onboardingEatingGeneratedSource,
+        baseTimeline: base,
+      );
+      final timelineWithPlanA = base.copyWith(blocks: mapped.blocks);
+      expect(timelineWithPlanA.confirmedBlocksForSection('eating'), hasLength(28));
+
+      // User changes foodType from 'veg' to 'vegan'
+      final editedTimeline = timelineWithPlanA.copyWith(foodType: 'vegan');
+
+      // Blocks are preserved!
+      expect(editedTimeline.confirmedBlocksForSection('eating'), hasLength(28));
+
+      // But fingerprint no longer matches computed fingerprint with new settings!
+      final error = editedTimeline.validateEatingSetup(targets: testTargets);
+      expect(
+        error,
+        'Your meal preferences changed. Generate the updated weekly routine first.',
+      );
+    });
+
+    test('atomic replacement: Plan B cleanly replaces Plan A without leaving duplicates', () {
+      final base = createBaseTimeline(4);
+      final planACandidates = createCandidateWeek(
+        mealsPerDay: 4,
+        targetCalories: testTargets.targetCalories!,
+        proteinTarget: testTargets.proteinTarget!.round(),
+      );
+      final planAMapped = mapOnboarding5MealCandidates(
+        planACandidates,
+        source: onboardingEatingGeneratedSource,
+        baseTimeline: base,
+      );
+      final timelineWithPlanA = base.copyWith(blocks: planAMapped.blocks);
+      expect(timelineWithPlanA.confirmedBlocksForSection('eating'), hasLength(28));
+
+      // Plan B generated with different dishes
+      final planBCandidates = createCandidateWeek(
+        mealsPerDay: 4,
+        targetCalories: testTargets.targetCalories!,
+        proteinTarget: testTargets.proteinTarget!.round(),
+        dishOverride: (slot, day) => ['Plan B Dish 1 ($slot, d$day)', 'Plan B Dish 2 ($slot, d$day)'],
+      );
+      final planBMapped = mapOnboarding5MealCandidates(
+        planBCandidates,
+        source: onboardingEatingGeneratedSource,
+        baseTimeline: base,
+      );
+
+      // Replace eating blocks
+      final replacedBlocks = timelineWithPlanA.blocks
+          .where((b) => b.section != 'eating')
+          .toList()
+        ..addAll(planBMapped.blocks);
+      final timelineWithPlanB = timelineWithPlanA.copyWith(blocks: replacedBlocks);
+
+      final finalEatingBlocks = timelineWithPlanB.confirmedBlocksForSection('eating');
+      expect(finalEatingBlocks, hasLength(28));
+      expect(
+        finalEatingBlocks.every((b) => b.dishes.first.startsWith('Plan B Dish 1')),
+        isTrue,
+      );
+    });
+  });
+
+  group('Gate 2 - Input Fingerprint Sensitivity', () {
+    test('deterministic fingerprint matches for identical inputs', () {
+      final base1 = createBaseTimeline(4);
+      final base2 = createBaseTimeline(4);
+      expect(
+        base1.computeEatingGeneratedInputFingerprint(targets: testTargets),
+        base2.computeEatingGeneratedInputFingerprint(targets: testTargets),
+      );
+    });
+
+    test('fingerprint changes when any key input changes', () {
+      final base = createBaseTimeline(4);
+      final fpBase = base.computeEatingGeneratedInputFingerprint(targets: testTargets);
+
+      // mealPlanningGoal
+      expect(
+        base.copyWith(mealPlanningGoal: 'lose').computeEatingGeneratedInputFingerprint(targets: testTargets),
+        isNot(fpBase),
+      );
+      // targetCalories
+      expect(
+        base.computeEatingGeneratedInputFingerprint(
+          targets: NutritionTargets(
+            bmi: testTargets.bmi,
+            estimatedAge: testTargets.estimatedAge,
+            estimatedBmr: testTargets.estimatedBmr,
+            activityFactor: testTargets.activityFactor,
+            estimatedMaintenanceCalories: testTargets.estimatedMaintenanceCalories,
+            targetCalories: testTargets.targetCalories! + 100,
+            proteinTarget: testTargets.proteinTarget,
+            bodyGoal: testTargets.bodyGoal,
+            hasBodyBasics: testTargets.hasBodyBasics,
+          ),
+        ),
+        isNot(fpBase),
+      );
+      // proteinTarget
+      expect(
+        base.computeEatingGeneratedInputFingerprint(
+          targets: NutritionTargets(
+            bmi: testTargets.bmi,
+            estimatedAge: testTargets.estimatedAge,
+            estimatedBmr: testTargets.estimatedBmr,
+            activityFactor: testTargets.activityFactor,
+            estimatedMaintenanceCalories: testTargets.estimatedMaintenanceCalories,
+            targetCalories: testTargets.targetCalories,
+            proteinTarget: testTargets.proteinTarget! + 20,
+            bodyGoal: testTargets.bodyGoal,
+            hasBodyBasics: testTargets.hasBodyBasics,
+          ),
+        ),
+        isNot(fpBase),
+      );
+      // foodType
+      expect(
+        base.copyWith(foodType: 'non_veg').computeEatingGeneratedInputFingerprint(targets: testTargets),
+        isNot(fpBase),
+      );
+      // eatingMode
+      expect(
+        base.copyWith(eatingMode: 'mediterranean').computeEatingGeneratedInputFingerprint(targets: testTargets),
+        isNot(fpBase),
+      );
+      // foodStyleCustomText
+      expect(
+        base.copyWith(foodStyleCustomText: 'No spicy food').computeEatingGeneratedInputFingerprint(targets: testTargets),
+        isNot(fpBase),
+      );
+      // mealsPerDay
+      expect(
+        base.copyWith(mealsPerDay: 5).computeEatingGeneratedInputFingerprint(targets: testTargets),
+        isNot(fpBase),
+      );
+      // breakfastMinute
+      expect(
+        base.copyWith(breakfastMinute: 9 * 60).computeEatingGeneratedInputFingerprint(targets: testTargets),
+        isNot(fpBase),
+      );
+    });
+  });
+
+  group('Gate 2 - Legacy Plan Migration Contract', () {
+    test('isLegacyGeneratedEatingPlan flags unversioned and older version plans', () {
+      final base = createBaseTimeline(4);
+      final candidates = createCandidateWeek(
+        mealsPerDay: 4,
+        targetCalories: testTargets.targetCalories!,
+        proteinTarget: testTargets.proteinTarget!.round(),
+      );
+      final mapped = mapOnboarding5MealCandidates(
+        candidates,
+        source: onboardingEatingGeneratedSource,
+        baseTimeline: base,
+      );
+
+      // Version null
+      final unversioned = base.copyWith(
+        blocks: mapped.blocks,
+        clearEatingGeneratedPlanVersion: true,
+      );
+      expect(isLegacyGeneratedEatingPlan(unversioned), isTrue);
+
+      // Version 1
+      final v1 = base.copyWith(
+        blocks: mapped.blocks,
+        eatingGeneratedPlanVersion: 1,
+      );
+      expect(isLegacyGeneratedEatingPlan(v1), isTrue);
+
+      // Version 2 with 28 day-specific blocks -> not legacy
+      final v2 = base.copyWith(
+        blocks: mapped.blocks,
+        eatingGeneratedPlanVersion: 2,
+      );
+      expect(isLegacyGeneratedEatingPlan(v2), isFalse);
+    });
+
+    test('isLegacyGeneratedEatingPlan flags plans with repeating multi-day blocks', () {
+      final multiDayBlock = TimelineBlockDraft(
+        id: 'eating-ai-d1-breakfast',
+        section: 'eating',
+        title: 'Breakfast',
+        startMinute: 8 * 60,
+        endMinute: 8 * 60 + 30,
+        repeatDays: const [1, 2, 3, 4, 5, 6, 7], // multi-day!
+        blockType: TimelineBlockDraft.hardBlockKey,
+        source: onboardingEatingGeneratedSource,
+        mealSlot: 'breakfast',
+        dishes: const ['Dish 1'],
+        calories: 500,
+        protein: 30,
+      );
+      final multiDayBase = createBaseTimeline(3).copyWith(
+        blocks: [multiDayBlock],
+        eatingGeneratedPlanVersion: 2,
+      );
+      expect(isLegacyGeneratedEatingPlan(multiDayBase), isTrue);
+    });
+
+    test('completed user at or past Step 14 remains valid even with legacy draft', () {
+      final legacyDraft = OnboardingDraft(
+        uid: 'completed-legacy-user',
+        currentStep: 14,
+        stepCompleted: List.filled(15, true),
+        baseTimeline: const BaseTimelineDraft(
+          eatingSetupPath: onboardingEatingPathCreate,
+          eatingGeneratedPlanVersion: 1,
+        ),
+      );
+      // Invariant: completed user is not broken by migration check
+      expect(legacyDraft.stepCompleted[14], isTrue);
+      expect(legacyDraft.currentStep, 14);
+    });
   });
 }

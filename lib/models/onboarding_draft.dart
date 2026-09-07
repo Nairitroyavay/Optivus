@@ -1108,11 +1108,9 @@ class BodyBasicsDraft {
     }
     final meters = height / 100.0;
     final bmi = weight / (meters * meters);
-    final protein = weight * 2.0;
     return copyWith(
       bmiEstimate: double.parse(bmi.toStringAsFixed(1)),
       clearCalorieEstimate: true,
-      proteinEstimate: double.parse(protein.toStringAsFixed(0)),
       bodyDataCompleted:
           ageRange != null &&
           gender != null &&
@@ -1277,6 +1275,11 @@ class BaseTimelineDraft {
   final String? skinCareRecommendationCountryCode;
   final String? skinCareRecommendationCurrencyCode;
 
+  static const currentGate2EatingPlanVersion = 2;
+
+  final int? eatingGeneratedPlanVersion;
+  final String? eatingGeneratedInputFingerprint;
+
   const BaseTimelineDraft({
     this.blocks = const [],
     this.classJobSetupStep = 0,
@@ -1301,6 +1304,8 @@ class BaseTimelineDraft {
     this.dinnerMinute,
     this.snackMinute,
     this.extraSnackMinute,
+    this.eatingGeneratedPlanVersion,
+    this.eatingGeneratedInputFingerprint,
     this.skinCareSetupPath,
     this.skinCareProductNames,
     this.skinCareProductPhotoAssetId,
@@ -1436,10 +1441,15 @@ class BaseTimelineDraft {
       skinCareRecommendationFingerprint:
           map['skinCareRecommendationFingerprint'] as String?,
       skinCareRoutineFingerprint: map['skinCareRoutineFingerprint'] as String?,
+      eatingGeneratedPlanVersion: map['eatingGeneratedPlanVersion'] as int?,
+      eatingGeneratedInputFingerprint:
+          map['eatingGeneratedInputFingerprint'] as String?,
     );
   }
 
   Map<String, dynamic> toMap() => {
+    'eatingGeneratedPlanVersion': eatingGeneratedPlanVersion,
+    'eatingGeneratedInputFingerprint': eatingGeneratedInputFingerprint,
     'blocks': blocks.map((block) => block.toMap()).toList(),
     'classJobSetupStep': classJobSetupStep,
     'eatingSetupStep': eatingSetupStep,
@@ -1570,6 +1580,10 @@ class BaseTimelineDraft {
     String? classLogicalAssetR2Key,
     String? workLogicalAssetId,
     String? workLogicalAssetR2Key,
+    int? eatingGeneratedPlanVersion,
+    String? eatingGeneratedInputFingerprint,
+    bool clearEatingGeneratedPlanVersion = false,
+    bool clearEatingGeneratedInputFingerprint = false,
     bool clearClassLogicalAsset = false,
     bool clearWorkLogicalAsset = false,
     bool clearMealPlanning = false,
@@ -1786,7 +1800,43 @@ class BaseTimelineDraft {
       workLogicalAssetR2Key: clearWorkData || clearWorkLogicalAsset
           ? null
           : (workLogicalAssetR2Key ?? this.workLogicalAssetR2Key),
+      eatingGeneratedPlanVersion: clearEatingGeneratedPlanVersion
+          ? null
+          : (eatingGeneratedPlanVersion ?? this.eatingGeneratedPlanVersion),
+      eatingGeneratedInputFingerprint: clearEatingGeneratedInputFingerprint
+          ? null
+          : (eatingGeneratedInputFingerprint ??
+              this.eatingGeneratedInputFingerprint),
     );
+  }
+
+  String computeEatingGeneratedInputFingerprint({NutritionTargets? targets}) {
+    final cal = targets?.targetCalories?.round() ?? 0;
+    final prot = targets?.proteinTarget?.round() ?? 0;
+    final normalizedMeals = normalizeMealsPerDay(mealsPerDay);
+    final goal = (mealPlanningGoal ?? '').trim().toLowerCase();
+    final type = (foodType ?? '').trim().toLowerCase();
+    final mode = (eatingMode ?? '').trim().toLowerCase();
+    final customStyle = (foodStyleCustomText ?? '').trim().toLowerCase();
+    final bMinute = breakfastMinute ?? 480;
+    final mSnackMinute = snackMinute ?? 630;
+    final lMinute = lunchMinute ?? 780;
+    final aSnackMinute = extraSnackMinute ?? 1020;
+    final dMinute = dinnerMinute ?? 1230;
+
+    return 'v$currentGate2EatingPlanVersion'
+        '|goal:$goal'
+        '|cal:$cal'
+        '|prot:$prot'
+        '|type:$type'
+        '|mode:$mode'
+        '|custom:$customStyle'
+        '|meals:$normalizedMeals'
+        '|b:$bMinute'
+        '|ms:$mSnackMinute'
+        '|l:$lMinute'
+        '|as:$aSnackMinute'
+        '|d:$dMinute';
   }
 
   BaseTimelineDraft upsertBlock(TimelineBlockDraft block) {
@@ -2249,11 +2299,19 @@ class BaseTimelineDraft {
           }
         }
       } else if (eatingSetupPath == 'create') {
-        if (blocks.any(
+        final generatedBlocks = blocks.where(
           (b) => b.section == 'eating' && b.source == 'ai_generated_meal_setup',
-        )) {
+        );
+        if (generatedBlocks.isNotEmpty) {
           if (isLegacyGeneratedEatingPlan(this)) {
             return 'Your saved meal plan uses the older weekly format. Please regenerate your meal routine.';
+          }
+          if (eatingGeneratedInputFingerprint != null) {
+            final expectedFingerprint =
+                computeEatingGeneratedInputFingerprint(targets: targets);
+            if (eatingGeneratedInputFingerprint != expectedFingerprint) {
+              return 'Your meal preferences changed. Generate the updated weekly routine first.';
+            }
           }
           final planError = validateGeneratedEatingWeeklyPlan(
             this,
@@ -2840,6 +2898,18 @@ bool looksLikeNonDishMealToken(String value) {
   return generic.contains(lower);
 }
 
+String normalizeDish(String d) =>
+    d.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+String mealSignature(List<String> dishes) {
+  final normalized = dishes
+      .map(normalizeDish)
+      .where((d) => d.isNotEmpty)
+      .toList()
+    ..sort();
+  return normalized.join('|');
+}
+
 bool isLegacyGeneratedEatingPlan(BaseTimelineDraft base) {
   final eatingBlocks = base.blocks
       .where(
@@ -2847,7 +2917,13 @@ bool isLegacyGeneratedEatingPlan(BaseTimelineDraft base) {
       )
       .toList();
   if (eatingBlocks.isEmpty) return false;
-  return eatingBlocks.any((b) => b.repeatDays.length > 1) ||
+  if (base.eatingGeneratedPlanVersion != null &&
+      base.eatingGeneratedPlanVersion! <
+          BaseTimelineDraft.currentGate2EatingPlanVersion) {
+    return true;
+  }
+  return base.eatingGeneratedPlanVersion == null ||
+      eatingBlocks.any((b) => b.repeatDays.length > 1) ||
       eatingBlocks.length < 21;
 }
 
@@ -2946,20 +3022,21 @@ String? validateGeneratedEatingWeeklyPlan(
 
       if (targetCal != null && targetCal > 0) {
         final diff = (dayCalories - targetCal).abs() / targetCal;
-        if (diff > 0.25) {
+        if (diff > 0.15) {
           return 'Daily calorie totals deviate significantly from your target.';
         }
       }
 
       if (targetProt != null && targetProt > 0) {
         final diff = (dayProtein - targetProt).abs() / targetProt;
-        if (diff > 0.35) {
+        if (diff > 0.20) {
           return 'Daily protein totals deviate significantly from your target.';
         }
       }
     }
   }
 
+  // Same-slot diversity across days: all 7 days must have unique dish combinations for each slot
   for (final slot in expectedSlotIds) {
     final distinctDishSets = <String>{};
     for (var day = 1; day <= 7; day++) {
@@ -2968,16 +3045,15 @@ String? validateGeneratedEatingWeeklyPlan(
             b.repeatDays.first == day &&
             b.mealSlot?.trim().toLowerCase() == slot,
       );
-      final signature = ([
-        ...block.dishes.map((d) => d.trim().toLowerCase()),
-      ]..sort()).join('|');
+      final signature = mealSignature(block.dishes);
       distinctDishSets.add(signature);
     }
-    if (distinctDishSets.length < 3) {
+    if (distinctDishSets.length < 7) {
       return 'Generated meal plan lacks weekly variety across days.';
     }
   }
 
+  // Daily menu diversity: all 7 complete day menus must be unique
   final distinctDailyMenus = <String>{};
   for (var day = 1; day <= 7; day++) {
     final dayDishes = <String>[];
@@ -2987,12 +3063,11 @@ String? validateGeneratedEatingWeeklyPlan(
             b.repeatDays.first == day &&
             b.mealSlot?.trim().toLowerCase() == slot,
       );
-      dayDishes.addAll(block.dishes.map((d) => d.trim().toLowerCase()));
+      dayDishes.add('$slot:${mealSignature(block.dishes)}');
     }
-    dayDishes.sort();
-    distinctDailyMenus.add(dayDishes.join('|'));
+    distinctDailyMenus.add(dayDishes.join('::'));
   }
-  if (distinctDailyMenus.length < 4) {
+  if (distinctDailyMenus.length < 7) {
     return 'Generated meal plan lacks weekly variety across days.';
   }
 

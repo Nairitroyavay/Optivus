@@ -42,7 +42,7 @@ void main() {
       );
       final draft = OnboardingDraft(
         baseTimeline: BaseTimelineDraft(
-          eatingSetupStep: 1,
+          eatingSetupStep: 2,
           eatingSetupPath: 'create',
           blocks: mapped.blocks,
         ),
@@ -90,7 +90,7 @@ void main() {
   ) async {
     final draft = OnboardingDraft(
       baseTimeline: BaseTimelineDraft(
-        eatingSetupStep: 1,
+        eatingSetupStep: 2,
         eatingSetupPath: 'create',
         blocks: [
           TimelineBlockDraft(

@@ -49,7 +49,7 @@ void main() {
         // 2. Now test the actual Step 5 UI rendering with 6 dishes
         final draft = OnboardingDraft(
           baseTimeline: BaseTimelineDraft(
-            eatingSetupStep: 1,
+            eatingSetupStep: 2,
             eatingSetupPath: 'create',
             blocks: [
               TimelineBlockDraft(
@@ -115,7 +115,7 @@ void main() {
       (tester) async {
         final draft = OnboardingDraft(
           baseTimeline: BaseTimelineDraft(
-            eatingSetupStep: 1,
+            eatingSetupStep: 2,
             eatingSetupPath: 'create',
             blocks: [
               TimelineBlockDraft(

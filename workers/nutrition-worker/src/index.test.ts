@@ -569,10 +569,10 @@ describe("Nutrition Worker request boundary", () => {
     expect(json.error).toBe("provider_duplicate_meal_slot");
   });
 
-  test("daily calories deviating significantly (>25%) from target throws provider_target_mismatch", async () => {
+  test("daily calories deviating significantly (>15%) from target throws provider_target_mismatch", async () => {
     const candidates = buildWeeklyCandidates(3, (d, slot) => {
       if (d === 3 && slot === "breakfast") {
-        return { caloriesEstimate: 50 }; // Day 3 total = 50 + 800 + 700 = 1550 kcal (target: 2100 => min 1575)
+        return { caloriesEstimate: 200 }; // Day 3 total = 200 + 800 + 700 = 1700 kcal (target: 2100 => min 1785)
       }
       return null;
     });
@@ -587,10 +587,25 @@ describe("Nutrition Worker request boundary", () => {
     expect(json.error).toBe("provider_target_mismatch");
   });
 
-  test("daily protein deviating significantly (>35%) from target throws provider_target_mismatch", async () => {
+  test("daily calories within ±15% pass successfully", async () => {
+    const candidates = buildWeeklyCandidates(3, (d, slot) => {
+      if (d === 3 && slot === "breakfast") {
+        return { caloriesEstimate: 285 }; // Day 3 total = 285 + 800 + 700 = 1785 kcal (exact 85% of 2100)
+      }
+      return null;
+    });
+    stubProviderText(JSON.stringify({ candidates }));
+    const response = await worker.fetch(
+      request(validRequestBody({ mealsPerDay: 3, targetCalories: 2100 })),
+      makeEnv() as never,
+    );
+    expect(response.status).toBe(200);
+  });
+
+  test("daily protein deviating significantly (>20%) from target throws provider_target_mismatch", async () => {
     const candidates = buildWeeklyCandidates(3, (d, slot) => {
       if (d === 4 && slot === "lunch") {
-        return { proteinEstimate: 2 }; // Day 4 total protein = 20 + 2 + 25 = 47g (target: 100g => min 65g)
+        return { proteinEstimate: 15 }; // Day 4 total protein = 20 + 15 + 25 = 60g (target: 90g => min 72g)
       }
       return null;
     });
@@ -600,7 +615,7 @@ describe("Nutrition Worker request boundary", () => {
         validRequestBody({
           mealsPerDay: 3,
           targetCalories: 2100,
-          proteinTarget: 100,
+          proteinTarget: 90,
         }),
       ),
       makeEnv() as never,
@@ -611,46 +626,37 @@ describe("Nutrition Worker request boundary", () => {
     expect(json.error).toBe("provider_target_mismatch");
   });
 
-  test("repetitive identical meals across days throws provider_insufficient_diversity", async () => {
-    const candidates: Record<string, unknown>[] = [];
-    for (let d = 1; d <= 7; d++) {
-      candidates.push({
-        day: d,
-        repeatDays: [d],
-        mealSlot: "breakfast",
-        title: "Breakfast",
-        mealCategory: "breakfast",
-        startMinute: 480,
-        endMinute: 510,
-        steps: ["Oatmeal", "Banana"],
-        caloriesEstimate: 600,
-        proteinEstimate: 20,
-      });
-      candidates.push({
-        day: d,
-        repeatDays: [d],
-        mealSlot: "lunch",
-        title: "Lunch",
-        mealCategory: "lunch",
-        startMinute: 780,
-        endMinute: 825,
-        steps: ["Rice", "Dal"],
-        caloriesEstimate: 800,
-        proteinEstimate: 30,
-      });
-      candidates.push({
-        day: d,
-        repeatDays: [d],
-        mealSlot: "dinner",
-        title: "Dinner",
-        mealCategory: "dinner",
-        startMinute: 1230,
-        endMinute: 1275,
-        steps: ["Roti", "Curry"],
-        caloriesEstimate: 700,
-        proteinEstimate: 25,
-      });
-    }
+  test("daily protein within ±20% passes successfully", async () => {
+    const candidates = buildWeeklyCandidates(3, (d, slot) => {
+      if (d === 4 && slot === "lunch") {
+        return { proteinEstimate: 30 }; // Day 4 total protein = 20 + 30 + 25 = 75g (target: 90g => range [72g, 108g])
+      }
+      return null;
+    });
+    stubProviderText(JSON.stringify({ candidates }));
+    const response = await worker.fetch(
+      request(
+        validRequestBody({
+          mealsPerDay: 3,
+          targetCalories: 2100,
+          proteinTarget: 90,
+        }),
+      ),
+      makeEnv() as never,
+    );
+    expect(response.status).toBe(200);
+  });
+
+  test("duplicate entire day menu across days throws provider_insufficient_diversity", async () => {
+    // Day 1 and Day 2 have identical menus, remaining days 3-7 differ
+    const candidates = buildWeeklyCandidates(3, (d, slot) => {
+      if (d === 2) {
+        if (slot === "breakfast") return { steps: ["Vegetable poha", "Plain curd"] };
+        if (slot === "lunch") return { steps: ["Brown rice", "Dal tadka", "Spinach sabzi"] };
+        if (slot === "dinner") return { steps: ["Whole wheat roti", "Methi paneer", "Tomato soup"] };
+      }
+      return null;
+    });
     stubProviderText(JSON.stringify({ candidates }));
     const response = await worker.fetch(
       request(validRequestBody({ mealsPerDay: 3 })),
@@ -660,6 +666,71 @@ describe("Nutrition Worker request boundary", () => {
 
     expect(response.status).toBe(500);
     expect(json.error).toBe("provider_insufficient_diversity");
+  });
+
+  test("duplicate breakfast across two days throws provider_insufficient_diversity even if daily menus differ", async () => {
+    // Day 1 and Day 3 have identical breakfast, but different lunch and dinner
+    const candidates = buildWeeklyCandidates(3, (d, slot) => {
+      if (d === 3 && slot === "breakfast") {
+        return { steps: ["Vegetable poha", "Plain curd"] }; // Same as Day 1
+      }
+      return null;
+    });
+    stubProviderText(JSON.stringify({ candidates }));
+    const response = await worker.fetch(
+      request(validRequestBody({ mealsPerDay: 3 })),
+      makeEnv() as never,
+    );
+    const json = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(500);
+    expect(json.error).toBe("provider_insufficient_diversity");
+  });
+
+  test("ordering or whitespace differences do not bypass duplicate detection", async () => {
+    // Day 1 has ["Vegetable poha", "Plain curd"], Day 4 has [" plain curd ", "vegetable POHA"]
+    const candidates = buildWeeklyCandidates(3, (d, slot) => {
+      if (d === 4 && slot === "breakfast") {
+        return { steps: [" plain curd ", "vegetable POHA "] };
+      }
+      return null;
+    });
+    stubProviderText(JSON.stringify({ candidates }));
+    const response = await worker.fetch(
+      request(validRequestBody({ mealsPerDay: 3 })),
+      makeEnv() as never,
+    );
+    const json = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(500);
+    expect(json.error).toBe("provider_insufficient_diversity");
+  });
+
+  test("invalid mealsPerDay outside 3-5 is rejected with 400", async () => {
+    const response = await worker.fetch(
+      request(validRequestBody({ mealsPerDay: 6 })),
+      makeEnv() as never,
+    );
+    expect(response.status).toBe(400);
+    const json = (await response.json()) as Record<string, unknown>;
+    expect(json.error).toBe("invalid_eating_request");
+  });
+
+  test("candidate with proteinEstimate 0 is rejected", async () => {
+    const candidates = buildWeeklyCandidates(3, (d, slot) => {
+      if (d === 1 && slot === "breakfast") {
+        return { proteinEstimate: 0 };
+      }
+      return null;
+    });
+    stubProviderText(JSON.stringify({ candidates }));
+    const response = await worker.fetch(
+      request(validRequestBody({ mealsPerDay: 3 })),
+      makeEnv() as never,
+    );
+    expect(response.status).toBe(500);
+    const json = (await response.json()) as Record<string, unknown>;
+    expect(json.error).toBe("provider_incomplete_week");
   });
 
   test("invalid candidate with generic dishes or missing day is rejected with no fake fallback", async () => {

@@ -208,7 +208,7 @@ ${slotLines}
 Generation Requirements:
 1. You MUST generate meals for ALL 7 DAYS of the week (day 1=Monday, day 2=Tuesday, day 3=Wednesday, day 4=Thursday, day 5=Friday, day 6=Saturday, day 7=Sunday).
 2. For EACH day (1 to 7), you MUST provide every required meal slot listed above. Exactly ${totalMeals} meal objects total (${slots.length} meals × 7 days).
-3. Do NOT repeat the same dishes every day. Every day must feel distinct with varied, realistic meal options matching the user's Diet Type and Style. At least 5 of the 7 days must have completely different dish combinations.
+3. ALL 7 days must have distinct complete daily menus. For each meal slot, the full dish combination must differ from that same meal slot on every other day. Individual ingredients may repeat, but the complete meal composition may not.
 4. Each meal block MUST contain:
    - "day": integer from 1 to 7 (1=Monday .. 7=Sunday)
    - "repeatDays": array with exactly that single day, e.g. [1] or [2]
@@ -277,6 +277,16 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
     lifestyle: readOptionalString(body, "lifestyle"),
     country: readOptionalString(body, "country"),
   };
+
+  if (!Number.isInteger(context.mealsPerDay) || context.mealsPerDay < 3 || context.mealsPerDay > 5) {
+    throw new HttpError(400, "invalid_eating_request", "mealsPerDay must be 3, 4, or 5.");
+  }
+  if (context.targetCalories <= 0 || !Number.isFinite(context.targetCalories)) {
+    throw new HttpError(400, "invalid_eating_request", "targetCalories must be positive and finite.");
+  }
+  if (context.proteinTarget !== undefined && (!Number.isFinite(context.proteinTarget) || context.proteinTarget <= 0)) {
+    throw new HttpError(400, "invalid_eating_request", "proteinTarget must be positive and finite.");
+  }
 
   const prompt = buildEatingGeneratePrompt(context);
   const provider = env.AI_PROVIDER || "gemini";
@@ -386,7 +396,7 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
     }
   }
 
-  // Nutrition targets validation per day
+  // Nutrition targets validation per day (±15% calories, ±20% protein)
   const targetCalories = context.targetCalories;
   const proteinTarget = context.proteinTarget;
   for (let day = 1; day <= 7; day++) {
@@ -398,32 +408,44 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
       dayProtein += Number(b.proteinEstimate ?? 0);
     }
     if (targetCalories > 0) {
-      const calMin = targetCalories * 0.75;
-      const calMax = targetCalories * 1.25;
+      const calMin = targetCalories * 0.85;
+      const calMax = targetCalories * 1.15;
       if (dayCalories < calMin || dayCalories > calMax) {
         throw new HttpError(500, "provider_target_mismatch", `Generated calories on day ${day} (${dayCalories}) deviated from target (${targetCalories}).`);
       }
     }
     if (proteinTarget && proteinTarget > 0) {
-      const pMin = proteinTarget * 0.65;
-      const pMax = proteinTarget * 1.35;
+      const pMin = proteinTarget * 0.80;
+      const pMax = proteinTarget * 1.20;
       if (dayProtein < pMin || dayProtein > pMax) {
         throw new HttpError(500, "provider_target_mismatch", `Generated protein on day ${day} (${dayProtein}g) deviated from target (${proteinTarget}g).`);
       }
     }
   }
 
-  // Weekly diversity validation
+  // Weekly diversity validation: 7 distinct complete daily menus
   const dailySignatures = new Set<string>();
   for (let day = 1; day <= 7; day++) {
-    const dayDishes = slots.map((s) => {
+    const dayMenuSignature = slots.map((s) => {
       const b = byDayAndSlot.get(`${day}_${s.slot}`)!;
-      return (b.steps as string[]).slice().sort().join(",");
-    }).join("|");
-    dailySignatures.add(dayDishes);
+      return `${s.slot}:${mealSignature(b.steps as string[])}`;
+    }).join("::");
+    dailySignatures.add(dayMenuSignature);
   }
-  if (dailySignatures.size < 4) {
-    throw new HttpError(500, "provider_insufficient_diversity", "AI generated repetitive meals across days without sufficient weekly diversity.");
+  if (dailySignatures.size !== 7) {
+    throw new HttpError(500, "provider_insufficient_diversity", "AI generated repetitive meals across days without 7 unique daily menus.");
+  }
+
+  // Same-slot diversity across days: all 7 days must have distinct full dish-set signatures for each mealSlot
+  for (const slot of slots) {
+    const slotSignatures = new Set<string>();
+    for (let day = 1; day <= 7; day++) {
+      const b = byDayAndSlot.get(`${day}_${slot.slot}`)!;
+      slotSignatures.add(mealSignature(b.steps as string[]));
+    }
+    if (slotSignatures.size !== 7) {
+      throw new HttpError(500, "provider_insufficient_diversity", `AI repeated dish combinations for meal slot "${slot.slot}" across the week.`);
+    }
   }
 
   const orderedBlocks: Record<string, unknown>[] = [];
@@ -438,6 +460,18 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
     uid: user.uid,
     candidates: orderedBlocks
   });
+}
+
+function normalizeDish(d: string): string {
+  return d.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function mealSignature(dishes: string[]): string {
+  return dishes
+    .map(normalizeDish)
+    .filter((d) => d.length > 0)
+    .sort()
+    .join("|");
 }
 
 function sanitizeMealCandidate(
@@ -506,14 +540,18 @@ function sanitizeMealCandidate(
   }
 
   let proteinEstimate: number | null = null;
-  if (typeof block.proteinEstimate === "number" && Number.isFinite(block.proteinEstimate) && block.proteinEstimate >= 0) {
+  if (typeof block.proteinEstimate === "number" && Number.isFinite(block.proteinEstimate) && block.proteinEstimate > 0) {
     proteinEstimate = Math.round(block.proteinEstimate);
-  } else if (typeof block.protein === "number" && Number.isFinite(block.protein) && block.protein >= 0) {
+  } else if (typeof block.protein === "number" && Number.isFinite(block.protein) && block.protein > 0) {
     proteinEstimate = Math.round(block.protein);
   }
 
   if (caloriesEstimate === null) {
     console.warn("[NutritionWorker] Dropping candidate without valid positive caloriesEstimate.");
+    return null;
+  }
+  if (proteinEstimate === null) {
+    console.warn("[NutritionWorker] Dropping candidate without valid positive proteinEstimate.");
     return null;
   }
 
@@ -533,7 +571,7 @@ function sanitizeMealCandidate(
     mealCategory: inferredSlot.category,
     steps: cleanSteps,
     caloriesEstimate,
-    proteinEstimate: proteinEstimate ?? 0,
+    proteinEstimate,
     blockType: "soft_block",
     candidateType: "block",
     confidenceScore: confidence,

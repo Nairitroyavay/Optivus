@@ -66,7 +66,8 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     if (_didInitFromDraft) return;
     _didInitFromDraft = true;
 
-    final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
+    final currentDraft = ref.read(mockOnboardingProvider).draft;
+    final base = currentDraft.baseTimeline;
     final eatingBlocks = base.confirmedBlocksForSection('eating');
     final isGenerating =
         ref.read(routineImportAiControllerProvider).isExtracting ||
@@ -82,11 +83,19 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         );
       });
     } else if (base.eatingSetupStep <= 1 && eatingBlocks.isNotEmpty) {
-      ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
-        return draft.copyWith(
-          baseTimeline: draft.baseTimeline.copyWith(eatingSetupStep: 2),
-        );
-      });
+      final targets = currentDraft.canonicalNutritionTargets();
+      final currentFingerprint =
+          base.computeEatingGeneratedInputFingerprint(targets: targets);
+      final isFresh = base.eatingGeneratedPlanVersion ==
+              BaseTimelineDraft.currentGate2EatingPlanVersion &&
+          base.eatingGeneratedInputFingerprint == currentFingerprint;
+      if (isFresh && !isLegacyGeneratedEatingPlan(base)) {
+        ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+          return draft.copyWith(
+            baseTimeline: draft.baseTimeline.copyWith(eatingSetupStep: 2),
+          );
+        });
+      }
     }
   }
 
@@ -116,7 +125,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
 
   String _retainedRoutineFailureMessage(String fallback) {
     return _hasRetainedEatingBlocks
-        ? "Couldn't update this meal routine. Your previous routine is still in place."
+        ? "Couldn't update this meal routine. Your previous routine is still saved."
         : fallback;
   }
 
@@ -609,7 +618,11 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
             : AiGenerationErrorCategory.serviceUnavailable,
         message: error is _Onboarding5ResponseException
             ? error.message
-            : 'AI is temporarily unavailable. Try again.',
+            : onboarding5FriendlyAiMessage(
+                error.toString(),
+                const [],
+                operation: Onboarding5AiOperation.generatedPlan,
+              ),
         canRetry: true,
       ),
       operation: (scope) async {
@@ -665,6 +678,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
               result.warnings.isNotEmpty
                   ? result.warnings
                   : ['no_blocks_generated'],
+              operation: Onboarding5AiOperation.generatedPlan,
             ),
           );
         }
@@ -687,20 +701,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
 
         final validationErr = validateGeneratedEatingWeeklyPlan(
           draft.baseTimeline.copyWith(blocks: blocks),
-          targets: bodyContext.hasBodyBasics
-              ? NutritionTargets(
-                  bmi: bodyContext.bmi,
-                  estimatedAge: bodyContext.age,
-                  estimatedBmr: bodyContext.estimatedBmr,
-                  activityFactor: 1.30,
-                  estimatedMaintenanceCalories:
-                      bodyContext.estimatedMaintenanceCalories,
-                  targetCalories: bodyContext.targetCalories,
-                  proteinTarget: bodyContext.proteinTarget,
-                  bodyGoal: bodyContext.bodyGoal,
-                  hasBodyBasics: true,
-                )
-              : null,
+          targets: draft.canonicalNutritionTargets(),
         );
         if (validationErr != null) {
           throw _Onboarding5ResponseException(validationErr);
@@ -754,11 +755,22 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         );
       }
 
+      final draft = ref.read(mockOnboardingProvider).draft;
+      final targets = draft.canonicalNutritionTargets();
+      final planVersion = sourceAsset == null
+          ? BaseTimelineDraft.currentGate2EatingPlanVersion
+          : base.eatingGeneratedPlanVersion;
+      final fingerprint = sourceAsset == null
+          ? base.computeEatingGeneratedInputFingerprint(targets: targets)
+          : base.eatingGeneratedInputFingerprint;
+
       return base.copyWith(
         eatingSetupPath: base.eatingSetupPath ?? onboardingEatingPathCreate,
         blocks: nextBlocks,
         pendingFutureImports: nextPending,
         eatingSetupStep: eatingBlocks.isEmpty ? 1 : 2,
+        eatingGeneratedPlanVersion: planVersion,
+        eatingGeneratedInputFingerprint: fingerprint,
       );
     });
   }
@@ -2888,7 +2900,16 @@ List<int> _dayNumbersFromText(String text) {
   return found.toList()..sort();
 }
 
-String onboarding5FriendlyAiMessage(String? error, List<String> warnings) {
+enum Onboarding5AiOperation {
+  uploadedMenu,
+  generatedPlan,
+}
+
+String onboarding5FriendlyAiMessage(
+  String? error,
+  List<String> warnings, {
+  Onboarding5AiOperation operation = Onboarding5AiOperation.uploadedMenu,
+}) {
   final messages = [
     if (error?.trim().isNotEmpty == true) error!.trim(),
     ...warnings
@@ -2925,17 +2946,25 @@ String onboarding5FriendlyAiMessage(String? error, List<String> warnings) {
   if (text.contains('unsupported_content_type') ||
       text.contains('content type') ||
       text.contains('format')) {
-    return 'This photo format is not supported. Please upload JPEG, PNG, or WEBP.';
+    return operation == Onboarding5AiOperation.generatedPlan
+        ? 'AI request format is not supported.'
+        : 'This photo format is not supported. Please upload JPEG, PNG, or WEBP.';
   }
   if (text.contains('provider_empty_candidates') ||
       text.contains('no_blocks_generated')) {
-    return 'AI could not read meals clearly. Try a clearer photo.';
+    return operation == Onboarding5AiOperation.generatedPlan
+        ? 'AI could not generate your meal routine. Please try again.'
+        : 'AI could not read meals clearly. Try a clearer photo.';
   }
   if (text.contains('too large') || text.contains('image too large')) {
-    return 'Meal photo is too large. Upload a smaller, clearer photo.';
+    return operation == Onboarding5AiOperation.generatedPlan
+        ? 'AI request was too large. Please try again.'
+        : 'Meal photo is too large. Upload a smaller, clearer photo.';
   }
   if (text.contains('not found') || text.contains('r2_image_missing')) {
-    return 'Uploaded meal photo could not be found. Please upload again.';
+    return operation == Onboarding5AiOperation.generatedPlan
+        ? 'AI request resource was not found. Please try again.'
+        : 'Uploaded meal photo could not be found. Please upload again.';
   }
   if (text.contains('unauthorized') ||
       text.contains('invalid key') ||
@@ -2956,7 +2985,9 @@ String onboarding5FriendlyAiMessage(String? error, List<String> warnings) {
       !messages.first.contains('}')) {
     return messages.first;
   }
-  return 'AI could not read this meal routine/menu image. Please upload a clearer image and try again.';
+  return operation == Onboarding5AiOperation.generatedPlan
+      ? 'AI could not generate this meal routine. Please try again.'
+      : 'AI could not read this meal routine/menu image. Please upload a clearer image and try again.';
 }
 
 BaseTimelineDraft _clearEatingBlocks(
@@ -2980,16 +3011,7 @@ void _updateCreateDraft(
 ) {
   ref.read(mockOnboardingProvider.notifier).clearValidation();
   updateBaseTimelineDraft(ref, onboardingEatingStepIndex, (base) {
-    final updated = update(base);
-    return updated.copyWith(
-      blocks: updated.blocks
-          .where(
-            (block) =>
-                block.section != 'eating' ||
-                block.source != onboardingEatingGeneratedSource,
-          )
-          .toList(growable: false),
-    );
+    return update(base);
   });
 }
 
