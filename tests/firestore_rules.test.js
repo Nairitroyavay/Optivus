@@ -931,6 +931,23 @@ describe("Firestore Rules for Routine durability", () => {
       await assertFails(itemRef.update({ onboardingProjectionId: "modified-projection-id" }));
     });
 
+    it("accepts canonical eating routine template with mealSlot and rejects invalid mealSlot", async () => {
+      const owner = ownerDb("user123", true);
+      const mealRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-meal-1");
+      await assertSucceeds(mealRef.set(routineItemData("user123", "routine-meal-1", {
+        category: "eating",
+        mealCategory: "breakfast",
+        mealSlot: "breakfast",
+      })));
+
+      const invalidMealRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-meal-invalid");
+      await assertFails(invalidMealRef.set(routineItemData("user123", "routine-meal-invalid", {
+        category: "eating",
+        mealCategory: "breakfast",
+        mealSlot: 12345,
+      })));
+    });
+
     it("validates routine occurrence action and enforces immutable occurrence fields", async () => {
       const owner = ownerDb("user123", true);
       const validOccRef = owner.collection("users").doc("user123").collection("routineHistory").doc("occ-valid");

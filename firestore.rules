@@ -192,6 +192,7 @@ service cloud.firestore {
         "subtasks",
         "steps",
         "mealCategory",
+        "mealSlot",
         "dishes",
         "caloriesEstimate",
         "proteinEstimate",
@@ -412,6 +413,8 @@ service cloud.firestore {
         && (!data.keys().hasAny(["steps"]) || data.steps is list)
         && (!data.keys().hasAny(["mealCategory"])
           || data.mealCategory is string)
+        && (!data.keys().hasAny(["mealSlot"])
+          || (data.mealSlot is string && data.mealSlot.size() > 0 && data.mealSlot.size() <= 50))
         && (!data.keys().hasAny(["dishes"]) || data.dishes is list)
         && (!data.keys().hasAny(["caloriesEstimate"])
           || data.caloriesEstimate is number)

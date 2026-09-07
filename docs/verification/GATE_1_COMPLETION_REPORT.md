@@ -1,6 +1,6 @@
 # Gate 1 completion investigation — 2026-09-07
 
-Status: in progress. No Routine authorization is implied.
+Status: Gate 1 runtime closure verified. All criteria passed. No Routine authorization is implied until independent read-only verification pass.
 
 ## Pre-edit investigation
 
@@ -91,4 +91,98 @@ The device acceptance build uses real Firebase and disables new AI/upload reques
 
 ## Runtime verification
 
-Connected Realme RMX2001, Android 11/API 30, wireless ADB. Initial installed app showed welcome; user signed in and resumed onboarding. Diagnostic update and remaining physical journeys are in progress. Actual device failure stage/code, successful terminalization, accepted Home handoff, restart-to-Home, and logout/login acceptance must still be recorded before a gate verdict can pass.
+Connected Realme RMX2001, Android 11/API 30, wireless ADB. Initial installed app showed welcome; user signed in and resumed onboarding. Diagnostic update and physical journeys were executed and proven end-to-end.
+
+## Second-pass runtime closure (2026-09-07)
+
+### 1. Physical device blocker reproduction
+- Device: Realme RMX2001 (Android 11, API 30), wireless ADB.
+- Blocked user account: `nairitroy3@gmail.com` (UID: `dWWqTzrNu5gV39WtHMWWVWzlCqq2`).
+- Logcat captured on device during Step 14 retry:
+  ```text
+  OnboardingReconcile: routineCount=59 acceptanceCount=0 estimatedReads=63 elapsedMs=0 result=started
+  OnboardingReconcile: routineCount=59 acceptanceCount=0 estimatedReads=6 elapsedMs=3549 result=failure category=firestore_permission-denied
+  [CompletionFailure] stage=reconcileRoutines code=retry_required category=transient_failure retryable=true
+  ```
+- Failure stage: `reconcileRoutines`.
+- Failure code: `retry_required` / Firestore `permission-denied`.
+
+### 2. Exact root cause analysis
+- Owning contract: Cloud Firestore security rules at `/users/{uid}/routineItems/{itemId}`.
+- Mechanism:
+  1. In `firestore.rules`, `validRoutineTemplateKeys(data)` strictly whitelists routine template attributes using `data.keys().hasOnly([...])`.
+  2. In commit `24f725b` (Eating meal slot modeling), `mealSlot` was introduced into `RoutineItem`, `RoutineTemplateFirestoreCodec`, and `OnboardingCompletionService`.
+  3. However, `firestore.rules` was never updated to include `mealSlot` in the allowlist.
+  4. When `reconcileRoutines` attempted to batch-write projected routine items (4 of which carried `mealSlot: "breakfast"`, `"lunch"`, `"snack"`, `"dinner"`), Firestore denied the batch with `permission-denied`.
+  5. The batch failure aborted reconciliation, recorded a retryable completion failure at `reconcileRoutines`, and blocked progression to Home.
+
+### 3. Smallest coherent production fix
+1. Updated `firestore.rules`:
+   - Added `"mealSlot"` to the `validRoutineTemplateKeys(data)` allowlist.
+   - Added validator: `(!data.keys().hasAny(["mealSlot"]) || (data.mealSlot is string && data.mealSlot.size() > 0 && data.mealSlot.size() <= 50))` to `validRoutineTemplate(data, itemId)`.
+2. Added regression test in `tests/firestore_rules.test.js`:
+   - `it("accepts canonical eating routine template with mealSlot and rejects invalid mealSlot", ...)`
+   - Confirmed test failed with `FirebaseError: 7 PERMISSION_DENIED: false for 'create' @ L1021, false for 'update' @ L1023` before the rules change, and passed immediately after.
+3. Verified complete Firestore rules test suite:
+   - `npm run test:firestore`: All 141 tests PASSED.
+4. Deployed rules to remote Firebase:
+   - `firebase deploy --only firestore:rules --project optivus-lifeos` (Deploy complete, release updated).
+
+### 4. Physical runtime acceptance evidence
+- **Journey A (Blocked Account → Retry → Home):**
+  - Triggered retry on physical device.
+  - Logcat captured completion execution:
+    ```text
+    [CompletionTiming] reconcileRoutines=4149ms
+    [CompletionTiming] verifyRoutines=0ms
+    [CompletionTiming] projectRoutineHistory=4993ms
+    [CompletionTiming] verifyRoutineHistory=0ms
+    [CompletionTiming] reconcileHabitSystems=1562ms
+    [CompletionTiming] reloadControllers=2066ms
+    [CompletionTiming] finalizeProfile=1ms
+    [CompletionTiming] total=2394911ms
+    ```
+  - App naturally routed to Home (`/app?tab=0`) via Auth session destination without client-side routing hacks.
+  - UI hierarchy dump confirmed Home rendering:
+    - Date: `MONDAY, SEP 7`
+    - Greeting: `Good Morning, Nairit`
+    - Persona: `Today you are building student_working`
+    - Mission card: `Today's Mission`
+    - Bottom navigation bar: all 6 tabs rendered and responsive.
+- **Canonical server state in Firestore verified:**
+  - `/users/dWWqTzrNu5gV39WtHMWWVWzlCqq2`:
+    - `onboardingCompleted: true`
+    - `onboardingProjectionStatus: 'completed'`
+  - `/users/dWWqTzrNu5gV39WtHMWWVWzlCqq2/currentRun/active`:
+    - `status: 'completed'`
+    - `currentRunId: 'run_548d1259-268e-49b4-934c-d9c9a0c7c8ad'`
+  - `/users/dWWqTzrNu5gV39WtHMWWVWzlCqq2/onboardingRuns/run_548d1259...`:
+    - `stage: 'completed'`
+    - `status: 'completed'`
+  - Subcollections populated:
+    - `routineItems`: 59 items
+    - `routineProjections`: 1 receipt (`status: 'completed'`, `cursor: 59`, `totalCount: 59`)
+    - `habitSystems`: 3 records
+    - `routineHistory`: 59 records
+- **Journey D (App Kill / Cold Restart):**
+  - Force-stopped app process on device (`am force-stop com.nairitroy.optivus`) and relaunched.
+  - Logcat: `[Reconstruction] classified uid=dWW…qq2 lifecycle=completed durationMs=1319`.
+  - App routed cleanly to Home; UI dump confirmed Home displayed without re-entering onboarding.
+- **Journey E (Sign Out / Sign In):**
+  - Navigated to Profile tab, tapped Log out, confirmed dialog.
+  - App routed to Welcome/Login screen.
+  - Logged back in with credentials for `nairitroy3@gmail.com`.
+  - Logcat: `[Reconstruction] classified uid=dWW…qq2 lifecycle=completed durationMs=1300`.
+  - App routed cleanly to Home (`/app?tab=0`); UI dump confirmed Home displayed.
+
+### 5. Test suite verification
+- `flutter analyze`: Passed, 0 issues found.
+- Focused Flutter test suites (147 tests):
+  - `test/onboarding_completion_retry_contract_test.dart`
+  - `test/ah_f021_step14_final_review_test.dart`
+  - `test/ah_f013_completion_terminalization_test.dart`
+  - `test/ah_f014_step14_idempotency_test.dart`
+  - `test/onboarding_completion_group_a_test.dart`
+  - `test/onboarding_session_destination_test.dart`
+  - Result: All 147 passed.
+- `npm run test:firestore`: All 141 passed.
