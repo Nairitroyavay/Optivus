@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:optivus/core/errors/completion_error_mapper.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -256,7 +257,38 @@ class OnboardingCompletionJobService {
           clearLastError: true,
           clearLastFailure: true,
         );
-        await _saveJobStatus(job, activate: true, activationDraft: finalDraft);
+        try {
+          await _saveJobStatus(
+            job,
+            activate: true,
+            activationDraft: finalDraft,
+          );
+        } catch (error) {
+          // A rejected atomic activation has no run to update. Keep attempted
+          // failure evidence local; never manufacture a durable failure write.
+          // A lost response may have committed: retry rereads the same run ID.
+          final failure = _buildSanitizedFailure(
+            error,
+            OnboardingCompletionStage.validateInput,
+            activation: true,
+          );
+          _logSafeFailure(failure);
+          if (operationGeneration == _operationGenerationByOwner[uid]) {
+            activeJobNotifier.value = job.copyWith(
+              status: failure.retryable
+                  ? OnboardingJobStatus.retryableFailure
+                  : OnboardingJobStatus.fatalFailure,
+              lastFailureStage: failure.stage,
+              lastFailureCode: failure.failureCode,
+              retryable: failure.retryable,
+              publicMessageKey: failure.publicMessageKey,
+              diagnosticCategory: failure.diagnosticCategory,
+              safeCauseType: failure.errorType,
+              lastFailureOccurredAt: DateTime.now(),
+            );
+          }
+          rethrow;
+        }
 
         void checkSession() {
           if (operationGeneration != _operationGenerationByOwner[uid]) {
@@ -632,6 +664,7 @@ class OnboardingCompletionJobService {
             bundle: bundle,
             reader: reader,
           );
+          job = job.copyWith(stage: OnboardingCompletionStage.completed);
           return await _terminalizeCompletion(
             uid: uid,
             expectedRunId: runId,
@@ -645,7 +678,13 @@ class OnboardingCompletionJobService {
           // this failure is attached to the last committed checkpoint, rather
           // than accidentally advancing it to the operation that failed.
           final failedStage = job.stage;
-          final persistedJob = await _loadJobStatus(uid, runId);
+          OnboardingCompletionJob? persistedJob;
+          try {
+            persistedJob = await _loadJobStatus(uid, runId);
+          } catch (_) {
+            // Keep the original operation failure if its readback also fails.
+          }
+          if (operationGeneration != _operationGenerationByOwner[uid]) rethrow;
           if (persistedJob?.status == OnboardingJobStatus.completed &&
               persistedJob?.stage == OnboardingCompletionStage.completed) {
             return persistedJob!;
@@ -653,6 +692,7 @@ class OnboardingCompletionJobService {
           job = persistedJob ?? job;
           final now = DateTime.now();
           final failure = _buildSanitizedFailure(e, failedStage);
+          _logSafeFailure(failure);
           job = job.copyWith(
             status: failure.retryable
                 ? OnboardingJobStatus.retryableFailure
@@ -668,7 +708,17 @@ class OnboardingCompletionJobService {
             failedEntityIds: failure.failedEntityIds,
             lastFailureOccurredAt: now,
           );
-          await _saveJobStatus(job);
+          if (persistedJob != null) {
+            try {
+              await _saveJobStatus(job);
+            } catch (_) {
+              // A secondary diagnostic write must not replace the original
+              // failure or leave the UI claiming that the attempt is running.
+            }
+          }
+          if (operationGeneration == _operationGenerationByOwner[uid]) {
+            activeJobNotifier.value = job;
+          }
           rethrow;
         }
       },
@@ -1256,7 +1306,7 @@ class OnboardingCompletionJobService {
     if (firestore != null) {
       final pointer = await firestore!
           .doc(FirestoreUserPaths.onboardingCurrentRun(uid))
-          .get();
+          .get(const GetOptions(source: Source.server));
       final pointerData = pointer.data();
       final runId = pointerData?['currentRunId'] as String?;
       if (runId != null && runId.isNotEmpty) {
@@ -1286,7 +1336,7 @@ class OnboardingCompletionJobService {
       // creates a canonical run rather than mutating this document.
       final legacy = await firestore!
           .doc(FirestoreUserPaths.onboardingCompletionJob(uid))
-          .get();
+          .get(const GetOptions(source: Source.server));
       final legacyData = legacy.data();
       if (legacyData == null) {
         return const OnboardingCurrentRunSnapshot.none();
@@ -1326,7 +1376,7 @@ class OnboardingCompletionJobService {
     if (firestore != null) {
       final snapshot = await firestore!
           .doc(FirestoreUserPaths.onboardingRun(uid, runId))
-          .get();
+          .get(const GetOptions(source: Source.server));
       final data = snapshot.data();
       return data == null ? null : OnboardingCompletionJob.fromMap(data);
     }
@@ -1343,7 +1393,7 @@ class OnboardingCompletionJobService {
     bool activate = false,
     OnboardingDraft? activationDraft,
   }) async {
-    activeJobNotifier.value = job;
+    final generation = _operationGenerationByOwner[job.uid];
     jobStatusWriteCount += 1;
     if (firestore != null) {
       if (activate) {
@@ -1375,6 +1425,9 @@ class OnboardingCompletionJobService {
             .doc(FirestoreUserPaths.onboardingRun(job.uid, job.jobId))
             .set(job.toFirestoreMap());
       }
+      if (generation == _operationGenerationByOwner[job.uid]) {
+        activeJobNotifier.value = job;
+      }
       return;
     }
     if (requirePersistentJobs) {
@@ -1398,6 +1451,7 @@ class OnboardingCompletionJobService {
       _memoryStore.currentRunIds[job.uid] = job.jobId;
       _memoryStore.currentRunStatuses[job.uid] = 'active';
     }
+    activeJobNotifier.value = job;
   }
 
   void _validateInMemoryRunActivation(
@@ -1448,10 +1502,59 @@ class OnboardingCompletionJobService {
     };
   }
 
+  void _logSafeFailure(SanitizedFailurePayload failure) {
+    if (!kDebugMode) return;
+    final category = switch (failure.diagnosticCategory) {
+      'authentication' ||
+      'cloud_persistence' ||
+      'projection_failed' ||
+      'habit_projection_failed' ||
+      'validation_failed' ||
+      'transient_failure' => failure.diagnosticCategory,
+      _ => 'execution_failed',
+    };
+    debugPrint(
+      '[CompletionFailure] stage=${CompletionErrorMapper.safeStage(failure.stage)} '
+      'code=${CompletionErrorMapper.safeCode(failure.failureCode)} '
+      'category=$category retryable=${failure.retryable}',
+    );
+  }
+
   static SanitizedFailurePayload _buildSanitizedFailure(
     Object error,
-    OnboardingCompletionStage stage,
-  ) {
+    OnboardingCompletionStage stage, {
+    bool activation = false,
+  }) {
+    if (error is FirebaseException) {
+      final unauthenticated = error.code == 'unauthenticated';
+      final code = switch (error.code) {
+        'permission-denied' =>
+          activation
+              ? 'COMPLETION_ACTIVATION_PERMISSION_DENIED'
+              : 'COMPLETION_PERSISTENCE_PERMISSION_DENIED',
+        'unauthenticated' => 'COMPLETION_UNAUTHENTICATED',
+        'unavailable' ||
+        'deadline-exceeded' => 'COMPLETION_NETWORK_UNAVAILABLE',
+        _ =>
+          activation
+              ? 'COMPLETION_ACTIVATION_FAILED'
+              : 'COMPLETION_PERSISTENCE_FAILED',
+      };
+      return SanitizedFailurePayload(
+        errorType: 'FirebaseException',
+        stage: stage.name,
+        failureCode: code,
+        diagnosticCategory: unauthenticated
+            ? 'authentication'
+            : 'cloud_persistence',
+        retryable: !unauthenticated,
+        publicMessageKey: unauthenticated
+            ? 'error_unauthenticated'
+            : 'error_completion_persistence',
+        failedEntityIds: const [],
+        sanitizedMessage: 'Completion persistence did not finish.',
+      );
+    }
     if (error is OnboardingCompletionFailureException) {
       return SanitizedFailurePayload(
         errorType: 'OnboardingCompletionFailureException',

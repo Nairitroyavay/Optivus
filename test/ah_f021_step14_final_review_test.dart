@@ -23,6 +23,7 @@ void main() {
   Widget buildTestHost({
     required OnboardingDraft draft,
     OnboardingStep14? child,
+    OnboardingCompletionJobService? completionService,
     void Function(ProviderContainer)? onContainerCreated,
     Size size = const Size(393, 873),
     double textScale = 1.0,
@@ -32,6 +33,10 @@ void main() {
   }) {
     return ProviderScope(
       overrides: [
+        if (completionService != null)
+          onboardingCompletionJobServiceProvider.overrideWithValue(
+            completionService,
+          ),
         mockOnboardingProvider.overrideWith(
           (_) => MockOnboardingNotifier()..loadSeedData(draft),
         ),
@@ -1506,6 +1511,99 @@ void main() {
       },
     );
   });
+
+  testWidgets(
+    'Gate 1 failure diagnostics survive an unavailable preview and reject secret fields',
+    (tester) async {
+      final key = GlobalKey<OnboardingStep14State>();
+      final ready = buildReadyDraft();
+      final draft = ready.copyWith(
+        baseTimeline: ready.baseTimeline.copyWith(
+          skinCareSetupPath: 'has_products',
+        ),
+      );
+      expect(
+        OnboardingCompletionService.projectBundleResult(draft),
+        isA<Step14BundleBuildInvalid>(),
+      );
+      final now = DateTime.now();
+      final failure = OnboardingCompletionJob(
+        jobId: 'run',
+        uid: draft.uid,
+        createdAt: now,
+        updatedAt: now,
+        status: OnboardingJobStatus.retryableFailure,
+        stage: OnboardingCompletionStage.verifyBundle,
+        lastFailureStage: 'verifyRoutines',
+        lastFailureCode: 'COMPLETION_ROUTINE_ACCOUNTING_FAILED',
+        retryable: true,
+        diagnosticCategory: 'projection_failed',
+        lastError: 'secret@example.com token=private',
+        failedEntityIds: const ['private-entity'],
+      );
+      final store = OnboardingCompletionMemoryStore();
+      store.jobs['${draft.uid}:run'] = failure;
+      store.currentRunIds[draft.uid] = 'run';
+      store.currentRunStatuses[draft.uid] = 'active';
+      final service = OnboardingCompletionJobService(
+        onboardingRepository: FakeOnboardingRepository(),
+        profileRepository: FakeProfileRepository(),
+        memoryStore: store,
+      );
+      await tester.pumpWidget(
+        buildTestHost(draft: draft, step14Key: key, completionService: service),
+      );
+      key.currentState!.setFailureState(
+        CompletionErrorMapper.map(error: Exception('raw secret')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('step14-failure')), findsOneWidget);
+      expect(find.text('Back to Review'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('step14-technical-details')));
+      await tester.pumpAndSettle();
+      expect(find.text('Stage: verifyRoutines'), findsOneWidget);
+      expect(
+        find.text('Code: COMPLETION_ROUTINE_ACCOUNTING_FAILED'),
+        findsOneWidget,
+      );
+      expect(find.text('Retryable: Yes'), findsOneWidget);
+      expect(find.textContaining('secret'), findsNothing);
+      expect(find.textContaining('private'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'Gate 1 completed authoritative pointer hides Back to Review with no active notifier',
+    (tester) async {
+      final key = GlobalKey<OnboardingStep14State>();
+      final draft = buildReadyDraft();
+      final now = DateTime.now();
+      final store = OnboardingCompletionMemoryStore();
+      store.jobs['${draft.uid}:run'] = OnboardingCompletionJob(
+        jobId: 'run',
+        uid: draft.uid,
+        createdAt: now,
+        updatedAt: now,
+        status: OnboardingJobStatus.completed,
+        stage: OnboardingCompletionStage.completed,
+      );
+      store.currentRunIds[draft.uid] = 'run';
+      store.currentRunStatuses[draft.uid] = 'completed';
+      final service = OnboardingCompletionJobService(
+        onboardingRepository: FakeOnboardingRepository(),
+        profileRepository: FakeProfileRepository(),
+        memoryStore: store,
+      );
+      await tester.pumpWidget(
+        buildTestHost(draft: draft, step14Key: key, completionService: service),
+      );
+      key.currentState!.setFailureState(
+        CompletionErrorMapper.map(error: Exception('interrupted handoff')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Back to Review'), findsNothing);
+    },
+  );
 
   // ── GROUP 6: Responsive & Layout Geometry Tests (Tests BD–BM) ───────────────
   group('AH-F021 Responsive & Layout Geometry Tests (Tests BD–BM)', () {

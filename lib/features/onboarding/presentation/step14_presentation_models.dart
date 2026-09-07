@@ -6,26 +6,19 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
 
 /// Presentation modes for Step 14.
-enum Step14PresentationMode {
-  review,
-  finishing,
-  success,
-  failure,
-}
+enum Step14PresentationMode { review, finishing, success, failure }
 
 /// Status of a user-facing completion stage.
-enum CompletionStageStatus {
-  pending,
-  active,
-  completed,
-  failed,
-}
+enum CompletionStageStatus { pending, active, completed, failed }
 
 /// Public completion stage identifier.
 enum Step14PublicStageId {
   savingSetup('saving_setup', 'Saving your setup'),
   preparingRoutine('preparing_routine', 'Preparing your routine'),
-  preparingDailySystems('preparing_daily_systems', 'Preparing your daily systems'),
+  preparingDailySystems(
+    'preparing_daily_systems',
+    'Preparing your daily systems',
+  ),
   preparingHome('preparing_home', 'Preparing Home');
 
   final String id;
@@ -145,7 +138,9 @@ class Step14ConflictGroupProjector {
       final leftId = id1.compareTo(id2) <= 0 ? id1 : id2;
       final rightId = id1.compareTo(id2) <= 0 ? id2 : id1;
       final groupId = '$leftId|$rightId|${occurrence.conflictType}';
-      grouped.putIfAbsent(groupId, () => <TimelineConflictDraft>[]).add(occurrence);
+      grouped
+          .putIfAbsent(groupId, () => <TimelineConflictDraft>[])
+          .add(occurrence);
     }
 
     final groups = <Step14ConflictGroup>[];
@@ -205,10 +200,12 @@ class Step14ConflictGroupProjector {
           : '';
 
       final canKeepBoth = items.any((i) => i.canKeepBoth);
-      final publicReason = items.map((i) => i.publicReason).firstWhere(
-        (r) => r.isNotEmpty,
-        orElse: () => 'Schedules overlap during this time.',
-      );
+      final publicReason = items
+          .map((i) => i.publicReason)
+          .firstWhere(
+            (r) => r.isNotEmpty,
+            orElse: () => 'Schedules overlap during this time.',
+          );
 
       groups.add(
         Step14ConflictGroup(
@@ -274,7 +271,10 @@ class Step14ConflictGroupProjector {
         }
       } else {
         if (day == targetDay) {
-          windows.add((startMinute: block.startMinute, endMinute: block.endMinute));
+          windows.add((
+            startMinute: block.startMinute,
+            endMinute: block.endMinute,
+          ));
         }
       }
     }
@@ -318,7 +318,8 @@ class Step14ReadinessSummary {
     required int unresolvedConflictGroupCount,
   }) {
     final profileOk =
-        draft.lifeRole.validate() == null && draft.bodyBasics.validate() == null;
+        draft.lifeRole.validate() == null &&
+        draft.bodyBasics.validate() == null;
 
     final routineOk =
         draft.baseTimeline.blocks.isNotEmpty &&
@@ -514,15 +515,41 @@ bool canReturnToStep14Review({
   required OnboardingCompletionJob? job,
   required OnboardingCurrentRunSnapshot currentRunSnapshot,
 }) {
-  if (job == null) return true;
-  // If completion reached or passed reconcileRoutines, durable server state
-  // was mutated or terminalized; returning to edit draft is not safe.
-  if (job.stage.index >= OnboardingCompletionStage.reconcileRoutines.index) {
+  if (currentRunSnapshot.hasPointer) {
+    final persisted = currentRunSnapshot.job;
+    if (persisted == null ||
+        currentRunSnapshot.pointerStatus != 'active' ||
+        (persisted.status != OnboardingJobStatus.retryableFailure &&
+            persisted.status != OnboardingJobStatus.fatalFailure) ||
+        currentRunSnapshot.pointerSchemaVersion != 1 ||
+        currentRunSnapshot.runId != persisted.jobId ||
+        currentRunSnapshot.ownerUid != persisted.ownerUid ||
+        currentRunSnapshot.sourceFingerprint != persisted.sourceFingerprint ||
+        currentRunSnapshot.draftRevision != persisted.draftRevision ||
+        (job != null && job.jobId != persisted.jobId)) {
+      return false;
+    }
+    if (!_safeReviewJob(persisted)) return false;
+  }
+  return job == null || _safeReviewJob(job);
+}
+
+bool _safeReviewJob(OnboardingCompletionJob job) {
+  if (job.status == OnboardingJobStatus.completed ||
+      job.stage.index >= OnboardingCompletionStage.reconcileRoutines.index) {
     return false;
   }
-  if (currentRunSnapshot.pointerStatus == 'terminalized' ||
-      currentRunSnapshot.pointerStatus == 'completed') {
-    return false;
+  // Failed operations do not advance the durable checkpoint. Reconciliation
+  // may already have written outputs before reporting its failure.
+  final attempted = job.lastFailureStage;
+  if (attempted != null) {
+    final stage = OnboardingCompletionStage.values
+        .where((stage) => stage.name == attempted)
+        .firstOrNull;
+    if (stage == null ||
+        stage.index >= OnboardingCompletionStage.reconcileRoutines.index) {
+      return false;
+    }
   }
   return true;
 }

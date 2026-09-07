@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:optivus/core/errors/recoverable_error.dart';
+import 'package:optivus/core/errors/completion_error_mapper.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/presentation/step14_presentation_models.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/fixed_timeline_adapter.dart';
@@ -46,9 +47,13 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
   bool _viewingFullTimeline = false;
   int _timelineSelectedDay = 1;
   RecoverableError? _recoverableError;
+  OnboardingCompletionJob? _failureJob;
+  OnboardingCurrentRunSnapshot? _failureSnapshot;
+  int _failureReadGeneration = 0;
 
   @override
   void dispose() {
+    _failureReadGeneration++;
     _scrollController.dispose();
     super.dispose();
   }
@@ -94,19 +99,62 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
   void startFinishingPresentation() {
     if (!mounted) return;
     closeFullTimelinePreview();
+    _failureReadGeneration++;
+    _failureJob = null;
+    _failureSnapshot = null;
     setState(() {
       _presentationMode = Step14PresentationMode.finishing;
       _recoverableError = null;
     });
   }
 
-  void setFailureState(RecoverableError error) {
+  void setFailureState(RecoverableError error, {OnboardingCompletionJob? job}) {
     if (!mounted) return;
     closeFullTimelinePreview();
     setState(() {
       _presentationMode = Step14PresentationMode.failure;
       _recoverableError = error;
+      _failureJob = job;
+      _failureSnapshot = null;
     });
+    _loadFailureSnapshot(++_failureReadGeneration);
+  }
+
+  Future<void> _loadFailureSnapshot(int generation) async {
+    final uid = ref.read(mockOnboardingProvider).draft.uid;
+    try {
+      final snapshot = await ref
+          .read(onboardingCompletionJobServiceProvider)
+          .loadCurrentRunSnapshot(uid);
+      if (!mounted ||
+          generation != _failureReadGeneration ||
+          ref.read(mockOnboardingProvider).draft.uid != uid) {
+        return;
+      }
+      setState(() {
+        _failureSnapshot = snapshot;
+        final persisted = snapshot.job;
+        if (persisted != null &&
+            persisted.lastFailureCode != null &&
+            (_failureJob == null || _failureJob!.jobId == persisted.jobId)) {
+          _failureJob = persisted;
+          _recoverableError = CompletionErrorMapper.map(job: persisted);
+        }
+        if (snapshot.hasPointer &&
+            (persisted == null ||
+                snapshot.ownerUid != uid ||
+                snapshot.runId != persisted.jobId ||
+                snapshot.pointerSchemaVersion != 1 ||
+                snapshot.sourceFingerprint != persisted.sourceFingerprint ||
+                snapshot.draftRevision != persisted.draftRevision ||
+                !['active', 'completed'].contains(snapshot.pointerStatus))) {
+          _recoverableError = CompletionErrorMapper.map(isContradiction: true);
+        }
+      });
+    } catch (_) {
+      // Unknown server state is not evidence that editing is safe.
+      // Keep retry available, but never fabricate an absent pointer.
+    }
   }
 
   void setSuccessState() {
@@ -169,11 +217,9 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
     }
 
     // Handle finishing / success / failure modes
-    if (_presentationMode != Step14PresentationMode.review && bundle != null) {
+    if (_presentationMode != Step14PresentationMode.review) {
       return _buildFinishingScaffold(
-        activeJob: activeJob,
-        draft: draft,
-        bundle: bundle,
+        activeJob: activeJob?.uid == draft.uid ? activeJob : null,
       );
     }
 
@@ -1067,8 +1113,6 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
   // ── Finishing / Success / Failure Presentation ──────────────────────────────
   Widget _buildFinishingScaffold({
     required OnboardingCompletionJob? activeJob,
-    required OnboardingDraft draft,
-    required OnboardingCompletionBundle bundle,
   }) {
     if (_presentationMode == Step14PresentationMode.success) {
       return _buildSuccessView();
@@ -1295,10 +1339,13 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
 
   Widget _buildFailureView(OnboardingCompletionJob? activeJob) {
     final error = _recoverableError!;
-    final snapshot = const OnboardingCurrentRunSnapshot.none();
-    final canReturn = canReturnToStep14Review(
-      job: activeJob,
-      currentRunSnapshot: snapshot,
+    final snapshot = _failureSnapshot;
+    final job = _failureJob ?? activeJob;
+    final canReturn =
+        snapshot != null &&
+        canReturnToStep14Review(job: job, currentRunSnapshot: snapshot);
+    final failureStage = CompletionErrorMapper.safeStage(
+      job?.lastFailureStage ?? error.supportHint,
     );
 
     return Scaffold(
@@ -1350,17 +1397,31 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
                   ),
                   const SizedBox(height: 24),
 
+                  ExpansionTile(
+                    key: const ValueKey('step14-technical-details'),
+                    title: const Text('Technical details'),
+                    children: [
+                      Text(
+                        'Stage: $failureStage',
+                        key: const ValueKey('step14-failure-stage'),
+                      ),
+                      Text(
+                        'Code: ${CompletionErrorMapper.safeCode(error.diagnosticCode)}',
+                        key: const ValueKey('step14-failure-code'),
+                      ),
+                      Text(
+                        'Retryable: ${error.retrySafe ? 'Yes' : 'No'}',
+                        key: const ValueKey('step14-failure-retryable'),
+                      ),
+                    ],
+                  ),
                   // Actions based on RecoverableError
                   if (error.retrySafe)
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
                         onPressed: () {
-                          setState(() {
-                            _presentationMode =
-                                Step14PresentationMode.finishing;
-                            _recoverableError = null;
-                          });
+                          startFinishingPresentation();
                           widget.onCompletionStarted?.call();
                         },
                         child: const Text('Try Again'),

@@ -1,4 +1,8 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:optivus/core/errors/completion_error_mapper.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
+import 'package:optivus/features/onboarding/presentation/step14_presentation_models.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
@@ -12,6 +16,278 @@ import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/services/onboarding_run_identity.dart';
 
 void main() {
+  test(
+    'Gate 1 rejected activation is observable without a phantom running job',
+    () async {
+      final database = _RejectedActivationFirestore();
+      final service = OnboardingCompletionJobService(
+        onboardingRepository: FakeOnboardingRepository(),
+        profileRepository: FakeProfileRepository(),
+        firestore: database,
+      );
+      final draft = _completedDraft('activation-test');
+      final bundle = OnboardingCompletionService.buildBundle(draft);
+      final statuses = <OnboardingJobStatus>[];
+      service.activeJobNotifier.addListener(() {
+        final job = service.activeJobNotifier.value;
+        if (job != null) statuses.add(job.status);
+      });
+      for (var attempt = 0; attempt < 2; attempt++) {
+        await expectLater(
+          service.runCompletionJob(
+            uid: draft.uid,
+            finalDraft: draft,
+            bundle: bundle,
+          ),
+          throwsA(isA<FirebaseException>()),
+        );
+        final failure = service.activeJobNotifier.value;
+        expect(failure?.status, OnboardingJobStatus.retryableFailure);
+        expect(failure?.lastFailureStage, 'validateInput');
+        expect(
+          failure?.lastFailureCode,
+          'COMPLETION_ACTIVATION_PERMISSION_DENIED',
+        );
+        expect(failure?.retryable, isTrue);
+        expect(
+          (await service.loadCurrentRunSnapshot(draft.uid)).hasPointer,
+          isFalse,
+        );
+        expect(database.directWrites, 0);
+      }
+      expect(statuses, isNot(contains(OnboardingJobStatus.running)));
+      expect(database.commits, 2);
+      expect(
+        database.paths,
+        containsAll([
+          'users/activation-test/onboarding/draft',
+          'users/activation-test/onboardingRuns/${bundle.runId}',
+          'users/activation-test/onboarding/currentRun',
+        ]),
+      );
+    },
+  );
+
+  test('Gate 1 durable diagnostics outrank raw auth strings', () {
+    final now = DateTime.now();
+    final job = OnboardingCompletionJob(
+      jobId: 'run',
+      uid: 'owner',
+      createdAt: now,
+      updatedAt: now,
+      status: OnboardingJobStatus.retryableFailure,
+      lastFailureCode: 'COMPLETION_ROUTINE_ACCOUNTING_FAILED',
+      lastFailureStage: 'verifyRoutines',
+      diagnosticCategory: 'projection_failed',
+      retryable: true,
+    );
+    final error = CompletionErrorMapper.map(
+      job: job,
+      error: Exception('unauthenticated secret@example.com'),
+    );
+    expect(error.category, RecoverableErrorCategory.completionRetry);
+    expect(error.diagnosticCode, job.lastFailureCode);
+    expect(error.retrySafe, isTrue);
+  });
+
+  test(
+    'Gate 1 typed permission denial is distinct from expired authentication',
+    () {
+      expect(
+        CompletionErrorMapper.map(
+          error: FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'permission-denied',
+          ),
+        ).category,
+        RecoverableErrorCategory.cloudPersistence,
+      );
+      expect(
+        CompletionErrorMapper.map(
+          error: FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'unauthenticated',
+          ),
+        ).category,
+        RecoverableErrorCategory.authentication,
+      );
+    },
+  );
+
+  test(
+    'Gate 1 dangling and completed pointers never permit editing without a job',
+    () {
+      for (final status in ['active', 'completed']) {
+        expect(
+          canReturnToStep14Review(
+            job: null,
+            currentRunSnapshot: OnboardingCurrentRunSnapshot(
+              hasPointer: true,
+              pointerStatus: status,
+            ),
+          ),
+          isFalse,
+        );
+      }
+    },
+  );
+
+  test(
+    'Gate 1 attempted reconciliation prevents editing at an earlier durable checkpoint',
+    () {
+      final now = DateTime.now();
+      final job = OnboardingCompletionJob(
+        jobId: 'run',
+        uid: 'owner',
+        createdAt: now,
+        updatedAt: now,
+        stage: OnboardingCompletionStage.verifyBundle,
+        status: OnboardingJobStatus.retryableFailure,
+        lastFailureStage: 'reconcileRoutines',
+      );
+      expect(
+        canReturnToStep14Review(
+          job: job,
+          currentRunSnapshot: const OnboardingCurrentRunSnapshot.none(),
+        ),
+        isFalse,
+      );
+    },
+  );
+
+  test(
+    'Gate 1 legacy job without metadata remains safe and unknown metadata cannot leak',
+    () {
+      final now = DateTime.now();
+      final legacy = OnboardingCompletionJob(
+        jobId: 'run',
+        uid: 'owner',
+        createdAt: now,
+        updatedAt: now,
+        status: OnboardingJobStatus.retryableFailure,
+      );
+      expect(
+        CompletionErrorMapper.map(job: legacy).category,
+        RecoverableErrorCategory.completionRetry,
+      );
+      final poisoned = legacy.copyWith(
+        lastFailureCode: 'PRIVATE_UID_TOKEN',
+        lastFailureStage: 'secret@example.com',
+        retryable: true,
+      );
+      final mapped = CompletionErrorMapper.map(job: poisoned);
+      expect(mapped.diagnosticCode, 'COMPLETION_VERIFY_FAILED');
+      expect(mapped.supportHint, 'unknown');
+    },
+  );
+
+  test(
+    'Gate 1 matching early failed pointer permits review but running or contradictory state does not',
+    () {
+      final now = DateTime.now();
+      final failed = OnboardingCompletionJob(
+        jobId: 'run',
+        uid: 'owner',
+        createdAt: now,
+        updatedAt: now,
+        status: OnboardingJobStatus.retryableFailure,
+        stage: OnboardingCompletionStage.verifyDraft,
+        lastFailureStage: 'persistBundle',
+      );
+      OnboardingCurrentRunSnapshot snapshot(
+        OnboardingCompletionJob job, {
+        String owner = 'owner',
+      }) => OnboardingCurrentRunSnapshot(
+        hasPointer: true,
+        runId: 'run',
+        ownerUid: owner,
+        pointerSchemaVersion: 1,
+        pointerStatus: 'active',
+        sourceFingerprint: job.sourceFingerprint,
+        draftRevision: job.draftRevision,
+        job: job,
+      );
+      expect(
+        canReturnToStep14Review(
+          job: failed,
+          currentRunSnapshot: snapshot(failed),
+        ),
+        isTrue,
+      );
+      expect(
+        canReturnToStep14Review(
+          job: failed,
+          currentRunSnapshot: snapshot(failed, owner: 'other'),
+        ),
+        isFalse,
+      );
+      final running = failed.copyWith(
+        status: OnboardingJobStatus.running,
+        clearLastFailure: true,
+      );
+      expect(
+        canReturnToStep14Review(
+          job: running,
+          currentRunSnapshot: snapshot(running),
+        ),
+        isFalse,
+      );
+    },
+  );
+
+  test(
+    'Gate 1 later Firestore failure persists exact stage and successful retry clears it',
+    () async {
+      const uid = 'later-failure';
+      final repository = _ControlledBundleRepository();
+      repository.failAttempt(
+        1,
+        FirebaseException(
+          plugin: 'cloud_firestore',
+          code: 'permission-denied',
+          message: 'private-payload',
+        ),
+      );
+      final profiles = FakeProfileRepository();
+      await profiles.saveUserProfile(UserProfile.empty(uid: uid));
+      final service = OnboardingCompletionJobService(
+        onboardingRepository: repository,
+        profileRepository: profiles,
+      );
+      final draft = _completedDraft(uid);
+      final bundle = OnboardingCompletionService.buildBundle(draft);
+      await expectLater(
+        service.runCompletionJob(uid: uid, finalDraft: draft, bundle: bundle),
+        throwsA(isA<FirebaseException>()),
+      );
+      final durable = await service.loadCurrentJob(uid);
+      expect(durable!.lastFailureStage, 'persistBundle');
+      expect(
+        durable.lastFailureCode,
+        'COMPLETION_PERSISTENCE_PERMISSION_DENIED',
+      );
+      expect(durable.diagnosticCategory, 'cloud_persistence');
+      final mapped = CompletionErrorMapper.map(
+        job: durable,
+        error: Exception('unauthenticated'),
+      );
+      expect(mapped.supportHint, 'persistBundle');
+      expect(mapped.category, RecoverableErrorCategory.cloudPersistence);
+      final completed = await service.runCompletionJob(
+        uid: uid,
+        finalDraft: draft,
+        bundle: bundle,
+      );
+      expect(completed.status, OnboardingJobStatus.completed);
+      expect(completed.lastFailureCode, isNull);
+      expect(completed.lastFailureStage, isNull);
+      expect(
+        (await service.loadCurrentRunSnapshot(uid)).pointerStatus,
+        'completed',
+      );
+    },
+  );
+
   test(
     'Step 14 retry reuses only the exact persisted final-draft bundle identity',
     () {
@@ -376,4 +652,67 @@ class _ControlledBundleRepository extends FakeOnboardingRepository {
     if (failure != null) throw failure;
     await super.saveCompletionBundle(bundle);
   }
+}
+
+class _RejectedActivationFirestore implements FirebaseFirestore {
+  int commits = 0;
+  int directWrites = 0;
+  final paths = <String>[];
+  @override
+  DocumentReference<Map<String, dynamic>> doc(String path) =>
+      _AbsentDocument(this, path);
+  @override
+  WriteBatch batch() => _RejectedBatch(this);
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+// Test double for the Firestore boundary; no new mocking dependency.
+// ignore: subtype_of_sealed_class
+class _AbsentDocument implements DocumentReference<Map<String, dynamic>> {
+  final _RejectedActivationFirestore database;
+  @override
+  final String path;
+  _AbsentDocument(this.database, this.path);
+  @override
+  Future<DocumentSnapshot<Map<String, dynamic>>> get([
+    GetOptions? options,
+  ]) async => _AbsentSnapshot();
+  @override
+  Future<void> set(Map<String, dynamic> data, [SetOptions? options]) async {
+    database.directWrites++;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+// ignore: subtype_of_sealed_class
+class _AbsentSnapshot implements DocumentSnapshot<Map<String, dynamic>> {
+  @override
+  Map<String, dynamic>? data() => null;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _RejectedBatch implements WriteBatch {
+  final _RejectedActivationFirestore database;
+  _RejectedBatch(this.database);
+  @override
+  void set<T>(DocumentReference<T> document, T data, [SetOptions? options]) {
+    database.paths.add(document.path);
+  }
+
+  @override
+  Future<void> commit() async {
+    database.commits++;
+    throw FirebaseException(
+      plugin: 'cloud_firestore',
+      code: 'permission-denied',
+      message: 'secret@example.com token=private',
+    );
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

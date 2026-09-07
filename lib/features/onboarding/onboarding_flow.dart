@@ -524,14 +524,31 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         return;
       }
     } catch (e) {
+      if (!mounted || !_stillOwnsDraft(uid)) return;
+      final service = ref.read(onboardingCompletionJobServiceProvider);
+      OnboardingCompletionJob? failureJob;
+      try {
+        failureJob = await service.loadCurrentJob(uid);
+      } catch (_) {
+        // A failed server read must not hide the local activation diagnostic.
+      }
+      if (!mounted || !_stillOwnsDraft(uid)) return;
+      if (failureJob?.jobId != bundle.runId ||
+          failureJob?.lastFailureCode == null) {
+        final local = service.activeJobNotifier.value;
+        failureJob = local?.uid == uid && local?.jobId == bundle.runId
+            ? local
+            : null;
+      }
       final recoverable = CompletionErrorMapper.map(
+        job: failureJob,
         error: e,
         isContradiction:
             e.toString().contains('contradiction') ||
             e.toString().contains('mismatch') ||
             e.toString().contains('schema'),
       );
-      _step14Key.currentState?.setFailureState(recoverable);
+      _step14Key.currentState?.setFailureState(recoverable, job: failureJob);
       ref
           .read(mockOnboardingProvider.notifier)
           .setValidationMessage(recoverable.publicMessage);
@@ -546,7 +563,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
             .read(authProvider.notifier)
             .acceptCanonicalOnboardingCompletion(authUser);
       } catch (e) {
-        final recoverable = CompletionErrorMapper.map(error: e);
+        final recoverable = CompletionErrorMapper.map(
+          error: e,
+        ).copyWith(supportHint: 'authHandoff');
         _step14Key.currentState?.setFailureState(recoverable);
         ref
             .read(mockOnboardingProvider.notifier)

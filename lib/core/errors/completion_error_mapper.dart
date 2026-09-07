@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:optivus/core/errors/diagnostic_codes.dart';
 import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/models/onboarding_completion_job.dart';
@@ -15,9 +16,76 @@ abstract final class CompletionErrorMapper {
       return error;
     }
 
+    // Durable failure evidence wins over incidental text in the thrown cause.
+    if (job != null && job.lastFailureCode != null) {
+      final auth =
+          job.diagnosticCategory == 'authentication' ||
+          job.publicMessageKey == 'error_unauthenticated';
+      final persistence = job.diagnosticCategory == 'cloud_persistence';
+      final network = job.lastFailureCode == 'COMPLETION_NETWORK_UNAVAILABLE';
+      final retry =
+          job.retryable == true &&
+          job.status != OnboardingJobStatus.fatalFailure &&
+          !isContradiction;
+      return RecoverableError(
+        category: auth
+            ? RecoverableErrorCategory.authentication
+            : network
+            ? RecoverableErrorCategory.network
+            : isContradiction || !retry
+            ? RecoverableErrorCategory.recoveryRequired
+            : persistence
+            ? RecoverableErrorCategory.cloudPersistence
+            : RecoverableErrorCategory.completionRetry,
+        publicMessage: auth
+            ? 'Your session needs to be refreshed. Please sign in again.'
+            : persistence
+            ? 'We couldn’t save final completion state yet. Retry to continue.'
+            : !retry
+            ? 'Your saved setup needs recovery before continuing.'
+            : 'Final preparation didn’t finish. Try again to resume your setup.',
+        severity: RecoverableErrorSeverity.error,
+        isBlocking: true,
+        retryAction: auth
+            ? RecoverableRetryAction.reauthenticate
+            : retry
+            ? RecoverableRetryAction.resumeCompletion
+            : RecoverableRetryAction.restartRecovery,
+        retrySafe: retry && !auth,
+        diagnosticCode: safeCode(job.lastFailureCode),
+        supportHint: safeStage(job.lastFailureStage ?? stage?.name),
+      );
+    }
+
+    if (error is FirebaseException) {
+      final auth =
+          error.code == 'unauthenticated' ||
+          error.code == 'requires-recent-login' ||
+          error.code == 'user-token-expired';
+      return RecoverableError(
+        category: auth
+            ? RecoverableErrorCategory.authentication
+            : RecoverableErrorCategory.cloudPersistence,
+        publicMessage: auth
+            ? 'Your session needs to be refreshed. Please sign in again.'
+            : 'We couldn’t save final completion state yet. Retry to continue.',
+        severity: RecoverableErrorSeverity.error,
+        isBlocking: true,
+        retryAction: auth
+            ? RecoverableRetryAction.reauthenticate
+            : RecoverableRetryAction.resumeCompletion,
+        retrySafe: !auth,
+        diagnosticCode: auth
+            ? DiagnosticCodes.authSessionExpired
+            : error.code == 'permission-denied'
+            ? 'COMPLETION_PERSISTENCE_PERMISSION_DENIED'
+            : 'COMPLETION_PERSISTENCE_FAILED',
+        supportHint: safeStage(stage?.name),
+      );
+    }
+
     // 1. Structured check for fatal failure or explicit contradiction
-    if (isContradiction ||
-        job?.status == OnboardingJobStatus.fatalFailure) {
+    if (isContradiction || job?.status == OnboardingJobStatus.fatalFailure) {
       return const RecoverableError(
         category: RecoverableErrorCategory.recoveryRequired,
         publicMessage:
@@ -62,8 +130,7 @@ abstract final class CompletionErrorMapper {
       );
     }
 
-    if (raw.contains('permission-denied') ||
-        raw.contains('unauthenticated') ||
+    if (raw.contains('unauthenticated') ||
         raw.contains('requires-recent-login') ||
         raw.contains('auth')) {
       return const RecoverableError(
@@ -78,7 +145,8 @@ abstract final class CompletionErrorMapper {
       );
     }
 
-    if (raw.contains('firestore') ||
+    if (raw.contains('permission-denied') ||
+        raw.contains('firestore') ||
         raw.contains('commit') ||
         raw.contains('persistence')) {
       return const RecoverableError(
@@ -122,4 +190,46 @@ abstract final class CompletionErrorMapper {
       diagnosticCode: DiagnosticCodes.completionVerifyFailed,
     );
   }
+
+  static String safeStage(String? value) =>
+      OnboardingCompletionStage.values.any((stage) => stage.name == value) ||
+          value == 'authHandoff'
+      ? value!
+      : 'unknown';
+
+  static String safeCode(String? value) => _publicCodes.contains(value)
+      ? value!
+      : DiagnosticCodes.completionVerifyFailed;
+
+  static const _publicCodes = {
+    DiagnosticCodes.completionVerifyFailed,
+    DiagnosticCodes.completionRoutineAccountingFailed,
+    DiagnosticCodes.completionHabitReadbackFailed,
+    DiagnosticCodes.completionTerminalizationPending,
+    DiagnosticCodes.completionResumeRequired,
+    DiagnosticCodes.authSessionExpired,
+    DiagnosticCodes.networkUnavailable,
+    DiagnosticCodes.firestoreDraftWriteFailed,
+    DiagnosticCodes.recoveryDurableStateConflict,
+    'COMPLETION_ACTIVATION_PERMISSION_DENIED',
+    'COMPLETION_PERSISTENCE_PERMISSION_DENIED',
+    'COMPLETION_ACTIVATION_FAILED',
+    'COMPLETION_PERSISTENCE_FAILED',
+    'COMPLETION_UNAUTHENTICATED',
+    'COMPLETION_NETWORK_UNAVAILABLE',
+    'receiptMissing',
+    'ownerMismatch',
+    'fingerprintMismatch',
+    'invalidStatus',
+    'invalidCursor',
+    'malformedReceipt',
+    'retryRequired',
+    'state_error',
+    'argument_error',
+    'unhandled_exception',
+    'retry_required',
+    'habit_system_projection_write_failed',
+    'habit_system_projection_persistence_invalid',
+    'habit_system_projection_controller_invalid',
+  };
 }
