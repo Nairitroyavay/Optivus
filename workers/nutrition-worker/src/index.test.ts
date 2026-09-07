@@ -808,6 +808,51 @@ describe("Nutrition Worker request boundary", () => {
     expect(json).not.toHaveProperty("candidates");
   });
 
+  test("mealTimes parameter provides morning and afternoon snack start times correctly", async () => {
+    let capturedPrompt = "";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url, init: any) => {
+        const body = JSON.parse(init.body);
+        capturedPrompt = body.contents[0].parts[0].text;
+        return new Response(
+          JSON.stringify({
+            candidates: [{
+              content: {
+                parts: [{
+                  text: JSON.stringify({
+                    candidates: buildWeeklyCandidates(5),
+                  }),
+                }],
+              },
+            }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }),
+    );
+
+    const body = validRequestBody({
+      mealsPerDay: 5,
+      mealTimes: {
+        breakfast: 480,
+        morning_snack: 650,
+        lunch: 780,
+        afternoon_snack: 1010,
+        dinner: 1230,
+      },
+    });
+
+    const response = await worker.fetch(
+      request(body),
+      makeEnv() as never,
+    );
+
+    expect(response.status).toBe(200);
+    expect(capturedPrompt).toContain("- morning_snack: title \"Morning Snack\", mealCategory \"snack\", startMinute 650");
+    expect(capturedPrompt).toContain("- afternoon_snack: title \"Snack\", mealCategory \"snack\", startMinute 1010");
+  });
+
   test("unsupported method returns a safe not-found response", async () => {
     const response = await worker.fetch(
       new Request(

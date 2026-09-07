@@ -252,6 +252,7 @@ Return ONLY valid JSON matching this schema:
 async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<Response> {
   const user = await requireVerifiedFirebaseUser(request, env);
   const body = await readSmallJson(request);
+  const mealTimes = (body.mealTimes && typeof body.mealTimes === "object") ? body.mealTimes as Record<string, unknown> : undefined;
 
   const context = {
     bodyGoal: readRequiredString(body, "bodyGoal"),
@@ -261,11 +262,21 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
     mealsPerDay: readRequiredNumber(body, "mealsPerDay"),
     targetCalories: readRequiredNumber(body, "targetCalories"),
     estimatedBmr: typeof body.estimatedBmr === "number" ? body.estimatedBmr : undefined,
-    breakfastMinute: typeof body.breakfastMinute === "number" ? body.breakfastMinute : 480,
-    lunchMinute: typeof body.lunchMinute === "number" ? body.lunchMinute : 780,
-    dinnerMinute: typeof body.dinnerMinute === "number" ? body.dinnerMinute : 1230,
-    snackMinute: typeof body.snackMinute === "number" ? body.snackMinute : undefined,
-    extraSnackMinute: typeof body.extraSnackMinute === "number" ? body.extraSnackMinute : undefined,
+    breakfastMinute: typeof body.breakfastMinute === "number"
+      ? body.breakfastMinute
+      : (typeof mealTimes?.breakfast === "number" ? mealTimes.breakfast : 480),
+    lunchMinute: typeof body.lunchMinute === "number"
+      ? body.lunchMinute
+      : (typeof mealTimes?.lunch === "number" ? mealTimes.lunch : 780),
+    dinnerMinute: typeof body.dinnerMinute === "number"
+      ? body.dinnerMinute
+      : (typeof mealTimes?.dinner === "number" ? mealTimes.dinner : 1230),
+    snackMinute: typeof body.snackMinute === "number"
+      ? body.snackMinute
+      : (typeof mealTimes?.afternoon_snack === "number" ? mealTimes.afternoon_snack : undefined),
+    extraSnackMinute: typeof body.extraSnackMinute === "number"
+      ? body.extraSnackMinute
+      : (typeof mealTimes?.morning_snack === "number" ? mealTimes.morning_snack : undefined),
     heightCm: typeof body.heightCm === "number" ? body.heightCm : undefined,
     weightKg: typeof body.weightKg === "number" ? body.weightKg : undefined,
     age: typeof body.age === "number" ? body.age : undefined,

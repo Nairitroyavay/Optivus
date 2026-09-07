@@ -3210,10 +3210,10 @@ class EatingGenerationInputs {
       foodStyleCustomText: base.foodStyleCustomText,
       mealsPerDay: meals,
       breakfastMinute: base.breakfastMinute ?? 480,
-      morningSnackMinute: meals == 5 ? (base.snackMinute ?? 630) : null,
+      morningSnackMinute: meals == 5 ? (base.extraSnackMinute ?? 660) : null,
       lunchMinute: base.lunchMinute ?? 780,
       afternoonSnackMinute: (meals == 4 || meals == 5)
-          ? (base.extraSnackMinute ?? 1020)
+          ? (base.snackMinute ?? 1020)
           : null,
       dinnerMinute: base.dinnerMinute ?? 1230,
       country: null,
@@ -3259,10 +3259,10 @@ class EatingGenerationInputs {
       foodStyleCustomText: base.foodStyleCustomText,
       mealsPerDay: meals,
       breakfastMinute: base.breakfastMinute ?? 480,
-      morningSnackMinute: meals == 5 ? (base.snackMinute ?? 630) : null,
+      morningSnackMinute: meals == 5 ? (base.extraSnackMinute ?? 660) : null,
       lunchMinute: base.lunchMinute ?? 780,
       afternoonSnackMinute: (meals == 4 || meals == 5)
-          ? (base.extraSnackMinute ?? 1020)
+          ? (base.snackMinute ?? 1020)
           : null,
       dinnerMinute: base.dinnerMinute ?? 1230,
       country: country,
@@ -3345,8 +3345,8 @@ class EatingGenerationInputs {
       'breakfastMinute': breakfastMinute,
       'lunchMinute': lunchMinute,
       'dinnerMinute': dinnerMinute,
-      'snackMinute': morningSnackMinute,
-      'extraSnackMinute': afternoonSnackMinute,
+      'snackMinute': afternoonSnackMinute,
+      'extraSnackMinute': morningSnackMinute,
       'mealTimes': mealTimes,
       'heightCm': heightCm,
       'weightKg': weightKg,

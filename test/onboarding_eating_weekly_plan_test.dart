@@ -1476,6 +1476,104 @@ void main() {
           );
         },
       );
+
+      test(
+        'EatingGenerationInputs correctly maps snack times for 4 and 5 meals',
+        () {
+          // 4 meals: extraSnackMinute is null, snackMinute is afternoon snack (1050)
+          final base4 = createBaseTimeline(4).copyWith(
+            snackMinute: 1050,
+            extraSnackMinute: 650, // Should be ignored because mealsPerDay == 4
+          );
+          final inputs4 = EatingGenerationInputs.fromTimeline(
+            base4,
+            targets: testTargets,
+          );
+          expect(inputs4.mealsPerDay, 4);
+          expect(inputs4.morningSnackMinute, isNull);
+          expect(inputs4.afternoonSnackMinute, 1050);
+
+          final params4 = inputs4.toWorkerParams();
+          expect(params4['snackMinute'], 1050);
+          expect(params4['extraSnackMinute'], isNull);
+          final mealTimes4 = params4['mealTimes'] as Map<String, int>;
+          expect(mealTimes4['afternoon_snack'], 1050);
+          expect(mealTimes4.containsKey('morning_snack'), isFalse);
+
+          // 5 meals: morning snack uses extraSnackMinute, afternoon snack uses snackMinute
+          final base5 = createBaseTimeline(
+            5,
+          ).copyWith(extraSnackMinute: 660, snackMinute: 1020);
+          final inputs5 = EatingGenerationInputs.fromTimeline(
+            base5,
+            targets: testTargets,
+          );
+          expect(inputs5.mealsPerDay, 5);
+          expect(inputs5.morningSnackMinute, 660);
+          expect(inputs5.afternoonSnackMinute, 1020);
+
+          final params5 = inputs5.toWorkerParams();
+          expect(params5['extraSnackMinute'], 660);
+          expect(params5['snackMinute'], 1020);
+          final mealTimes5 = params5['mealTimes'] as Map<String, int>;
+          expect(mealTimes5['morning_snack'], 660);
+          expect(mealTimes5['afternoon_snack'], 1020);
+        },
+      );
+
+      test(
+        'EatingGenerationInputs fingerprint is sensitive to snack times independently',
+        () {
+          const base = EatingGenerationInputs(
+            contractVersion: 2,
+            heightCm: 175.0,
+            weightKg: 70.0,
+            estimatedAge: 30,
+            gender: 'male',
+            exerciseLevel: '3_4_days',
+            lifeRole: 'student',
+            bmi: 22.86,
+            estimatedBmr: 1675,
+            estimatedMaintenanceCalories: 2261,
+            bodyGoal: 'maintain',
+            targetMode: 'calories_and_protein',
+            targetCalories: 2261,
+            proteinTarget: 140.0,
+            foodType: 'veg',
+            eatingMode: 'standard',
+            foodStyleCustomText: '',
+            mealsPerDay: 5,
+            breakfastMinute: 480,
+            morningSnackMinute: 660,
+            lunchMinute: 780,
+            afternoonSnackMinute: 1020,
+            dinnerMinute: 1230,
+            country: 'IN',
+          );
+          final fpBase = base.computeFingerprint();
+
+          // Changing morning snack changes fingerprint
+          final fpMorning = base
+              .copyWith(morningSnackMinute: 640)
+              .computeFingerprint();
+          expect(fpMorning, isNot(fpBase));
+
+          // Changing afternoon snack changes fingerprint
+          final fpAfternoon = base
+              .copyWith(afternoonSnackMinute: 1000)
+              .computeFingerprint();
+          expect(fpAfternoon, isNot(fpBase));
+
+          // Morning and afternoon snack changes are not interchangeable
+          expect(fpMorning, isNot(fpAfternoon));
+
+          // Swapping morning and afternoon snack minutes produces distinct fingerprints
+          final fpSwapped = base
+              .copyWith(morningSnackMinute: 1020, afternoonSnackMinute: 660)
+              .computeFingerprint();
+          expect(fpSwapped, isNot(fpBase));
+        },
+      );
     },
   );
 }
