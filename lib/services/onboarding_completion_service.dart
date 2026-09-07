@@ -248,8 +248,12 @@ class OnboardingCompletionService {
     if (draft.baseTimeline.eatingSetupPath != null ||
         draft.baseTimeline.eatingMode != null ||
         draft.baseTimeline.shouldPlanMeals != null) {
+      final targets = draft.canonicalNutritionTargets();
       final eatingErr = mergedTimeline.validateEatingSetup(
-        targets: draft.canonicalNutritionTargets(),
+        targets: targets,
+        generationInputs: draft.canonicalEatingGenerationInputs(
+          targets: targets,
+        ),
       );
       if (eatingErr != null) {
         throw StateError(eatingErr);

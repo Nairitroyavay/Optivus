@@ -1,7 +1,7 @@
 # Gate 2 Eating Contract Verification Report — 2026-09-07
 
 **Status**: GATE 2 IMPLEMENTATION COMPLETE & VERIFIED.
-**Remote Nutrition Worker Status**: REMOTE NUTRITION WORKER VERIFICATION = BLOCKED (deployment pending authorized remote deploy).
+**Remote Nutrition Worker Status**: DEPLOYED & LIVE VERIFIED (`optivus-nutrition-worker-dev`, version `7678adbd-92fa-4449-a904-f9d30bec9299`).
 **Gate Status**: `STABILIZATION IMPLEMENTATION GATE PASSED`.
 **Next Action Required**: Perform independent read-only verification pass before declaring readiness for Routine Phase.
 
@@ -41,7 +41,7 @@ The active nutrition target calculation path in Optivus is now single, canonical
 
 ```text
 Body Basics (weightKg, heightCm, ageRange, gender)
-+ Life Role (exerciseLevel: sedentary / 1_2_days / 3_4_days / 5_plus_days)
++ Life Role (exerciseLevel: rarely / 1_2_days / 3_4_days / 5_plus_days)
 + Base Timeline (mealPlanningGoal: maintain / gain / lose)
         ↓
 NutritionTargetService.calculate(...)
@@ -49,18 +49,18 @@ NutritionTargetService.calculate(...)
 BMR (Mifflin-St Jeor Formula)
   Male:       10 * weight + 6.25 * height - 5 * age + 5
   Female:     10 * weight + 6.25 * height - 5 * age - 161
-  Non-binary: average of male and female formula
+  Non-binary: average of male and female formula (-78 offset)
         ↓
 TDEE / Maintenance Calories = BMR * Activity Factor
-  Sedentary:    1.20
-  1-2 days:     1.375
-  3-4 days:     1.55
-  5+ days:      1.725
+  Rarely:       1.25
+  1-2 days:     1.30
+  3-4 days:     1.35
+  5+ days:      1.45
         ↓
 Target Calories
   Maintain:   TDEE
-  Gain:       TDEE + 300 kcal
-  Lose:       max(floor, TDEE - 400 kcal) [Floor: 1500 kcal male/non-binary, 1200 kcal female]
+  Gain:       clamp(TDEE + 300 kcal, TDEE, TDEE + 500 kcal)
+  Lose:       clamp(TDEE - 350 kcal, max(floor, round(TDEE * 0.75)), TDEE) [Floor: 1400 kcal male/non-binary, 1200 kcal female]
         ↓
 Protein Target = 2.0 g/kg body weight (rounded to nearest gram)
 ```

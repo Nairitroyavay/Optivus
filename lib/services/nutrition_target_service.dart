@@ -11,6 +11,12 @@ class NutritionTargets {
   final String bodyGoal;
   final bool hasBodyBasics;
 
+  final double? weightKg;
+  final double? heightCm;
+  final String? gender;
+  final String? exerciseLevel;
+  final String? lifeRole;
+
   const NutritionTargets({
     required this.bmi,
     required this.estimatedAge,
@@ -21,6 +27,11 @@ class NutritionTargets {
     required this.proteinTarget,
     required this.bodyGoal,
     required this.hasBodyBasics,
+    this.weightKg,
+    this.heightCm,
+    this.gender,
+    this.exerciseLevel,
+    this.lifeRole,
   });
 
   static const empty = NutritionTargets(
@@ -33,6 +44,11 @@ class NutritionTargets {
     proteinTarget: null,
     bodyGoal: 'maintain',
     hasBodyBasics: false,
+    weightKg: null,
+    heightCm: null,
+    gender: null,
+    exerciseLevel: null,
+    lifeRole: null,
   );
 }
 
@@ -57,6 +73,7 @@ class NutritionTargetService {
     double? weightKg,
     String? gender,
     String? exerciseLevel,
+    String? lifeRole,
     String? bodyGoal,
   }) {
     final normalizedGoal = normalizeGoal(bodyGoal);
@@ -102,6 +119,11 @@ class NutritionTargetService {
             : null,
         bodyGoal: normalizedGoal,
         hasBodyBasics: false,
+        weightKg: weightKg,
+        heightCm: heightCm,
+        gender: gender,
+        exerciseLevel: exerciseLevel,
+        lifeRole: lifeRole,
       );
     }
 
@@ -134,6 +156,11 @@ class NutritionTargetService {
       proteinTarget: protein,
       bodyGoal: normalizedGoal,
       hasBodyBasics: true,
+      weightKg: weightKg,
+      heightCm: heightCm,
+      gender: gender,
+      exerciseLevel: exerciseLevel,
+      lifeRole: lifeRole,
     );
   }
 

@@ -73,7 +73,21 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         ref.read(routineImportAiControllerProvider).isExtracting ||
         _createLifecycle.state.isActive;
 
-    if (base.eatingSetupStep == 2 && eatingBlocks.isEmpty && !isGenerating) {
+    final targets = currentDraft.canonicalNutritionTargets();
+    final currentInputs = currentDraft.canonicalEatingGenerationInputs(
+      targets: targets,
+    );
+    final currentFingerprint = currentInputs.computeFingerprint();
+    final isFresh =
+        base.eatingGeneratedPlanVersion ==
+            BaseTimelineDraft.currentGate2EatingPlanVersion &&
+        base.eatingGeneratedInputFingerprint == currentFingerprint;
+
+    if (base.eatingSetupStep == 2 &&
+        (eatingBlocks.isEmpty ||
+            !isFresh ||
+            isLegacyGeneratedEatingPlan(base)) &&
+        !isGenerating) {
       ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
         final fallbackStep = draft.baseTimeline.eatingSetupPath != null ? 1 : 0;
         return draft.copyWith(
@@ -83,12 +97,6 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         );
       });
     } else if (base.eatingSetupStep <= 1 && eatingBlocks.isNotEmpty) {
-      final targets = currentDraft.canonicalNutritionTargets();
-      final currentFingerprint =
-          base.computeEatingGeneratedInputFingerprint(targets: targets);
-      final isFresh = base.eatingGeneratedPlanVersion ==
-              BaseTimelineDraft.currentGate2EatingPlanVersion &&
-          base.eatingGeneratedInputFingerprint == currentFingerprint;
       if (isFresh && !isLegacyGeneratedEatingPlan(base)) {
         ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
           return draft.copyWith(
@@ -586,9 +594,9 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     if (_createLifecycle.state.isActive) return;
     ref.read(mockOnboardingProvider.notifier).clearValidation();
     final draft = ref.read(mockOnboardingProvider).draft;
-    final base = draft.baseTimeline;
-    final bodyContext = onboarding5MealBodyContextFromDraft(draft);
-    if (!bodyContext.hasBodyBasics) {
+    final generationInputs = draft.canonicalEatingGenerationInputs();
+    final targets = draft.canonicalNutritionTargets();
+    if (!targets.hasBodyBasics) {
       setState(() {
         _createError =
             'Complete Body Basics with your height and weight before generating a meal routine.';
@@ -628,7 +636,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       operation: (scope) async {
         debugPrint(
           '[Onboarding5] GENERATE source=create '
-          'hasBodyBasics=${bodyContext.hasBodyBasics}',
+          'hasBodyBasics=${targets.hasBodyBasics}',
         );
         final idToken =
             await ref.read(authRepositoryProvider).currentIdToken() ?? '';
@@ -641,32 +649,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         final result = await nutritionClient.generateEatingRoutine(
           uid: uid,
           idToken: idToken,
-          params: {
-            'bodyGoal': bodyContext.bodyGoal,
-            'eatingMode': base.eatingMode,
-            'foodType': base.foodType,
-            'foodStyleCustomText': base.foodStyleCustomText,
-            'mealsPerDay': base.mealsPerDay,
-            'targetCalories': bodyContext.targetCalories,
-            'proteinTarget': bodyContext.proteinTarget,
-            'estimatedBmr': bodyContext.estimatedBmr,
-            'breakfastMinute': base.breakfastMinute,
-            'lunchMinute': base.lunchMinute,
-            'dinnerMinute': base.dinnerMinute,
-            'snackMinute': base.snackMinute,
-            'extraSnackMinute': base.extraSnackMinute,
-            'mealTimes': bodyContext.mealTimes,
-            'heightCm': bodyContext.heightCm,
-            'weightKg': bodyContext.currentWeightKg,
-            'age': bodyContext.age,
-            'gender': bodyContext.gender,
-            'bmi': bodyContext.bmi,
-            'estimatedMaintenanceCalories':
-                bodyContext.estimatedMaintenanceCalories,
-            'targetMode': bodyContext.targetMode,
-            'lifestyle': bodyContext.lifestyle,
-            'country': bodyContext.country,
-          },
+          params: generationInputs.toWorkerParams(),
         );
 
         if (result.id.trim().isEmpty ||
@@ -701,7 +684,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
 
         final validationErr = validateGeneratedEatingWeeklyPlan(
           draft.baseTimeline.copyWith(blocks: blocks),
-          targets: draft.canonicalNutritionTargets(),
+          targets: targets,
         );
         if (validationErr != null) {
           throw _Onboarding5ResponseException(validationErr);
@@ -715,7 +698,10 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         .read(mockOnboardingProvider.notifier)
         .setStepLoading(onboardingEatingStepIndex, false);
     if (run.isSuccess) {
-      _replaceEatingBlocks(run.value!);
+      _replaceEatingBlocks(
+        run.value!,
+        generatedFingerprint: generationInputs.computeFingerprint(),
+      );
     } else if (run.error != null) {
       setState(() {
         _createError = _retainedRoutineFailureMessage(run.error!.message);
@@ -726,6 +712,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
   void _replaceEatingBlocks(
     List<TimelineBlockDraft> eatingBlocks, {
     UploadedAsset? sourceAsset,
+    String? generatedFingerprint,
   }) {
     updateBaseTimelineDraft(ref, onboardingEatingStepIndex, (base) {
       final nextBlocks =
@@ -756,12 +743,12 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       }
 
       final draft = ref.read(mockOnboardingProvider).draft;
-      final targets = draft.canonicalNutritionTargets();
       final planVersion = sourceAsset == null
           ? BaseTimelineDraft.currentGate2EatingPlanVersion
           : base.eatingGeneratedPlanVersion;
       final fingerprint = sourceAsset == null
-          ? base.computeEatingGeneratedInputFingerprint(targets: targets)
+          ? (generatedFingerprint ??
+                draft.canonicalEatingGenerationInputs().computeFingerprint())
           : base.eatingGeneratedInputFingerprint;
 
       return base.copyWith(
@@ -2900,10 +2887,7 @@ List<int> _dayNumbersFromText(String text) {
   return found.toList()..sort();
 }
 
-enum Onboarding5AiOperation {
-  uploadedMenu,
-  generatedPlan,
-}
+enum Onboarding5AiOperation { uploadedMenu, generatedPlan }
 
 String onboarding5FriendlyAiMessage(
   String? error,

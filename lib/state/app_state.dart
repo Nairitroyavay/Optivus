@@ -1772,17 +1772,6 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
       classJobSetupStep: 0,
     );
 
-    // Local Step 5 revalidation (preserve if valid, clear if invalid)
-    final eatingError = nextTimeline.validateEatingSetup();
-    if (eatingError != null) {
-      nextTimeline = nextTimeline.copyWith(
-        blocks: nextTimeline.blocks
-            .where((block) => block.section != 'eating')
-            .toList(growable: false),
-        eatingSetupStep: 0,
-      );
-    }
-
     final nextDraft = state.draft.copyWith(
       lifeRole: state.draft.lifeRole.copyWith(
         lifeRole: roleKey,
@@ -1795,6 +1784,20 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
       clearFinalPreview: true,
     );
 
+    // Local Step 5 revalidation: check against updated role targets.
+    // Plan A eating blocks are PRESERVED (never erased).
+    final roleTargets = nextDraft.canonicalNutritionTargets();
+    final eatingError = nextTimeline.validateEatingSetup(
+      targets: roleTargets,
+      generationInputs: nextDraft.canonicalEatingGenerationInputs(
+        targets: roleTargets,
+      ),
+    );
+    if (eatingError != null && nextTimeline.eatingSetupStep == 2) {
+      nextTimeline = nextTimeline.copyWith(eatingSetupStep: 1);
+    }
+
+    final finalDraft = nextDraft.copyWith(baseTimeline: nextTimeline);
     final completed = List<bool>.from(state.draft.stepCompleted);
     final dirty = List<bool>.from(state.draft.stepDirty);
 
@@ -1823,13 +1826,19 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
       dirty[i] = true;
     }
 
+    final warnings = List<String>.from(invalidation.warnings);
+    if (eatingError != null &&
+        nextTimeline.blocks.any((b) => b.section == 'eating')) {
+      warnings.add(
+        'Nutrition targets updated for your new role. Please review and regenerate your eating plan in Step 5.',
+      );
+    }
+
     state = state.copyWith(
-      draft: nextDraft.copyWith(stepCompleted: completed, stepDirty: dirty),
-      validationMessage: invalidation.warnings.isEmpty
-          ? null
-          : invalidation.warnings.join(' '),
+      draft: finalDraft.copyWith(stepCompleted: completed, stepDirty: dirty),
+      validationMessage: warnings.isEmpty ? null : warnings.join(' '),
     );
-    return invalidation.warnings;
+    return warnings;
   }
 
   static List<bool> _setStepValue(List<bool> source, int step, bool value) {

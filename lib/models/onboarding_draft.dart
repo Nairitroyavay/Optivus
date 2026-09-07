@@ -337,7 +337,17 @@ class OnboardingDraft {
       ageRange: bodyBasics.ageRange,
       gender: bodyBasics.gender,
       exerciseLevel: lifeRole.exerciseLevel,
+      lifeRole: lifeRole.lifeRole,
       bodyGoal: baseTimeline.mealPlanningGoal,
+    );
+  }
+
+  EatingGenerationInputs canonicalEatingGenerationInputs({
+    NutritionTargets? targets,
+  }) {
+    return EatingGenerationInputs.fromDraft(
+      this,
+      targets: targets ?? canonicalNutritionTargets(),
     );
   }
 
@@ -356,8 +366,10 @@ class OnboardingDraft {
       case 4:
         return baseTimeline.validateClassesAndWorkForRole(lifeRole.lifeRole);
       case 5:
+        final targets = canonicalNutritionTargets();
         return baseTimeline.validateEatingSetup(
-          targets: canonicalNutritionTargets(),
+          targets: targets,
+          generationInputs: canonicalEatingGenerationInputs(targets: targets),
         );
       case 6:
         return baseTimeline.validateFixedSchedule();
@@ -395,8 +407,10 @@ class OnboardingDraft {
         if (baseTimeline.eatingSetupPath != null ||
             baseTimeline.eatingMode != null ||
             baseTimeline.shouldPlanMeals != null) {
+          final targets = canonicalNutritionTargets();
           final eatingErr = baseTimeline.validateEatingSetup(
-            targets: canonicalNutritionTargets(),
+            targets: targets,
+            generationInputs: canonicalEatingGenerationInputs(targets: targets),
           );
           if (eatingErr != null) return eatingErr;
         }
@@ -1806,37 +1820,34 @@ class BaseTimelineDraft {
       eatingGeneratedInputFingerprint: clearEatingGeneratedInputFingerprint
           ? null
           : (eatingGeneratedInputFingerprint ??
-              this.eatingGeneratedInputFingerprint),
+                this.eatingGeneratedInputFingerprint),
     );
   }
 
-  String computeEatingGeneratedInputFingerprint({NutritionTargets? targets}) {
-    final cal = targets?.targetCalories?.round() ?? 0;
-    final prot = targets?.proteinTarget?.round() ?? 0;
-    final normalizedMeals = normalizeMealsPerDay(mealsPerDay);
-    final goal = (mealPlanningGoal ?? '').trim().toLowerCase();
-    final type = (foodType ?? '').trim().toLowerCase();
-    final mode = (eatingMode ?? '').trim().toLowerCase();
-    final customStyle = (foodStyleCustomText ?? '').trim().toLowerCase();
-    final bMinute = breakfastMinute ?? 480;
-    final mSnackMinute = snackMinute ?? 630;
-    final lMinute = lunchMinute ?? 780;
-    final aSnackMinute = extraSnackMinute ?? 1020;
-    final dMinute = dinnerMinute ?? 1230;
+  String computeEatingGeneratedInputFingerprint({
+    NutritionTargets? targets,
+    EatingGenerationInputs? generationInputs,
+  }) {
+    if (generationInputs != null) {
+      return generationInputs.computeFingerprint();
+    }
+    return EatingGenerationInputs.fromTimeline(
+      this,
+      targets: targets,
+    ).computeFingerprint();
+  }
 
-    return 'v$currentGate2EatingPlanVersion'
-        '|goal:$goal'
-        '|cal:$cal'
-        '|prot:$prot'
-        '|type:$type'
-        '|mode:$mode'
-        '|custom:$customStyle'
-        '|meals:$normalizedMeals'
-        '|b:$bMinute'
-        '|ms:$mSnackMinute'
-        '|l:$lMinute'
-        '|as:$aSnackMinute'
-        '|d:$dMinute';
+  EatingGenerationInputs canonicalEatingGenerationInputs({
+    NutritionTargets? targets,
+    String? lifeRole,
+    String? country,
+  }) {
+    return EatingGenerationInputs.fromTimeline(
+      this,
+      targets: targets,
+      lifeRole: lifeRole,
+      country: country,
+    );
   }
 
   BaseTimelineDraft upsertBlock(TimelineBlockDraft block) {
@@ -2271,7 +2282,11 @@ class BaseTimelineDraft {
     return null;
   }
 
-  String? validateEatingSetup({NutritionTargets? targets}) {
+  String? validateEatingSetup({
+    NutritionTargets? targets,
+    String? expectedFingerprint,
+    EatingGenerationInputs? generationInputs,
+  }) {
     if (_hasConfirmedSection('eating')) {
       if (eatingSetupPath == 'has_routine') {
         final eatingImport = latestImportForSection('Eating');
@@ -2299,26 +2314,59 @@ class BaseTimelineDraft {
           }
         }
       } else if (eatingSetupPath == 'create') {
-        final generatedBlocks = blocks.where(
-          (b) => b.section == 'eating' && b.source == 'ai_generated_meal_setup',
-        );
-        if (generatedBlocks.isNotEmpty) {
-          if (isLegacyGeneratedEatingPlan(this)) {
-            return 'Your saved meal plan uses the older weekly format. Please regenerate your meal routine.';
-          }
-          if (eatingGeneratedInputFingerprint != null) {
-            final expectedFingerprint =
-                computeEatingGeneratedInputFingerprint(targets: targets);
-            if (eatingGeneratedInputFingerprint != expectedFingerprint) {
-              return 'Your meal preferences changed. Generate the updated weekly routine first.';
-            }
-          }
-          final planError = validateGeneratedEatingWeeklyPlan(
-            this,
-            targets: targets,
-          );
-          if (planError != null) return planError;
+        final confirmedEatingBlocks = blocks
+            .where((b) => b.section == 'eating' && b.title.trim().isNotEmpty)
+            .toList();
+
+        if (confirmedEatingBlocks.isEmpty) {
+          return 'Generate your meal routine first.';
         }
+
+        // Source purity: ALL confirmed eating blocks must be ai_generated_meal_setup
+        final hasNonGeneratedBlocks = confirmedEatingBlocks.any(
+          (b) => b.source != 'ai_generated_meal_setup',
+        );
+        final generatedBlocks = confirmedEatingBlocks
+            .where((b) => b.source == 'ai_generated_meal_setup')
+            .toList();
+
+        if (hasNonGeneratedBlocks || generatedBlocks.isEmpty) {
+          return 'Your meal routine contains invalid meal items. Generate your meal routine first.';
+        }
+
+        // Plan version contract
+        final version = eatingGeneratedPlanVersion;
+        if (version == null ||
+            version < BaseTimelineDraft.currentGate2EatingPlanVersion) {
+          return 'Your saved meal plan uses the older weekly format. Please regenerate your meal routine.';
+        }
+        if (version > BaseTimelineDraft.currentGate2EatingPlanVersion) {
+          return 'Your saved meal plan uses an unsupported newer format. Please regenerate your meal routine.';
+        }
+
+        if (isLegacyGeneratedEatingPlan(this)) {
+          return 'Your saved meal plan uses the older weekly format. Please regenerate your meal routine.';
+        }
+
+        // Fingerprint contract: non-null, non-empty, matching expected
+        final storedFingerprint = eatingGeneratedInputFingerprint?.trim();
+        if (storedFingerprint == null || storedFingerprint.isEmpty) {
+          return 'Your saved meal plan is missing generation verification. Generate your meal routine first.';
+        }
+
+        final expected =
+            expectedFingerprint ??
+            generationInputs?.computeFingerprint() ??
+            computeEatingGeneratedInputFingerprint(targets: targets);
+        if (storedFingerprint != expected) {
+          return 'Your meal preferences changed. Generate the updated weekly routine first.';
+        }
+
+        final planError = validateGeneratedEatingWeeklyPlan(
+          this,
+          targets: targets,
+        );
+        if (planError != null) return planError;
       }
       return validateMealScheduleDensity();
     }
@@ -2902,11 +2950,8 @@ String normalizeDish(String d) =>
     d.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
 String mealSignature(List<String> dishes) {
-  final normalized = dishes
-      .map(normalizeDish)
-      .where((d) => d.isNotEmpty)
-      .toList()
-    ..sort();
+  final normalized =
+      dishes.map(normalizeDish).where((d) => d.isNotEmpty).toList()..sort();
   return normalized.join('|');
 }
 
@@ -3072,6 +3117,285 @@ String? validateGeneratedEatingWeeklyPlan(
   }
 
   return null;
+}
+
+class EatingGenerationInputs {
+  final int contractVersion;
+  final double? heightCm;
+  final double? weightKg;
+  final int? estimatedAge;
+  final String? gender;
+  final String? exerciseLevel;
+  final String? lifeRole;
+  final double? bmi;
+  final int? estimatedBmr;
+  final int? estimatedMaintenanceCalories;
+  final String bodyGoal;
+  final String targetMode;
+  final int? targetCalories;
+  final double? proteinTarget;
+  final String? foodType;
+  final String? eatingMode;
+  final String? foodStyleCustomText;
+  final int mealsPerDay;
+  final int breakfastMinute;
+  final int? morningSnackMinute;
+  final int lunchMinute;
+  final int? afternoonSnackMinute;
+  final int dinnerMinute;
+  final String? country;
+
+  const EatingGenerationInputs({
+    required this.contractVersion,
+    required this.heightCm,
+    required this.weightKg,
+    required this.estimatedAge,
+    required this.gender,
+    required this.exerciseLevel,
+    required this.lifeRole,
+    required this.bmi,
+    required this.estimatedBmr,
+    required this.estimatedMaintenanceCalories,
+    required this.bodyGoal,
+    required this.targetMode,
+    required this.targetCalories,
+    required this.proteinTarget,
+    required this.foodType,
+    required this.eatingMode,
+    required this.foodStyleCustomText,
+    required this.mealsPerDay,
+    required this.breakfastMinute,
+    required this.morningSnackMinute,
+    required this.lunchMinute,
+    required this.afternoonSnackMinute,
+    required this.dinnerMinute,
+    required this.country,
+  });
+
+  factory EatingGenerationInputs.fromDraft(
+    OnboardingDraft draft, {
+    NutritionTargets? targets,
+  }) {
+    final t = targets ?? draft.canonicalNutritionTargets();
+    final base = draft.baseTimeline;
+    final meals = normalizeMealsPerDay(base.mealsPerDay);
+    final goal =
+        (base.mealPlanningGoal != null &&
+            base.mealPlanningGoal!.trim().isNotEmpty)
+        ? base.mealPlanningGoal!
+        : t.bodyGoal;
+    final targetMode = switch (goal.trim().toLowerCase()) {
+      'gain' => 'mild_surplus',
+      'lose' => 'mild_deficit',
+      _ => 'maintenance',
+    };
+
+    return EatingGenerationInputs(
+      contractVersion: BaseTimelineDraft.currentGate2EatingPlanVersion,
+      heightCm: t.heightCm ?? draft.bodyBasics.heightCm,
+      weightKg: t.weightKg ?? draft.bodyBasics.weightKg,
+      estimatedAge: t.estimatedAge,
+      gender: t.gender ?? draft.bodyBasics.gender,
+      exerciseLevel: t.exerciseLevel ?? draft.lifeRole.exerciseLevel,
+      lifeRole: t.lifeRole ?? draft.lifeRole.lifeRole,
+      bmi: t.bmi,
+      estimatedBmr: t.estimatedBmr,
+      estimatedMaintenanceCalories: t.estimatedMaintenanceCalories,
+      bodyGoal: goal,
+      targetMode: targetMode,
+      targetCalories: t.targetCalories,
+      proteinTarget: t.proteinTarget,
+      foodType: base.foodType,
+      eatingMode: base.eatingMode,
+      foodStyleCustomText: base.foodStyleCustomText,
+      mealsPerDay: meals,
+      breakfastMinute: base.breakfastMinute ?? 480,
+      morningSnackMinute: meals == 5 ? (base.snackMinute ?? 630) : null,
+      lunchMinute: base.lunchMinute ?? 780,
+      afternoonSnackMinute: (meals == 4 || meals == 5)
+          ? (base.extraSnackMinute ?? 1020)
+          : null,
+      dinnerMinute: base.dinnerMinute ?? 1230,
+      country: null,
+    );
+  }
+
+  factory EatingGenerationInputs.fromTimeline(
+    BaseTimelineDraft base, {
+    NutritionTargets? targets,
+    String? lifeRole,
+    String? country,
+  }) {
+    final t = targets ?? NutritionTargets.empty;
+    final meals = normalizeMealsPerDay(base.mealsPerDay);
+    final goal =
+        (base.mealPlanningGoal != null &&
+            base.mealPlanningGoal!.trim().isNotEmpty)
+        ? base.mealPlanningGoal!
+        : t.bodyGoal;
+    final targetMode = switch (goal.trim().toLowerCase()) {
+      'gain' => 'mild_surplus',
+      'lose' => 'mild_deficit',
+      _ => 'maintenance',
+    };
+
+    return EatingGenerationInputs(
+      contractVersion: BaseTimelineDraft.currentGate2EatingPlanVersion,
+      heightCm: t.heightCm,
+      weightKg: t.weightKg,
+      estimatedAge: t.estimatedAge,
+      gender: t.gender,
+      exerciseLevel: t.exerciseLevel,
+      lifeRole: t.lifeRole ?? lifeRole,
+      bmi: t.bmi,
+      estimatedBmr: t.estimatedBmr,
+      estimatedMaintenanceCalories: t.estimatedMaintenanceCalories,
+      bodyGoal: goal,
+      targetMode: targetMode,
+      targetCalories: t.targetCalories,
+      proteinTarget: t.proteinTarget,
+      foodType: base.foodType,
+      eatingMode: base.eatingMode,
+      foodStyleCustomText: base.foodStyleCustomText,
+      mealsPerDay: meals,
+      breakfastMinute: base.breakfastMinute ?? 480,
+      morningSnackMinute: meals == 5 ? (base.snackMinute ?? 630) : null,
+      lunchMinute: base.lunchMinute ?? 780,
+      afternoonSnackMinute: (meals == 4 || meals == 5)
+          ? (base.extraSnackMinute ?? 1020)
+          : null,
+      dinnerMinute: base.dinnerMinute ?? 1230,
+      country: country,
+    );
+  }
+
+  EatingGenerationInputs copyWith({
+    int? contractVersion,
+    double? heightCm,
+    double? weightKg,
+    int? estimatedAge,
+    String? gender,
+    String? exerciseLevel,
+    String? lifeRole,
+    double? bmi,
+    int? estimatedBmr,
+    int? estimatedMaintenanceCalories,
+    String? bodyGoal,
+    String? targetMode,
+    int? targetCalories,
+    double? proteinTarget,
+    String? foodType,
+    String? eatingMode,
+    String? foodStyleCustomText,
+    int? mealsPerDay,
+    int? breakfastMinute,
+    int? morningSnackMinute,
+    int? lunchMinute,
+    int? afternoonSnackMinute,
+    int? dinnerMinute,
+    String? country,
+  }) {
+    return EatingGenerationInputs(
+      contractVersion: contractVersion ?? this.contractVersion,
+      heightCm: heightCm ?? this.heightCm,
+      weightKg: weightKg ?? this.weightKg,
+      estimatedAge: estimatedAge ?? this.estimatedAge,
+      gender: gender ?? this.gender,
+      exerciseLevel: exerciseLevel ?? this.exerciseLevel,
+      lifeRole: lifeRole ?? this.lifeRole,
+      bmi: bmi ?? this.bmi,
+      estimatedBmr: estimatedBmr ?? this.estimatedBmr,
+      estimatedMaintenanceCalories:
+          estimatedMaintenanceCalories ?? this.estimatedMaintenanceCalories,
+      bodyGoal: bodyGoal ?? this.bodyGoal,
+      targetMode: targetMode ?? this.targetMode,
+      targetCalories: targetCalories ?? this.targetCalories,
+      proteinTarget: proteinTarget ?? this.proteinTarget,
+      foodType: foodType ?? this.foodType,
+      eatingMode: eatingMode ?? this.eatingMode,
+      foodStyleCustomText: foodStyleCustomText ?? this.foodStyleCustomText,
+      mealsPerDay: mealsPerDay ?? this.mealsPerDay,
+      breakfastMinute: breakfastMinute ?? this.breakfastMinute,
+      morningSnackMinute: morningSnackMinute ?? this.morningSnackMinute,
+      lunchMinute: lunchMinute ?? this.lunchMinute,
+      afternoonSnackMinute: afternoonSnackMinute ?? this.afternoonSnackMinute,
+      dinnerMinute: dinnerMinute ?? this.dinnerMinute,
+      country: country ?? this.country,
+    );
+  }
+
+  Map<String, dynamic> toWorkerParams() {
+    final mealTimes = <String, int>{
+      'breakfast': breakfastMinute,
+      'morning_snack': ?morningSnackMinute,
+      'lunch': lunchMinute,
+      'afternoon_snack': ?afternoonSnackMinute,
+      'dinner': dinnerMinute,
+    };
+
+    return {
+      'bodyGoal': bodyGoal,
+      'eatingMode': eatingMode,
+      'foodType': foodType,
+      'foodStyleCustomText': foodStyleCustomText,
+      'mealsPerDay': mealsPerDay,
+      'targetCalories': targetCalories,
+      'proteinTarget': proteinTarget,
+      'estimatedBmr': estimatedBmr,
+      'breakfastMinute': breakfastMinute,
+      'lunchMinute': lunchMinute,
+      'dinnerMinute': dinnerMinute,
+      'snackMinute': morningSnackMinute,
+      'extraSnackMinute': afternoonSnackMinute,
+      'mealTimes': mealTimes,
+      'heightCm': heightCm,
+      'weightKg': weightKg,
+      'age': estimatedAge,
+      'gender': gender,
+      'bmi': bmi,
+      'estimatedMaintenanceCalories': estimatedMaintenanceCalories,
+      'targetMode': targetMode,
+      'lifestyle': lifeRole,
+      'country': country,
+    };
+  }
+
+  String computeFingerprint() {
+    final normLifeRole = (lifeRole ?? '').trim().toLowerCase();
+    final normExercise = (exerciseLevel ?? '').trim().toLowerCase();
+    final normGender = (gender ?? '').trim().toLowerCase();
+    final normCountry = (country ?? '').trim().toLowerCase();
+    final normGoal = bodyGoal.trim().toLowerCase();
+    final normTargetMode = targetMode.trim().toLowerCase();
+    final normType = (foodType ?? '').trim().toLowerCase();
+    final normMode = (eatingMode ?? '').trim().toLowerCase();
+    final normCustom = (foodStyleCustomText ?? '').trim().toLowerCase();
+
+    return 'v$contractVersion'
+        '|h:${heightCm != null ? heightCm!.toStringAsFixed(1) : "none"}'
+        '|w:${weightKg != null ? weightKg!.toStringAsFixed(1) : "none"}'
+        '|age:${estimatedAge ?? "none"}'
+        '|gen:$normGender'
+        '|ex:$normExercise'
+        '|role:$normLifeRole'
+        '|bmi:${bmi != null ? bmi!.toStringAsFixed(1) : "none"}'
+        '|bmr:${estimatedBmr ?? "none"}'
+        '|maint:${estimatedMaintenanceCalories ?? "none"}'
+        '|goal:$normGoal'
+        '|tmode:$normTargetMode'
+        '|cal:${targetCalories?.round() ?? 0}'
+        '|prot:${proteinTarget?.round() ?? 0}'
+        '|type:$normType'
+        '|mode:$normMode'
+        '|custom:$normCustom'
+        '|meals:$mealsPerDay'
+        '|b:$breakfastMinute'
+        '|ms:${morningSnackMinute ?? 0}'
+        '|l:$lunchMinute'
+        '|as:${afternoonSnackMinute ?? 0}'
+        '|d:$dinnerMinute'
+        '|c:$normCountry';
+  }
 }
 
 class PendingFutureImportDraft {

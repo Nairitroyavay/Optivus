@@ -329,6 +329,7 @@ class Step14ReadinessSummary {
             null &&
         draft.baseTimeline.validateEatingSetup(
               targets: draft.canonicalNutritionTargets(),
+              generationInputs: draft.canonicalEatingGenerationInputs(),
             ) ==
             null &&
         draft.baseTimeline.validateFixedSchedule() == null &&
