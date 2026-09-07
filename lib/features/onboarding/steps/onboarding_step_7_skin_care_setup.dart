@@ -60,24 +60,15 @@ class OnboardingStep7 extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final draft = ref.watch(mockOnboardingProvider).draft;
     final base = draft.baseTimeline;
+    final flowStateHolder = ref.watch(skinCareFlowControllerProvider);
+    final flowState = flowStateHolder.state;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
-    final hasActivePath =
-        base.skinCareSetupPath == 'has_products' ||
-        base.skinCareSetupPath == 'no_products' ||
-        base.skinCareSetupPath == 'skip' ||
-        base.skinCareSkipped;
-    final isChoice = base.skinCareSetupStep <= 0 || !hasActivePath;
-    // Keep the review subtree mounted while a retained routine is edited.
-    // The edit is intentionally transactional: changing a selection makes the
-    // fingerprint stale, but must not re-parent this stateful editor and lose
-    // its pending rebuild state before a replacement succeeds or is cancelled.
-    final hasRetainedRoutine = base.blocks.any(
-      (block) => block.section == 'skin_care',
-    );
 
     // Review mode is structurally parallel to Steps 4 and 5: the timeline
     // owns the onboarding body rather than living inside setup padding.
-    if (hasRetainedRoutine && !isChoice) {
+    // Keep the review / edit subtree mounted with full-screen timeline scaffold.
+    if ((flowState.isReview || flowState.isEditing) &&
+        flowState != SkinCareFlowState.choice) {
       return _SkinCareSelectedModeScreen(base: base);
     }
 
@@ -91,7 +82,7 @@ class OnboardingStep7 extends ConsumerWidget {
             const SizedBox(height: 18),
           ],
           Expanded(
-            child: isChoice
+            child: flowState == SkinCareFlowState.choice
                 ? _SkinCareChoiceScreen(base: base)
                 : _SkinCareSelectedModeScreen(base: base),
           ),
@@ -108,13 +99,16 @@ class _SkinCareSelectedModeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (base.skinCareSkipped || base.skinCareSetupPath == 'skip') {
+    final flowState = ref.watch(skinCareFlowControllerProvider).state;
+    if (flowState == SkinCareFlowState.skipped ||
+        base.skinCareSkipped ||
+        base.skinCareSetupPath == 'skip') {
       return const _SkipModeScreen();
     }
 
     final blocks = base.confirmedBlocksForSection('skin_care');
 
-    if (base.skinCareSetupPath == 'has_products') {
+    if (flowState.isHasProducts || base.skinCareSetupPath == 'has_products') {
       return _HasProductsModeScreen(base: base, blocks: blocks);
     }
 

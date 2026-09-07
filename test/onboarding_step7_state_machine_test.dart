@@ -291,5 +291,51 @@ void main() {
       expect(base.blocks, isNotEmpty);
       expect(base.skinCareSetupStep, 0);
     });
+
+    test('startGeneration bumps epoch and records generationOrigin', () {
+      final controller = container.read(
+        skinCareFlowControllerProvider.notifier,
+      );
+      final initialEpoch = controller.currentEpoch;
+
+      controller.transitionTo(SkinCareFlowState.hasProductsEditing);
+      final editingEpoch = controller.currentEpoch;
+      expect(editingEpoch, initialEpoch + 1);
+
+      controller.startGeneration(SkinCareFlowState.hasProductsGenerating);
+      final genEpoch = controller.currentEpoch;
+      expect(genEpoch, editingEpoch + 1);
+      expect(
+        container.read(skinCareFlowControllerProvider).generationOrigin,
+        SkinCareFlowState.hasProductsEditing,
+      );
+
+      // Failing generation restores state to origin (hasProductsEditing)
+      controller.failGeneration('Timeout occurred');
+      final failState = container.read(skinCareFlowControllerProvider);
+      expect(failState.state, SkinCareFlowState.hasProductsEditing);
+      expect(failState.activeError, 'Timeout occurred');
+      expect(failState.generationOrigin, isNull);
+    });
+
+    test(
+      'Back during generation bumps epoch to invalidate in-flight request',
+      () {
+        final controller = container.read(
+          skinCareFlowControllerProvider.notifier,
+        );
+        controller.transitionTo(SkinCareFlowState.hasProductsInput);
+        controller.startGeneration(SkinCareFlowState.hasProductsGenerating);
+        final inFlightEpoch = controller.currentEpoch;
+
+        final handled = controller.handleBack();
+        expect(handled, isTrue);
+        expect(controller.currentEpoch, greaterThan(inFlightEpoch));
+        expect(
+          container.read(skinCareFlowControllerProvider).state,
+          SkinCareFlowState.hasProductsInput,
+        );
+      },
+    );
   });
 }

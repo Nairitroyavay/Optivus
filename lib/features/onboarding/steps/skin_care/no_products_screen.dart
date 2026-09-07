@@ -17,13 +17,13 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
   late final AiGenerationController _lifecycle;
   bool _removingPhoto = false;
   int? _pendingDesiredApplicationsPerDay;
-  bool _editingExisting = false;
-  bool _showProductSelection = false;
   String? _generationError;
   bool _recommendationRetryAvailable = false;
   bool _routineRetryAvailable = false;
   int _selectedDay = DateTime.now().weekday;
   String? _publishedActionSignature;
+  final Object _actionOwner = Object();
+  int? _publishedActionEpoch;
   late final Step7ActionBridgeNotifier _actionBridge;
   late final SkinCareFlowController _flowController;
 
@@ -34,10 +34,11 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     if (_publishedActionSignature == signature) return;
     _publishedActionSignature = signature;
     final epoch = _flowController.currentEpoch;
+    _publishedActionEpoch = epoch;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _publishedActionSignature != signature) return;
       _actionBridge.publish(
-        ownerId: 'no_products',
+        ownerId: _actionOwner,
         epoch: epoch,
         action: action,
       );
@@ -58,8 +59,6 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       purpose: UploadedAssetPurpose.skinFace,
     );
     _uploadedAsset = restoredAsset ?? durableSkinFaceAssetFromDraft(draft);
-    _showProductSelection =
-        widget.base.skinCareProductRecommendations.isNotEmpty;
   }
 
   void _onLifecycleChanged() {
@@ -70,10 +69,9 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
   void dispose() {
     _lifecycle.removeListener(_onLifecycleChanged);
     _lifecycle.dispose();
-    _actionBridge.clear(
-      ownerId: 'no_products',
-      epoch: _flowController.currentEpoch,
-    );
+    if (_publishedActionEpoch != null) {
+      _actionBridge.clear(ownerId: _actionOwner, epoch: _publishedActionEpoch!);
+    }
     super.dispose();
   }
 
@@ -217,7 +215,6 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       _removingPhoto = false;
       _uploadError = null;
       _generationError = null;
-      _showProductSelection = false;
     });
     updateBaseTimelineDraft(
       ref,
@@ -293,6 +290,11 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         .read(mockOnboardingProvider.notifier)
         .setStepLoading(onboardingSkinCareStepIndex, true);
 
+    _flowController.startGeneration(
+      SkinCareFlowState.noProductsFindingProducts,
+    );
+    final requestEpoch = _flowController.currentEpoch;
+
     final run = await _lifecycle.run<bool>(
       operationType: 'skin-care-find-products',
       timeoutPolicy: AiOperationTimeouts.skinCare,
@@ -300,6 +302,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       preparingMessage: 'Getting your face photo ready…',
       isSessionCurrent: () =>
           mounted &&
+          _flowController.currentEpoch == requestEpoch &&
           ref.read(authGenerationProvider) == currentAuthGeneration &&
           (ref.read(authProvider).user?.uid ??
                   ref.read(mockOnboardingProvider).draft.uid) ==
@@ -434,26 +437,21 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           .setStepLoading(onboardingSkinCareStepIndex, false);
       if (run.isSuccess) {
         setState(() {
-          _showProductSelection = true;
           _generationError = null;
           _recommendationRetryAvailable = false;
         });
-        ref
-            .read(skinCareFlowControllerProvider.notifier)
-            .transitionTo(SkinCareFlowState.noProductsProductSelection);
+        if (_flowController.currentEpoch == requestEpoch) {
+          _flowController.transitionTo(
+            SkinCareFlowState.noProductsProductSelection,
+          );
+        }
       } else if (run.error != null) {
         setState(() {
-          _showProductSelection = false;
           _recommendationRetryAvailable = true;
           _generationError =
               "We couldn't find products right now. ${run.error!.message}";
         });
-        ref
-            .read(skinCareFlowControllerProvider.notifier)
-            .transitionTo(
-              SkinCareFlowState.noProductsInput,
-              error: run.error!.message,
-            );
+        _flowController.failGeneration(run.error!.message);
       }
     }
   }
@@ -494,8 +492,8 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       return;
     }
     if (asset == null || asset.r2Key.trim().isEmpty) {
+      _flowController.transitionTo(SkinCareFlowState.noProductsInput);
       setState(() {
-        _showProductSelection = false;
         _generationError = 'Add a face photo before building your routine.';
       });
       return;
@@ -518,6 +516,11 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         .read(mockOnboardingProvider.notifier)
         .setStepLoading(onboardingSkinCareStepIndex, true);
 
+    _flowController.startGeneration(
+      SkinCareFlowState.noProductsGeneratingRoutine,
+    );
+    final requestEpoch = _flowController.currentEpoch;
+
     final run = await _lifecycle.run<bool>(
       operationType: 'skin-care-routine',
       timeoutPolicy: AiOperationTimeouts.skinCare,
@@ -525,6 +528,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       preparingMessage: 'Getting your skin care routine ready…',
       isSessionCurrent: () =>
           mounted &&
+          _flowController.currentEpoch == requestEpoch &&
           ref.read(authGenerationProvider) == currentAuthGeneration &&
           (ref.read(authProvider).user?.uid ??
                   ref.read(mockOnboardingProvider).draft.uid) ==
@@ -689,17 +693,15 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           .setStepLoading(onboardingSkinCareStepIndex, false);
       if (run.isSuccess) {
         setState(() {
-          _editingExisting = false;
-          _showProductSelection = false;
           _pendingDesiredApplicationsPerDay = null;
           _generationError = null;
           _routineRetryAvailable = false;
         });
-        ref
-            .read(skinCareFlowControllerProvider.notifier)
-            .commitRebuildSuccess(
-              ref.read(mockOnboardingProvider).draft.baseTimeline,
-            );
+        if (_flowController.currentEpoch == requestEpoch) {
+          _flowController.commitRebuildSuccess(
+            ref.read(mockOnboardingProvider).draft.baseTimeline,
+          );
+        }
       } else if (run.error != null) {
         setState(() {
           _routineRetryAvailable = true;
@@ -707,6 +709,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
               'Products are ready, but routine generation failed. '
               '${run.error!.message}';
         });
+        _flowController.failGeneration(run.error!.message);
       }
     }
   }
@@ -762,7 +765,6 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       ),
     );
     setState(() {
-      _showProductSelection = false;
       _generationError = null;
     });
   }
@@ -847,10 +849,27 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         : region.countryName;
     final desiredApplicationsPerDay = _effectiveDesiredApplications(base);
 
-    final inReviewMode = generated && !_editingExisting;
+    final flowStateHolder = ref.watch(skinCareFlowControllerProvider);
+    final flowState = flowStateHolder.state;
+    final isEditing = flowState == SkinCareFlowState.noProductsEditing;
+    final inReviewMode = generated && !isEditing;
+
+    ref.listen(skinCareFlowControllerProvider, (previous, next) {
+      if (previous?.state.isEditing == true && !next.state.isEditing) {
+        setState(() {
+          _pendingDesiredApplicationsPerDay = null;
+          _generationError = null;
+        });
+      }
+    });
+
+    final showProductSelection =
+        flowState == SkinCareFlowState.noProductsProductSelection ||
+        flowState == SkinCareFlowState.noProductsGeneratingRoutine ||
+        (isEditing && base.skinCareProductRecommendations.isNotEmpty);
     final hasProductSelection =
         !inReviewMode &&
-        _showProductSelection &&
+        showProductSelection &&
         base.skinCareProductRecommendations.isNotEmpty;
     final hasSharedFooter =
         context.findAncestorWidgetOfExactType<OnboardingStepShell>() != null;
@@ -916,7 +935,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       );
     }
 
-    if (generated && !_editingExisting) {
+    if (generated && !isEditing) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -980,10 +999,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                       .read(skinCareFlowControllerProvider.notifier)
                       .startEditing(base);
                   setState(() {
-                    _editingExisting = true;
                     _pendingDesiredApplicationsPerDay = null;
-                    _showProductSelection =
-                        base.skinCareProductRecommendations.isNotEmpty;
                     _generationError = null;
                   });
                 },
@@ -1084,7 +1100,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       );
     }
 
-    if (_showProductSelection &&
+    if (showProductSelection &&
         base.skinCareProductRecommendations.isNotEmpty) {
       final selectedKeys = base.skinCareSelectedProductNames
           .map((name) => normalizeSkinCareSelectionKey(name))
@@ -1110,7 +1126,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                 onPressed: busy ? null : _changeDetails,
                 child: const Text('Change details'),
               ),
-              if (_editingExisting)
+              if (isEditing)
                 TextButton.icon(
                   key: const ValueKey(
                     'onboarding-step7-no-products-cancel-rebuild',
@@ -1120,9 +1136,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                         .read(skinCareFlowControllerProvider.notifier)
                         .cancelEditing();
                     setState(() {
-                      _editingExisting = false;
                       _pendingDesiredApplicationsPerDay = null;
-                      _showProductSelection = false;
                       _generationError = null;
                     });
                   },
@@ -1348,7 +1362,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_editingExisting)
+        if (isEditing)
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -1368,7 +1382,6 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                               .read(skinCareFlowControllerProvider.notifier)
                               .cancelEditing();
                           setState(() {
-                            _editingExisting = false;
                             _pendingDesiredApplicationsPerDay = null;
                             _generationError = null;
                           });

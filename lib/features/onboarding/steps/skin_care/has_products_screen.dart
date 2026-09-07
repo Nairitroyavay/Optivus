@@ -21,14 +21,13 @@ class _HasProductsModeScreenState
   String? _uploadError;
   late final AiGenerationController _lifecycle;
   bool _removingPhoto = false;
-  bool _editingExisting = false;
-  late bool _photoProductsReviewed;
-  List<SkinCareDetectedProduct> _reviewedPhotoDetails = const [];
   String? _generationError;
   late _ProductInputSource _inputSource;
   int _selectedDay = DateTime.now().weekday;
   final _productNamesTargetKey = GlobalKey();
   String? _publishedActionSignature;
+  final Object _actionOwner = Object();
+  int? _publishedActionEpoch;
   late final Step7ActionBridgeNotifier _actionBridge;
   late final SkinCareFlowController _flowController;
 
@@ -39,10 +38,11 @@ class _HasProductsModeScreenState
     if (_publishedActionSignature == signature) return;
     _publishedActionSignature = signature;
     final epoch = _flowController.currentEpoch;
+    _publishedActionEpoch = epoch;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _publishedActionSignature != signature) return;
       _actionBridge.publish(
-        ownerId: 'has_products',
+        ownerId: _actionOwner,
         epoch: epoch,
         action: action,
       );
@@ -68,10 +68,6 @@ class _HasProductsModeScreenState
     _inputSource = _uploadedAsset != null
         ? _ProductInputSource.photo
         : _initialProductInputSource(widget.base);
-    _reviewedPhotoDetails = widget.base.skinCareReviewedProducts;
-    _photoProductsReviewed =
-        _inputSource == _ProductInputSource.photo &&
-        _reviewedPhotoDetails.isNotEmpty;
   }
 
   void _onLifecycleChanged() {
@@ -84,10 +80,9 @@ class _HasProductsModeScreenState
     _lifecycle.dispose();
     _controller.dispose();
     _focusNode.dispose();
-    _actionBridge.clear(
-      ownerId: 'has_products',
-      epoch: _flowController.currentEpoch,
-    );
+    if (_publishedActionEpoch != null) {
+      _actionBridge.clear(ownerId: _actionOwner, epoch: _publishedActionEpoch!);
+    }
     super.dispose();
   }
 
@@ -155,8 +150,6 @@ class _HasProductsModeScreenState
       if (latestAsset != null) {
         _uploadedAsset = latestAsset;
         _inputSource = _ProductInputSource.photo;
-        _photoProductsReviewed = false;
-        _reviewedPhotoDetails = const [];
       } else if (_uploadedAsset == null &&
           _inputSource == _ProductInputSource.photo) {
         _inputSource = _ProductInputSource.none;
@@ -218,8 +211,6 @@ class _HasProductsModeScreenState
         if (latest?.durableAsset == null) {
           setState(() {
             _uploadedAsset = null;
-            _reviewedPhotoDetails = const [];
-            _photoProductsReviewed = false;
             _inputSource = _controller.text.trim().isEmpty
                 ? _ProductInputSource.none
                 : _ProductInputSource.typed;
@@ -245,8 +236,6 @@ class _HasProductsModeScreenState
     setState(() {
       _uploadedAsset = null;
       _removingPhoto = false;
-      _photoProductsReviewed = false;
-      _reviewedPhotoDetails = const [];
       _uploadError = null;
       _generationError = null;
       _inputSource = hasTypedProducts
@@ -294,9 +283,13 @@ class _HasProductsModeScreenState
       });
       return;
     }
+    final flowState = _flowController.currentFlowState;
+    final photoNeedsReview =
+        activeSource == _ProductInputSource.photo &&
+        (flowState == SkinCareFlowState.hasProductsPhotoReview ||
+            widget.base.skinCareReviewedProducts.isEmpty);
     if ((activeSource == _ProductInputSource.typed ||
-            (activeSource == _ProductInputSource.photo &&
-                _photoProductsReviewed)) &&
+            (activeSource == _ProductInputSource.photo && !photoNeedsReview)) &&
         typedProductDetails.isEmpty) {
       setState(() {
         _generationError = _onboarding7NoTypedProductsMessage;
@@ -344,9 +337,11 @@ class _HasProductsModeScreenState
         .read(mockOnboardingProvider.notifier)
         .setStepLoading(onboardingSkinCareStepIndex, true);
 
-    final isPhotoAnalyze =
-        _inputSource == _ProductInputSource.photo && !_photoProductsReviewed;
+    final isPhotoAnalyze = photoNeedsReview;
     final isRetry = _lifecycle.state.phase == AiGenerationPhase.error;
+
+    _flowController.startGeneration(SkinCareFlowState.hasProductsGenerating);
+    final requestEpoch = _flowController.currentEpoch;
 
     final run = await _lifecycle.run<bool>(
       operationType: isPhotoAnalyze ? 'skin-care-analyze' : 'skin-care-routine',
@@ -357,6 +352,7 @@ class _HasProductsModeScreenState
           : 'Getting your skin care preferences ready…',
       isSessionCurrent: () =>
           mounted &&
+          _flowController.currentEpoch == requestEpoch &&
           ref.read(authGenerationProvider) == currentAuthGeneration &&
           (ref.read(authProvider).user?.uid ??
                   ref.read(mockOnboardingProvider).draft.uid) ==
@@ -458,8 +454,6 @@ class _HasProductsModeScreenState
               skinCareSkipped: false,
             ),
           );
-          _reviewedPhotoDetails = photoProductDetails;
-          _photoProductsReviewed = true;
           return true;
         } else {
           scope.transition(
@@ -646,18 +640,22 @@ class _HasProductsModeScreenState
           .setStepLoading(onboardingSkinCareStepIndex, false);
       if (run.isSuccess) {
         setState(() {
-          _editingExisting = false;
           _generationError = null;
         });
-        ref
-            .read(skinCareFlowControllerProvider.notifier)
-            .commitRebuildSuccess(
-              ref.read(mockOnboardingProvider).draft.baseTimeline,
-            );
+        if (isPhotoAnalyze) {
+          if (_flowController.currentEpoch == requestEpoch) {
+            _flowController.transitionTo(SkinCareFlowState.hasProductsInput);
+          }
+        } else {
+          _flowController.commitRebuildSuccess(
+            ref.read(mockOnboardingProvider).draft.baseTimeline,
+          );
+        }
       } else if (run.error != null) {
         setState(() {
           _generationError = run.error!.message;
         });
+        _flowController.failGeneration(run.error!.message);
       }
     }
   }
@@ -667,6 +665,21 @@ class _HasProductsModeScreenState
     final generated = widget.blocks.isNotEmpty;
     final restored = ref.watch(restoredUploadsProvider);
     final draft = ref.watch(mockOnboardingProvider).draft;
+    final flowStateHolder = ref.watch(skinCareFlowControllerProvider);
+    final flowState = flowStateHolder.state;
+    final isEditing = flowState == SkinCareFlowState.hasProductsEditing;
+    final inReviewMode = generated && !isEditing;
+
+    ref.listen(skinCareFlowControllerProvider, (previous, next) {
+      if (previous?.state.isEditing == true && !next.state.isEditing) {
+        final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
+        _controller.text = base.skinCareProductNames ?? '';
+        setState(() {
+          _generationError = null;
+        });
+      }
+    });
+
     final restoredAsset = _restoredSkinAssetForSlot(
       restored: restored,
       draft: draft,
@@ -689,8 +702,16 @@ class _HasProductsModeScreenState
             ? _friendlySkinCareUploadMessage(uploadState?.attemptError)
             : null);
     final busy = uploadBusy || _lifecycle.state.isActive || _removingPhoto;
+    final isPhotoReview =
+        flowState == SkinCareFlowState.hasProductsPhotoReview ||
+        (_inputSource == _ProductInputSource.photo &&
+            widget.base.skinCareReviewedProducts.isEmpty &&
+            effectiveAsset != null);
+    final photoProductsReviewed =
+        _inputSource != _ProductInputSource.photo ||
+        (!isPhotoReview && widget.base.skinCareReviewedProducts.isNotEmpty);
     final sourceLabel =
-        _inputSource == _ProductInputSource.photo && _photoProductsReviewed
+        _inputSource == _ProductInputSource.photo && photoProductsReviewed
         ? 'Review detected products before building'
         : _productInputSourceLabel(_inputSource);
     final textInputEnabled = !_lifecycle.state.isActive;
@@ -706,12 +727,11 @@ class _HasProductsModeScreenState
           _ProductInputSource.typed => typedPreviewProducts.isNotEmpty,
           _ProductInputSource.photo =>
             effectiveAsset != null &&
-                (!_photoProductsReviewed || typedPreviewProducts.isNotEmpty),
+                (!photoProductsReviewed || typedPreviewProducts.isNotEmpty),
         });
-    final inReviewMode = generated && !_editingExisting;
     final usesGlobalBuildAction =
         !inReviewMode &&
-        (_inputSource != _ProductInputSource.photo || _photoProductsReviewed);
+        (_inputSource != _ProductInputSource.photo || photoProductsReviewed);
     final hasSharedFooter =
         context.findAncestorWidgetOfExactType<OnboardingStepShell>() != null;
     _publishPrimaryAction(
@@ -725,7 +745,7 @@ class _HasProductsModeScreenState
           : null,
     );
     final textHelper =
-        _inputSource == _ProductInputSource.photo && !_photoProductsReviewed
+        _inputSource == _ProductInputSource.photo && !photoProductsReviewed
         ? 'Read labels to review and correct detected products.'
         : null;
 
@@ -745,10 +765,6 @@ class _HasProductsModeScreenState
           _inputSource = _ProductInputSource.typed;
         } else if (_inputSource == _ProductInputSource.typed && !hasText) {
           _inputSource = _ProductInputSource.none;
-        }
-        if (_inputSource == _ProductInputSource.photo &&
-            _photoProductsReviewed) {
-          _reviewedPhotoDetails = canonical;
         }
       });
       updateBaseTimelineDraft(
@@ -791,7 +807,7 @@ class _HasProductsModeScreenState
       onRemove: busy ? null : _removeUploadedAsset,
       showGenerateAction: !usesGlobalBuildAction || !hasSharedFooter,
       generateLabel:
-          _inputSource == _ProductInputSource.photo && !_photoProductsReviewed
+          _inputSource == _ProductInputSource.photo && !photoProductsReviewed
           ? 'Read product labels'
           : 'Build skin routine',
       onGenerate: canGenerate ? _generate : null,
@@ -844,7 +860,7 @@ class _HasProductsModeScreenState
 
     if (_lifecycle.state.isActive) {
       final isPhotoAnalyze =
-          _inputSource == _ProductInputSource.photo && !_photoProductsReviewed;
+          _inputSource == _ProductInputSource.photo && !photoProductsReviewed;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -881,8 +897,8 @@ class _HasProductsModeScreenState
       );
     }
 
-    if (!generated || _editingExisting) {
-      if (!_editingExisting && MediaQuery.viewInsetsOf(context).bottom > 0) {
+    if (!generated || isEditing) {
+      if (!isEditing && MediaQuery.viewInsetsOf(context).bottom > 0) {
         return _SkinCareProductNamesTarget(
           key: _productNamesTargetKey,
           controller: _controller,
@@ -896,7 +912,7 @@ class _HasProductsModeScreenState
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_editingExisting) ...[
+          if (isEditing) ...[
             const _SkinCareInlineMessage(
               message: 'Changes not applied yet. Your last routine is kept.',
             ),
@@ -917,7 +933,6 @@ class _HasProductsModeScreenState
                             .baseTimeline;
                         _controller.text = base.skinCareProductNames ?? '';
                         setState(() {
-                          _editingExisting = false;
                           _generationError = null;
                         });
                       },
@@ -1029,7 +1044,6 @@ class _HasProductsModeScreenState
                             .read(skinCareFlowControllerProvider.notifier)
                             .startEditing(draft.baseTimeline);
                         setState(() {
-                          _editingExisting = true;
                           _generationError = null;
                         });
                       },

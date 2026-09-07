@@ -6247,7 +6247,8 @@ void main() {
         find.byKey(const ValueKey('onboarding-step7-selected-products-button')),
         findsOneWidget,
       );
-      expect(onboarding7CanContinue(base, 'uid-1'), isFalse);
+      expect(onboarding7CanContinue(base, 'uid-1'), isTrue);
+      expect(base.isSkinCareRoutineCurrent('uid-1'), isTrue);
     },
   );
 
@@ -6621,16 +6622,17 @@ void main() {
     await tester.pumpAndSettle();
     base = container.read(mockOnboardingProvider).draft.baseTimeline;
     expect(base.skinCareDesiredApplicationsPerDay, 2);
-    expect(onboarding7CanContinue(base, 'uid-1'), isFalse);
-    expect(find.text('Routine built'), findsNothing);
-    expect(find.text('Changes not applied yet'), findsOneWidget);
+    expect(onboarding7CanContinue(base, 'uid-1'), isTrue);
+    expect(find.text('Routine built'), findsOneWidget);
+    expect(find.text('Changes not applied yet'), findsNothing);
     final saved = container.read(mockOnboardingProvider).draft;
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(
       buildTestWidget(draft: OnboardingDraft.fromMap(saved.toMap())),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Changes not applied yet'), findsOneWidget);
+    expect(find.text('Changes not applied yet'), findsNothing);
+    expect(find.text('Routine built'), findsOneWidget);
   });
 
   testWidgets(

@@ -18,10 +18,14 @@ class PlanASnapshot {
   final String? budget;
   final String? preference;
   final int desiredApplicationsPerDay;
-  final List<String> selectedProductNames;
+  final List<String> specialCareNotes;
   final List<SkinCareProductRecommendationDraft> productRecommendations;
+  final List<String> selectedProductNames;
+  final List<String> suggestedProducts;
   final String? recommendationFingerprint;
   final String? routineFingerprint;
+  final String? recommendationCountryCode;
+  final String? recommendationCurrencyCode;
 
   const PlanASnapshot({
     this.productNames,
@@ -31,10 +35,14 @@ class PlanASnapshot {
     this.budget,
     this.preference,
     this.desiredApplicationsPerDay = 2,
-    this.selectedProductNames = const [],
+    this.specialCareNotes = const [],
     this.productRecommendations = const [],
+    this.selectedProductNames = const [],
+    this.suggestedProducts = const [],
     this.recommendationFingerprint,
     this.routineFingerprint,
+    this.recommendationCountryCode,
+    this.recommendationCurrencyCode,
   });
 
   factory PlanASnapshot.fromBaseTimeline(BaseTimelineDraft base) {
@@ -46,14 +54,18 @@ class PlanASnapshot {
       budget: base.skinCareBudget,
       preference: base.skinCarePreference,
       desiredApplicationsPerDay: base.skinCareDesiredApplicationsPerDay,
-      selectedProductNames: List.unmodifiable(
-        base.skinCareSelectedProductNames,
-      ),
+      specialCareNotes: List.unmodifiable(base.skinCareSpecialCareNotes),
       productRecommendations: List.unmodifiable(
         base.skinCareProductRecommendations,
       ),
+      selectedProductNames: List.unmodifiable(
+        base.skinCareSelectedProductNames,
+      ),
+      suggestedProducts: List.unmodifiable(base.skinCareSuggestedProducts),
       recommendationFingerprint: base.skinCareRecommendationFingerprint,
       routineFingerprint: base.skinCareRoutineFingerprint,
+      recommendationCountryCode: base.skinCareRecommendationCountryCode,
+      recommendationCurrencyCode: base.skinCareRecommendationCurrencyCode,
     );
   }
 
@@ -66,10 +78,14 @@ class PlanASnapshot {
       skinCareBudget: budget,
       skinCarePreference: preference,
       skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
-      skinCareSelectedProductNames: selectedProductNames,
+      skinCareSpecialCareNotes: specialCareNotes,
       skinCareProductRecommendations: productRecommendations,
+      skinCareSelectedProductNames: selectedProductNames,
+      skinCareSuggestedProducts: suggestedProducts,
       skinCareRecommendationFingerprint: recommendationFingerprint,
       skinCareRoutineFingerprint: routineFingerprint,
+      skinCareRecommendationCountryCode: recommendationCountryCode,
+      skinCareRecommendationCurrencyCode: recommendationCurrencyCode,
     );
   }
 }
@@ -80,12 +96,14 @@ class SkinCareFlowStateHolder {
   final int epoch;
   final String? activeError;
   final PlanASnapshot? planASnapshot;
+  final SkinCareFlowState? generationOrigin;
 
   const SkinCareFlowStateHolder({
     required this.state,
     required this.epoch,
     this.activeError,
     this.planASnapshot,
+    this.generationOrigin,
   });
 
   SkinCareFlowStateHolder copyWith({
@@ -95,6 +113,8 @@ class SkinCareFlowStateHolder {
     bool clearError = false,
     PlanASnapshot? planASnapshot,
     bool clearSnapshot = false,
+    SkinCareFlowState? generationOrigin,
+    bool clearGenerationOrigin = false,
   }) {
     return SkinCareFlowStateHolder(
       state: state ?? this.state,
@@ -103,6 +123,9 @@ class SkinCareFlowStateHolder {
       planASnapshot: clearSnapshot
           ? null
           : (planASnapshot ?? this.planASnapshot),
+      generationOrigin: clearGenerationOrigin
+          ? null
+          : (generationOrigin ?? this.generationOrigin),
     );
   }
 }
@@ -122,8 +145,8 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
 
   /// Synchronizes current state from the durable draft.
   void syncFromDraft(BaseTimelineDraft base, String uid) {
-    // If currently editing, preserve the edit state and snapshot.
-    if (state.state.isEditing) return;
+    // If currently editing or generating, preserve the state and snapshot.
+    if (state.state.isEditing || state.state.isGenerating) return;
 
     final derived = deriveSkinCareFlowState(base, uid);
     if (state.state != derived) {
@@ -159,6 +182,43 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
     );
   }
 
+  /// Begins generation and bumps epoch.
+  void startGeneration(SkinCareFlowState generatingState) {
+    state = state.copyWith(
+      state: generatingState,
+      epoch: state.epoch + 1,
+      generationOrigin: state.state.isGenerating
+          ? state.generationOrigin
+          : state.state,
+      clearError: true,
+    );
+  }
+
+  /// Handles generation failure by returning to origin and recording error.
+  void failGeneration(String error) {
+    final origin = state.generationOrigin;
+    final fallback = switch (state.state) {
+      SkinCareFlowState.hasProductsGenerating =>
+        (state.planASnapshot != null)
+            ? SkinCareFlowState.hasProductsEditing
+            : SkinCareFlowState.hasProductsInput,
+      SkinCareFlowState.noProductsFindingProducts =>
+        SkinCareFlowState.noProductsInput,
+      SkinCareFlowState.noProductsGeneratingRoutine =>
+        (state.planASnapshot != null)
+            ? SkinCareFlowState.noProductsEditing
+            : SkinCareFlowState.noProductsProductSelection,
+      _ => state.state,
+    };
+    final nextState = origin ?? fallback;
+    state = state.copyWith(
+      state: nextState,
+      epoch: state.epoch + 1,
+      activeError: error,
+      clearGenerationOrigin: true,
+    );
+  }
+
   void _updateBase(BaseTimelineDraft Function(BaseTimelineDraft base) update) {
     ref
         .read(mockOnboardingProvider.notifier)
@@ -173,16 +233,22 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
         .setStepDirty(onboardingSkinCareStepIndex, true);
   }
 
-  /// Cancels editing and returns to review mode.
+  /// Cancels editing and restores Plan A snapshot onto the draft.
   void cancelEditing() {
     final nextState = state.state == SkinCareFlowState.noProductsEditing
         ? SkinCareFlowState.noProductsReview
         : SkinCareFlowState.hasProductsReview;
 
+    final snapshot = state.planASnapshot;
+    if (snapshot != null) {
+      _updateBase((base) => snapshot.restoreOnto(base));
+    }
+
     state = state.copyWith(
       state: nextState,
       epoch: state.epoch + 1,
       clearSnapshot: true,
+      clearGenerationOrigin: true,
       clearError: true,
     );
 
@@ -200,6 +266,7 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
       state: nextState,
       epoch: state.epoch + 1,
       clearSnapshot: true,
+      clearGenerationOrigin: true,
       clearError: true,
     );
 
@@ -259,12 +326,22 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
       case SkinCareFlowState.hasProductsGenerating:
       case SkinCareFlowState.noProductsFindingProducts:
       case SkinCareFlowState.noProductsGeneratingRoutine:
-        // Cancel operation by bumping epoch; return to previous input state.
-        final target = state.state == SkinCareFlowState.hasProductsGenerating
-            ? SkinCareFlowState.hasProductsInput
-            : SkinCareFlowState.noProductsInput;
+        final origin = state.generationOrigin;
+        final fallback = state.state == SkinCareFlowState.hasProductsGenerating
+            ? ((state.planASnapshot != null)
+                  ? SkinCareFlowState.hasProductsEditing
+                  : SkinCareFlowState.hasProductsInput)
+            : ((state.planASnapshot != null)
+                  ? SkinCareFlowState.noProductsEditing
+                  : SkinCareFlowState.noProductsInput);
+        final target = origin ?? fallback;
         ref.read(step7ActionBridgeProvider.notifier).clearAll();
-        transitionTo(target);
+        state = state.copyWith(
+          state: target,
+          epoch: state.epoch + 1,
+          clearGenerationOrigin: true,
+          clearError: true,
+        );
         return true;
     }
   }

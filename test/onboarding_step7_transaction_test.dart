@@ -192,6 +192,116 @@ void main() {
       );
     });
 
+    test(
+      'mutating inputs during edit and calling cancelEditing restores Plan A snapshot and keeps routine current',
+      () {
+        final controller = container.read(
+          skinCareFlowControllerProvider.notifier,
+        );
+        final baseBefore = container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline;
+
+        expect(baseBefore.isSkinCareRoutineCurrent(testUid), isTrue);
+
+        controller.startEditing(baseBefore);
+        expect(
+          container.read(skinCareFlowControllerProvider).state,
+          SkinCareFlowState.noProductsEditing,
+        );
+
+        // Mutate inputs during edit (e.g. user changes budget, skinType, problems)
+        container
+            .read(mockOnboardingProvider.notifier)
+            .updateDraft(
+              (d) => d.copyWith(
+                baseTimeline: d.baseTimeline.copyWith(
+                  skinCareBudget: 'high',
+                  skinCareSkinType: 'dry',
+                  skinCareProblems: const ['redness'],
+                  skinCareDesiredApplicationsPerDay: 4,
+                  skinCareSelectedProductNames: const ['Other Product'],
+                ),
+              ),
+            );
+
+        final dirtyBase = container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline;
+        expect(dirtyBase.isSkinCareRoutineCurrent(testUid), isFalse);
+
+        // Cancel editing restores Plan A snapshot onto draft
+        controller.cancelEditing();
+
+        final restoredBase = container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline;
+
+        expect(restoredBase.skinCareBudget, 'medium');
+        expect(restoredBase.skinCareSkinType, 'oily');
+        expect(restoredBase.skinCareProblems, const ['pimples']);
+        expect(restoredBase.skinCareDesiredApplicationsPerDay, 2);
+        expect(restoredBase.skinCareSelectedProductNames, _testSelected);
+        expect(restoredBase.skinCareProductRecommendations, _testRecs);
+        expect(
+          restoredBase.skinCareRoutineFingerprint,
+          baseBefore.skinCareRoutineFingerprint,
+        );
+        expect(restoredBase.validateSkinCareSetup(testUid), isNull);
+        expect(restoredBase.isSkinCareRoutineCurrent(testUid), isTrue);
+        expect(
+          container.read(skinCareFlowControllerProvider).state,
+          SkinCareFlowState.noProductsReview,
+        );
+      },
+    );
+
+    test(
+      'handleBack during edit mode restores Plan A snapshot and keeps routine current',
+      () {
+        final controller = container.read(
+          skinCareFlowControllerProvider.notifier,
+        );
+        final baseBefore = container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline;
+
+        controller.startEditing(baseBefore);
+
+        // Mutate inputs during edit
+        container
+            .read(mockOnboardingProvider.notifier)
+            .updateDraft(
+              (d) => d.copyWith(
+                baseTimeline: d.baseTimeline.copyWith(
+                  skinCareBudget: 'high',
+                  skinCareDesiredApplicationsPerDay: 3,
+                ),
+              ),
+            );
+
+        // Shell top-left back button triggers handleBack
+        final handled = controller.handleBack();
+        expect(handled, isTrue);
+
+        final restoredBase = container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline;
+        expect(restoredBase.skinCareBudget, 'medium');
+        expect(restoredBase.skinCareDesiredApplicationsPerDay, 2);
+        expect(restoredBase.isSkinCareRoutineCurrent(testUid), isTrue);
+        expect(
+          container.read(skinCareFlowControllerProvider).state,
+          SkinCareFlowState.noProductsReview,
+        );
+      },
+    );
+
     test('Failed rebuild leaves Plan A blocks untouched', () {
       final controller = container.read(
         skinCareFlowControllerProvider.notifier,
