@@ -537,7 +537,7 @@ BodyBasicsDraft _validBody() => const BodyBasicsDraft(
 );
 
 BaseTimelineDraft _validBaseTimeline() => const BaseTimelineDraft(
-  eatingSetupPath: 'create',
+  eatingSetupPath: 'skip',
   skinCareSkipped: true,
   blocks: [
     TimelineBlockDraft(

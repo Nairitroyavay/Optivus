@@ -27,6 +27,8 @@ import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpe
 import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_primary_action.dart';
+import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_controller.dart';
+import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_state.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_action_bar.dart';
 import 'package:optivus/features/onboarding/onboarding_step_readiness.dart';
@@ -360,6 +362,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         return;
       }
       _currentPage = nextPage;
+      ref.read(step7ActionBridgeProvider.notifier).clearAll();
       ref.read(mockOnboardingProvider.notifier).setStep(_currentPage);
       await _pageController.animateToPage(
         _currentPage,
@@ -644,6 +647,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     }
 
     _currentPage = boundedIndex;
+    ref.read(step7ActionBridgeProvider.notifier).clearAll();
     ref.read(mockOnboardingProvider.notifier).setStep(boundedIndex);
     await _pageController.animateToPage(
       boundedIndex,
@@ -755,6 +759,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
     final target = _currentPage - 1;
     _currentPage = target;
+    ref.read(step7ActionBridgeProvider.notifier).clearAll();
     ref.read(mockOnboardingProvider.notifier).setStep(target);
     _pageController.animateToPage(
       target,
@@ -796,6 +801,10 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     return onboardingShouldShowTopLeftBackButton(
       currentPage: _currentPage,
       baseTimeline: draft.baseTimeline,
+      step7CanHandleBack: _currentPage == onboardingSkinCareStepIndex
+          ? ref.watch(skinCareFlowControllerProvider).state !=
+              SkinCareFlowState.choice
+          : null,
     );
   }
 
@@ -1040,12 +1049,16 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       ),
     );
 
+    final globalSafe =
+        !_isNavigating &&
+        !_isSaving &&
+        !onboardingState.stepLoading[_currentPage];
     final showPrimaryCta = step7Action != null || defaultShowPrimaryCta;
     if (step7Action != null) {
       ctaLabel = step7Action.label;
       ctaKind = OnboardingActionKind.generate;
       ctaOnPressed = step7Action.onPressed;
-      ctaEnabled = step7Action.enabled;
+      ctaEnabled = globalSafe && step7Action.enabled;
     }
 
     return PopScope(
@@ -1183,8 +1196,14 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   bool _backFixed(OnboardingDraft draft) => false;
 
   bool _backSkinCare(OnboardingDraft draft) {
-    final base = draft.baseTimeline;
+    final controller = ref.read(skinCareFlowControllerProvider.notifier);
+    final user = ref.read(authProvider).user;
+    controller.syncFromDraft(draft.baseTimeline, user?.uid ?? 'anonymous');
+    if (controller.canHandleBack) {
+      return controller.handleBack();
+    }
 
+    final base = draft.baseTimeline;
     if (base.skinCareSetupStep <= 0) {
       return false;
     }
@@ -1193,7 +1212,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       onboardingSkinCareStepIndex,
       (base) => base.copyWith(
         skinCareSetupStep: 0,
-        // keep saved answers/blocks unless user explicitly clears them
       ),
     );
 
@@ -1423,6 +1441,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 bool onboardingShouldShowTopLeftBackButton({
   required int currentPage,
   required BaseTimelineDraft baseTimeline,
+  bool? step7CanHandleBack,
 }) {
   if (currentPage == onboardingClassJobStepIndex) {
     return baseTimeline.classJobSetupStep > 0;
@@ -1433,6 +1452,9 @@ bool onboardingShouldShowTopLeftBackButton({
   // Skin Care has internal navigation: inside a path it returns to choice.
   // The first screen (choice screen) does not show a back button.
   if (currentPage == onboardingSkinCareStepIndex) {
+    if (step7CanHandleBack != null) {
+      return step7CanHandleBack;
+    }
     return baseTimeline.skinCareSetupStep > 0;
   }
   return false;

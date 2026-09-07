@@ -6659,7 +6659,7 @@ void main() {
           gender: 'other',
         ),
         baseTimeline: const BaseTimelineDraft(
-          eatingSetupPath: 'create',
+          eatingSetupPath: 'skip',
           blocks: [
             TimelineBlockDraft(
               id: BaseTimelineDraft.fixedSleepId,

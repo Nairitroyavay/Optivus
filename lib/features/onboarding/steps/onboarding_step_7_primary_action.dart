@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+export 'skin_care/skin_care_action_bridge.dart';
 
 /// The Step 7-owned behavior presented by the shared onboarding footer.
 ///
@@ -19,6 +19,3 @@ class OnboardingStep7PrimaryAction {
     required this.onPressed,
   });
 }
-
-final onboardingStep7PrimaryActionProvider =
-    StateProvider<OnboardingStep7PrimaryAction?>((ref) => null);

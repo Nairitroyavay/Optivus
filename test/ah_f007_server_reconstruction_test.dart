@@ -1056,7 +1056,7 @@ OnboardingDraft _validDraftAtStep(String uid, int step) {
     completed[index] = true;
   }
   final base = const BaseTimelineDraft(
-    eatingSetupPath: 'create',
+    eatingSetupPath: 'skip',
     eatingMode: 'flat',
     shouldPlanMeals: false,
     skinCareSkipped: true,

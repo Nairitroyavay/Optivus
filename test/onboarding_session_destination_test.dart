@@ -320,7 +320,7 @@ OnboardingDraft _draft(
       gender: 'other',
     ),
     baseTimeline: const BaseTimelineDraft(
-      eatingSetupPath: 'create',
+      eatingSetupPath: 'skip',
       skinCareSkipped: true,
       blocks: [
         TimelineBlockDraft(

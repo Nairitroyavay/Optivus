@@ -722,7 +722,7 @@ OnboardingDraft _step6ResumeDraft(BaseTimelineDraft baseTimeline) {
       gender: 'other',
     ),
     baseTimeline: baseTimeline.copyWith(
-      eatingSetupPath: 'create',
+      eatingSetupPath: 'skip',
       blocks: [
         ...baseTimeline.blocks,
         const TimelineBlockDraft(

@@ -1,0 +1,282 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_controller.dart';
+import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_state.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
+import 'package:optivus/state/app_state.dart';
+
+TimelineBlockDraft _bathBlock() => BaseTimelineDraft.defaultBathBlock();
+
+List<TimelineBlockDraft> _fullWeekSkinBlocks(
+  int count, {
+  String prefix = 'Plan A',
+}) {
+  return List.generate(
+    count,
+    (i) => TimelineBlockDraft(
+      id: '$prefix-block-$i',
+      title: '$prefix Slot $i',
+      startMinute: 450 + i * 120,
+      endMinute: 465 + i * 120,
+      section: 'skin_care',
+      repeatDays: onboarding7EveryDay,
+      blockType: TimelineBlockDraft.softBlockKey,
+      skincareProducts: const ['Minimalist Gentle Cleanser'],
+      skincareSteps: const ['Cleanse'],
+    ),
+  );
+}
+
+List<TimelineBlockDraft> _tagBlocks(
+  List<TimelineBlockDraft> blocks,
+  String fingerprint,
+) {
+  final token = 'skin-care-generation:$fingerprint';
+  return blocks
+      .map(
+        (b) => b.section == 'skin_care'
+            ? b.copyWith(
+                provenanceSourceIds: {...b.provenanceSourceIds, token}.toList(),
+              )
+            : b,
+      )
+      .toList();
+}
+
+const _testRecs = [
+  SkinCareProductRecommendationDraft(
+    category: 'cleanser',
+    brand: 'Minimalist',
+    name: 'Minimalist Gentle Cleanser',
+    estimatedPrice: '10',
+    currencyCode: 'USD',
+    reason: 'Gentle',
+  ),
+  SkinCareProductRecommendationDraft(
+    category: 'moisturizer',
+    brand: 'Minimalist',
+    name: 'Minimalist Barrier Moisturizer',
+    estimatedPrice: '12',
+    currencyCode: 'USD',
+    reason: 'Moisturizes',
+  ),
+  SkinCareProductRecommendationDraft(
+    category: 'sunscreen',
+    brand: 'Minimalist',
+    name: 'Minimalist SPF 50 Sunscreen',
+    estimatedPrice: '14',
+    currencyCode: 'USD',
+    reason: 'Protects',
+  ),
+];
+
+const _testSelected = [
+  'Minimalist Gentle Cleanser',
+  'Minimalist Barrier Moisturizer',
+  'Minimalist SPF 50 Sunscreen',
+];
+
+void main() {
+  const testUid = 'transaction-test-uid';
+
+  group('Transactional Rebuild & Plan A/B Replacement Invariants', () {
+    late ProviderContainer container;
+
+    setUp(() {
+      final initialBase = const BaseTimelineDraft().copyWith(
+        skinCareSetupPath: 'no_products',
+        skinCareSetupStep: 1,
+        skinCareSkinType: 'oily',
+        skinCareProblems: const ['pimples'],
+        skinCareBudget: 'medium',
+        skinCareDesiredApplicationsPerDay: 2,
+        skinCareFacePhotoAssetId: 'skin-asset',
+        skinCareFacePhotoR2Key:
+            'users/$testUid/onboarding/skin_care/skin-asset.jpg',
+        skinCareFacePhotoStatus: 'uploaded',
+        skinCareFacePhotoCreatedAt: DateTime.utc(2026, 6, 15, 10),
+        skinCareFacePhotoUpdatedAt: DateTime.utc(2026, 6, 15, 10),
+        skinCareProductRecommendations: _testRecs,
+        skinCareSelectedProductNames: _testSelected,
+        skinCareSuggestedProducts: _testSelected,
+      );
+
+      final recFp = initialBase.computeSkinCareRecommendationFingerprint();
+      final withRec = initialBase.copyWith(
+        skinCareRecommendationFingerprint: recFp,
+      );
+      final routineFp = withRec.computeSkinCareRoutineFingerprint();
+      final planABlocks = _tagBlocks([
+        _bathBlock(),
+        ..._fullWeekSkinBlocks(2, prefix: 'Plan A'),
+      ], routineFp);
+
+      final draft = OnboardingDraft(
+        uid: testUid,
+        currentStep: 7,
+        baseTimeline: withRec.copyWith(
+          skinCareRoutineFingerprint: routineFp,
+          blocks: planABlocks,
+        ),
+      );
+
+      final notifier = MockOnboardingNotifier()..loadSeedData(draft);
+      container = ProviderContainer(
+        overrides: [mockOnboardingProvider.overrideWith((ref) => notifier)],
+      );
+    });
+
+    tearDown(() => container.dispose());
+
+    test('Initial state has Plan A routine blocks and is current', () {
+      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      final skinBlocks = base.confirmedBlocksForSection('skin_care');
+
+      expect(skinBlocks, hasLength(2));
+      expect(skinBlocks.every((b) => b.title.startsWith('Plan A')), isTrue);
+      // print validation failure if any
+      final validationError = base.validateSkinCareSetup(testUid);
+      expect(validationError, isNull);
+      expect(base.isSkinCareRoutineCurrent(testUid), isTrue);
+    });
+
+    test('startEditing preserves Plan A blocks in draft', () {
+      final controller = container.read(
+        skinCareFlowControllerProvider.notifier,
+      );
+      final baseBefore = container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline;
+
+      controller.startEditing(baseBefore);
+
+      final baseAfter = container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline;
+      final skinBlocks = baseAfter.confirmedBlocksForSection('skin_care');
+
+      expect(skinBlocks, hasLength(2));
+      expect(skinBlocks.every((b) => b.title.startsWith('Plan A')), isTrue);
+      expect(
+        container.read(skinCareFlowControllerProvider).state,
+        SkinCareFlowState.noProductsEditing,
+      );
+    });
+
+    test('cancelEditing exits edit mode and keeps Plan A blocks intact', () {
+      final controller = container.read(
+        skinCareFlowControllerProvider.notifier,
+      );
+      final baseBefore = container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline;
+
+      controller.startEditing(baseBefore);
+      controller.cancelEditing();
+
+      final baseAfter = container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline;
+      final skinBlocks = baseAfter.confirmedBlocksForSection('skin_care');
+
+      expect(skinBlocks, hasLength(2));
+      expect(skinBlocks.every((b) => b.title.startsWith('Plan A')), isTrue);
+      expect(
+        container.read(skinCareFlowControllerProvider).state,
+        SkinCareFlowState.noProductsReview,
+      );
+    });
+
+    test('Failed rebuild leaves Plan A blocks untouched', () {
+      final controller = container.read(
+        skinCareFlowControllerProvider.notifier,
+      );
+      final baseBefore = container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline;
+
+      controller.startEditing(baseBefore);
+
+      // Simulate a failure during generation: controller transitions with error
+      controller.transitionTo(
+        SkinCareFlowState.noProductsEditing,
+        error: 'AI generation timed out',
+      );
+
+      final baseAfter = container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline;
+      final skinBlocks = baseAfter.confirmedBlocksForSection('skin_care');
+
+      // Plan A blocks are still completely preserved
+      expect(skinBlocks, hasLength(2));
+      expect(skinBlocks.every((b) => b.title.startsWith('Plan A')), isTrue);
+      expect(
+        container.read(skinCareFlowControllerProvider).activeError,
+        'AI generation timed out',
+      );
+    });
+
+    test(
+      'Plan B replaces Plan A atomically only upon commitRebuildSuccess',
+      () {
+        final controller = container.read(
+          skinCareFlowControllerProvider.notifier,
+        );
+        final baseBefore = container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline;
+
+        controller.startEditing(baseBefore);
+
+        var updatedBase = baseBefore.copyWith(
+          skinCareDesiredApplicationsPerDay: 3,
+        );
+        final recFp = updatedBase.computeSkinCareRecommendationFingerprint();
+        updatedBase = updatedBase.copyWith(
+          skinCareRecommendationFingerprint: recFp,
+        );
+        final planBFingerprint = updatedBase
+            .computeSkinCareRoutineFingerprint();
+        final planBBlocks = _tagBlocks([
+          _bathBlock(),
+          ..._fullWeekSkinBlocks(3, prefix: 'Plan B'),
+        ], planBFingerprint);
+        updatedBase = updatedBase.copyWith(
+          skinCareRoutineFingerprint: planBFingerprint,
+          blocks: planBBlocks,
+        );
+
+        // Commit rebuild success
+        container
+            .read(mockOnboardingProvider.notifier)
+            .updateDraft((d) => d.copyWith(baseTimeline: updatedBase));
+        controller.commitRebuildSuccess(updatedBase);
+
+        final finalBase = container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline;
+        final skinBlocks = finalBase.confirmedBlocksForSection('skin_care');
+
+        // Now Plan B has atomically replaced Plan A
+        expect(skinBlocks, hasLength(3));
+        expect(skinBlocks.every((b) => b.title.startsWith('Plan B')), isTrue);
+        expect(finalBase.validateSkinCareSetup(testUid), isNull);
+        expect(finalBase.isSkinCareRoutineCurrent(testUid), isTrue);
+        expect(
+          container.read(skinCareFlowControllerProvider).state,
+          SkinCareFlowState.noProductsReview,
+        );
+      },
+    );
+  });
+}
