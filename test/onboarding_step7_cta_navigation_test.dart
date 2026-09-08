@@ -6,9 +6,12 @@ import 'package:optivus/features/onboarding/steps/onboarding_step_7_primary_acti
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_setup.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
 import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_controller.dart';
+import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_state.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/auth_generation.dart';
 
 void _noop() {}
@@ -498,7 +501,7 @@ void main() {
     );
 
     testWidgets(
-      'Custom CTA clears upon session reset or transitioning to review',
+      'Same Build CTA signature republishes after session reset clears bridge',
       (tester) async {
         tester.view.physicalSize = const Size(390, 844);
         tester.view.devicePixelRatio = 1;
@@ -565,8 +568,9 @@ void main() {
         expect(bridgeState.action, isNotNull);
         expect(bridgeState.action!.label, 'Build skin routine');
         expect(container.read(onboardingStep7PrimaryActionProvider), isNotNull);
+        final initialEpoch = bridgeState.activeToken!.epoch;
 
-        // Now simulate session reset (authGeneration increment)
+        // Now simulate session reset (authGeneration increment).
         container.read(authGenerationProvider.notifier).state++;
         container
             .read(skinCareFlowControllerProvider.notifier)
@@ -578,10 +582,164 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
 
-        // Session reset must have wiped the active custom action
-        expect(container.read(step7ActionBridgeProvider).action, isNull);
+        // The reset wipes the old action, then the still-valid Build state
+        // republishes the same visible signature under the new epoch/session.
+        final republished = container.read(step7ActionBridgeProvider);
+        expect(republished.action, isNotNull);
+        expect(republished.action!.label, 'Build skin routine');
+        expect(republished.activeToken, isNotNull);
+        expect(republished.activeToken!.epoch, greaterThan(initialEpoch));
+        expect(container.read(onboardingStep7PrimaryActionProvider), isNotNull);
+      },
+    );
+
+    testWidgets(
+      'Shell Back uses current non-zero authGeneration for has-products edit',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final draft = createHasProductsDraftWithBlocks(uid: 'user-shell-back');
+        final notifier = MockOnboardingNotifier()..loadSeedData(draft);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              authProvider.overrideWith(
+                (ref) => _Step7TestAuthNotifier(
+                  const AuthUser(
+                    uid: 'user-shell-back',
+                    email: 'shell@example.com',
+                    emailVerified: true,
+                  ),
+                ),
+              ),
+              authGenerationProvider.overrideWith((ref) => 7),
+              mockOnboardingProvider.overrideWith((ref) => notifier),
+            ],
+            child: const MaterialApp(home: OnboardingFlow()),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+
+        await tester.tap(find.text('Rebuild / Edit'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.enterText(
+          find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+          'Changed Cleanser',
+        );
+        await tester.pump();
+
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(OnboardingFlow)),
+        );
+        expect(
+          container.read(skinCareFlowControllerProvider).state,
+          SkinCareFlowState.hasProductsEditing,
+        );
+
+        await tester.tap(find.byKey(const ValueKey('onboarding-step7-back')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+
+        final flow = container.read(skinCareFlowControllerProvider);
+        final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+        expect(flow.ownerUid, 'user-shell-back');
+        expect(flow.authGeneration, 7);
+        expect(flow.state, SkinCareFlowState.hasProductsReview);
+        expect(
+          base.skinCareProductNames,
+          'Gentle Cleanser\nBarrier Moisturizer',
+        );
+        expect(base.isSkinCareRoutineCurrent('user-shell-back'), isTrue);
+        expect(
+          find.byKey(const ValueKey('onboarding-step7-full-timeline')),
+          findsOneWidget,
+        );
         expect(container.read(onboardingStep7PrimaryActionProvider), isNull);
+        expect(find.text('Next Step'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Shell Back with null auth preserves draft owner during no-products edit',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final draft = createNoProductsDraftWithBlocks(uid: 'test-user-123');
+        final notifier = MockOnboardingNotifier()..loadSeedData(draft);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              authProvider.overrideWith((ref) => _Step7TestAuthNotifier(null)),
+              authGenerationProvider.overrideWith((ref) => 4),
+              mockOnboardingProvider.overrideWith((ref) => notifier),
+            ],
+            child: const MaterialApp(home: OnboardingFlow()),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+
+        await tester.tap(find.text('Rebuild / Edit'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.tap(find.text('Change details'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.tap(find.text('High'));
+        await tester.pump();
+
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(OnboardingFlow)),
+        );
+        expect(
+          container.read(skinCareFlowControllerProvider).state,
+          SkinCareFlowState.noProductsEditing,
+        );
+
+        await tester.tap(find.byKey(const ValueKey('onboarding-step7-back')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+
+        final flow = container.read(skinCareFlowControllerProvider);
+        final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+        expect(flow.ownerUid, 'test-user-123');
+        expect(flow.authGeneration, 4);
+        expect(flow.state, SkinCareFlowState.noProductsReview);
+        expect(base.skinCareBudget, 'medium');
+        expect(base.isSkinCareRoutineCurrent('test-user-123'), isTrue);
+        expect(
+          find.byKey(const ValueKey('onboarding-step7-full-timeline')),
+          findsOneWidget,
+        );
+        expect(container.read(onboardingStep7PrimaryActionProvider), isNull);
+        expect(find.text('Next Step'), findsOneWidget);
       },
     );
   });
+}
+
+class _Step7TestAuthNotifier extends StateNotifier<AuthState>
+    implements AuthNotifier {
+  _Step7TestAuthNotifier(AuthUser? user)
+    : super(
+        AuthState(
+          user: user,
+          status: user == null
+              ? AuthFlowStatus.signedInOnboardingIncomplete
+              : AuthFlowStatus.signedInOnboardingIncomplete,
+        ),
+      );
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

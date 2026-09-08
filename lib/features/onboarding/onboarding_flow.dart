@@ -6,6 +6,7 @@ import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/core/errors/completion_error_mapper.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/auth_generation.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_draft.dart';
@@ -803,7 +804,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       baseTimeline: draft.baseTimeline,
       step7CanHandleBack: _currentPage == onboardingSkinCareStepIndex
           ? ref.watch(skinCareFlowControllerProvider).state !=
-              SkinCareFlowState.choice
+                SkinCareFlowState.choice
           : null,
     );
   }
@@ -1198,7 +1199,11 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   bool _backSkinCare(OnboardingDraft draft) {
     final controller = ref.read(skinCareFlowControllerProvider.notifier);
     final user = ref.read(authProvider).user;
-    controller.syncFromDraft(draft.baseTimeline, user?.uid ?? 'anonymous');
+    controller.syncFromDraft(
+      draft.baseTimeline,
+      user?.uid ?? draft.uid,
+      authGeneration: ref.read(authGenerationProvider),
+    );
     if (controller.canHandleBack) {
       return controller.handleBack();
     }
@@ -1210,9 +1215,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
     _updateBaseTimelineStage(
       onboardingSkinCareStepIndex,
-      (base) => base.copyWith(
-        skinCareSetupStep: 0,
-      ),
+      (base) => base.copyWith(skinCareSetupStep: 0),
     );
 
     return true;

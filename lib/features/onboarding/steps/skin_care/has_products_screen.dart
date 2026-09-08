@@ -28,6 +28,8 @@ class _HasProductsModeScreenState
   String? _publishedActionSignature;
   final Object _actionOwner = Object();
   int? _publishedActionEpoch;
+  String? _publishedActionOwnerUid;
+  int? _publishedActionAuthGeneration;
   late final Step7ActionBridgeNotifier _actionBridge;
   late final SkinCareFlowController _flowController;
 
@@ -35,12 +37,35 @@ class _HasProductsModeScreenState
     final signature = action == null
         ? null
         : '${action.label}|${action.enabled}|${action.loading}';
-    if (_publishedActionSignature == signature) return;
-    _publishedActionSignature = signature;
     final epoch = _flowController.currentEpoch;
+    final draft = ref.read(mockOnboardingProvider).draft;
+    final ownerUid = ref.read(authProvider).user?.uid ?? draft.uid;
+    final authGeneration = ref.read(authGenerationProvider);
+    final bridgeState = ref.read(step7ActionBridgeProvider);
+    final bridgeStillOwnsAction =
+        action == null ||
+        (bridgeState.action != null &&
+            bridgeState.activeToken?.ownerId == _actionOwner &&
+            bridgeState.activeToken?.epoch == _publishedActionEpoch);
+    if (_publishedActionSignature == signature &&
+        _publishedActionEpoch == epoch &&
+        _publishedActionOwnerUid == ownerUid &&
+        _publishedActionAuthGeneration == authGeneration &&
+        bridgeStillOwnsAction) {
+      return;
+    }
+    _publishedActionSignature = signature;
     _publishedActionEpoch = epoch;
+    _publishedActionOwnerUid = ownerUid;
+    _publishedActionAuthGeneration = authGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _publishedActionSignature != signature) return;
+      if (!mounted ||
+          _publishedActionSignature != signature ||
+          _publishedActionEpoch != epoch ||
+          _publishedActionOwnerUid != ownerUid ||
+          _publishedActionAuthGeneration != authGeneration) {
+        return;
+      }
       _actionBridge.publish(
         ownerId: _actionOwner,
         epoch: epoch,
@@ -86,6 +111,42 @@ class _HasProductsModeScreenState
     super.dispose();
   }
 
+  void _resetPublishedActionCache() {
+    _publishedActionSignature = null;
+    _publishedActionEpoch = null;
+    _publishedActionOwnerUid = null;
+    _publishedActionAuthGeneration = null;
+  }
+
+  bool _isCurrentUploadBinding({
+    required String uid,
+    required int authGeneration,
+    required int flowEpoch,
+    required SkinCareFlowState expectedState,
+  }) {
+    if (!mounted) return false;
+    final draft = ref.read(mockOnboardingProvider).draft;
+    final currentUid = ref.read(authProvider).user?.uid ?? draft.uid;
+    final flow = ref.read(skinCareFlowControllerProvider);
+    return currentUid == uid &&
+        ref.read(authGenerationProvider) == authGeneration &&
+        flow.epoch == flowEpoch &&
+        flow.state == expectedState;
+  }
+
+  UploadedAsset? _slotAssetIfBoundToDraft(
+    UploadSlotRuntimeState? uploadState,
+    OnboardingDraft draft,
+  ) {
+    final asset = uploadState?.durableAsset;
+    if (asset == null) return null;
+    final base = draft.baseTimeline;
+    return asset.assetId == base.skinCareProductPhotoAssetId &&
+            asset.r2Key == base.skinCareProductPhotoR2Key
+        ? asset
+        : null;
+  }
+
   Future<void> _startUpload() async {
     final initialUploadState = ref.read(
       onboardingUploadInteractionProvider,
@@ -108,6 +169,9 @@ class _HasProductsModeScreenState
     final uid =
         ref.read(authProvider).user?.uid ??
         ref.read(mockOnboardingProvider).draft.uid;
+    final requestAuthGeneration = ref.read(authGenerationProvider);
+    final requestFlowEpoch = _flowController.currentEpoch;
+    final requestFlowState = _flowController.currentFlowState;
     final controller = ref.read(onboardingUploadInteractionProvider.notifier);
     final asset = retrying
         ? await controller.retry(
@@ -127,6 +191,14 @@ class _HasProductsModeScreenState
             sourceFeature: OnboardingDraft.sourceOnboarding,
           );
     if (!mounted) return;
+    if (!_isCurrentUploadBinding(
+      uid: uid,
+      authGeneration: requestAuthGeneration,
+      flowEpoch: requestFlowEpoch,
+      expectedState: requestFlowState,
+    )) {
+      return;
+    }
 
     final latestUploadState = ref.read(
       onboardingUploadInteractionProvider,
@@ -668,8 +740,24 @@ class _HasProductsModeScreenState
     final flowState = flowStateHolder.state;
     final isEditing = flowState == SkinCareFlowState.hasProductsEditing;
     final inReviewMode = flowState == SkinCareFlowState.hasProductsReview;
+    final lifecycleActive = _lifecycle.state.isActive && flowState.isGenerating;
 
     ref.listen(skinCareFlowControllerProvider, (previous, next) {
+      final sessionOrEpochChanged =
+          previous?.ownerUid != next.ownerUid ||
+          previous?.authGeneration != next.authGeneration ||
+          previous?.epoch != next.epoch;
+      if (sessionOrEpochChanged) {
+        _resetPublishedActionCache();
+      }
+      if (previous?.state.isGenerating == true && !next.state.isGenerating) {
+        if (_lifecycle.state.isActive) {
+          _lifecycle.cancel();
+        }
+        ref
+            .read(mockOnboardingProvider.notifier)
+            .setStepLoading(onboardingSkinCareStepIndex, false);
+      }
       if (previous?.state.isEditing == true && !next.state.isEditing) {
         final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
         _controller.text = base.skinCareProductNames ?? '';
@@ -687,7 +775,7 @@ class _HasProductsModeScreenState
     final uploadState = ref.watch(
       onboardingUploadInteractionProvider,
     )[onboardingSkinProductsUploadSlot];
-    final slotAsset = uploadState?.durableAsset;
+    final slotAsset = _slotAssetIfBoundToDraft(uploadState, draft);
     final effectiveAsset =
         _uploadedAsset ??
         slotAsset ??
@@ -700,7 +788,7 @@ class _HasProductsModeScreenState
                 uploadState?.cleanupPending == true)
             ? _friendlySkinCareUploadMessage(uploadState?.attemptError)
             : null);
-    final busy = uploadBusy || _lifecycle.state.isActive || _removingPhoto;
+    final busy = uploadBusy || lifecycleActive || _removingPhoto;
     final isPhotoReview =
         flowState == SkinCareFlowState.hasProductsPhotoReview ||
         (_inputSource == _ProductInputSource.photo &&
@@ -713,7 +801,7 @@ class _HasProductsModeScreenState
         _inputSource == _ProductInputSource.photo && photoProductsReviewed
         ? 'Review detected products before building'
         : _productInputSourceLabel(_inputSource);
-    final textInputEnabled = !_lifecycle.state.isActive;
+    final textInputEnabled = !lifecycleActive;
     final photoUploadEnabled = !busy;
     final typedPreviewProducts = onboarding7ParseTypedProductDetails(
       _controller.text,
@@ -738,7 +826,7 @@ class _HasProductsModeScreenState
           ? OnboardingStep7PrimaryAction(
               label: 'Build skin routine',
               enabled: canGenerate,
-              loading: _lifecycle.state.isActive,
+              loading: lifecycleActive,
               onPressed: _generate,
             )
           : null,
@@ -793,9 +881,11 @@ class _HasProductsModeScreenState
           : uploadBusy
           ? _skinCareInteractionStatusLabel(uploadState!.phase)
           : null,
-      localPreviewPath: uploadState?.usablePreviewPath,
+      localPreviewPath: slotAsset == null
+          ? null
+          : uploadState?.usablePreviewPath,
       busy: busy,
-      generating: _lifecycle.state.isActive,
+      generating: lifecycleActive,
       photoEnabled: photoUploadEnabled,
       textInputEnabled: textInputEnabled,
       photoHelper: _inputSource == _ProductInputSource.typed
@@ -857,7 +947,7 @@ class _HasProductsModeScreenState
     );
     final message = uploadError ?? _generationError;
 
-    if (_lifecycle.state.isActive) {
+    if (lifecycleActive) {
       final isPhotoAnalyze =
           _inputSource == _ProductInputSource.photo && !photoProductsReviewed;
       return Column(

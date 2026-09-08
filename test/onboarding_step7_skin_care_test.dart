@@ -11,6 +11,8 @@ import 'package:http/testing.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_setup.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
+import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_controller.dart';
+import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_state.dart';
 import 'package:optivus/features/onboarding/onboarding_flow.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_timeline_preview.dart';
@@ -6454,6 +6456,502 @@ void main() {
     },
   );
 
+  testWidgets(
+    '69d. Has-products shell Back during delayed AI exits thinking and ignores late routine',
+    (tester) async {
+      useAndroidWidth(tester);
+      final completer = Completer<SkinCareAiRoutineResult>();
+      final client = TestSkinCareAiClient(routineCompleter: completer);
+      final draft = _hasProductsDraft(
+        uid: 'test-uid',
+        blocks: _skinCareBlocksForEveryDay(2),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith((ref) => FakeAuthNotifier()),
+            mockOnboardingProvider.overrideWith(
+              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            ),
+            skinCareAiClientProvider.overrideWithValue(client),
+            onboardingUploadInteractionProvider.overrideWith(
+              (_) => TestUploadInteractionController(),
+            ),
+            deviceCountryServiceProvider.overrideWithValue(
+              const TestDeviceCountryService(null),
+            ),
+          ],
+          child: const MaterialApp(home: OnboardingFlow()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Rebuild / Edit'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Build skin routine').last);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingFlow)),
+      );
+      expect(find.textContaining('Skin Care AI'), findsOneWidget);
+      expect(
+        container.read(skinCareFlowControllerProvider).state,
+        SkinCareFlowState.hasProductsGenerating,
+      );
+      expect(
+        container
+            .read(mockOnboardingProvider)
+            .stepLoading[onboardingSkinCareStepIndex],
+        isTrue,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('onboarding-step7-back')));
+      await tester.pump();
+
+      expect(find.textContaining('Skin Care AI'), findsNothing);
+      expect(
+        container.read(skinCareFlowControllerProvider).state,
+        SkinCareFlowState.hasProductsEditing,
+      );
+      expect(
+        container
+            .read(mockOnboardingProvider)
+            .stepLoading[onboardingSkinCareStepIndex],
+        isFalse,
+      );
+      expect(
+        container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline
+            .confirmedBlocksForSection('skin_care')
+            .map((block) => block.title),
+        ['Morning Skin Care', 'Night Skin Care'],
+      );
+
+      completer.complete(_routineResultWithPlanCount(3));
+      await tester.pumpAndSettle();
+
+      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      expect(
+        base.confirmedBlocksForSection('skin_care').map((block) => block.title),
+        ['Morning Skin Care', 'Night Skin Care'],
+      );
+      expect(
+        container.read(skinCareFlowControllerProvider).state,
+        SkinCareFlowState.hasProductsEditing,
+      );
+      expect(find.textContaining('Skin Care AI'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    '69e. No-products Find-products Back exits thinking and ignores late recommendations',
+    (tester) async {
+      useAndroidWidth(tester);
+      final completer = Completer<SkinCareAiRoutineResult>();
+      final client = TestSkinCareAiClient(routineCompleter: completer);
+      final draft = _noProductsDraft(
+        uid: 'test-uid',
+        recommendations: _productRecommendationDraftsWithAlternatives(),
+        selectedProducts: const [
+          'Minimalist Gentle Cleanser',
+          'Minimalist Barrier Moisturizer',
+          'Minimalist SPF 50 Sunscreen',
+        ],
+        withPhoto: true,
+        blocks: _skinCareBlocksForEveryDay(2),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith((ref) => FakeAuthNotifier()),
+            mockOnboardingProvider.overrideWith(
+              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            ),
+            skinCareAiClientProvider.overrideWithValue(client),
+            onboardingUploadInteractionProvider.overrideWith(
+              (_) => TestUploadInteractionController(),
+            ),
+            deviceCountryServiceProvider.overrideWithValue(
+              const TestDeviceCountryService(null),
+            ),
+          ],
+          child: const MaterialApp(home: OnboardingFlow()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Rebuild / Edit'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Change details'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Find products'));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingFlow)),
+      );
+      expect(find.textContaining('Skin Care AI'), findsOneWidget);
+      expect(
+        container.read(skinCareFlowControllerProvider).state,
+        SkinCareFlowState.noProductsFindingProducts,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('onboarding-step7-back')));
+      await tester.pump();
+
+      expect(find.textContaining('Skin Care AI'), findsNothing);
+      expect(
+        container.read(skinCareFlowControllerProvider).state,
+        SkinCareFlowState.noProductsEditing,
+      );
+      expect(
+        container
+            .read(mockOnboardingProvider)
+            .stepLoading[onboardingSkinCareStepIndex],
+        isFalse,
+      );
+
+      completer.complete(_productRecommendationResult());
+      await tester.pumpAndSettle();
+
+      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      expect(
+        base.confirmedBlocksForSection('skin_care').map((block) => block.title),
+        ['Morning Skin Care', 'Night Skin Care'],
+      );
+      expect(base.skinCareProductRecommendations, isEmpty);
+      expect(find.textContaining('Skin Care AI'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    '69f. No-products routine-build Back exits thinking and ignores late Plan B',
+    (tester) async {
+      useAndroidWidth(tester);
+      final completer = Completer<SkinCareAiRoutineResult>();
+      final client = TestSkinCareAiClient(routineCompleter: completer);
+      final draft = _noProductsDraft(
+        uid: 'test-uid',
+        recommendations: _productRecommendationDraftsWithAlternatives(),
+        selectedProducts: const [
+          'Minimalist Gentle Cleanser',
+          'Minimalist Barrier Moisturizer',
+          'Minimalist SPF 50 Sunscreen',
+        ],
+        withPhoto: true,
+        blocks: _skinCareBlocksForEveryDay(2),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith((ref) => FakeAuthNotifier()),
+            mockOnboardingProvider.overrideWith(
+              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            ),
+            skinCareAiClientProvider.overrideWithValue(client),
+            onboardingUploadInteractionProvider.overrideWith(
+              (_) => TestUploadInteractionController(),
+            ),
+            deviceCountryServiceProvider.overrideWithValue(
+              const TestDeviceCountryService(null),
+            ),
+          ],
+          child: const MaterialApp(home: OnboardingFlow()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Rebuild / Edit'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Build skin routine').last);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingFlow)),
+      );
+      expect(find.textContaining('Skin Care AI'), findsOneWidget);
+      expect(
+        container.read(skinCareFlowControllerProvider).state,
+        SkinCareFlowState.noProductsGeneratingRoutine,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('onboarding-step7-back')));
+      await tester.pump();
+
+      expect(find.textContaining('Skin Care AI'), findsNothing);
+      expect(
+        container.read(skinCareFlowControllerProvider).state,
+        SkinCareFlowState.noProductsEditing,
+      );
+      expect(
+        container
+            .read(mockOnboardingProvider)
+            .stepLoading[onboardingSkinCareStepIndex],
+        isFalse,
+      );
+
+      completer.complete(_selectedProductRoutineResult());
+      await tester.pumpAndSettle();
+
+      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      expect(
+        base.confirmedBlocksForSection('skin_care').map((block) => block.title),
+        ['Morning Skin Care', 'Night Skin Care'],
+      );
+      expect(
+        container.read(skinCareFlowControllerProvider).state,
+        SkinCareFlowState.noProductsEditing,
+      );
+      expect(find.textContaining('Skin Care AI'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    '69g. Delayed has-products upload after shell Back cannot mutate restored Plan A',
+    (tester) async {
+      useAndroidWidth(tester);
+      final upload = DelayedTestUploadInteractionController(
+        result: _uploadedAsset().copyWith(
+          assetId: 'replacement-products',
+          r2Key: 'users/test-uid/onboarding/skin_care/replacement-products.jpg',
+        ),
+      );
+      final draft = _hasProductsDraft(
+        uid: 'test-uid',
+        productPhotoAssetId: 'plan-a-products',
+        productPhotoR2Key: 'users/test-uid/onboarding/skin_care/plan-a.jpg',
+        productPhotoStatus: 'uploaded',
+        productPhotoCreatedAt: DateTime.utc(2026, 6, 14, 10),
+        productPhotoUpdatedAt: DateTime.utc(2026, 6, 14, 10),
+        blocks: _skinCareBlocksForEveryDay(2),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith((ref) => FakeAuthNotifier()),
+            mockOnboardingProvider.overrideWith(
+              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            ),
+            skinCareAiClientProvider.overrideWithValue(
+              const FakeSkinCareAiClient(),
+            ),
+            onboardingUploadInteractionProvider.overrideWith((_) => upload),
+            deviceCountryServiceProvider.overrideWithValue(
+              const TestDeviceCountryService(null),
+            ),
+          ],
+          child: const MaterialApp(home: OnboardingFlow()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Rebuild / Edit'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add photo').first);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-choose-gallery')),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingFlow)),
+      );
+      expect(upload.startUploadCalls, 1);
+      expect(
+        container.read(skinCareFlowControllerProvider).state,
+        SkinCareFlowState.hasProductsEditing,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('onboarding-step7-back')));
+      await tester.pumpAndSettle();
+      expect(
+        container.read(skinCareFlowControllerProvider).state,
+        SkinCareFlowState.hasProductsReview,
+      );
+
+      upload.complete();
+      await tester.pumpAndSettle();
+
+      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      expect(base.skinCareProductPhotoAssetId, 'plan-a-products');
+      expect(base.skinCareProductPhotoR2Key, contains('/plan-a.jpg'));
+      expect(
+        base.confirmedBlocksForSection('skin_care').map((block) => block.title),
+        ['Morning Skin Care', 'Night Skin Care'],
+      );
+      expect(find.text('Next Step'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    '69h. Delayed no-products upload after shell Back cannot mutate restored Plan A',
+    (tester) async {
+      useAndroidWidth(tester);
+      final upload = DelayedTestUploadInteractionController(
+        result: _uploadedAsset(purpose: UploadedAssetPurpose.skinFace).copyWith(
+          assetId: 'replacement-face',
+          r2Key: 'users/test-uid/onboarding/skin_care/replacement-face.jpg',
+        ),
+      );
+      final draft = _noProductsDraft(
+        uid: 'test-uid',
+        recommendations: _productRecommendationDraftsWithAlternatives(),
+        selectedProducts: const [
+          'Minimalist Gentle Cleanser',
+          'Minimalist Barrier Moisturizer',
+          'Minimalist SPF 50 Sunscreen',
+        ],
+        photoAssetId: 'plan-a-face',
+        photoR2Key: 'users/test-uid/onboarding/skin_care/plan-a-face.jpg',
+        photoStatus: 'uploaded',
+        photoCreatedAt: DateTime.utc(2026, 6, 14, 10),
+        photoUpdatedAt: DateTime.utc(2026, 6, 14, 10),
+        blocks: _skinCareBlocksForEveryDay(2),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith((ref) => FakeAuthNotifier()),
+            mockOnboardingProvider.overrideWith(
+              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            ),
+            skinCareAiClientProvider.overrideWithValue(
+              const FakeSkinCareAiClient(),
+            ),
+            onboardingUploadInteractionProvider.overrideWith((_) => upload),
+            deviceCountryServiceProvider.overrideWithValue(
+              const TestDeviceCountryService(null),
+            ),
+          ],
+          child: const MaterialApp(home: OnboardingFlow()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Rebuild / Edit'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Change details'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add photo').first);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-choose-gallery')),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingFlow)),
+      );
+      expect(upload.startUploadCalls, 1);
+
+      await tester.tap(find.byKey(const ValueKey('onboarding-step7-back')));
+      await tester.pumpAndSettle();
+
+      upload.complete();
+      await tester.pumpAndSettle();
+
+      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      expect(base.skinCareFacePhotoAssetId, 'plan-a-face');
+      expect(base.skinCareFacePhotoR2Key, contains('/plan-a-face.jpg'));
+      expect(
+        base.confirmedBlocksForSection('skin_care').map((block) => block.title),
+        ['Morning Skin Care', 'Night Skin Care'],
+      );
+      expect(find.text('Next Step'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    '69i. User-A delayed upload cannot bind into User-B Step-7 draft',
+    (tester) async {
+      useAndroidWidth(tester);
+      final auth = FakeAuthNotifier();
+      final onboarding = MockOnboardingNotifier()
+        ..loadSeedData(
+          _hasProductsDraft(
+            uid: 'test-uid',
+            productPhotoAssetId: 'user-a-plan-a',
+            productPhotoR2Key:
+                'users/test-uid/onboarding/skin_care/user-a-plan-a.jpg',
+            productPhotoStatus: 'uploaded',
+            blocks: _skinCareBlocksForEveryDay(2),
+          ),
+        );
+      final upload = DelayedTestUploadInteractionController(
+        result: _uploadedAsset().copyWith(
+          assetId: 'user-a-replacement',
+          r2Key: 'users/test-uid/onboarding/skin_care/user-a-replacement.jpg',
+        ),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith((ref) => auth),
+            mockOnboardingProvider.overrideWith((_) => onboarding),
+            skinCareAiClientProvider.overrideWithValue(
+              const FakeSkinCareAiClient(),
+            ),
+            onboardingUploadInteractionProvider.overrideWith((_) => upload),
+            deviceCountryServiceProvider.overrideWithValue(
+              const TestDeviceCountryService(null),
+            ),
+          ],
+          child: const MaterialApp(home: OnboardingFlow()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Rebuild / Edit'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add photo').first);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-choose-gallery')),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      auth.setTestUser(
+        const AuthUser(
+          uid: 'user-b',
+          email: 'b@example.com',
+          emailVerified: true,
+        ),
+      );
+      onboarding.loadSeedData(
+        _hasProductsDraft(uid: 'user-b', productNames: 'User B Cleanser'),
+      );
+      await tester.pumpAndSettle();
+
+      upload.complete();
+      await tester.pumpAndSettle();
+
+      final draft = onboarding.state.draft;
+      expect(draft.uid, 'user-b');
+      expect(draft.baseTimeline.skinCareProductPhotoAssetId, isNull);
+      expect(draft.baseTimeline.skinCareProductPhotoR2Key, isNull);
+      expect(
+        draft.baseTimeline.skinCareProductNames,
+        isNot(contains('user-a-replacement')),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   test('70. Sun cream is sunscreen and not moisturizer', () {
     final result = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: BaseTimelineDraft(
@@ -7678,6 +8176,79 @@ class TestUploadInteractionController extends UploadInteractionController {
   }
 }
 
+class DelayedTestUploadInteractionController
+    extends TestUploadInteractionController {
+  final Completer<UploadedAsset?> _gate = Completer<UploadedAsset?>();
+
+  DelayedTestUploadInteractionController({required UploadedAsset result})
+    : super(result: result);
+
+  void complete() {
+    if (!_gate.isCompleted) {
+      _gate.complete(result);
+    }
+  }
+
+  @override
+  Future<UploadedAsset?> pickAndUpload(
+    String slotKey, {
+    required ImageSource source,
+    required String uid,
+    required String sourceFeature,
+  }) async {
+    startUploadCalls += 1;
+    legacyProbe?.startUploadCalls += 1;
+    final purpose = slotKey == onboardingSkinProductsUploadSlot
+        ? UploadedAssetPurpose.skinProducts
+        : UploadedAssetPurpose.skinFace;
+    state = Map.unmodifiable({
+      ...state,
+      slotKey: UploadSlotRuntimeState(
+        slotKey: slotKey,
+        purpose: purpose,
+        phase: UploadInteractionPhase.uploading,
+      ),
+    });
+    final completed = await _gate.future;
+    if (completed == null) return null;
+    final asset = completed.copyWith(purpose: purpose, ownerUid: uid);
+    state = Map.unmodifiable({
+      ...state,
+      slotKey: UploadSlotRuntimeState(
+        slotKey: slotKey,
+        purpose: purpose,
+        phase: UploadInteractionPhase.uploaded,
+        durableAsset: asset,
+      ),
+    });
+    return asset;
+  }
+
+  @override
+  Future<UploadedAsset?> takePhoto(
+    String slotKey, {
+    required String uid,
+    required String sourceFeature,
+  }) => pickAndUpload(
+    slotKey,
+    source: ImageSource.camera,
+    uid: uid,
+    sourceFeature: sourceFeature,
+  );
+
+  @override
+  Future<UploadedAsset?> chooseFromGallery(
+    String slotKey, {
+    required String uid,
+    required String sourceFeature,
+  }) => pickAndUpload(
+    slotKey,
+    source: ImageSource.gallery,
+    uid: uid,
+    sourceFeature: sourceFeature,
+  );
+}
+
 class TestUploadController extends UploadController {
   final UploadedAsset? result;
   int startUploadCalls = 0;
@@ -7775,6 +8346,13 @@ class FakeAuthNotifier extends StateNotifier<AuthState>
           status: AuthFlowStatus.signedInOnboardingIncomplete,
         ),
       );
+
+  void setTestUser(AuthUser? user) {
+    state = AuthState(
+      user: user,
+      status: AuthFlowStatus.signedInOnboardingIncomplete,
+    );
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

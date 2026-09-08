@@ -24,6 +24,8 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
   String? _publishedActionSignature;
   final Object _actionOwner = Object();
   int? _publishedActionEpoch;
+  String? _publishedActionOwnerUid;
+  int? _publishedActionAuthGeneration;
   late final Step7ActionBridgeNotifier _actionBridge;
   late final SkinCareFlowController _flowController;
 
@@ -31,12 +33,35 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final signature = action == null
         ? null
         : '${action.label}|${action.enabled}|${action.loading}';
-    if (_publishedActionSignature == signature) return;
-    _publishedActionSignature = signature;
     final epoch = _flowController.currentEpoch;
+    final draft = ref.read(mockOnboardingProvider).draft;
+    final ownerUid = ref.read(authProvider).user?.uid ?? draft.uid;
+    final authGeneration = ref.read(authGenerationProvider);
+    final bridgeState = ref.read(step7ActionBridgeProvider);
+    final bridgeStillOwnsAction =
+        action == null ||
+        (bridgeState.action != null &&
+            bridgeState.activeToken?.ownerId == _actionOwner &&
+            bridgeState.activeToken?.epoch == _publishedActionEpoch);
+    if (_publishedActionSignature == signature &&
+        _publishedActionEpoch == epoch &&
+        _publishedActionOwnerUid == ownerUid &&
+        _publishedActionAuthGeneration == authGeneration &&
+        bridgeStillOwnsAction) {
+      return;
+    }
+    _publishedActionSignature = signature;
     _publishedActionEpoch = epoch;
+    _publishedActionOwnerUid = ownerUid;
+    _publishedActionAuthGeneration = authGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _publishedActionSignature != signature) return;
+      if (!mounted ||
+          _publishedActionSignature != signature ||
+          _publishedActionEpoch != epoch ||
+          _publishedActionOwnerUid != ownerUid ||
+          _publishedActionAuthGeneration != authGeneration) {
+        return;
+      }
       _actionBridge.publish(
         ownerId: _actionOwner,
         epoch: epoch,
@@ -75,6 +100,42 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     super.dispose();
   }
 
+  void _resetPublishedActionCache() {
+    _publishedActionSignature = null;
+    _publishedActionEpoch = null;
+    _publishedActionOwnerUid = null;
+    _publishedActionAuthGeneration = null;
+  }
+
+  bool _isCurrentUploadBinding({
+    required String uid,
+    required int authGeneration,
+    required int flowEpoch,
+    required SkinCareFlowState expectedState,
+  }) {
+    if (!mounted) return false;
+    final draft = ref.read(mockOnboardingProvider).draft;
+    final currentUid = ref.read(authProvider).user?.uid ?? draft.uid;
+    final flow = ref.read(skinCareFlowControllerProvider);
+    return currentUid == uid &&
+        ref.read(authGenerationProvider) == authGeneration &&
+        flow.epoch == flowEpoch &&
+        flow.state == expectedState;
+  }
+
+  UploadedAsset? _slotAssetIfBoundToDraft(
+    UploadSlotRuntimeState? uploadState,
+    OnboardingDraft draft,
+  ) {
+    final asset = uploadState?.durableAsset;
+    if (asset == null) return null;
+    final base = draft.baseTimeline;
+    return asset.assetId == base.skinCareFacePhotoAssetId &&
+            asset.r2Key == base.skinCareFacePhotoR2Key
+        ? asset
+        : null;
+  }
+
   Future<void> _startUpload() async {
     final initialUploadState = ref.read(
       onboardingUploadInteractionProvider,
@@ -97,6 +158,9 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final uid =
         ref.read(authProvider).user?.uid ??
         ref.read(mockOnboardingProvider).draft.uid;
+    final requestAuthGeneration = ref.read(authGenerationProvider);
+    final requestFlowEpoch = _flowController.currentEpoch;
+    final requestFlowState = _flowController.currentFlowState;
     final controller = ref.read(onboardingUploadInteractionProvider.notifier);
     final asset = retrying
         ? await controller.retry(
@@ -117,6 +181,14 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           );
 
     if (!mounted) return;
+    if (!_isCurrentUploadBinding(
+      uid: uid,
+      authGeneration: requestAuthGeneration,
+      flowEpoch: requestFlowEpoch,
+      expectedState: requestFlowState,
+    )) {
+      return;
+    }
 
     final latestUploadState = ref.read(
       onboardingUploadInteractionProvider,
@@ -815,14 +887,13 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final uploadState = ref.watch(
       onboardingUploadInteractionProvider,
     )[onboardingSkinFaceUploadSlot];
-    final slotAsset = uploadState?.durableAsset;
+    final slotAsset = _slotAssetIfBoundToDraft(uploadState, draft);
     final effectiveAsset =
         _uploadedAsset ??
         slotAsset ??
         restoredAsset ??
         durableSkinFaceAssetFromDraft(draft);
     final uploadBusy = uploadState?.isBusy == true;
-    final busy = uploadBusy || _lifecycle.state.isActive || _removingPhoto;
     final uploadError =
         _uploadError ??
         ((uploadState?.phase == UploadInteractionPhase.failed ||
@@ -850,8 +921,25 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final flowState = flowStateHolder.state;
     final isEditing = flowState == SkinCareFlowState.noProductsEditing;
     final inReviewMode = flowState == SkinCareFlowState.noProductsReview;
+    final lifecycleActive = _lifecycle.state.isActive && flowState.isGenerating;
+    final busy = uploadBusy || lifecycleActive || _removingPhoto;
 
     ref.listen(skinCareFlowControllerProvider, (previous, next) {
+      final sessionOrEpochChanged =
+          previous?.ownerUid != next.ownerUid ||
+          previous?.authGeneration != next.authGeneration ||
+          previous?.epoch != next.epoch;
+      if (sessionOrEpochChanged) {
+        _resetPublishedActionCache();
+      }
+      if (previous?.state.isGenerating == true && !next.state.isGenerating) {
+        if (_lifecycle.state.isActive) {
+          _lifecycle.cancel();
+        }
+        ref
+            .read(mockOnboardingProvider.notifier)
+            .setStepLoading(onboardingSkinCareStepIndex, false);
+      }
       if (previous?.state.isEditing == true && !next.state.isEditing) {
         setState(() {
           _pendingDesiredApplicationsPerDay = null;
@@ -889,7 +977,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       _publishPrimaryAction(null);
     }
 
-    if (_lifecycle.state.isActive) {
+    if (lifecycleActive) {
       final isFindProducts =
           _lifecycle.state.operationId?.contains('find-products') ?? false;
       return Column(
@@ -1446,7 +1534,9 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                                   uploadState!.phase,
                                 )
                               : null,
-                          localPreviewPath: uploadState?.usablePreviewPath,
+                          localPreviewPath: slotAsset == null
+                              ? null
+                              : uploadState?.usablePreviewPath,
                           helperText: effectiveAsset == null
                               ? 'Face photo required'
                               : null,
