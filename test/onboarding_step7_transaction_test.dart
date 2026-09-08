@@ -1,11 +1,21 @@
+import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:optivus/features/uploads/providers/onboarding_upload_interaction_provider.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/skin_care_product_draft.dart';
+import 'package:optivus/models/uploaded_asset.dart';
+import 'package:optivus/repositories/auth_repository.dart';
+import 'package:optivus/repositories/uploaded_asset_repository.dart';
+import 'package:optivus/services/cloudflare/cloudflare_clients.dart';
+import 'package:optivus/services/uploads/image_prepare_service.dart';
 import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_controller.dart';
 import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_state.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/auth_state.dart';
+import 'package:optivus/state/upload_state.dart';
 
 TimelineBlockDraft _bathBlock() => BaseTimelineDraft.defaultBathBlock();
 
@@ -588,4 +598,603 @@ void main() {
       },
     );
   });
+
+  group(
+    'Transactional Photo Replacement Lifecycle (Edit/Rebuild) with Real Controllers & Fake Deps',
+    () {
+      test(
+        'Plan A with Photo A -> Edit -> upload Photo B (defer) -> cancel preserves Photo A in repo/R2, deletes Photo B',
+        () async {
+          final photoA = UploadedAsset(
+            assetId: 'asset-photo-a',
+            ownerUid: testUid,
+            sourceFeature: 'onboarding',
+            purpose: UploadedAssetPurpose.skinFace,
+            fileName: 'photo-a.jpg',
+            contentType: 'image/jpeg',
+            sizeBytes: 100,
+            r2Key: 'users/$testUid/onboarding/skin_face/asset-photo-a.jpg',
+            status: UploadedAssetStatus.uploaded,
+            createdAt: DateTime.utc(2026, 6, 15, 10),
+            updatedAt: DateTime.utc(2026, 6, 15, 10),
+          );
+
+          final assetRepo = _TxTestAssetRepo([photoA]);
+          final r2Client = _TxTestR2Client();
+          final authRepo = _TxTestAuthRepo(
+            currentUser: const AuthUser(
+              uid: testUid,
+              email: 'test@optivus.dev',
+              emailVerified: true,
+            ),
+          );
+
+          final testDraft = OnboardingDraft(
+            uid: testUid,
+            currentStep: 7,
+            baseTimeline: BaseTimelineDraft(
+              skinCareSetupPath: 'no_products',
+              skinCareSetupStep: 1,
+              skinCareFacePhotoAssetId: 'asset-photo-a',
+              skinCareFacePhotoR2Key:
+                  'users/$testUid/onboarding/skin_face/asset-photo-a.jpg',
+              skinCareFacePhotoStatus: 'uploaded',
+            ),
+          );
+
+          final testNotifier = MockOnboardingNotifier()
+            ..loadSeedData(testDraft);
+          final testContainer = ProviderContainer(
+            overrides: [
+              mockOnboardingProvider.overrideWith((ref) => testNotifier),
+              authProvider.overrideWith(
+                (ref) => _Step7TestAuthNotifier(
+                  const AuthUser(
+                    uid: testUid,
+                    email: 'test@optivus.dev',
+                    emailVerified: true,
+                  ),
+                ),
+              ),
+              uploadedAssetRepositoryProvider.overrideWithValue(assetRepo),
+              authRepositoryProvider.overrideWithValue(authRepo),
+              imagePrepareServiceProvider.overrideWithValue(
+                _TxTestImagePrepareService(),
+              ),
+              r2UploadClientProvider.overrideWithValue(r2Client),
+            ],
+          );
+          addTearDown(testContainer.dispose);
+
+          final uploadController = testContainer.read(
+            onboardingUploadInteractionProvider.notifier,
+          );
+          uploadController.syncWithDurableState(
+            RestoredUploadsState(
+              assetsByPurpose: {
+                UploadedAssetPurpose.skinFace: RestoredUploadedAsset(
+                  asset: photoA,
+                ),
+              },
+            ),
+            uid: testUid,
+          );
+
+          final flowController = testContainer.read(
+            skinCareFlowControllerProvider.notifier,
+          );
+          flowController.startEditing(testDraft.baseTimeline);
+
+          // Upload Photo B with deferReplacement: true (as triggered during isEditing)
+          await uploadController.chooseFromGallery(
+            onboardingSkinFaceUploadSlot,
+            uid: testUid,
+            sourceFeature: 'onboarding',
+            deferReplacement: true,
+          );
+
+          // Verify intermediate state: Photo A preserved as durable, Photo B staged
+          var slotState = testContainer.read(
+            onboardingUploadInteractionProvider,
+          )[onboardingSkinFaceUploadSlot]!;
+          expect(slotState.durableAsset?.assetId, 'asset-photo-a');
+          expect(slotState.pendingReplacementAsset?.assetId, 'asset-photo-b');
+          expect(slotState.isDeferredReplacement, isTrue);
+          expect(assetRepo.deletedAssetIds, isNot(contains('asset-photo-a')));
+          expect(r2Client.deletedObjectKeys, isNot(contains(photoA.r2Key)));
+
+          // User cancels / navigates back
+          flowController.cancelEditing();
+          await Future<void>.delayed(Duration.zero);
+
+          // Verify rollback: Photo B cleaned from repo and R2, Photo A remains durable
+          slotState = testContainer.read(
+            onboardingUploadInteractionProvider,
+          )[onboardingSkinFaceUploadSlot]!;
+          expect(slotState.pendingReplacementAsset, isNull);
+          expect(slotState.durableAsset?.assetId, 'asset-photo-a');
+          expect(assetRepo.deletedAssetIds, contains('asset-photo-b'));
+          expect(assetRepo.deletedAssetIds, isNot(contains('asset-photo-a')));
+          expect(
+            r2Client.deletedObjectKeys,
+            contains('users/$testUid/onboarding/skin_face/asset-photo-b.jpg'),
+          );
+          expect(r2Client.deletedObjectKeys, isNot(contains(photoA.r2Key)));
+        },
+      );
+
+      test(
+        'Plan A with Photo A -> Edit -> upload Photo B -> commitRebuildSuccess promotes Photo B and cleans Photo A',
+        () async {
+          final photoA = UploadedAsset(
+            assetId: 'asset-photo-a',
+            ownerUid: testUid,
+            sourceFeature: 'onboarding',
+            purpose: UploadedAssetPurpose.skinFace,
+            fileName: 'photo-a.jpg',
+            contentType: 'image/jpeg',
+            sizeBytes: 100,
+            r2Key: 'users/$testUid/onboarding/skin_face/asset-photo-a.jpg',
+            status: UploadedAssetStatus.uploaded,
+            createdAt: DateTime.utc(2026, 6, 15, 10),
+            updatedAt: DateTime.utc(2026, 6, 15, 10),
+          );
+
+          final assetRepo = _TxTestAssetRepo([photoA]);
+          final r2Client = _TxTestR2Client();
+          final authRepo = _TxTestAuthRepo(
+            currentUser: const AuthUser(
+              uid: testUid,
+              email: 'test@optivus.dev',
+              emailVerified: true,
+            ),
+          );
+
+          final testDraft = OnboardingDraft(
+            uid: testUid,
+            currentStep: 7,
+            baseTimeline: BaseTimelineDraft(
+              skinCareSetupPath: 'no_products',
+              skinCareSetupStep: 1,
+              skinCareFacePhotoAssetId: 'asset-photo-a',
+              skinCareFacePhotoR2Key:
+                  'users/$testUid/onboarding/skin_face/asset-photo-a.jpg',
+              skinCareFacePhotoStatus: 'uploaded',
+            ),
+          );
+
+          final testNotifier = MockOnboardingNotifier()
+            ..loadSeedData(testDraft);
+          final testContainer = ProviderContainer(
+            overrides: [
+              mockOnboardingProvider.overrideWith((ref) => testNotifier),
+              authProvider.overrideWith(
+                (ref) => _Step7TestAuthNotifier(
+                  const AuthUser(
+                    uid: testUid,
+                    email: 'test@optivus.dev',
+                    emailVerified: true,
+                  ),
+                ),
+              ),
+              uploadedAssetRepositoryProvider.overrideWithValue(assetRepo),
+              authRepositoryProvider.overrideWithValue(authRepo),
+              imagePrepareServiceProvider.overrideWithValue(
+                _TxTestImagePrepareService(),
+              ),
+              r2UploadClientProvider.overrideWithValue(r2Client),
+            ],
+          );
+          addTearDown(testContainer.dispose);
+
+          final uploadController = testContainer.read(
+            onboardingUploadInteractionProvider.notifier,
+          );
+          uploadController.syncWithDurableState(
+            RestoredUploadsState(
+              assetsByPurpose: {
+                UploadedAssetPurpose.skinFace: RestoredUploadedAsset(
+                  asset: photoA,
+                ),
+              },
+            ),
+            uid: testUid,
+          );
+
+          final flowController = testContainer.read(
+            skinCareFlowControllerProvider.notifier,
+          );
+          flowController.startEditing(testDraft.baseTimeline);
+
+          await uploadController.chooseFromGallery(
+            onboardingSkinFaceUploadSlot,
+            uid: testUid,
+            sourceFeature: 'onboarding',
+            deferReplacement: true,
+          );
+
+          // Commit rebuild
+          final updatedBase = testDraft.baseTimeline.copyWith(
+            skinCareFacePhotoAssetId: 'asset-photo-b',
+            skinCareFacePhotoR2Key:
+                'users/$testUid/onboarding/skin_face/asset-photo-b.jpg',
+            skinCareFacePhotoStatus: 'uploaded',
+          );
+          flowController.commitRebuildSuccess(updatedBase);
+          await Future<void>.delayed(Duration.zero);
+
+          // Verify: Photo B is durable, Photo A is deleted
+          final slotState = testContainer.read(
+            onboardingUploadInteractionProvider,
+          )[onboardingSkinFaceUploadSlot]!;
+          expect(slotState.durableAsset?.assetId, 'asset-photo-b');
+          expect(slotState.pendingReplacementAsset, isNull);
+          expect(assetRepo.deletedAssetIds, contains('asset-photo-a'));
+          expect(r2Client.deletedObjectKeys, contains(photoA.r2Key));
+        },
+      );
+
+      test(
+        'Explicit removal during Edit -> cancel -> photo is not resurrected',
+        () async {
+          final photoA = UploadedAsset(
+            assetId: 'asset-photo-a',
+            ownerUid: testUid,
+            sourceFeature: 'onboarding',
+            purpose: UploadedAssetPurpose.skinFace,
+            fileName: 'photo-a.jpg',
+            contentType: 'image/jpeg',
+            sizeBytes: 100,
+            r2Key: 'users/$testUid/onboarding/skin_face/asset-photo-a.jpg',
+            status: UploadedAssetStatus.uploaded,
+            createdAt: DateTime.utc(2026, 6, 15, 10),
+            updatedAt: DateTime.utc(2026, 6, 15, 10),
+          );
+
+          final assetRepo = _TxTestAssetRepo([photoA]);
+          final r2Client = _TxTestR2Client();
+          final authRepo = _TxTestAuthRepo(
+            currentUser: const AuthUser(
+              uid: testUid,
+              email: 'test@optivus.dev',
+              emailVerified: true,
+            ),
+          );
+
+          final testDraft = OnboardingDraft(
+            uid: testUid,
+            currentStep: 7,
+            baseTimeline: BaseTimelineDraft(
+              skinCareSetupPath: 'no_products',
+              skinCareSetupStep: 1,
+              skinCareFacePhotoAssetId: 'asset-photo-a',
+              skinCareFacePhotoR2Key:
+                  'users/$testUid/onboarding/skin_face/asset-photo-a.jpg',
+              skinCareFacePhotoStatus: 'uploaded',
+            ),
+          );
+
+          final testNotifier = MockOnboardingNotifier()
+            ..loadSeedData(testDraft);
+          final testContainer = ProviderContainer(
+            overrides: [
+              mockOnboardingProvider.overrideWith((ref) => testNotifier),
+              authProvider.overrideWith(
+                (ref) => _Step7TestAuthNotifier(
+                  const AuthUser(
+                    uid: testUid,
+                    email: 'test@optivus.dev',
+                    emailVerified: true,
+                  ),
+                ),
+              ),
+              uploadedAssetRepositoryProvider.overrideWithValue(assetRepo),
+              authRepositoryProvider.overrideWithValue(authRepo),
+              imagePrepareServiceProvider.overrideWithValue(
+                _TxTestImagePrepareService(),
+              ),
+              r2UploadClientProvider.overrideWithValue(r2Client),
+            ],
+          );
+          addTearDown(testContainer.dispose);
+
+          final uploadController = testContainer.read(
+            onboardingUploadInteractionProvider.notifier,
+          );
+          uploadController.syncWithDurableState(
+            RestoredUploadsState(
+              assetsByPurpose: {
+                UploadedAssetPurpose.skinFace: RestoredUploadedAsset(
+                  asset: photoA,
+                ),
+              },
+            ),
+            uid: testUid,
+          );
+
+          final flowController = testContainer.read(
+            skinCareFlowControllerProvider.notifier,
+          );
+          flowController.startEditing(testDraft.baseTimeline);
+
+          // Explicit removal during edit
+          flowController.clearSnapshotPhoto(isFacePhoto: true);
+          await uploadController.remove(
+            onboardingSkinFaceUploadSlot,
+            uid: testUid,
+          );
+
+          // Cancel editing
+          flowController.cancelEditing();
+
+          final base = testContainer
+              .read(mockOnboardingProvider)
+              .draft
+              .baseTimeline;
+          expect(base.skinCareFacePhotoAssetId, isNull);
+          final slotState = testContainer.read(
+            onboardingUploadInteractionProvider,
+          )[onboardingSkinFaceUploadSlot]!;
+          expect(slotState.durableAsset, isNull);
+        },
+      );
+
+      test(
+        'Account switch during active deferred replacement rolls back pending replacement and isolates accounts',
+        () async {
+          final photoA = UploadedAsset(
+            assetId: 'asset-photo-a',
+            ownerUid: testUid,
+            sourceFeature: 'onboarding',
+            purpose: UploadedAssetPurpose.skinFace,
+            fileName: 'photo-a.jpg',
+            contentType: 'image/jpeg',
+            sizeBytes: 100,
+            r2Key: 'users/$testUid/onboarding/skin_face/asset-photo-a.jpg',
+            status: UploadedAssetStatus.uploaded,
+            createdAt: DateTime.utc(2026, 6, 15, 10),
+            updatedAt: DateTime.utc(2026, 6, 15, 10),
+          );
+
+          final assetRepo = _TxTestAssetRepo([photoA]);
+          final r2Client = _TxTestR2Client();
+          final authRepo = _TxTestAuthRepo(
+            currentUser: const AuthUser(
+              uid: testUid,
+              email: 'test@optivus.dev',
+              emailVerified: true,
+            ),
+          );
+
+          final testDraft = OnboardingDraft(
+            uid: testUid,
+            currentStep: 7,
+            baseTimeline: BaseTimelineDraft(
+              skinCareSetupPath: 'no_products',
+              skinCareSetupStep: 1,
+              skinCareFacePhotoAssetId: 'asset-photo-a',
+              skinCareFacePhotoR2Key:
+                  'users/$testUid/onboarding/skin_face/asset-photo-a.jpg',
+              skinCareFacePhotoStatus: 'uploaded',
+            ),
+          );
+
+          final testNotifier = MockOnboardingNotifier()
+            ..loadSeedData(testDraft);
+          final testContainer = ProviderContainer(
+            overrides: [
+              mockOnboardingProvider.overrideWith((ref) => testNotifier),
+              authProvider.overrideWith(
+                (ref) => _Step7TestAuthNotifier(
+                  const AuthUser(
+                    uid: testUid,
+                    email: 'test@optivus.dev',
+                    emailVerified: true,
+                  ),
+                ),
+              ),
+              uploadedAssetRepositoryProvider.overrideWithValue(assetRepo),
+              authRepositoryProvider.overrideWithValue(authRepo),
+              imagePrepareServiceProvider.overrideWithValue(
+                _TxTestImagePrepareService(),
+              ),
+              r2UploadClientProvider.overrideWithValue(r2Client),
+            ],
+          );
+          addTearDown(testContainer.dispose);
+
+          final uploadController = testContainer.read(
+            onboardingUploadInteractionProvider.notifier,
+          );
+          uploadController.syncWithDurableState(
+            RestoredUploadsState(
+              assetsByPurpose: {
+                UploadedAssetPurpose.skinFace: RestoredUploadedAsset(
+                  asset: photoA,
+                ),
+              },
+            ),
+            uid: testUid,
+          );
+
+          final flowController = testContainer.read(
+            skinCareFlowControllerProvider.notifier,
+          );
+          flowController.startEditing(testDraft.baseTimeline);
+
+          await uploadController.chooseFromGallery(
+            onboardingSkinFaceUploadSlot,
+            uid: testUid,
+            sourceFeature: 'onboarding',
+            deferReplacement: true,
+          );
+
+          // Account switches to user-b
+          flowController.syncFromDraft(
+            const BaseTimelineDraft(),
+            'user-b',
+            authGeneration: 2,
+          );
+          await Future<void>.delayed(Duration.zero);
+
+          // Verify: User A's pending replacement was rolled back and cleaned up
+          expect(assetRepo.deletedAssetIds, contains('asset-photo-b'));
+          expect(
+            r2Client.deletedObjectKeys,
+            contains('users/$testUid/onboarding/skin_face/asset-photo-b.jpg'),
+          );
+        },
+      );
+    },
+  );
+}
+
+class _TxTestAuthRepo implements AuthRepository {
+  @override
+  AuthUser? currentUser;
+  _TxTestAuthRepo({this.currentUser});
+  @override
+  Future<String?> currentIdToken() async => 'test-token';
+  @override
+  Stream<AuthUser?> get authStateChanges => Stream.value(currentUser);
+  @override
+  Future<AuthUser?> signInWithGoogle() async => currentUser;
+  @override
+  Future<AuthUser> signInAnonymously() async => currentUser!;
+  @override
+  Future<AuthUser> linkAnonymousWithEmail(
+    String email,
+    String password, {
+    String? name,
+  }) async => currentUser!;
+  @override
+  Future<AuthUser?> reloadCurrentUser() async => currentUser;
+  @override
+  Future<void> sendEmailVerification() async {}
+  @override
+  Future<void> sendPasswordResetEmail(String email) async {}
+  @override
+  Future<AuthUser> signIn(String email, String password) async => currentUser!;
+  @override
+  Future<void> signOut() async {}
+  @override
+  Future<AuthUser> signUp(
+    String email,
+    String password, {
+    String? name,
+  }) async => currentUser!;
+}
+
+class _Step7TestAuthNotifier extends StateNotifier<AuthState>
+    implements AuthNotifier {
+  _Step7TestAuthNotifier(AuthUser? user)
+    : super(
+        AuthState(
+          user: user,
+          status: AuthFlowStatus.signedInOnboardingIncomplete,
+        ),
+      );
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _TxTestAssetRepo extends FakeUploadedAssetRepository {
+  final List<String> deletedAssetIds = [];
+
+  _TxTestAssetRepo([List<UploadedAsset>? initial]) {
+    if (initial != null) {
+      for (final asset in initial) {
+        saveAsset(asset);
+      }
+    }
+  }
+
+  @override
+  Future<void> markDeleted({
+    required String uid,
+    required String assetId,
+  }) async {
+    deletedAssetIds.add(assetId);
+    await super.markDeleted(uid: uid, assetId: assetId);
+  }
+}
+
+class _TxTestR2Client implements R2UploadClient {
+  final List<String> deletedObjectKeys = [];
+  int signCallCount = 0;
+  int uploadCallCount = 0;
+  int completeCallCount = 0;
+
+  @override
+  Future<R2SignedUpload> signUpload({
+    required String uid,
+    required UploadedAssetPurpose purpose,
+    required String sourceFeature,
+    required String contentType,
+    required int sizeBytes,
+    required String idToken,
+  }) async {
+    signCallCount++;
+    return R2SignedUpload(
+      assetId: 'asset-photo-b',
+      objectKey:
+          'users/$uid/$sourceFeature/${purpose.wireName}/asset-photo-b.jpg',
+      uploadUrl: 'https://r2.optivus.dev/upload',
+    );
+  }
+
+  @override
+  Future<void> uploadBytes({
+    required String uploadUrl,
+    required String contentType,
+    required Uint8List bytes,
+  }) async {
+    uploadCallCount++;
+  }
+
+  @override
+  Future<void> markUploadComplete({
+    required String assetId,
+    required String objectKey,
+    required int sizeBytes,
+    required String idToken,
+  }) async {
+    completeCallCount++;
+  }
+
+  @override
+  Future<void> deleteUpload({
+    required String objectKey,
+    required String idToken,
+  }) async {
+    deletedObjectKeys.add(objectKey);
+  }
+}
+
+class _TxTestImagePrepareService extends ImagePrepareService {
+  @override
+  Future<XFile?> pickImageFile({
+    ImageSource source = ImageSource.gallery,
+  }) async {
+    return XFile.fromData(
+      Uint8List.fromList([1, 2, 3]),
+      name: 'photo-b.jpg',
+      mimeType: 'image/jpeg',
+    );
+  }
+
+  @override
+  Future<PreparedUploadImage?> preparePickedFile(
+    XFile? picked, {
+    UploadedAssetPurpose purpose = UploadedAssetPurpose.profilePhoto,
+  }) async {
+    if (picked == null) return null;
+    return PreparedUploadImage(
+      fileName: 'photo-b.jpg',
+      contentType: 'image/jpeg',
+      bytes: Uint8List.fromList([1, 2, 3]),
+      sizeBytes: 3,
+    );
+  }
 }

@@ -50,6 +50,7 @@ class Step7ActionBridgeNotifier extends StateNotifier<Step7ActionBridgeState> {
     required int epoch,
     required OnboardingStep7PrimaryAction? action,
   }) {
+    if (!mounted) return;
     final currentToken = state.activeToken;
     if (currentToken != null && epoch < currentToken.epoch) {
       // Ignore stale publication from an earlier epoch.
@@ -64,6 +65,7 @@ class Step7ActionBridgeNotifier extends StateNotifier<Step7ActionBridgeState> {
 
   /// Clears the action only if the caller is the current owner and matches the epoch.
   void clear({required Object ownerId, required int epoch}) {
+    if (!mounted) return;
     final currentToken = state.activeToken;
     if (currentToken == null) return;
     if (currentToken.ownerId != ownerId || currentToken.epoch != epoch) {
@@ -76,6 +78,7 @@ class Step7ActionBridgeNotifier extends StateNotifier<Step7ActionBridgeState> {
 
   /// Unconditionally clears any published action. Used on step exit or full reset.
   void clearAll() {
+    if (!mounted) return;
     state = const Step7ActionBridgeState(action: null, activeToken: null);
     ref.read(onboardingStep7PrimaryActionProvider.notifier).state = null;
   }

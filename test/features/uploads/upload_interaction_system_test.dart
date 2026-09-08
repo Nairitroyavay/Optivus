@@ -1718,6 +1718,470 @@ void main() {
         );
       },
     );
+
+    // -------------------------------------------------------------------------
+    // Transactional Replacement (Gate 3 Fifth Closure)
+    // -------------------------------------------------------------------------
+    test(
+      '29. deferReplacement: true stages candidate as pendingReplacementAsset, preserves durableAsset Photo A in repo and R2',
+      () async {
+        final photoA = _validAsset(
+          uid: uidA,
+          assetId: 'photo-a',
+          purpose: UploadedAssetPurpose.skinProducts,
+          r2Key: 'users/$uidA/onboarding/skin_products/photo-a.jpg',
+        );
+        final repo = FakeUploadedAssetRepository([photoA]);
+        final uploadClient = RecordingR2UploadClient();
+        final authRepo = FakeAuthRepo(
+          currentUser: const AuthUser(
+            uid: uidA,
+            email: 'a@optivus.dev',
+            emailVerified: true,
+          ),
+        );
+        final config = UploadShellConfig(
+          title: 'Skin products',
+          slots: const [
+            UploadSlotConfig(
+              key: 'products',
+              label: 'Products',
+              title: 'Products photo',
+              icon: Icons.sanitizer_rounded,
+              purpose: UploadedAssetPurpose.skinProducts,
+            ),
+          ],
+        );
+        final controller = UploadInteractionController(
+          shellConfig: config,
+          assetRepository: repo,
+          authRepository: authRepo,
+          imagePrepareService: FakeImagePrepareService(),
+          r2UploadClient: uploadClient,
+          permissionService: const DefaultUploadPermissionService(),
+        );
+
+        controller.syncWithDurableState(
+          RestoredUploadsState(
+            uid: uidA,
+            assetsByPurpose: {
+              UploadedAssetPurpose.skinProducts: RestoredUploadedAsset(
+                asset: photoA,
+              ),
+            },
+          ),
+          uid: uidA,
+        );
+
+        expect(controller.state['products']?.durableAsset?.assetId, 'photo-a');
+        expect(controller.state['products']?.pendingReplacementAsset, isNull);
+
+        // Perform deferred replacement upload
+        final candidate = await controller.chooseFromGallery(
+          'products',
+          uid: uidA,
+          sourceFeature: 'onboarding',
+          deferReplacement: true,
+        );
+
+        expect(candidate, isNotNull);
+        final slotState = controller.state['products'];
+        expect(slotState, isNotNull);
+        // Canonical durable asset remains Photo A
+        expect(slotState!.durableAsset?.assetId, 'photo-a');
+        // Candidate staged as pending replacement asset
+        expect(slotState.pendingReplacementAsset?.assetId, candidate!.assetId);
+        expect(slotState.isDeferredReplacement, isTrue);
+        expect(slotState.hasPendingReplacement, isTrue);
+        // Effective asset is the pending replacement for UI preview
+        expect(slotState.effectiveAsset?.assetId, candidate.assetId);
+
+        // Photo A is NOT deleted from repo or R2
+        expect(repo.deletedAssetIds, isNot(contains('photo-a')));
+        expect(uploadClient.deletedObjectKeys, isNot(contains(photoA.r2Key)));
+        // Candidate is saved in repository
+        expect(repo.assets.map((a) => a.assetId), contains(candidate.assetId));
+      },
+    );
+
+    test(
+      '30. rollbackReplacement cleans candidate from repo and R2, restores Photo A as canonical and undeleted',
+      () async {
+        final photoA = _validAsset(
+          uid: uidA,
+          assetId: 'photo-a',
+          purpose: UploadedAssetPurpose.skinProducts,
+          r2Key: 'users/$uidA/onboarding/skin_products/photo-a.jpg',
+        );
+        final repo = FakeUploadedAssetRepository([photoA]);
+        final uploadClient = RecordingR2UploadClient();
+        final authRepo = FakeAuthRepo(
+          currentUser: const AuthUser(
+            uid: uidA,
+            email: 'a@optivus.dev',
+            emailVerified: true,
+          ),
+        );
+        final config = UploadShellConfig(
+          title: 'Skin products',
+          slots: const [
+            UploadSlotConfig(
+              key: 'products',
+              label: 'Products',
+              title: 'Products photo',
+              icon: Icons.sanitizer_rounded,
+              purpose: UploadedAssetPurpose.skinProducts,
+            ),
+          ],
+        );
+        final controller = UploadInteractionController(
+          shellConfig: config,
+          assetRepository: repo,
+          authRepository: authRepo,
+          imagePrepareService: FakeImagePrepareService(),
+          r2UploadClient: uploadClient,
+          permissionService: const DefaultUploadPermissionService(),
+        );
+
+        controller.syncWithDurableState(
+          RestoredUploadsState(
+            uid: uidA,
+            assetsByPurpose: {
+              UploadedAssetPurpose.skinProducts: RestoredUploadedAsset(
+                asset: photoA,
+              ),
+            },
+          ),
+          uid: uidA,
+        );
+
+        final candidate = await controller.chooseFromGallery(
+          'products',
+          uid: uidA,
+          sourceFeature: 'onboarding',
+          deferReplacement: true,
+        );
+        expect(candidate, isNotNull);
+
+        // User cancels / navigates Back -> rollback replacement
+        await controller.rollbackReplacement('products', uid: uidA);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        final slotState = controller.state['products'];
+        expect(slotState, isNotNull);
+        expect(slotState!.durableAsset?.assetId, 'photo-a');
+        expect(slotState.pendingReplacementAsset, isNull);
+        expect(slotState.isDeferredReplacement, isFalse);
+        expect(slotState.hasPendingReplacement, isFalse);
+        expect(slotState.effectiveAsset?.assetId, 'photo-a');
+
+        // Candidate was cleaned from repo and R2
+        expect(repo.deletedAssetIds, contains(candidate!.assetId));
+        expect(uploadClient.deletedObjectKeys, contains(candidate.r2Key));
+
+        // Photo A was NEVER deleted
+        expect(repo.deletedAssetIds, isNot(contains('photo-a')));
+        expect(uploadClient.deletedObjectKeys, isNot(contains(photoA.r2Key)));
+        expect(repo.assets.map((a) => a.assetId), contains('photo-a'));
+      },
+    );
+
+    test(
+      '31. commitReplacement promotes candidate to durableAsset and deletes Photo A only after commit',
+      () async {
+        final photoA = _validAsset(
+          uid: uidA,
+          assetId: 'photo-a',
+          purpose: UploadedAssetPurpose.skinProducts,
+          r2Key: 'users/$uidA/onboarding/skin_products/photo-a.jpg',
+        );
+        final repo = FakeUploadedAssetRepository([photoA]);
+        final uploadClient = RecordingR2UploadClient();
+        final authRepo = FakeAuthRepo(
+          currentUser: const AuthUser(
+            uid: uidA,
+            email: 'a@optivus.dev',
+            emailVerified: true,
+          ),
+        );
+        final config = UploadShellConfig(
+          title: 'Skin products',
+          slots: const [
+            UploadSlotConfig(
+              key: 'products',
+              label: 'Products',
+              title: 'Products photo',
+              icon: Icons.sanitizer_rounded,
+              purpose: UploadedAssetPurpose.skinProducts,
+            ),
+          ],
+        );
+        final controller = UploadInteractionController(
+          shellConfig: config,
+          assetRepository: repo,
+          authRepository: authRepo,
+          imagePrepareService: FakeImagePrepareService(),
+          r2UploadClient: uploadClient,
+          permissionService: const DefaultUploadPermissionService(),
+        );
+
+        controller.syncWithDurableState(
+          RestoredUploadsState(
+            uid: uidA,
+            assetsByPurpose: {
+              UploadedAssetPurpose.skinProducts: RestoredUploadedAsset(
+                asset: photoA,
+              ),
+            },
+          ),
+          uid: uidA,
+        );
+
+        final candidate = await controller.chooseFromGallery(
+          'products',
+          uid: uidA,
+          sourceFeature: 'onboarding',
+          deferReplacement: true,
+        );
+        expect(candidate, isNotNull);
+
+        // Before commit, Photo A is still durable and not deleted
+        expect(repo.deletedAssetIds, isNot(contains('photo-a')));
+
+        // Plan B succeeds -> commitReplacement
+        await controller.commitReplacement('products', uid: uidA);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        final slotState = controller.state['products'];
+        expect(slotState, isNotNull);
+        expect(slotState!.durableAsset?.assetId, candidate!.assetId);
+        expect(slotState.pendingReplacementAsset, isNull);
+        expect(slotState.isDeferredReplacement, isFalse);
+        expect(slotState.hasPendingReplacement, isFalse);
+
+        // Now Photo A is cleaned from repo and R2
+        expect(repo.deletedAssetIds, contains('photo-a'));
+        expect(uploadClient.deletedObjectKeys, contains(photoA.r2Key));
+        // Candidate remains intact
+        expect(repo.deletedAssetIds, isNot(contains(candidate.assetId)));
+      },
+    );
+
+    test(
+      '32. deferReplacement: false (default) immediately supersedes and cleans Photo A (backward compatible)',
+      () async {
+        final photoA = _validAsset(
+          uid: uidA,
+          assetId: 'photo-a',
+          purpose: UploadedAssetPurpose.skinProducts,
+          r2Key: 'users/$uidA/onboarding/skin_products/photo-a.jpg',
+        );
+        final repo = FakeUploadedAssetRepository([photoA]);
+        final uploadClient = RecordingR2UploadClient();
+        final authRepo = FakeAuthRepo(
+          currentUser: const AuthUser(
+            uid: uidA,
+            email: 'a@optivus.dev',
+            emailVerified: true,
+          ),
+        );
+        final config = UploadShellConfig(
+          title: 'Skin products',
+          slots: const [
+            UploadSlotConfig(
+              key: 'products',
+              label: 'Products',
+              title: 'Products photo',
+              icon: Icons.sanitizer_rounded,
+              purpose: UploadedAssetPurpose.skinProducts,
+            ),
+          ],
+        );
+        final controller = UploadInteractionController(
+          shellConfig: config,
+          assetRepository: repo,
+          authRepository: authRepo,
+          imagePrepareService: FakeImagePrepareService(),
+          r2UploadClient: uploadClient,
+          permissionService: const DefaultUploadPermissionService(),
+        );
+
+        controller.syncWithDurableState(
+          RestoredUploadsState(
+            uid: uidA,
+            assetsByPurpose: {
+              UploadedAssetPurpose.skinProducts: RestoredUploadedAsset(
+                asset: photoA,
+              ),
+            },
+          ),
+          uid: uidA,
+        );
+
+        // Upload with default deferReplacement: false
+        final newAsset = await controller.chooseFromGallery(
+          'products',
+          uid: uidA,
+          sourceFeature: 'onboarding',
+        );
+        expect(newAsset, isNotNull);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        final slotState = controller.state['products'];
+        expect(slotState, isNotNull);
+        // Immediately became durableAsset
+        expect(slotState!.durableAsset?.assetId, newAsset!.assetId);
+        expect(slotState.pendingReplacementAsset, isNull);
+        expect(slotState.isDeferredReplacement, isFalse);
+
+        // Photo A was immediately deleted
+        expect(repo.deletedAssetIds, contains('photo-a'));
+        expect(uploadClient.deletedObjectKeys, contains(photoA.r2Key));
+      },
+    );
+
+    test(
+      '33. remove() with pending replacement deletes both durableAsset and pendingReplacementAsset',
+      () async {
+        final photoA = _validAsset(
+          uid: uidA,
+          assetId: 'photo-a',
+          purpose: UploadedAssetPurpose.skinProducts,
+          r2Key: 'users/$uidA/onboarding/skin_products/photo-a.jpg',
+        );
+        final repo = FakeUploadedAssetRepository([photoA]);
+        final uploadClient = RecordingR2UploadClient();
+        final authRepo = FakeAuthRepo(
+          currentUser: const AuthUser(
+            uid: uidA,
+            email: 'a@optivus.dev',
+            emailVerified: true,
+          ),
+        );
+        final config = UploadShellConfig(
+          title: 'Skin products',
+          slots: const [
+            UploadSlotConfig(
+              key: 'products',
+              label: 'Products',
+              title: 'Products photo',
+              icon: Icons.sanitizer_rounded,
+              purpose: UploadedAssetPurpose.skinProducts,
+            ),
+          ],
+        );
+        final controller = UploadInteractionController(
+          shellConfig: config,
+          assetRepository: repo,
+          authRepository: authRepo,
+          imagePrepareService: FakeImagePrepareService(),
+          r2UploadClient: uploadClient,
+          permissionService: const DefaultUploadPermissionService(),
+        );
+
+        controller.syncWithDurableState(
+          RestoredUploadsState(
+            uid: uidA,
+            assetsByPurpose: {
+              UploadedAssetPurpose.skinProducts: RestoredUploadedAsset(
+                asset: photoA,
+              ),
+            },
+          ),
+          uid: uidA,
+        );
+
+        final candidate = await controller.chooseFromGallery(
+          'products',
+          uid: uidA,
+          sourceFeature: 'onboarding',
+          deferReplacement: true,
+        );
+        expect(candidate, isNotNull);
+
+        // Explicit remove by user -> both Photo A and candidate Photo B must be deleted
+        final removed = await controller.remove('products', uid: uidA);
+        expect(removed, isTrue);
+
+        final slotState = controller.state['products'];
+        expect(slotState, isNotNull);
+        expect(slotState!.phase, UploadInteractionPhase.empty);
+        expect(slotState.durableAsset, isNull);
+        expect(slotState.pendingReplacementAsset, isNull);
+
+        // Both Photo A and Photo B were deleted
+        expect(repo.deletedAssetIds, contains('photo-a'));
+        expect(repo.deletedAssetIds, contains(candidate!.assetId));
+        expect(uploadClient.deletedObjectKeys, contains(photoA.r2Key));
+        expect(uploadClient.deletedObjectKeys, contains(candidate.r2Key));
+      },
+    );
+
+    test('34. resetForSignedOut() cleans pending replacement asset', () async {
+      final photoA = _validAsset(
+        uid: uidA,
+        assetId: 'photo-a',
+        purpose: UploadedAssetPurpose.skinProducts,
+        r2Key: 'users/$uidA/onboarding/skin_products/photo-a.jpg',
+      );
+      final repo = FakeUploadedAssetRepository([photoA]);
+      final uploadClient = RecordingR2UploadClient();
+      final authRepo = FakeAuthRepo(
+        currentUser: const AuthUser(
+          uid: uidA,
+          email: 'a@optivus.dev',
+          emailVerified: true,
+        ),
+      );
+      final config = UploadShellConfig(
+        title: 'Skin products',
+        slots: const [
+          UploadSlotConfig(
+            key: 'products',
+            label: 'Products',
+            title: 'Products photo',
+            icon: Icons.sanitizer_rounded,
+            purpose: UploadedAssetPurpose.skinProducts,
+          ),
+        ],
+      );
+      final controller = UploadInteractionController(
+        shellConfig: config,
+        assetRepository: repo,
+        authRepository: authRepo,
+        imagePrepareService: FakeImagePrepareService(),
+        r2UploadClient: uploadClient,
+        permissionService: const DefaultUploadPermissionService(),
+      );
+
+      controller.syncWithDurableState(
+        RestoredUploadsState(
+          uid: uidA,
+          assetsByPurpose: {
+            UploadedAssetPurpose.skinProducts: RestoredUploadedAsset(
+              asset: photoA,
+            ),
+          },
+        ),
+        uid: uidA,
+      );
+
+      final candidate = await controller.chooseFromGallery(
+        'products',
+        uid: uidA,
+        sourceFeature: 'onboarding',
+        deferReplacement: true,
+      );
+      expect(candidate, isNotNull);
+
+      // Sign out
+      controller.resetForSignedOut();
+
+      // Pending candidate was cleaned
+      expect(repo.deletedAssetIds, contains(candidate!.assetId));
+      // Photo A was not deleted
+      expect(repo.deletedAssetIds, isNot(contains('photo-a')));
+    });
   });
 }
 

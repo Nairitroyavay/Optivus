@@ -241,6 +241,7 @@ class MockUploadInteractionController extends UploadInteractionController {
     String slotKey, {
     required String uid,
     required String sourceFeature,
+    bool deferReplacement = false,
   }) async {
     final purpose = slotKey == onboardingClassUploadSlot
         ? UploadedAssetPurpose.classTimetable

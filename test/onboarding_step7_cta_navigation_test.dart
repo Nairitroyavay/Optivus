@@ -233,7 +233,17 @@ void main() {
       int desiredApplicationsPerDay = 2,
     }) {
       final blocks = [
+        BaseTimelineDraft.defaultSleepBlock(),
         BaseTimelineDraft.defaultBathBlock(),
+        const TimelineBlockDraft(
+          id: 'meal-lunch',
+          section: 'eating',
+          title: 'Lunch',
+          startMinute: 720,
+          endMinute: 750,
+          repeatDays: onboarding7EveryDay,
+          blockType: TimelineBlockDraft.hardBlockKey,
+        ),
         TimelineBlockDraft(
           id: 'skin-morning',
           section: 'skin_care',
@@ -269,12 +279,33 @@ void main() {
         skinCareReviewedProducts: onboarding7ParseTypedProductDetails(
           productNames,
         ),
+        eatingSetupPath: 'skip',
+        eatingSetupStep: 1,
         blocks: blocks,
       );
       final fingerprint = draftBase.computeSkinCareRoutineFingerprint();
       return OnboardingDraft(
         uid: uid,
         currentStep: 7,
+        welcomeSaved: true,
+        patiencePledgeAccepted: true,
+        stepCompleted: List<bool>.generate(
+          OnboardingDraft.stepCount,
+          (index) => index < 7,
+        ),
+        lifeRole: const LifeRoleDraft(
+          lifeRole: LifeRoleDraft.notStudentNotWorkingKey,
+          exerciseLevel: 'moderate',
+          waterIntake: 'medium',
+          stressLevel: 'medium',
+          sleepQuality: 'good',
+        ),
+        bodyBasics: const BodyBasicsDraft(
+          ageRange: '25-34',
+          heightCm: 175,
+          weightKg: 70,
+          gender: 'other',
+        ),
         baseTimeline: draftBase.copyWith(
           skinCareRoutineFingerprint: fingerprint,
           blocks: tagSkinCareBlocks(blocks, fingerprint),
@@ -286,7 +317,17 @@ void main() {
       String uid = 'user-timeline-test',
     }) {
       final blocks = [
+        BaseTimelineDraft.defaultSleepBlock(),
         BaseTimelineDraft.defaultBathBlock(),
+        const TimelineBlockDraft(
+          id: 'meal-lunch',
+          section: 'eating',
+          title: 'Lunch',
+          startMinute: 720,
+          endMinute: 750,
+          repeatDays: onboarding7EveryDay,
+          blockType: TimelineBlockDraft.hardBlockKey,
+        ),
         TimelineBlockDraft(
           id: 'skin-morning',
           section: 'skin_care',
@@ -295,8 +336,12 @@ void main() {
           endMinute: 495,
           repeatDays: onboarding7EveryDay,
           blockType: TimelineBlockDraft.softBlockKey,
-          skincareProducts: const ['Daily Cleanser', 'Barrier Moisturizer'],
-          skincareSteps: const ['Cleanse', 'Moisturize'],
+          skincareProducts: const [
+            'Simple Daily Cleanser',
+            'Simple Barrier Moisturizer',
+            'Simple Daily Sunscreen SPF 50',
+          ],
+          skincareSteps: const ['Cleanse', 'Moisturize', 'Sun Protection'],
           skincareSlotLabel: 'Morning',
         ),
         TimelineBlockDraft(
@@ -307,20 +352,40 @@ void main() {
           endMinute: 1275,
           repeatDays: onboarding7EveryDay,
           blockType: TimelineBlockDraft.softBlockKey,
-          skincareProducts: const ['Daily Cleanser', 'Barrier Moisturizer'],
-          skincareSteps: const ['Cleanse', 'Moisturize'],
+          skincareProducts: const [
+            'Simple Daily Cleanser',
+            'Simple Barrier Moisturizer',
+            'Simple Daily Sunscreen SPF 50',
+          ],
+          skincareSteps: const ['Cleanse', 'Moisturize', 'Sun Protection'],
           skincareSlotLabel: 'Night',
         ),
       ];
 
       const recommendations = [
         SkinCareProductRecommendationDraft(
-          name: 'Daily Cleanser',
           category: 'cleanser',
+          brand: 'Simple',
+          name: 'Simple Daily Cleanser',
+          estimatedPrice: '10',
+          currencyCode: 'USD',
+          reason: 'Gentle',
         ),
         SkinCareProductRecommendationDraft(
-          name: 'Barrier Moisturizer',
           category: 'moisturizer',
+          brand: 'Simple',
+          name: 'Simple Barrier Moisturizer',
+          estimatedPrice: '12',
+          currencyCode: 'USD',
+          reason: 'Moisturizes',
+        ),
+        SkinCareProductRecommendationDraft(
+          category: 'sunscreen',
+          brand: 'Simple',
+          name: 'Simple Daily Sunscreen SPF 50',
+          estimatedPrice: '15',
+          currencyCode: 'USD',
+          reason: 'Protects',
         ),
       ];
 
@@ -339,13 +404,17 @@ void main() {
         skinCareFacePhotoUpdatedAt: DateTime.utc(2026, 6, 15, 10),
         skinCareProductRecommendations: recommendations,
         skinCareSelectedProductNames: const [
-          'Daily Cleanser',
-          'Barrier Moisturizer',
+          'Simple Daily Cleanser',
+          'Simple Barrier Moisturizer',
+          'Simple Daily Sunscreen SPF 50',
         ],
         skinCareSuggestedProducts: const [
-          'Daily Cleanser',
-          'Barrier Moisturizer',
+          'Simple Daily Cleanser',
+          'Simple Barrier Moisturizer',
+          'Simple Daily Sunscreen SPF 50',
         ],
+        eatingSetupPath: 'skip',
+        eatingSetupStep: 1,
         blocks: blocks,
       );
       final recFingerprint = draftBase
@@ -358,6 +427,25 @@ void main() {
       return OnboardingDraft(
         uid: uid,
         currentStep: 7,
+        welcomeSaved: true,
+        patiencePledgeAccepted: true,
+        stepCompleted: List<bool>.generate(
+          OnboardingDraft.stepCount,
+          (index) => index < 7,
+        ),
+        lifeRole: const LifeRoleDraft(
+          lifeRole: LifeRoleDraft.notStudentNotWorkingKey,
+          exerciseLevel: 'moderate',
+          waterIntake: 'medium',
+          stressLevel: 'medium',
+          sleepQuality: 'good',
+        ),
+        bodyBasics: const BodyBasicsDraft(
+          ageRange: '25-34',
+          heightCm: 175,
+          weightKg: 70,
+          gender: 'other',
+        ),
         baseTimeline: draftWithRec.copyWith(
           skinCareRoutineFingerprint: routineFingerprint,
           blocks: tagSkinCareBlocks(blocks, routineFingerprint),

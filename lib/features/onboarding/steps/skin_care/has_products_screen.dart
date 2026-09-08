@@ -106,7 +106,12 @@ class _HasProductsModeScreenState
     _controller.dispose();
     _focusNode.dispose();
     if (_publishedActionEpoch != null) {
-      _actionBridge.clear(ownerId: _actionOwner, epoch: _publishedActionEpoch!);
+      final owner = _actionOwner;
+      final epoch = _publishedActionEpoch!;
+      final bridge = _actionBridge;
+      Future<void>.microtask(() {
+        bridge.clear(ownerId: owner, epoch: epoch);
+      });
     }
     super.dispose();
   }
@@ -138,7 +143,7 @@ class _HasProductsModeScreenState
     UploadSlotRuntimeState? uploadState,
     OnboardingDraft draft,
   ) {
-    final asset = uploadState?.durableAsset;
+    final asset = uploadState?.effectiveAsset;
     if (asset == null) return null;
     final base = draft.baseTimeline;
     return asset.assetId == base.skinCareProductPhotoAssetId &&
@@ -172,23 +177,27 @@ class _HasProductsModeScreenState
     final requestAuthGeneration = ref.read(authGenerationProvider);
     final requestFlowEpoch = _flowController.currentEpoch;
     final requestFlowState = _flowController.currentFlowState;
+    final isEditing = requestFlowState.isEditing;
     final controller = ref.read(onboardingUploadInteractionProvider.notifier);
     final asset = retrying
         ? await controller.retry(
             onboardingSkinProductsUploadSlot,
             uid: uid,
             sourceFeature: OnboardingDraft.sourceOnboarding,
+            deferReplacement: isEditing,
           )
         : source == _SkinPhotoSource.camera
         ? await controller.takePhoto(
             onboardingSkinProductsUploadSlot,
             uid: uid,
             sourceFeature: OnboardingDraft.sourceOnboarding,
+            deferReplacement: isEditing,
           )
         : await controller.chooseFromGallery(
             onboardingSkinProductsUploadSlot,
             uid: uid,
             sourceFeature: OnboardingDraft.sourceOnboarding,
+            deferReplacement: isEditing,
           );
     if (!mounted) return;
     if (!_isCurrentUploadBinding(
@@ -240,7 +249,11 @@ class _HasProductsModeScreenState
           skinCareSkipped: false,
         ),
       );
-      ref.read(restoredUploadsProvider.notifier).registerUploaded(latestAsset);
+      if (!isEditing) {
+        ref
+            .read(restoredUploadsProvider.notifier)
+            .registerUploaded(latestAsset);
+      }
     }
   }
 
@@ -280,13 +293,15 @@ class _HasProductsModeScreenState
           _removingPhoto = false;
           _uploadError = _friendlySkinCareUploadMessage(latest?.attemptError);
         });
-        if (latest?.durableAsset == null) {
+        if (latest?.durableAsset == null &&
+            latest?.pendingReplacementAsset == null) {
           setState(() {
             _uploadedAsset = null;
             _inputSource = _controller.text.trim().isEmpty
                 ? _ProductInputSource.none
                 : _ProductInputSource.typed;
           });
+          _flowController.clearSnapshotPhoto(isProductPhoto: true);
           updateBaseTimelineDraft(
             ref,
             onboardingSkinCareStepIndex,
@@ -305,6 +320,7 @@ class _HasProductsModeScreenState
     final manuallyReviewed = onboarding7ParseTypedProductDetails(
       _controller.text,
     );
+    _flowController.clearSnapshotPhoto(isProductPhoto: true);
     setState(() {
       _uploadedAsset = null;
       _removingPhoto = false;
@@ -759,10 +775,24 @@ class _HasProductsModeScreenState
             .setStepLoading(onboardingSkinCareStepIndex, false);
       }
       if (previous?.state.isEditing == true && !next.state.isEditing) {
-        final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
+        final draft = ref.read(mockOnboardingProvider).draft;
+        final base = draft.baseTimeline;
         _controller.text = base.skinCareProductNames ?? '';
+        final restoredCurrent =
+            _restoredSkinAssetForSlot(
+              restored: ref.read(restoredUploadsProvider),
+              draft: draft,
+              purpose: UploadedAssetPurpose.skinProducts,
+            ) ??
+            durableSkinProductsAssetFromDraft(draft);
         setState(() {
           _generationError = null;
+          _uploadedAsset = restoredCurrent;
+          _inputSource = _uploadedAsset != null
+              ? _ProductInputSource.photo
+              : _controller.text.trim().isNotEmpty
+              ? _ProductInputSource.typed
+              : _ProductInputSource.none;
         });
       }
     });

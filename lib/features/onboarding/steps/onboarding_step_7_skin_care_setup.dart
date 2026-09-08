@@ -67,7 +67,10 @@ class OnboardingStep7 extends ConsumerWidget {
     // Review mode is structurally parallel to Steps 4 and 5: the timeline
     // owns the onboarding body rather than living inside setup padding.
     // Keep the review / edit subtree mounted with full-screen timeline scaffold.
-    if ((flowState.isReview || flowState.isEditing) &&
+    final isGeneratingFromEdit =
+        flowState.isGenerating &&
+        flowStateHolder.generationOrigin?.isEditing == true;
+    if ((flowState.isReview || flowState.isEditing || isGeneratingFromEdit) &&
         flowState != SkinCareFlowState.choice) {
       return _SkinCareSelectedModeScreen(base: base);
     }

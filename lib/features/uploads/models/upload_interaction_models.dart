@@ -79,6 +79,10 @@ class UploadSlotRuntimeState {
   final UploadedAssetPreviewStatus previewStatus;
   final Uri? remotePreviewUri;
 
+  // Deferred Transactional Replacement Candidate State
+  final UploadedAsset? pendingReplacementAsset;
+  final bool isDeferredReplacement;
+
   // Transient Interaction Attempt State
   final XFile? transientFile;
   final PreparedUploadImage? preparedImage;
@@ -94,6 +98,8 @@ class UploadSlotRuntimeState {
     this.durableAsset,
     this.previewStatus = UploadedAssetPreviewStatus.unavailable,
     this.remotePreviewUri,
+    this.pendingReplacementAsset,
+    this.isDeferredReplacement = false,
     this.transientFile,
     this.preparedImage,
     this.attemptError,
@@ -102,6 +108,7 @@ class UploadSlotRuntimeState {
   });
 
   bool get hasDurableAsset => durableAsset != null;
+  bool get hasPendingReplacement => pendingReplacementAsset != null;
 
   bool get isBusy {
     return switch (phase) {
@@ -117,14 +124,14 @@ class UploadSlotRuntimeState {
   bool get isActionableEmpty =>
       !isHydrating && !hasDurableAsset && phase == UploadInteractionPhase.empty;
 
-  UploadedAsset? get effectiveAsset => durableAsset;
+  UploadedAsset? get effectiveAsset => pendingReplacementAsset ?? durableAsset;
 
   String? get usablePreviewPath =>
       preparedImage?.localPreviewPath ??
       transientFile?.path ??
-      (durableAsset == null
+      (effectiveAsset == null
           ? null
-          : usableUploadedAssetLocalPreviewPath(durableAsset!));
+          : usableUploadedAssetLocalPreviewPath(effectiveAsset!));
 
   UploadSlotRuntimeState copyWith({
     String? slotKey,
@@ -134,6 +141,10 @@ class UploadSlotRuntimeState {
     UploadedAsset? durableAsset,
     UploadedAssetPreviewStatus? previewStatus,
     Uri? remotePreviewUri,
+    UploadedAsset? pendingReplacementAsset,
+    bool clearPendingReplacementAsset = false,
+    bool? isDeferredReplacement,
+    bool clearDeferredReplacement = false,
     XFile? transientFile,
     PreparedUploadImage? preparedImage,
     String? attemptError,
@@ -158,6 +169,12 @@ class UploadSlotRuntimeState {
       remotePreviewUri: clearRemotePreviewUri
           ? null
           : (remotePreviewUri ?? this.remotePreviewUri),
+      pendingReplacementAsset: clearPendingReplacementAsset
+          ? null
+          : (pendingReplacementAsset ?? this.pendingReplacementAsset),
+      isDeferredReplacement: clearDeferredReplacement
+          ? false
+          : (isDeferredReplacement ?? this.isDeferredReplacement),
       transientFile: clearTransientFile
           ? null
           : (transientFile ?? this.transientFile),

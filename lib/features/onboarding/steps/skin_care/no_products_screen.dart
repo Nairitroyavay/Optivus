@@ -95,7 +95,12 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     _lifecycle.removeListener(_onLifecycleChanged);
     _lifecycle.dispose();
     if (_publishedActionEpoch != null) {
-      _actionBridge.clear(ownerId: _actionOwner, epoch: _publishedActionEpoch!);
+      final owner = _actionOwner;
+      final epoch = _publishedActionEpoch!;
+      final bridge = _actionBridge;
+      Future<void>.microtask(() {
+        bridge.clear(ownerId: owner, epoch: epoch);
+      });
     }
     super.dispose();
   }
@@ -127,7 +132,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     UploadSlotRuntimeState? uploadState,
     OnboardingDraft draft,
   ) {
-    final asset = uploadState?.durableAsset;
+    final asset = uploadState?.effectiveAsset;
     if (asset == null) return null;
     final base = draft.baseTimeline;
     return asset.assetId == base.skinCareFacePhotoAssetId &&
@@ -161,23 +166,27 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final requestAuthGeneration = ref.read(authGenerationProvider);
     final requestFlowEpoch = _flowController.currentEpoch;
     final requestFlowState = _flowController.currentFlowState;
+    final isEditing = requestFlowState.isEditing;
     final controller = ref.read(onboardingUploadInteractionProvider.notifier);
     final asset = retrying
         ? await controller.retry(
             onboardingSkinFaceUploadSlot,
             uid: uid,
             sourceFeature: OnboardingDraft.sourceOnboarding,
+            deferReplacement: isEditing,
           )
         : source == _SkinPhotoSource.camera
         ? await controller.takePhoto(
             onboardingSkinFaceUploadSlot,
             uid: uid,
             sourceFeature: OnboardingDraft.sourceOnboarding,
+            deferReplacement: isEditing,
           )
         : await controller.chooseFromGallery(
             onboardingSkinFaceUploadSlot,
             uid: uid,
             sourceFeature: OnboardingDraft.sourceOnboarding,
+            deferReplacement: isEditing,
           );
 
     if (!mounted) return;
@@ -221,7 +230,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           ? _friendlySkinCareUploadMessage(latestUploadState?.attemptError)
           : null;
     });
-    if (latestAsset != null) {
+    if (latestAsset != null && !isEditing) {
       ref.read(restoredUploadsProvider.notifier).registerUploaded(latestAsset);
     }
   }
@@ -262,10 +271,12 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           _removingPhoto = false;
           _uploadError = _friendlySkinCareUploadMessage(latest?.attemptError);
         });
-        if (latest?.durableAsset == null) {
+        if (latest?.durableAsset == null &&
+            latest?.pendingReplacementAsset == null) {
           setState(() {
             _uploadedAsset = null;
           });
+          _flowController.clearSnapshotPhoto(isFacePhoto: true);
           updateBaseTimelineDraft(
             ref,
             onboardingSkinCareStepIndex,
@@ -282,6 +293,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         return;
       }
     }
+    _flowController.clearSnapshotPhoto(isFacePhoto: true);
     setState(() {
       _uploadedAsset = null;
       _removingPhoto = false;
@@ -941,9 +953,17 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
             .setStepLoading(onboardingSkinCareStepIndex, false);
       }
       if (previous?.state.isEditing == true && !next.state.isEditing) {
+        final draft = ref.read(mockOnboardingProvider).draft;
         setState(() {
           _pendingDesiredApplicationsPerDay = null;
           _generationError = null;
+          _uploadedAsset =
+              _restoredSkinAssetForSlot(
+                restored: ref.read(restoredUploadsProvider),
+                draft: draft,
+                purpose: UploadedAssetPurpose.skinFace,
+              ) ??
+              durableSkinFaceAssetFromDraft(draft);
         });
       }
     });

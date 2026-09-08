@@ -710,7 +710,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     return result ?? false;
   }
 
-  Future<void> _handlePopGesture() async {
+  Future<void> _handlePopGesture({bool isHardwareOrSwipe = true}) async {
     if (_isHandlingPopGesture) return;
     _isHandlingPopGesture = true;
     try {
@@ -723,9 +723,12 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
           (focusContext.widget is EditableText ||
               focusContext.findAncestorWidgetOfExactType<EditableText>() !=
                   null);
-      if (hasEditableFocus) {
+      if (isHardwareOrSwipe && hasEditableFocus) {
         currentFocus.unfocus();
         return;
+      }
+      if (!isHardwareOrSwipe && currentFocus != null && currentFocus.hasFocus) {
+        currentFocus.unfocus();
       }
 
       if (_handleInternalBackIfNeeded()) {
@@ -772,7 +775,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   }
 
   void _goToPreviousStep() {
-    _handlePopGesture();
+    _handlePopGesture(isHardwareOrSwipe: false);
   }
 
   bool _handleInternalBackIfNeeded() {

@@ -6465,6 +6465,7 @@ void main() {
       final draft = _hasProductsDraft(
         uid: 'test-uid',
         blocks: _skinCareBlocksForEveryDay(2),
+        includePrerequisites: true,
       );
 
       await tester.pumpWidget(
@@ -6485,12 +6486,18 @@ void main() {
           child: const MaterialApp(home: OnboardingFlow()),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       await tester.tap(find.text('Rebuild / Edit'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Build skin routine').last);
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      final buildButton = find.byKey(
+        const ValueKey('onboarding-step7-generate-button'),
+      );
+      await tester.ensureVisible(buildButton);
+      await tester.tap(buildButton);
+      await tester.pump();
 
       final container = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingFlow)),
@@ -6509,6 +6516,7 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('onboarding-step7-back')));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.textContaining('Skin Care AI'), findsNothing);
       expect(
@@ -6532,7 +6540,8 @@ void main() {
       );
 
       completer.complete(_routineResultWithPlanCount(3));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       final base = container.read(mockOnboardingProvider).draft.baseTimeline;
       expect(
@@ -6564,6 +6573,7 @@ void main() {
         ],
         withPhoto: true,
         blocks: _skinCareBlocksForEveryDay(2),
+        includePrerequisites: true,
       );
 
       await tester.pumpWidget(
@@ -6584,13 +6594,17 @@ void main() {
           child: const MaterialApp(home: OnboardingFlow()),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       await tester.tap(find.text('Rebuild / Edit'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.text('Change details'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.text('Find products'));
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
       final container = ProviderScope.containerOf(
@@ -6604,6 +6618,7 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('onboarding-step7-back')));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.textContaining('Skin Care AI'), findsNothing);
       expect(
@@ -6618,7 +6633,8 @@ void main() {
       );
 
       completer.complete(_productRecommendationResult());
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       final base = container.read(mockOnboardingProvider).draft.baseTimeline;
       expect(
@@ -6647,6 +6663,7 @@ void main() {
         ],
         withPhoto: true,
         blocks: _skinCareBlocksForEveryDay(2),
+        includePrerequisites: true,
       );
 
       await tester.pumpWidget(
@@ -6667,12 +6684,18 @@ void main() {
           child: const MaterialApp(home: OnboardingFlow()),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       await tester.tap(find.text('Rebuild / Edit'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Build skin routine').last);
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      final buildButton = find.byKey(
+        const ValueKey('onboarding-step7-generate-button'),
+      );
+      await tester.ensureVisible(buildButton);
+      await tester.tap(buildButton);
+      await tester.pump();
 
       final container = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingFlow)),
@@ -6685,6 +6708,7 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('onboarding-step7-back')));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.textContaining('Skin Care AI'), findsNothing);
       expect(
@@ -6699,7 +6723,8 @@ void main() {
       );
 
       completer.complete(_selectedProductRoutineResult());
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       final base = container.read(mockOnboardingProvider).draft.baseTimeline;
       expect(
@@ -6733,6 +6758,7 @@ void main() {
         productPhotoCreatedAt: DateTime.utc(2026, 6, 14, 10),
         productPhotoUpdatedAt: DateTime.utc(2026, 6, 14, 10),
         blocks: _skinCareBlocksForEveryDay(2),
+        includePrerequisites: true,
       );
 
       await tester.pumpWidget(
@@ -6753,12 +6779,15 @@ void main() {
           child: const MaterialApp(home: OnboardingFlow()),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       await tester.tap(find.text('Rebuild / Edit'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.text('Add photo').first);
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(
         find.byKey(const ValueKey('onboarding-step7-choose-gallery')),
       );
@@ -6774,14 +6803,16 @@ void main() {
       );
 
       await tester.tap(find.byKey(const ValueKey('onboarding-step7-back')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(
         container.read(skinCareFlowControllerProvider).state,
         SkinCareFlowState.hasProductsReview,
       );
 
       upload.complete();
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       final base = container.read(mockOnboardingProvider).draft.baseTimeline;
       expect(base.skinCareProductPhotoAssetId, 'plan-a-products');
@@ -6819,6 +6850,7 @@ void main() {
         photoCreatedAt: DateTime.utc(2026, 6, 14, 10),
         photoUpdatedAt: DateTime.utc(2026, 6, 14, 10),
         blocks: _skinCareBlocksForEveryDay(2),
+        includePrerequisites: true,
       );
 
       await tester.pumpWidget(
@@ -6839,14 +6871,20 @@ void main() {
           child: const MaterialApp(home: OnboardingFlow()),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       await tester.tap(find.text('Rebuild / Edit'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.text('Change details'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Add photo').first);
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-photo-tile')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(
         find.byKey(const ValueKey('onboarding-step7-choose-gallery')),
       );
@@ -6858,10 +6896,12 @@ void main() {
       expect(upload.startUploadCalls, 1);
 
       await tester.tap(find.byKey(const ValueKey('onboarding-step7-back')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       upload.complete();
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       final base = container.read(mockOnboardingProvider).draft.baseTimeline;
       expect(base.skinCareFacePhotoAssetId, 'plan-a-face');
@@ -6889,6 +6929,7 @@ void main() {
                 'users/test-uid/onboarding/skin_care/user-a-plan-a.jpg',
             productPhotoStatus: 'uploaded',
             blocks: _skinCareBlocksForEveryDay(2),
+            includePrerequisites: true,
           ),
         );
       final upload = DelayedTestUploadInteractionController(
@@ -6914,12 +6955,17 @@ void main() {
           child: const MaterialApp(home: OnboardingFlow()),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       await tester.tap(find.text('Rebuild / Edit'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Add photo').first);
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-photo-tile')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(
         find.byKey(const ValueKey('onboarding-step7-choose-gallery')),
       );
@@ -6933,12 +6979,18 @@ void main() {
         ),
       );
       onboarding.loadSeedData(
-        _hasProductsDraft(uid: 'user-b', productNames: 'User B Cleanser'),
+        _hasProductsDraft(
+          uid: 'user-b',
+          productNames: 'User B Cleanser',
+          includePrerequisites: true,
+        ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       upload.complete();
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       final draft = onboarding.state.draft;
       expect(draft.uid, 'user-b');
@@ -7481,6 +7533,7 @@ OnboardingDraft _hasProductsDraft({
   DateTime? productPhotoCreatedAt,
   DateTime? productPhotoUpdatedAt,
   List<String> specialCareNotes = const [],
+  bool includePrerequisites = false,
 }) {
   final hasSkinBlocks = blocks.any((b) => b.section == 'skin_care');
   final effectiveProductNames =
@@ -7502,15 +7555,51 @@ OnboardingDraft _hasProductsDraft({
     skinCareProductPhotoCreatedAt: productPhotoCreatedAt,
     skinCareProductPhotoUpdatedAt: productPhotoUpdatedAt,
     skinCareSpecialCareNotes: specialCareNotes,
-    blocks: blocks,
+    eatingSetupPath: 'skip',
+    eatingSetupStep: 1,
+    blocks: includePrerequisites
+        ? [
+            BaseTimelineDraft.defaultSleepBlock(),
+            BaseTimelineDraft.defaultBathBlock(),
+            const TimelineBlockDraft(
+              id: 'meal-lunch',
+              section: 'eating',
+              title: 'Lunch',
+              startMinute: 720,
+              endMinute: 750,
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+            ...blocks,
+          ]
+        : blocks,
   );
   final fingerprint = draftBase.computeSkinCareRoutineFingerprint();
   return OnboardingDraft(
     uid: uid,
     currentStep: 7,
+    welcomeSaved: true,
+    patiencePledgeAccepted: true,
+    stepCompleted: List<bool>.generate(
+      OnboardingDraft.stepCount,
+      (index) => index < 7,
+    ),
+    lifeRole: const LifeRoleDraft(
+      lifeRole: LifeRoleDraft.notStudentNotWorkingKey,
+      exerciseLevel: 'moderate',
+      waterIntake: 'medium',
+      stressLevel: 'medium',
+      sleepQuality: 'good',
+    ),
+    bodyBasics: const BodyBasicsDraft(
+      ageRange: '25-34',
+      heightCm: 175,
+      weightKg: 70,
+      gender: 'other',
+    ),
     baseTimeline: draftBase.copyWith(
       skinCareRoutineFingerprint: fingerprint,
-      blocks: _tagSkinCareBlocks(blocks, fingerprint),
+      blocks: _tagSkinCareBlocks(draftBase.blocks, fingerprint),
     ),
   );
 }
@@ -7531,6 +7620,7 @@ OnboardingDraft _noProductsDraft({
   String? photoStatus,
   DateTime? photoCreatedAt,
   DateTime? photoUpdatedAt,
+  bool includePrerequisites = false,
 }) {
   final hasSkinBlocks = blocks.any((b) => b.section == 'skin_care');
   final effectiveWithPhoto = withPhoto || hasSkinBlocks;
@@ -7571,7 +7661,24 @@ OnboardingDraft _noProductsDraft({
     skinCareFacePhotoUpdatedAt:
         photoUpdatedAt ??
         (effectiveWithPhoto ? DateTime.utc(2026, 6, 15, 10) : null),
-    blocks: blocks,
+    eatingSetupPath: 'skip',
+    eatingSetupStep: 1,
+    blocks: includePrerequisites
+        ? [
+            BaseTimelineDraft.defaultSleepBlock(),
+            BaseTimelineDraft.defaultBathBlock(),
+            const TimelineBlockDraft(
+              id: 'meal-lunch',
+              section: 'eating',
+              title: 'Lunch',
+              startMinute: 720,
+              endMinute: 750,
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+            ...blocks,
+          ]
+        : blocks,
   );
   final recFingerprint = draftBase.computeSkinCareRecommendationFingerprint();
   final draftWithRec = draftBase.copyWith(
@@ -7581,9 +7688,28 @@ OnboardingDraft _noProductsDraft({
   return OnboardingDraft(
     uid: uid,
     currentStep: 7,
+    welcomeSaved: true,
+    patiencePledgeAccepted: true,
+    stepCompleted: List<bool>.generate(
+      OnboardingDraft.stepCount,
+      (index) => index < 7,
+    ),
+    lifeRole: const LifeRoleDraft(
+      lifeRole: LifeRoleDraft.notStudentNotWorkingKey,
+      exerciseLevel: 'moderate',
+      waterIntake: 'medium',
+      stressLevel: 'medium',
+      sleepQuality: 'good',
+    ),
+    bodyBasics: const BodyBasicsDraft(
+      ageRange: '25-34',
+      heightCm: 175,
+      weightKg: 70,
+      gender: 'other',
+    ),
     baseTimeline: draftWithRec.copyWith(
       skinCareRoutineFingerprint: routineFingerprint,
-      blocks: _tagSkinCareBlocks(blocks, routineFingerprint),
+      blocks: _tagSkinCareBlocks(draftWithRec.blocks, routineFingerprint),
     ),
   );
 }
@@ -8101,6 +8227,7 @@ class TestUploadInteractionController extends UploadInteractionController {
     required ImageSource source,
     required String uid,
     required String sourceFeature,
+    bool deferReplacement = false,
   }) async {
     startUploadCalls += 1;
     legacyProbe?.startUploadCalls += 1;
@@ -8109,13 +8236,16 @@ class TestUploadInteractionController extends UploadInteractionController {
         ? UploadedAssetPurpose.skinProducts
         : UploadedAssetPurpose.skinFace;
     final asset = result!.copyWith(purpose: purpose, ownerUid: uid);
+    final previousDurable = state[slotKey]?.durableAsset;
     state = Map.unmodifiable({
       ...state,
       slotKey: UploadSlotRuntimeState(
         slotKey: slotKey,
         purpose: purpose,
         phase: UploadInteractionPhase.uploaded,
-        durableAsset: asset,
+        durableAsset: deferReplacement ? previousDurable : asset,
+        pendingReplacementAsset: deferReplacement ? asset : null,
+        isDeferredReplacement: deferReplacement,
       ),
     });
     return asset;
@@ -8126,11 +8256,13 @@ class TestUploadInteractionController extends UploadInteractionController {
     String slotKey, {
     required String uid,
     required String sourceFeature,
+    bool deferReplacement = false,
   }) => pickAndUpload(
     slotKey,
     source: ImageSource.camera,
     uid: uid,
     sourceFeature: sourceFeature,
+    deferReplacement: deferReplacement,
   );
 
   @override
@@ -8138,11 +8270,13 @@ class TestUploadInteractionController extends UploadInteractionController {
     String slotKey, {
     required String uid,
     required String sourceFeature,
+    bool deferReplacement = false,
   }) => pickAndUpload(
     slotKey,
     source: ImageSource.gallery,
     uid: uid,
     sourceFeature: sourceFeature,
+    deferReplacement: deferReplacement,
   );
 
   @override
@@ -8150,12 +8284,50 @@ class TestUploadInteractionController extends UploadInteractionController {
     String slotKey, {
     required String uid,
     required String sourceFeature,
+    bool? deferReplacement,
   }) => pickAndUpload(
     slotKey,
     source: ImageSource.gallery,
     uid: uid,
     sourceFeature: sourceFeature,
+    deferReplacement: deferReplacement ?? false,
   );
+
+  @override
+  Future<void> commitReplacement(String slotKey, {required String uid}) async {
+    final current = state[slotKey];
+    if (current?.pendingReplacementAsset != null) {
+      state = Map.unmodifiable({
+        ...state,
+        slotKey: current!.copyWith(
+          durableAsset: current.pendingReplacementAsset,
+          clearPendingReplacementAsset: true,
+          clearDeferredReplacement: true,
+          phase: UploadInteractionPhase.uploaded,
+        ),
+      });
+    }
+  }
+
+  @override
+  Future<void> rollbackReplacement(
+    String slotKey, {
+    required String uid,
+  }) async {
+    final current = state[slotKey];
+    if (current?.pendingReplacementAsset != null) {
+      state = Map.unmodifiable({
+        ...state,
+        slotKey: current!.copyWith(
+          clearPendingReplacementAsset: true,
+          clearDeferredReplacement: true,
+          phase: current.durableAsset != null
+              ? UploadInteractionPhase.uploaded
+              : UploadInteractionPhase.empty,
+        ),
+      });
+    }
+  }
 
   @override
   Future<bool> remove(String slotKey, {required String uid}) async {
@@ -8192,6 +8364,7 @@ class DelayedTestUploadInteractionController
   @override
   Future<UploadedAsset?> pickAndUpload(
     String slotKey, {
+    bool deferReplacement = false,
     required ImageSource source,
     required String uid,
     required String sourceFeature,
@@ -8207,6 +8380,8 @@ class DelayedTestUploadInteractionController
         slotKey: slotKey,
         purpose: purpose,
         phase: UploadInteractionPhase.uploading,
+        durableAsset: state[slotKey]?.durableAsset,
+        isDeferredReplacement: deferReplacement,
       ),
     });
     final completed = await _gate.future;
@@ -8218,7 +8393,9 @@ class DelayedTestUploadInteractionController
         slotKey: slotKey,
         purpose: purpose,
         phase: UploadInteractionPhase.uploaded,
-        durableAsset: asset,
+        durableAsset: deferReplacement ? state[slotKey]?.durableAsset : asset,
+        pendingReplacementAsset: deferReplacement ? asset : null,
+        isDeferredReplacement: deferReplacement,
       ),
     });
     return asset;
@@ -8227,10 +8404,12 @@ class DelayedTestUploadInteractionController
   @override
   Future<UploadedAsset?> takePhoto(
     String slotKey, {
+    bool deferReplacement = false,
     required String uid,
     required String sourceFeature,
   }) => pickAndUpload(
     slotKey,
+    deferReplacement: deferReplacement,
     source: ImageSource.camera,
     uid: uid,
     sourceFeature: sourceFeature,
@@ -8239,10 +8418,12 @@ class DelayedTestUploadInteractionController
   @override
   Future<UploadedAsset?> chooseFromGallery(
     String slotKey, {
+    bool deferReplacement = false,
     required String uid,
     required String sourceFeature,
   }) => pickAndUpload(
     slotKey,
+    deferReplacement: deferReplacement,
     source: ImageSource.gallery,
     uid: uid,
     sourceFeature: sourceFeature,

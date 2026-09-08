@@ -151,12 +151,14 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
     String slotKey, {
     required String uid,
     required String sourceFeature,
+    bool deferReplacement = false,
   }) {
     return pickAndUpload(
       slotKey,
       source: ImageSource.camera,
       uid: uid,
       sourceFeature: sourceFeature,
+      deferReplacement: deferReplacement,
     );
   }
 
@@ -164,12 +166,14 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
     String slotKey, {
     required String uid,
     required String sourceFeature,
+    bool deferReplacement = false,
   }) {
     return pickAndUpload(
       slotKey,
       source: ImageSource.gallery,
       uid: uid,
       sourceFeature: sourceFeature,
+      deferReplacement: deferReplacement,
     );
   }
 
@@ -178,6 +182,7 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
     required ImageSource source,
     required String uid,
     required String sourceFeature,
+    bool deferReplacement = false,
   }) async {
     final current = state[slotKey];
     if (current == null) return null;
@@ -194,6 +199,7 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
       slotKey,
       (s) => s.copyWith(
         phase: UploadInteractionPhase.preparing,
+        isDeferredReplacement: deferReplacement,
         clearAttemptError: true,
       ),
     );
@@ -275,7 +281,7 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         _setSlotState(
           slotKey,
           (s) => s.copyWith(
-            phase: s.hasDurableAsset
+            phase: (s.hasDurableAsset || s.hasPendingReplacement)
                 ? (s.previewStatus == UploadedAssetPreviewStatus.available
                       ? UploadInteractionPhase.uploaded
                       : UploadInteractionPhase.restored)
@@ -294,6 +300,7 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         sourceFeature: sourceFeature,
         sessionGeneration: sessionGeneration,
         slotGeneration: slotGeneration,
+        deferReplacement: deferReplacement,
       );
     } finally {
       if ((_slotGenerations[slotKey] ?? 0) == slotGeneration) {
@@ -307,6 +314,7 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
     required XFile file,
     required String uid,
     required String sourceFeature,
+    bool deferReplacement = false,
   }) async {
     final current = state[slotKey];
     if (current == null) return null;
@@ -326,6 +334,7 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         sourceFeature: sourceFeature,
         sessionGeneration: sessionGeneration,
         slotGeneration: slotGeneration,
+        deferReplacement: deferReplacement,
       );
     } finally {
       if ((_slotGenerations[slotKey] ?? 0) == slotGeneration) {
@@ -338,9 +347,11 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
     String slotKey, {
     required String uid,
     required String sourceFeature,
+    bool? deferReplacement,
   }) async {
     final current = state[slotKey];
     if (current == null) return null;
+    final shouldDefer = deferReplacement ?? current.isDeferredReplacement;
     if (_slotLocks[slotKey] == true || current.isBusy) return null;
     if (current.cleanupPending) {
       await remove(slotKey, uid: uid);
@@ -352,9 +363,15 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         file: current.transientFile!,
         uid: uid,
         sourceFeature: sourceFeature,
+        deferReplacement: shouldDefer,
       );
     }
-    return chooseFromGallery(slotKey, uid: uid, sourceFeature: sourceFeature);
+    return chooseFromGallery(
+      slotKey,
+      uid: uid,
+      sourceFeature: sourceFeature,
+      deferReplacement: shouldDefer,
+    );
   }
 
   Future<bool> remove(String slotKey, {required String uid}) async {
@@ -382,6 +399,16 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
     );
 
     try {
+      final pendingCandidate = current.pendingReplacementAsset;
+      if (pendingCandidate != null) {
+        final idToken = await _authRepository.currentIdToken();
+        _cleanSupersededAsset(
+          uid: uid,
+          superseded: pendingCandidate,
+          idToken: idToken,
+        );
+      }
+
       UploadedAsset? asset = current.durableAsset;
       if (asset == null) {
         final pending = await _assetRepository.fetchRecentAssets(
@@ -409,7 +436,11 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         if (asset == null) {
           _setSlotState(
             slotKey,
-            (s) => s.copyWith(phase: UploadInteractionPhase.empty),
+            (s) => s.copyWith(
+              phase: UploadInteractionPhase.empty,
+              clearPendingReplacementAsset: true,
+              clearDeferredReplacement: true,
+            ),
           );
           return true;
         }
@@ -442,6 +473,8 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         (s) => s.copyWith(
           cleanupPending: true,
           clearDurableAsset: true,
+          clearPendingReplacementAsset: true,
+          clearDeferredReplacement: true,
           clearTransientFile: true,
           clearPreparedImage: true,
           clearRemotePreviewUri: true,
@@ -494,6 +527,8 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
           phase: UploadInteractionPhase.empty,
           cleanupPending: false,
           clearDurableAsset: true,
+          clearPendingReplacementAsset: true,
+          clearDeferredReplacement: true,
           clearTransientFile: true,
           clearPreparedImage: true,
           clearAttemptError: true,
@@ -522,6 +557,8 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
               : UploadInteractionPhase.restored,
           cleanupPending: terminalized,
           clearDurableAsset: terminalized,
+          clearPendingReplacementAsset: terminalized,
+          clearDeferredReplacement: terminalized,
           clearRemotePreviewUri: terminalized,
           attemptError: terminalized
               ? 'Photo removed. Private cleanup is pending. Try removing again.'
@@ -536,6 +573,66 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
     }
   }
 
+  Future<void> commitReplacement(String slotKey, {required String uid}) async {
+    final current = state[slotKey];
+    if (current == null) return;
+    final pending = current.pendingReplacementAsset;
+    if (pending == null) return;
+
+    final previousDurable = current.durableAsset;
+
+    _restoredController?.registerUploaded(pending);
+
+    _setSlotState(
+      slotKey,
+      (s) => s.copyWith(
+        phase: UploadInteractionPhase.uploaded,
+        durableAsset: pending,
+        clearPendingReplacementAsset: true,
+        clearDeferredReplacement: true,
+        previewStatus: UploadedAssetPreviewStatus.available,
+      ),
+    );
+
+    if (previousDurable != null && previousDurable.assetId != pending.assetId) {
+      final idToken = await _authRepository.currentIdToken();
+      _cleanSupersededAsset(
+        uid: uid,
+        superseded: previousDurable,
+        idToken: idToken,
+      );
+    }
+  }
+
+  Future<void> rollbackReplacement(
+    String slotKey, {
+    required String uid,
+  }) async {
+    final current = state[slotKey];
+    if (current == null) return;
+    final pending = current.pendingReplacementAsset;
+    if (pending == null) return;
+
+    _setSlotState(
+      slotKey,
+      (s) => s.copyWith(
+        phase: s.hasDurableAsset
+            ? (s.previewStatus == UploadedAssetPreviewStatus.available
+                  ? UploadInteractionPhase.uploaded
+                  : UploadInteractionPhase.restored)
+            : UploadInteractionPhase.empty,
+        clearPendingReplacementAsset: true,
+        clearDeferredReplacement: true,
+        clearAttemptError: true,
+        clearTransientFile: true,
+        clearPreparedImage: true,
+      ),
+    );
+
+    final idToken = await _authRepository.currentIdToken();
+    _cleanSupersededAsset(uid: uid, superseded: pending, idToken: idToken);
+  }
+
   void dismissAttemptError(String slotKey) {
     _setSlotState(
       slotKey,
@@ -543,7 +640,7 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         clearAttemptError: true,
         clearTransientFile: true,
         clearPreparedImage: true,
-        phase: s.hasDurableAsset
+        phase: (s.hasDurableAsset || s.hasPendingReplacement)
             ? (s.previewStatus == UploadedAssetPreviewStatus.available
                   ? UploadInteractionPhase.uploaded
                   : UploadInteractionPhase.restored)
@@ -553,11 +650,21 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
   }
 
   void resetForSignedOut() {
+    final uid = _activeUid;
+    final pendingToClean = state.values
+        .map((s) => s.pendingReplacementAsset)
+        .whereType<UploadedAsset>()
+        .toList();
     _sessionGeneration++;
     _slotGenerations.clear();
     _slotLocks.clear();
     _activeUid = null;
     state = _initialStateFromConfig(_shellConfig);
+    if (uid != null && pendingToClean.isNotEmpty) {
+      for (final asset in pendingToClean) {
+        _cleanSupersededAsset(uid: uid, superseded: asset, idToken: null);
+      }
+    }
   }
 
   Future<UploadedAsset?> _executeUploadPipeline({
@@ -568,12 +675,14 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
     required String sourceFeature,
     required int sessionGeneration,
     required int slotGeneration,
+    bool deferReplacement = false,
   }) async {
     _setSlotState(
       slotKey,
       (s) => s.copyWith(
         phase: UploadInteractionPhase.preparing,
         transientFile: pickedFile,
+        isDeferredReplacement: deferReplacement,
         clearAttemptError: true,
       ),
     );
@@ -732,6 +841,34 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
       }
 
       final previousDurableAsset = state[slotKey]?.durableAsset;
+      final existingPendingReplacement =
+          state[slotKey]?.pendingReplacementAsset;
+
+      if (deferReplacement) {
+        if (existingPendingReplacement != null &&
+            existingPendingReplacement.assetId != asset.assetId) {
+          _cleanSupersededAsset(
+            uid: uid,
+            superseded: existingPendingReplacement,
+            idToken: uploadIdToken,
+          );
+        }
+
+        _setSlotState(
+          slotKey,
+          (s) => s.copyWith(
+            phase: UploadInteractionPhase.uploaded,
+            pendingReplacementAsset: asset,
+            isDeferredReplacement: true,
+            previewStatus: UploadedAssetPreviewStatus.available,
+            clearAttemptError: true,
+            clearTransientFile: true,
+            clearPreparedImage: true,
+          ),
+        );
+
+        return asset;
+      }
 
       // Register with durable restored controller (Invariant 1)
       _restoredController?.registerUploaded(asset);
@@ -742,6 +879,8 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         (s) => s.copyWith(
           phase: UploadInteractionPhase.uploaded,
           durableAsset: asset,
+          clearPendingReplacementAsset: true,
+          clearDeferredReplacement: true,
           previewStatus: UploadedAssetPreviewStatus.available,
           clearAttemptError: true,
           clearTransientFile: true,

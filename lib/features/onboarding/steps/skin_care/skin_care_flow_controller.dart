@@ -1,11 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:optivus/state/app_state.dart';
-import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
+import 'package:optivus/features/uploads/providers/onboarding_upload_interaction_provider.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/skin_care_product_draft.dart';
+import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_generation.dart';
+import 'package:optivus/state/auth_state.dart';
 import 'skin_care_action_bridge.dart';
 import 'skin_care_flow_state.dart';
 
@@ -30,6 +31,19 @@ class PlanASnapshot {
   final String? recommendationCountryCode;
   final String? recommendationCurrencyCode;
 
+  // Photo state
+  final String? productPhotoAssetId;
+  final String? productPhotoR2Key;
+  final String? productPhotoStatus;
+  final DateTime? productPhotoCreatedAt;
+  final DateTime? productPhotoUpdatedAt;
+  final String? facePhotoAssetId;
+  final String? facePhotoR2Key;
+  final String? facePhotoStatus;
+  final DateTime? facePhotoCreatedAt;
+  final DateTime? facePhotoUpdatedAt;
+  final bool facePhotoSkipped;
+
   const PlanASnapshot({
     this.ownerUid,
     this.authGeneration = 0,
@@ -48,6 +62,17 @@ class PlanASnapshot {
     this.routineFingerprint,
     this.recommendationCountryCode,
     this.recommendationCurrencyCode,
+    this.productPhotoAssetId,
+    this.productPhotoR2Key,
+    this.productPhotoStatus,
+    this.productPhotoCreatedAt,
+    this.productPhotoUpdatedAt,
+    this.facePhotoAssetId,
+    this.facePhotoR2Key,
+    this.facePhotoStatus,
+    this.facePhotoCreatedAt,
+    this.facePhotoUpdatedAt,
+    this.facePhotoSkipped = false,
   });
 
   factory PlanASnapshot.fromBaseTimeline(
@@ -77,6 +102,53 @@ class PlanASnapshot {
       routineFingerprint: base.skinCareRoutineFingerprint,
       recommendationCountryCode: base.skinCareRecommendationCountryCode,
       recommendationCurrencyCode: base.skinCareRecommendationCurrencyCode,
+      productPhotoAssetId: base.skinCareProductPhotoAssetId,
+      productPhotoR2Key: base.skinCareProductPhotoR2Key,
+      productPhotoStatus: base.skinCareProductPhotoStatus,
+      productPhotoCreatedAt: base.skinCareProductPhotoCreatedAt,
+      productPhotoUpdatedAt: base.skinCareProductPhotoUpdatedAt,
+      facePhotoAssetId: base.skinCareFacePhotoAssetId,
+      facePhotoR2Key: base.skinCareFacePhotoR2Key,
+      facePhotoStatus: base.skinCareFacePhotoStatus,
+      facePhotoCreatedAt: base.skinCareFacePhotoCreatedAt,
+      facePhotoUpdatedAt: base.skinCareFacePhotoUpdatedAt,
+      facePhotoSkipped: base.skinCareFacePhotoSkipped,
+    );
+  }
+
+  PlanASnapshot copyWithClearedPhoto({
+    bool isProductPhoto = false,
+    bool isFacePhoto = false,
+  }) {
+    return PlanASnapshot(
+      ownerUid: ownerUid,
+      authGeneration: authGeneration,
+      productNames: productNames,
+      reviewedProducts: reviewedProducts,
+      skinType: skinType,
+      problems: problems,
+      budget: budget,
+      preference: preference,
+      desiredApplicationsPerDay: desiredApplicationsPerDay,
+      specialCareNotes: specialCareNotes,
+      productRecommendations: productRecommendations,
+      selectedProductNames: selectedProductNames,
+      suggestedProducts: suggestedProducts,
+      recommendationFingerprint: recommendationFingerprint,
+      routineFingerprint: routineFingerprint,
+      recommendationCountryCode: recommendationCountryCode,
+      recommendationCurrencyCode: recommendationCurrencyCode,
+      productPhotoAssetId: isProductPhoto ? null : productPhotoAssetId,
+      productPhotoR2Key: isProductPhoto ? null : productPhotoR2Key,
+      productPhotoStatus: isProductPhoto ? null : productPhotoStatus,
+      productPhotoCreatedAt: isProductPhoto ? null : productPhotoCreatedAt,
+      productPhotoUpdatedAt: isProductPhoto ? null : productPhotoUpdatedAt,
+      facePhotoAssetId: isFacePhoto ? null : facePhotoAssetId,
+      facePhotoR2Key: isFacePhoto ? null : facePhotoR2Key,
+      facePhotoStatus: isFacePhoto ? null : facePhotoStatus,
+      facePhotoCreatedAt: isFacePhoto ? null : facePhotoCreatedAt,
+      facePhotoUpdatedAt: isFacePhoto ? null : facePhotoUpdatedAt,
+      facePhotoSkipped: isFacePhoto ? false : facePhotoSkipped,
     );
   }
 
@@ -111,6 +183,19 @@ class PlanASnapshot {
       skinCareRecommendationCurrencyCode: recommendationCurrencyCode,
       clearSkinCareRecommendationCurrencyCode:
           recommendationCurrencyCode == null,
+      skinCareProductPhotoAssetId: productPhotoAssetId,
+      skinCareProductPhotoR2Key: productPhotoR2Key,
+      skinCareProductPhotoStatus: productPhotoStatus,
+      skinCareProductPhotoCreatedAt: productPhotoCreatedAt,
+      skinCareProductPhotoUpdatedAt: productPhotoUpdatedAt,
+      clearSkinCareProductPhoto: productPhotoAssetId == null,
+      skinCareFacePhotoAssetId: facePhotoAssetId,
+      skinCareFacePhotoR2Key: facePhotoR2Key,
+      skinCareFacePhotoStatus: facePhotoStatus,
+      skinCareFacePhotoCreatedAt: facePhotoCreatedAt,
+      skinCareFacePhotoUpdatedAt: facePhotoUpdatedAt,
+      skinCareFacePhotoSkipped: facePhotoSkipped,
+      clearSkinCareFacePhoto: facePhotoAssetId == null,
     );
   }
 }
@@ -189,6 +274,19 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
 
     if (ownerChanged) {
       ref.read(step7ActionBridgeProvider.notifier).clearAll();
+      if (state.ownerUid != null) {
+        final uploadNotifier = ref.read(
+          onboardingUploadInteractionProvider.notifier,
+        );
+        uploadNotifier.rollbackReplacement(
+          onboardingSkinProductsUploadSlot,
+          uid: state.ownerUid!,
+        );
+        uploadNotifier.rollbackReplacement(
+          onboardingSkinFaceUploadSlot,
+          uid: state.ownerUid!,
+        );
+      }
       final derived = deriveSkinCareFlowState(base, uid);
       state = SkinCareFlowStateHolder(
         state: derived,
@@ -373,6 +471,19 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
     final currentUid = authState.user?.uid ?? currentDraft.uid;
     final currentAuthGen = ref.read(authGenerationProvider);
 
+    // Rollback any pending photo replacement
+    final uploadNotifier = ref.read(
+      onboardingUploadInteractionProvider.notifier,
+    );
+    uploadNotifier.rollbackReplacement(
+      onboardingSkinProductsUploadSlot,
+      uid: currentUid,
+    );
+    uploadNotifier.rollbackReplacement(
+      onboardingSkinFaceUploadSlot,
+      uid: currentUid,
+    );
+
     final snapshot = state.planASnapshot;
     final canRestore =
         snapshot != null &&
@@ -414,7 +525,41 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
 
   /// Commits successful Plan B rebuild and returns to review.
   void commitRebuildSuccess(BaseTimelineDraft updatedBase) {
+    final currentDraft = ref.read(mockOnboardingProvider).draft;
+    final authState = ref.read(authProvider);
+    final currentUid = authState.user?.uid ?? currentDraft.uid;
+
+    // Commit promoted photo replacement
+    final uploadNotifier = ref.read(
+      onboardingUploadInteractionProvider.notifier,
+    );
+    uploadNotifier.commitReplacement(
+      onboardingSkinProductsUploadSlot,
+      uid: currentUid,
+    );
+    uploadNotifier.commitReplacement(
+      onboardingSkinFaceUploadSlot,
+      uid: currentUid,
+    );
+
     completeGeneration(isRoutineCommit: true, updatedBase: updatedBase);
+  }
+
+  /// Clears photo fields from the active PlanASnapshot so explicit privacy removal
+  /// is never resurrected on cancel or Back.
+  void clearSnapshotPhoto({
+    bool isProductPhoto = false,
+    bool isFacePhoto = false,
+  }) {
+    final snap = state.planASnapshot;
+    if (snap != null) {
+      state = state.copyWith(
+        planASnapshot: snap.copyWithClearedPhoto(
+          isProductPhoto: isProductPhoto,
+          isFacePhoto: isFacePhoto,
+        ),
+      );
+    }
   }
 
   /// Current epoch of the flow controller.
