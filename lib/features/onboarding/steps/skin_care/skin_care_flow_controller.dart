@@ -209,6 +209,7 @@ class SkinCareFlowStateHolder {
   final SkinCareFlowState? generationOrigin;
   final String? ownerUid;
   final int authGeneration;
+  final NoProductsEditStage noProductsEditStage;
 
   const SkinCareFlowStateHolder({
     required this.state,
@@ -218,6 +219,7 @@ class SkinCareFlowStateHolder {
     this.generationOrigin,
     this.ownerUid,
     this.authGeneration = 0,
+    this.noProductsEditStage = NoProductsEditStage.details,
   });
 
   SkinCareFlowStateHolder copyWith({
@@ -232,6 +234,7 @@ class SkinCareFlowStateHolder {
     String? ownerUid,
     bool clearOwner = false,
     int? authGeneration,
+    NoProductsEditStage? noProductsEditStage,
   }) {
     return SkinCareFlowStateHolder(
       state: state ?? this.state,
@@ -245,6 +248,7 @@ class SkinCareFlowStateHolder {
           : (generationOrigin ?? this.generationOrigin),
       ownerUid: clearOwner ? null : (ownerUid ?? this.ownerUid),
       authGeneration: authGeneration ?? this.authGeneration,
+      noProductsEditStage: noProductsEditStage ?? this.noProductsEditStage,
     );
   }
 }
@@ -337,16 +341,32 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
     final nextState = base.skinCareSetupPath == 'no_products'
         ? SkinCareFlowState.noProductsEditing
         : SkinCareFlowState.hasProductsEditing;
+    final noProductsEditStage =
+        nextState == SkinCareFlowState.noProductsEditing &&
+            base.skinCareProductRecommendations.isNotEmpty
+        ? NoProductsEditStage.productSelection
+        : NoProductsEditStage.details;
     state = state.copyWith(
       state: nextState,
       epoch: state.epoch + 1,
       ownerUid: uid,
       authGeneration: authGen,
+      noProductsEditStage: noProductsEditStage,
       planASnapshot: PlanASnapshot.fromBaseTimeline(
         base,
         ownerUid: uid,
         authGeneration: authGen,
       ),
+      clearError: true,
+    );
+  }
+
+  /// Moves the no-products editor to a concrete substage without mutating draft data.
+  void setNoProductsEditStage(NoProductsEditStage stage) {
+    if (state.noProductsEditStage == stage) return;
+    state = state.copyWith(
+      noProductsEditStage: stage,
+      epoch: state.epoch + 1,
       clearError: true,
     );
   }
@@ -399,6 +419,7 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
         clearSnapshot: true,
         clearGenerationOrigin: true,
         clearError: true,
+        noProductsEditStage: NoProductsEditStage.details,
       );
       ref.read(step7ActionBridgeProvider.notifier).clearAll();
       return;
@@ -422,6 +443,9 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
       epoch: state.epoch + 1,
       clearGenerationOrigin: true,
       clearError: true,
+      noProductsEditStage: nextState == SkinCareFlowState.noProductsEditing
+          ? NoProductsEditStage.productSelection
+          : state.noProductsEditStage,
     );
   }
 
@@ -503,6 +527,7 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
         clearSnapshot: true,
         clearGenerationOrigin: true,
         clearError: true,
+        noProductsEditStage: NoProductsEditStage.details,
       );
     } else {
       // Discard mismatched/stale snapshot without applying to new user/session
@@ -595,7 +620,12 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
 
       case SkinCareFlowState.noProductsProductSelection:
         // Back from product recommendations goes back to skin details form.
-        transitionTo(SkinCareFlowState.noProductsInput);
+        state = state.copyWith(
+          state: SkinCareFlowState.noProductsInput,
+          epoch: state.epoch + 1,
+          noProductsEditStage: NoProductsEditStage.details,
+          clearError: true,
+        );
         ref.read(step7ActionBridgeProvider.notifier).clearAll();
         return true;
 
@@ -641,6 +671,9 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
           epoch: state.epoch + 1,
           clearGenerationOrigin: true,
           clearError: true,
+          noProductsEditStage: target == SkinCareFlowState.noProductsEditing
+              ? state.noProductsEditStage
+              : NoProductsEditStage.details,
         );
         return true;
     }

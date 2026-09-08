@@ -822,6 +822,8 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
   }
 
   void _changeDetails() {
+    final flowState = ref.read(skinCareFlowControllerProvider).state;
+    final flowController = ref.read(skinCareFlowControllerProvider.notifier);
     final hasRoutine = ref
         .read(mockOnboardingProvider)
         .draft
@@ -838,6 +840,11 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         skinCareSkipped: false,
       ),
     );
+    if (flowState == SkinCareFlowState.noProductsEditing) {
+      flowController.setNoProductsEditStage(NoProductsEditStage.details);
+    } else {
+      flowController.transitionTo(SkinCareFlowState.noProductsInput);
+    }
     setState(() {
       _generationError = null;
     });
@@ -963,7 +970,9 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final showProductSelection =
         flowState == SkinCareFlowState.noProductsProductSelection ||
         flowState == SkinCareFlowState.noProductsGeneratingRoutine ||
-        (isEditing && base.skinCareProductRecommendations.isNotEmpty);
+        (isEditing &&
+            flowStateHolder.noProductsEditStage ==
+                NoProductsEditStage.productSelection);
     final hasProductSelection =
         !inReviewMode &&
         showProductSelection &&
@@ -992,43 +1001,46 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     if (lifecycleActive) {
       final isFindProducts =
           _lifecycle.state.operationId?.contains('find-products') ?? false;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          AiThinkingCard(
-            title: isFindProducts
-                ? 'Skin Care AI'
-                : 'Products found ✓ — Skin Care AI',
-            detail: isFindProducts
-                ? 'Finding useful products available in ${region.countryName}'
-                : 'Building your routine from product names and labels',
-            accent: isFindProducts
-                ? OptivusColors.purpleAccent
-                : OptivusColors.roseAccent,
-            state: _lifecycle.state,
-            onRetry: isFindProducts ? _findProducts : _generate,
-          ),
-          if (uploadState?.cleanupPending == true)
-            TextButton(
-              onPressed: busy
-                  ? null
-                  : () async {
-                      final resolved = await ref
-                          .read(onboardingUploadInteractionProvider.notifier)
-                          .remove(uploadState!.slotKey, uid: draft.uid);
-                      if (mounted && resolved) {
-                        setState(() {
-                          _uploadError = null;
-                        });
-                      }
-                    },
-              child: const Text('Retry private cleanup'),
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AiThinkingCard(
+              title: isFindProducts
+                  ? 'Skin Care AI'
+                  : 'Products found ✓ — Skin Care AI',
+              detail: isFindProducts
+                  ? 'Finding useful products available in ${region.countryName}'
+                  : 'Building your routine from product names and labels',
+              accent: isFindProducts
+                  ? OptivusColors.purpleAccent
+                  : OptivusColors.roseAccent,
+              state: _lifecycle.state,
+              onRetry: isFindProducts ? _findProducts : _generate,
             ),
-          if (message != null) ...[
-            const SizedBox(height: 10),
-            _SkinCareInlineMessage(message: message),
+            if (uploadState?.cleanupPending == true)
+              TextButton(
+                onPressed: busy
+                    ? null
+                    : () async {
+                        final resolved = await ref
+                            .read(onboardingUploadInteractionProvider.notifier)
+                            .remove(uploadState!.slotKey, uid: draft.uid);
+                        if (mounted && resolved) {
+                          setState(() {
+                            _uploadError = null;
+                          });
+                        }
+                      },
+                child: const Text('Retry private cleanup'),
+              ),
+            if (message != null) ...[
+              const SizedBox(height: 10),
+              _SkinCareInlineMessage(message: message),
+            ],
           ],
-        ],
+        ),
       );
     }
 
@@ -1364,6 +1376,8 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                                         children: [
                                           Text(
                                             product.displayName,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
                                               fontSize: 12,
                                               fontWeight: FontWeight.w900,
@@ -1374,6 +1388,8 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                                             const SizedBox(height: 2),
                                             Text(
                                               details,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(
                                                 fontSize: 10,
                                                 fontWeight: FontWeight.w800,
@@ -1386,12 +1402,48 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                                             const SizedBox(height: 3),
                                             Text(
                                               product.reason,
+                                              maxLines: 3,
+                                              overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(
                                                 fontSize: 10,
                                                 height: 1.3,
                                                 fontWeight: FontWeight.w700,
                                                 color:
                                                     OptivusColors.textSecondary,
+                                              ),
+                                            ),
+                                          ],
+                                          if (_shouldShowRecommendationDetails(
+                                            product,
+                                            details,
+                                          )) ...[
+                                            const SizedBox(height: 3),
+                                            TextButton(
+                                              key: ValueKey(
+                                                'onboarding-step7-product-details-${product.selectionKey}',
+                                              ),
+                                              onPressed: () =>
+                                                  _showProductRecommendationDetailsSheet(
+                                                    context,
+                                                    product,
+                                                    details,
+                                                    OptivusColors.purpleAccent,
+                                                  ),
+                                              style: TextButton.styleFrom(
+                                                foregroundColor:
+                                                    OptivusColors.purpleAccent,
+                                                padding: EdgeInsets.zero,
+                                                minimumSize: const Size(0, 26),
+                                                tapTargetSize:
+                                                    MaterialTapTargetSize
+                                                        .shrinkWrap,
+                                              ),
+                                              child: const Text(
+                                                'View details',
+                                                style: TextStyle(
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.w900,
+                                                ),
                                               ),
                                             ),
                                           ],
@@ -1456,7 +1508,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       );
     }
 
-    return Column(
+    final detailsPane = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (isEditing)
@@ -1770,5 +1822,92 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         ),
       ],
     );
+    return isEditing
+        ? Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: detailsPane,
+          )
+        : detailsPane;
   }
+}
+
+bool _shouldShowRecommendationDetails(
+  SkinCareProductRecommendationDraft product,
+  String details,
+) {
+  return product.displayName.trim().length > 56 ||
+      details.trim().length > 72 ||
+      product.reason.trim().length > 150;
+}
+
+void _showProductRecommendationDetailsSheet(
+  BuildContext context,
+  SkinCareProductRecommendationDraft product,
+  String details,
+  Color accent,
+) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) => SafeArea(
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.76,
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                product.displayName,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: OptivusColors.textPrimary,
+                ),
+              ),
+              if (details.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  details,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: accent,
+                  ),
+                ),
+              ],
+              if (product.reason.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  'Why this product',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  product.reason,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.35,
+                    fontWeight: FontWeight.w700,
+                    color: OptivusColors.textSecondary,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }

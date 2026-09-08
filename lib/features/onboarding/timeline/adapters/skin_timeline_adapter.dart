@@ -65,268 +65,21 @@ class SkinTimelineAdapter
     required BuildContext context,
     required TimelineBlockDraft block,
     required Future<bool> Function(TimelineBlockDraft updated) onSave,
+    int? Function(TimelineBlockDraft candidate)? findFreeStart,
+    bool Function(TimelineBlockDraft candidate)? hasConflict,
     Color accent = OptivusColors.roseAccent,
   }) {
-    final titleCtrl = TextEditingController(text: block.title);
-    final startTimeCtrl = TextEditingController(
-      text: onboardingTimeLabel(block.startMinute),
-    );
-    final productsCtrl = TextEditingController(
-      text: block.skincareProducts.join('\n'),
-    );
-    final stepsCtrl = TextEditingController(
-      text: block.skincareSteps.join('\n'),
-    );
-    final selectedDays = Set<int>.from(
-      block.repeatDays.isEmpty ? const [1, 2, 3, 4, 5, 6, 7] : block.repeatDays,
-    );
-    final formKey = GlobalKey<FormState>();
-
-    return TimelineEditSheetShell.show<bool>(
+    return showModalBottomSheet<bool>(
       context: context,
-      title: 'Edit Skin Care Block',
-      subtitle: 'Duration stays fixed at 15 minutes',
-      accent: accent,
-      onSave: () async {
-        if (!formKey.currentState!.validate()) return false;
-        final title = titleCtrl.text.trim();
-        if (title.isEmpty) {
-          throw Exception('Routine title is required.');
-        }
-
-        final parsedStart = _parseClockMinute(startTimeCtrl.text);
-        if (parsedStart == null) {
-          throw Exception('Use a valid start time like 7:45 AM.');
-        }
-        if (parsedStart + onboarding7SkinCareDurationMinutes > 24 * 60) {
-          throw Exception('Choose a time before midnight.');
-        }
-        if (selectedDays.isEmpty) {
-          throw Exception('Select at least one repeat day.');
-        }
-
-        final parsedProducts = productsCtrl.text
-            .split('\n')
-            .map((e) => e.trim())
-            .where((e) => e.isNotEmpty)
-            .toList();
-        final parsedSteps = stepsCtrl.text
-            .split('\n')
-            .map((e) => e.trim())
-            .where((e) => e.isNotEmpty)
-            .toList();
-
-        if (parsedProducts.isEmpty && parsedSteps.isEmpty) {
-          throw Exception('Add at least one product or routine step.');
-        }
-
-        final updated = block.copyWith(
-          title: title,
-          startMinute: parsedStart,
-          endMinute: parsedStart + onboarding7SkinCareDurationMinutes,
-          repeatDays: selectedDays.toList()..sort(),
-          skincareProducts: parsedProducts,
-          skincareSteps: parsedSteps,
-        );
-
-        return await onSave(updated);
-      },
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return Form(
-              key: formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Title
-                  const Text(
-                    'ROUTINE TITLE',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
-                      color: OptivusColors.textSecondary,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    key: const Key('timeline-edit-skin-title-field'),
-                    controller: titleCtrl,
-                    decoration: InputDecoration(
-                      hintText: 'e.g. Morning Face Routine',
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.6),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: accent.withValues(alpha: 0.5),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Start Time
-                  const Text(
-                    'START TIME (15 MIN FIXED DURATION)',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
-                      color: OptivusColors.textSecondary,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    key: const Key('timeline-edit-skin-start-time-field'),
-                    controller: startTimeCtrl,
-                    decoration: InputDecoration(
-                      hintText: 'e.g. 7:45 AM',
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.6),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.access_time_rounded),
-                        onPressed: () async {
-                          final currentMin =
-                              _parseClockMinute(startTimeCtrl.text) ?? 8 * 60;
-                          final picked = await showTimePicker(
-                            context: context,
-                            initialTime: TimeOfDay(
-                              hour: currentMin ~/ 60,
-                              minute: currentMin % 60,
-                            ),
-                          );
-                          if (picked != null) {
-                            setSheetState(() {
-                              startTimeCtrl.text = onboardingTimeLabel(
-                                picked.hour * 60 + picked.minute,
-                              );
-                            });
-                          }
-                        },
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: accent.withValues(alpha: 0.5),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Products
-                  const Text(
-                    'PRODUCTS (ONE PER LINE)',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
-                      color: OptivusColors.textSecondary,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    key: const Key('timeline-edit-skin-products-field'),
-                    controller: productsCtrl,
-                    maxLines: 3,
-                    decoration: InputDecoration(
-                      hintText: 'e.g.\nCleanser\nMoisturizer\nSunscreen',
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.6),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: accent.withValues(alpha: 0.5),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Steps
-                  const Text(
-                    'STEPS (ONE PER LINE)',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
-                      color: OptivusColors.textSecondary,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    key: const Key('timeline-edit-skin-steps-field'),
-                    controller: stepsCtrl,
-                    maxLines: 3,
-                    decoration: InputDecoration(
-                      hintText:
-                          'e.g.\nWash with lukewarm water\nApply moisturizer',
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.6),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: accent.withValues(alpha: 0.5),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Repeat Days
-                  const Text(
-                    'REPEAT DAYS',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
-                      color: OptivusColors.textSecondary,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: List.generate(7, (index) {
-                      final day = index + 1;
-                      final dayName = [
-                        'Mon',
-                        'Tue',
-                        'Wed',
-                        'Thu',
-                        'Fri',
-                        'Sat',
-                        'Sun',
-                      ][index];
-                      final isSelected = selectedDays.contains(day);
-                      return FilterChip(
-                        label: Text(dayName),
-                        selected: isSelected,
-                        selectedColor: accent.withValues(alpha: 0.25),
-                        onSelected: (selected) {
-                          setSheetState(() {
-                            if (selected) {
-                              selectedDays.add(day);
-                            } else if (selectedDays.length > 1) {
-                              selectedDays.remove(day);
-                            }
-                          });
-                        },
-                      );
-                    }),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _SkinCareBlockEditSheet(
+        block: block,
+        accent: accent,
+        onSave: onSave,
+        findFreeStart: findFreeStart,
+        hasConflict: hasConflict,
+      ),
     );
   }
 
@@ -353,4 +106,359 @@ class SkinTimelineAdapter
     }
     return h * 60 + m;
   }
+}
+
+class _SkinCareBlockEditSheet extends StatefulWidget {
+  final TimelineBlockDraft block;
+  final Future<bool> Function(TimelineBlockDraft updated) onSave;
+  final int? Function(TimelineBlockDraft candidate)? findFreeStart;
+  final bool Function(TimelineBlockDraft candidate)? hasConflict;
+  final Color accent;
+
+  const _SkinCareBlockEditSheet({
+    required this.block,
+    required this.onSave,
+    required this.accent,
+    this.findFreeStart,
+    this.hasConflict,
+  });
+
+  @override
+  State<_SkinCareBlockEditSheet> createState() =>
+      _SkinCareBlockEditSheetState();
+}
+
+class _SkinCareBlockEditSheetState extends State<_SkinCareBlockEditSheet> {
+  late final TextEditingController _titleCtrl;
+  late final TextEditingController _startTimeCtrl;
+  late final TextEditingController _productsCtrl;
+  late final TextEditingController _stepsCtrl;
+  final _formKey = GlobalKey<FormState>();
+  late final Set<int> _selectedDays;
+  String? _localError;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleCtrl = TextEditingController(text: widget.block.title);
+    _startTimeCtrl = TextEditingController(
+      text: onboardingTimeLabel(widget.block.startMinute),
+    );
+    _productsCtrl = TextEditingController(
+      text: widget.block.skincareProducts.join('\n'),
+    );
+    _stepsCtrl = TextEditingController(
+      text: widget.block.skincareSteps.join('\n'),
+    );
+    _selectedDays = {
+      ...widget.block.repeatDays.where((day) => day >= 1 && day <= 7),
+    };
+    if (_selectedDays.isEmpty) {
+      _selectedDays.addAll(const [1, 2, 3, 4, 5, 6, 7]);
+    }
+  }
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _startTimeCtrl.dispose();
+    _productsCtrl.dispose();
+    _stepsCtrl.dispose();
+    super.dispose();
+  }
+
+  TimelineBlockDraft _candidateFromInputs() {
+    final title = _titleCtrl.text.trim();
+    if (title.isEmpty) {
+      throw Exception('Routine title is required.');
+    }
+
+    final parsedStart = SkinTimelineAdapter._parseClockMinute(
+      _startTimeCtrl.text,
+    );
+    if (parsedStart == null) {
+      throw Exception('Use a valid start time like 7:45 AM.');
+    }
+    if (parsedStart + onboarding7SkinCareDurationMinutes > 24 * 60) {
+      throw Exception('Choose a time before midnight.');
+    }
+    if (_selectedDays.isEmpty) {
+      throw Exception('Select at least one repeat day.');
+    }
+
+    final parsedProducts = _productsCtrl.text
+        .split('\n')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final parsedSteps = _stepsCtrl.text
+        .split('\n')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    if (parsedProducts.isEmpty && parsedSteps.isEmpty) {
+      throw Exception('Add at least one product or routine step.');
+    }
+
+    return widget.block.copyWith(
+      title: title,
+      startMinute: parsedStart,
+      endMinute: parsedStart + onboarding7SkinCareDurationMinutes,
+      repeatDays: _selectedDays.toList()..sort(),
+      skincareProducts: parsedProducts,
+      skincareSteps: parsedSteps,
+    );
+  }
+
+  Future<bool> _save() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return false;
+    if (_localError != null) {
+      setState(() => _localError = null);
+    }
+    final candidate = _candidateFromInputs();
+    if (widget.hasConflict?.call(candidate) == true) {
+      throw Exception(
+        'That time overlaps another onboarding block. Choose a free 15-minute slot.',
+      );
+    }
+    return widget.onSave(candidate);
+  }
+
+  void _findFreeTime() {
+    final findFreeStart = widget.findFreeStart;
+    if (findFreeStart == null) return;
+    TimelineBlockDraft candidate;
+    try {
+      candidate = _candidateFromInputs();
+    } catch (error) {
+      setState(() {
+        _localError = error
+            .toString()
+            .replaceFirst(RegExp(r'^Exception:\s*'), '')
+            .trim();
+      });
+      return;
+    }
+    final freeStart = findFreeStart(candidate);
+    if (freeStart == null) {
+      setState(() {
+        _localError = 'No free 15-minute skin-care slot was found.';
+      });
+      return;
+    }
+    if (_localError != null) {
+      _localError = null;
+    }
+    setState(() {
+      _startTimeCtrl.text = onboardingTimeLabel(freeStart);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = widget.accent;
+    return TimelineEditSheetShell(
+      title: 'Edit Skin Care Block',
+      subtitle: 'Duration stays fixed at 15 minutes',
+      accent: accent,
+      saveButtonKey: const ValueKey('onboarding-step7-edit-save-button'),
+      onSave: _save,
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (_localError != null) ...[
+              Container(
+                key: const ValueKey('onboarding-step7-edit-error'),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: OptivusColors.danger.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: OptivusColors.danger.withValues(alpha: 0.22),
+                  ),
+                ),
+                child: Text(
+                  _localError!,
+                  style: const TextStyle(
+                    color: OptivusColors.danger,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+            _SkinEditLabel('ROUTINE TITLE'),
+            const SizedBox(height: 6),
+            TextFormField(
+              key: const ValueKey('onboarding-step7-edit-title-field'),
+              controller: _titleCtrl,
+              decoration: _skinEditInputDecoration(
+                accent: accent,
+                hintText: 'e.g. Morning Face Routine',
+              ),
+              validator: (value) =>
+                  value == null || value.trim().isEmpty ? 'Required' : null,
+            ),
+            const SizedBox(height: 16),
+            _SkinEditLabel('START TIME (15 MIN FIXED DURATION)'),
+            const SizedBox(height: 6),
+            TextFormField(
+              key: const ValueKey('onboarding-step7-edit-start-time-field'),
+              controller: _startTimeCtrl,
+              decoration: _skinEditInputDecoration(
+                accent: accent,
+                hintText: 'e.g. 7:45 AM',
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.access_time_rounded),
+                  onPressed: () async {
+                    final currentMin =
+                        SkinTimelineAdapter._parseClockMinute(
+                          _startTimeCtrl.text,
+                        ) ??
+                        8 * 60;
+                    final picked = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay(
+                        hour: currentMin ~/ 60,
+                        minute: currentMin % 60,
+                      ),
+                    );
+                    if (!mounted || picked == null) return;
+                    setState(() {
+                      _startTimeCtrl.text = onboardingTimeLabel(
+                        picked.hour * 60 + picked.minute,
+                      );
+                    });
+                  },
+                ),
+              ),
+              validator: (value) =>
+                  value == null || value.trim().isEmpty ? 'Required' : null,
+            ),
+            if (widget.findFreeStart != null) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                key: const ValueKey('onboarding-step7-find-free-time-button'),
+                onPressed: _findFreeTime,
+                icon: const Icon(Icons.manage_search_rounded, size: 18),
+                label: const Text('Find free time'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: accent,
+                  side: BorderSide(color: accent.withValues(alpha: 0.55)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            _SkinEditLabel('PRODUCTS (ONE PER LINE)'),
+            const SizedBox(height: 6),
+            TextFormField(
+              key: const ValueKey('onboarding-step7-edit-products-field'),
+              controller: _productsCtrl,
+              minLines: 2,
+              maxLines: 4,
+              decoration: _skinEditInputDecoration(
+                accent: accent,
+                hintText: 'e.g.\nCleanser\nMoisturizer\nSunscreen',
+              ),
+            ),
+            const SizedBox(height: 16),
+            _SkinEditLabel('STEPS (ONE PER LINE)'),
+            const SizedBox(height: 6),
+            TextFormField(
+              key: const ValueKey('onboarding-step7-edit-steps-field'),
+              controller: _stepsCtrl,
+              minLines: 2,
+              maxLines: 4,
+              decoration: _skinEditInputDecoration(
+                accent: accent,
+                hintText: 'e.g.\nWash with lukewarm water\nApply moisturizer',
+              ),
+            ),
+            const SizedBox(height: 16),
+            _SkinEditLabel('REPEAT DAYS'),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: List.generate(7, (index) {
+                final day = index + 1;
+                final dayName = const [
+                  'Mon',
+                  'Tue',
+                  'Wed',
+                  'Thu',
+                  'Fri',
+                  'Sat',
+                  'Sun',
+                ][index];
+                final isSelected = _selectedDays.contains(day);
+                return FilterChip(
+                  key: ValueKey('onboarding-step7-edit-day-$day'),
+                  label: Text(dayName),
+                  selected: isSelected,
+                  selectedColor: accent.withValues(alpha: 0.25),
+                  onSelected: (selected) {
+                    setState(() {
+                      if (selected) {
+                        _selectedDays.add(day);
+                      } else if (_selectedDays.length > 1) {
+                        _selectedDays.remove(day);
+                      }
+                    });
+                  },
+                );
+              }),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SkinEditLabel extends StatelessWidget {
+  final String text;
+
+  const _SkinEditLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w900,
+        color: OptivusColors.textSecondary,
+        letterSpacing: 0.8,
+      ),
+    );
+  }
+}
+
+InputDecoration _skinEditInputDecoration({
+  required Color accent,
+  required String hintText,
+  Widget? suffixIcon,
+}) {
+  return InputDecoration(
+    hintText: hintText,
+    filled: true,
+    fillColor: Colors.white.withValues(alpha: 0.6),
+    suffixIcon: suffixIcon,
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: accent.withValues(alpha: 0.5)),
+    ),
+  );
 }

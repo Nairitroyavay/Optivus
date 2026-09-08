@@ -20,40 +20,76 @@ class _SkinCareTimelineSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final adapter = SkinTimelineAdapter(accent: accent);
-    final entries = [for (final block in blocks) ...adapter.toEntries(block)];
+    final initialEntries = [
+      for (final block in blocks) ...adapter.toEntries(block),
+    ];
     return Expanded(
-      child: FullScreenTimelineScaffold(
-        key: const ValueKey('onboarding-step7-full-timeline'),
-        entries: entries,
-        selectedDay: selectedDay,
-        onDayChanged: onDayChanged,
-        emptyDayMessage: emptyLabel,
-        accent: accent,
-        styleBuilder: adapter.styleForEntry,
-        blockBuilder: (context, positioned) {
-          final block = blocks
-              .where((candidate) => candidate.id == positioned.entry.sourceId)
-              .first;
-          return _SkinCareBlockCard(
-            item: block,
-            baseColor: accent,
-            onEditRequested: () =>
-                _showSkinCareBlockEditSheet(context, ref, block, accent),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final footerInset =
+              OnboardingFooterMetrics.resolve(context).requiredContentInset +
+              16.0;
+          final geometryConfig = const TimelineGeometryConfig().copyWith(
+            bottomPadding: footerInset,
           );
-        },
-        headerBanner: specialCareNotes.isEmpty
-            ? null
-            : Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Your Routine',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
+          final provisionalLayout = TimelineOverlapEngine.computeLayout(
+            entries: initialEntries,
+            availableWidth: constraints.maxWidth,
+            selectedDay: selectedDay,
+            config: geometryConfig,
+          );
+          final widthsBySourceId = {
+            for (final positioned in provisionalLayout.entries)
+              positioned.entry.sourceId: positioned.width,
+          };
+          final blocksById = {for (final block in blocks) block.id: block};
+          final measuredEntries = [
+            for (final entry in initialEntries)
+              entry.copyWith(
+                minHeight: _calculateRequiredSkinCareBlockHeight(
+                  context: context,
+                  block: blocksById[entry.sourceId]!,
+                  timeLabel: TimelineUtils.formatTimeRange(
+                    entry.startMinute,
+                    entry.endMinute,
                   ),
+                  blockWidth:
+                      widthsBySourceId[entry.sourceId] ??
+                      math.max(120.0, constraints.maxWidth - 78.0),
+                ),
+              ),
+          ];
+          return FullScreenTimelineScaffold(
+            key: const ValueKey('onboarding-step7-full-timeline'),
+            entries: measuredEntries,
+            selectedDay: selectedDay,
+            onDayChanged: onDayChanged,
+            emptyDayMessage: emptyLabel,
+            accent: accent,
+            geometryConfig: geometryConfig,
+            styleBuilder: adapter.styleForEntry,
+            blockBuilder: (context, positioned) {
+              final block = blocks
+                  .where(
+                    (candidate) => candidate.id == positioned.entry.sourceId,
+                  )
+                  .first;
+              return _SkinCareBlockCard(
+                item: block,
+                baseColor: accent,
+                onEditRequested: () =>
+                    _showSkinCareBlockEditSheet(context, ref, block, accent),
+              );
+            },
+            headerBanner: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Your Routine',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+                  ),
+                ),
+                if (specialCareNotes.isNotEmpty)
                   IconButton(
                     key: const ValueKey(
                       'onboarding-step7-special-care-notes-button',
@@ -65,14 +101,16 @@ class _SkinCareTimelineSection extends ConsumerWidget {
                     ),
                     icon: Icon(Icons.info_outline_rounded, color: accent),
                   ),
-                ],
-              ),
-        onEntryTapped: (entry) {
-          final block = blocks
-              .where((candidate) => candidate.id == entry.sourceId)
-              .firstOrNull;
-          if (block == null) return;
-          _showSkinCareBlockEditSheet(context, ref, block, accent);
+              ],
+            ),
+            onEntryTapped: (entry) {
+              final block = blocks
+                  .where((candidate) => candidate.id == entry.sourceId)
+                  .firstOrNull;
+              if (block == null) return;
+              _showSkinCareBlockEditSheet(context, ref, block, accent);
+            },
+          );
         },
       ),
     );
@@ -86,454 +124,40 @@ Future<void> _showSkinCareBlockEditSheet(
   TimelineBlockDraft block,
   Color accent,
 ) async {
-  final titleCtrl = TextEditingController(text: block.title);
-  final startTimeCtrl = TextEditingController(
-    text: onboardingTimeLabel(block.startMinute),
+  await SkinTimelineAdapter.showSkinEditSheet(
+    context: context,
+    block: block,
+    accent: accent,
+    findFreeStart: (candidate) {
+      final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
+      return onboarding7FindFreeStartForSkinCareEdit(
+        baseTimeline: base,
+        block: candidate,
+        preferredStartMinute: candidate.startMinute,
+      );
+    },
+    hasConflict: (candidate) {
+      final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
+      return onboarding7SkinCareCandidateConflicts(
+        baseTimeline: base,
+        candidate: candidate,
+        excludingBlockId: block.id,
+      );
+    },
+    onSave: (candidate) async {
+      updateBaseTimelineDraft(
+        ref,
+        onboardingSkinCareStepIndex,
+        (base) => base.copyWith(
+          blocks: [
+            for (final item in base.blocks)
+              if (item.id == block.id) candidate else item,
+          ],
+        ),
+      );
+      return true;
+    },
   );
-  final productsCtrl = TextEditingController(
-    text: block.skincareProducts.join('\n'),
-  );
-  final stepsCtrl = TextEditingController(text: block.skincareSteps.join('\n'));
-  final selectedDays = <int>{
-    ...block.repeatDays.where((day) => day >= 1 && day <= 7),
-  };
-  if (selectedDays.isEmpty) selectedDays.addAll(onboardingEveryDay());
-  final formKey = GlobalKey<FormState>();
-  String? sheetError;
-
-  try {
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            void setError(String? value) {
-              setSheetState(() => sheetError = value);
-            }
-
-            TimelineBlockDraft? candidateFromInputs() {
-              final parsedStart = _parseClockMinute(startTimeCtrl.text);
-              final title = titleCtrl.text.trim();
-              final repeatDays = selectedDays.toList()..sort();
-              final parsedProducts = productsCtrl.text
-                  .split('\n')
-                  .map((e) => e.trim())
-                  .where((e) => e.isNotEmpty)
-                  .toList();
-              final parsedSteps = stepsCtrl.text
-                  .split('\n')
-                  .map((e) => e.trim())
-                  .where((e) => e.isNotEmpty)
-                  .toList();
-
-              if (title.isEmpty) {
-                setError('Routine title is required.');
-                return null;
-              }
-              if (parsedStart == null) {
-                setError('Use a valid start time like 7:45 AM.');
-                return null;
-              }
-              if (parsedStart + onboarding7SkinCareDurationMinutes > 24 * 60) {
-                setError('Choose a time before midnight.');
-                return null;
-              }
-              if (repeatDays.isEmpty) {
-                setError('Select at least one repeat day.');
-                return null;
-              }
-              if (parsedProducts.isEmpty && parsedSteps.isEmpty) {
-                setError('Add at least one product or routine step.');
-                return null;
-              }
-              return block.copyWith(
-                title: title,
-                startMinute: parsedStart,
-                endMinute: parsedStart + onboarding7SkinCareDurationMinutes,
-                repeatDays: repeatDays,
-                skincareProducts: parsedProducts,
-                skincareSteps: parsedSteps,
-              );
-            }
-
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.viewInsetsOf(ctx).bottom,
-              ),
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.95),
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(24),
-                  ),
-                  border: Border.all(color: Colors.white, width: 1.5),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 20,
-                      offset: const Offset(0, -4),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(24),
-                  ),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                    child: SingleChildScrollView(
-                      child: Form(
-                        key: formKey,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Edit skin-care block',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w900,
-                                color: Color(0xFF0F111A),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Duration stays fixed at 15 minutes.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                                color: OptivusColors.textSecondary.withValues(
-                                  alpha: 0.86,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 18),
-                            if (sheetError != null) ...[
-                              Container(
-                                key: const ValueKey(
-                                  'onboarding-step7-edit-error',
-                                ),
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: OptivusColors.danger.withValues(
-                                    alpha: 0.08,
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: OptivusColors.danger.withValues(
-                                      alpha: 0.22,
-                                    ),
-                                  ),
-                                ),
-                                child: Text(
-                                  sheetError!,
-                                  style: const TextStyle(
-                                    color: OptivusColors.danger,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                            ],
-                            SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Row(
-                                children: List.generate(7, (index) {
-                                  final dayName = [
-                                    'Mon',
-                                    'Tue',
-                                    'Wed',
-                                    'Thu',
-                                    'Fri',
-                                    'Sat',
-                                    'Sun',
-                                  ][index];
-                                  final day = index + 1;
-                                  final isSelected = selectedDays.contains(day);
-                                  return GestureDetector(
-                                    key: ValueKey(
-                                      'onboarding-step7-edit-day-$day',
-                                    ),
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: () => setSheetState(() {
-                                      if (selectedDays.contains(day)) {
-                                        selectedDays.remove(day);
-                                      } else {
-                                        selectedDays.add(day);
-                                      }
-                                    }),
-                                    child: Container(
-                                      margin: const EdgeInsets.only(right: 8),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                        vertical: 8,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: isSelected
-                                            ? accent
-                                            : Colors.white.withValues(
-                                                alpha: 0.5,
-                                              ),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: isSelected
-                                              ? accent
-                                              : const Color(0xFFE2E8F0),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        dayName,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w800,
-                                          color: isSelected
-                                              ? Colors.white
-                                              : const Color(0xFF475569),
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                }),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              key: const ValueKey(
-                                'onboarding-step7-edit-title-field',
-                              ),
-                              controller: titleCtrl,
-                              decoration: InputDecoration(
-                                labelText: 'Title',
-                                filled: true,
-                                fillColor: Colors.white,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide.none,
-                                ),
-                              ),
-                              validator: (value) =>
-                                  value == null || value.trim().isEmpty
-                                  ? 'Required'
-                                  : null,
-                            ),
-                            const SizedBox(height: 12),
-                            TextFormField(
-                              key: const ValueKey(
-                                'onboarding-step7-edit-start-time-field',
-                              ),
-                              controller: startTimeCtrl,
-                              decoration: InputDecoration(
-                                labelText: 'Start time',
-                                filled: true,
-                                fillColor: Colors.white,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide.none,
-                                ),
-                              ),
-                              validator: (value) =>
-                                  value == null || value.trim().isEmpty
-                                  ? 'Required'
-                                  : null,
-                            ),
-                            const SizedBox(height: 12),
-                            TextFormField(
-                              key: const ValueKey(
-                                'onboarding-step7-edit-products-field',
-                              ),
-                              controller: productsCtrl,
-                              minLines: 2,
-                              maxLines: 4,
-                              decoration: InputDecoration(
-                                labelText: 'Products (one per line)',
-                                filled: true,
-                                fillColor: Colors.white,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide.none,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            TextFormField(
-                              key: const ValueKey(
-                                'onboarding-step7-edit-steps-field',
-                              ),
-                              controller: stepsCtrl,
-                              minLines: 2,
-                              maxLines: 4,
-                              decoration: InputDecoration(
-                                labelText: 'Steps (one per line)',
-                                filled: true,
-                                fillColor: Colors.white,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide.none,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 18),
-                            Row(
-                              children: [
-                                OutlinedButton.icon(
-                                  key: const ValueKey(
-                                    'onboarding-step7-find-free-time-button',
-                                  ),
-                                  onPressed: () {
-                                    final candidate = candidateFromInputs();
-                                    if (candidate == null) return;
-                                    final base = ref
-                                        .read(mockOnboardingProvider)
-                                        .draft
-                                        .baseTimeline;
-                                    final freeStart =
-                                        onboarding7FindFreeStartForSkinCareEdit(
-                                          baseTimeline: base,
-                                          block: candidate,
-                                          preferredStartMinute:
-                                              candidate.startMinute,
-                                        );
-                                    if (freeStart == null) {
-                                      setError(
-                                        'No free 15-minute skin-care slot was found.',
-                                      );
-                                      return;
-                                    }
-                                    setSheetState(() {
-                                      sheetError = null;
-                                      startTimeCtrl.text = onboardingTimeLabel(
-                                        freeStart,
-                                      );
-                                    });
-                                  },
-                                  icon: const Icon(
-                                    Icons.manage_search_rounded,
-                                    size: 18,
-                                  ),
-                                  label: const Text('Find free time'),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: accent,
-                                    side: BorderSide(
-                                      color: accent.withValues(alpha: 0.55),
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                  ),
-                                ),
-                                const Spacer(),
-                                FilledButton(
-                                  key: const ValueKey(
-                                    'onboarding-step7-edit-save-button',
-                                  ),
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: accent,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 22,
-                                      vertical: 13,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                  ),
-                                  onPressed: () {
-                                    if (!formKey.currentState!.validate()) {
-                                      return;
-                                    }
-                                    final candidate = candidateFromInputs();
-                                    if (candidate == null) return;
-                                    final base = ref
-                                        .read(mockOnboardingProvider)
-                                        .draft
-                                        .baseTimeline;
-                                    final conflicts =
-                                        onboarding7SkinCareCandidateConflicts(
-                                          baseTimeline: base,
-                                          candidate: candidate,
-                                          excludingBlockId: block.id,
-                                        );
-                                    if (conflicts) {
-                                      setError(
-                                        'That time overlaps another onboarding block. Choose a free 15-minute slot.',
-                                      );
-                                      return;
-                                    }
-
-                                    updateBaseTimelineDraft(
-                                      ref,
-                                      onboardingSkinCareStepIndex,
-                                      (base) => base.copyWith(
-                                        blocks: [
-                                          for (final item in base.blocks)
-                                            if (item.id == block.id)
-                                              candidate
-                                            else
-                                              item,
-                                        ],
-                                      ),
-                                    );
-                                    Navigator.pop(ctx);
-                                  },
-                                  child: const Text(
-                                    'Save',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  } finally {
-    titleCtrl.dispose();
-    startTimeCtrl.dispose();
-    productsCtrl.dispose();
-    stepsCtrl.dispose();
-  }
-}
-
-int? _parseClockMinute(String value) {
-  final text = value.trim().toLowerCase();
-  final match = RegExp(r'^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$').firstMatch(text);
-  if (match == null) return null;
-  var hour = int.tryParse(match.group(1) ?? '');
-  final minute = int.tryParse(match.group(2) ?? '0');
-  final period = match.group(3);
-  if (hour == null || minute == null || minute < 0 || minute > 59) {
-    return null;
-  }
-  if (period != null) {
-    if (hour < 1 || hour > 12) return null;
-    if (period == 'am') {
-      hour = hour == 12 ? 0 : hour;
-    } else {
-      hour = hour == 12 ? 12 : hour + 12;
-    }
-  } else if (hour > 23) {
-    return null;
-  }
-  return hour * 60 + minute;
 }
 
 // ignore: unused_element
@@ -553,13 +177,13 @@ double _calculateRequiredSkinCareBlockHeight({
       .where((item) => item.isNotEmpty)
       .toList(growable: false);
   final contentWidth = math.max(80.0, blockWidth - 34.0);
+  final titleWidth = math.max(70.0, contentWidth - 56.0);
   var height = 20.0;
   height += _measureTextHeight(
     context: context,
     text: block.title,
     style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900),
-    width: contentWidth,
-    maxLines: 2,
+    width: titleWidth,
   );
   height += 5.0;
   height += _measureTextHeight(
@@ -567,7 +191,6 @@ double _calculateRequiredSkinCareBlockHeight({
     text: timeLabel,
     style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800),
     width: contentWidth,
-    maxLines: 1,
   );
   if (steps.isNotEmpty) {
     height += 7.0;
@@ -577,7 +200,6 @@ double _calculateRequiredSkinCareBlockHeight({
         text: '${i + 1}. ${steps[i]}',
         style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800),
         width: contentWidth,
-        maxLines: 3,
       );
       if (i != steps.length - 1) height += 4.0;
     }
@@ -589,7 +211,6 @@ double _calculateRequiredSkinCareBlockHeight({
       text: products.join(', '),
       style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700),
       width: contentWidth,
-      maxLines: 3,
     );
   }
   if (missingItems.isNotEmpty) {
@@ -600,14 +221,16 @@ double _calculateRequiredSkinCareBlockHeight({
         text: missingItems[i],
         style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800),
         width: contentWidth - 18.0,
-        maxLines: 2,
       );
       height += 10.0;
       if (i != missingItems.length - 1) height += 4.0;
     }
   }
-  height += 40.0;
-  return math.min(430.0, math.max(110.0, height));
+  if (_skinCareBlockNeedsFullDetailsAffordance(block)) {
+    height += 30.0;
+  }
+  height += 96.0;
+  return math.max(110.0, height);
 }
 
 double _measureTextHeight({
@@ -672,6 +295,7 @@ class _SkinCareBlockCard extends StatelessWidget {
       item.startMinute,
       item.endMinute,
     );
+    final showFullDetails = _skinCareBlockNeedsFullDetailsAffordance(item);
 
     return Container(
       key: ValueKey('onboarding-step7-block-${item.id}'),
@@ -702,142 +326,271 @@ class _SkinCareBlockCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: SingleChildScrollView(
-            physics: const NeverScrollableScrollPhysics(),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.max,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.face_retouching_natural_rounded,
-                        color: baseColor,
-                        size: 15,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          item.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF0F111A),
-                          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.max,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.face_retouching_natural_rounded,
+                      color: baseColor,
+                      size: 15,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        item.title,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF0F111A),
                         ),
                       ),
-                      if (onEditRequested != null) ...[
-                        const SizedBox(width: 4),
-                        SizedBox(
-                          width: 28,
-                          height: 28,
-                          child: IconButton(
-                            key: ValueKey('onboarding-step7-edit-${item.id}'),
-                            tooltip: 'Edit',
-                            padding: EdgeInsets.zero,
-                            onPressed: onEditRequested,
-                            icon: const Icon(Icons.more_horiz_rounded),
-                          ),
+                    ),
+                    if (onEditRequested != null) ...[
+                      const SizedBox(width: 4),
+                      SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: IconButton(
+                          key: ValueKey('onboarding-step7-edit-${item.id}'),
+                          tooltip: 'Edit',
+                          padding: EdgeInsets.zero,
+                          onPressed: onEditRequested,
+                          icon: const Icon(Icons.more_horiz_rounded),
                         ),
-                      ],
+                      ),
                     ],
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  timeLabel,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    color: baseColor.withValues(alpha: 0.82),
                   ),
-                  const SizedBox(height: 4),
+                ),
+                if (instructionLines.isNotEmpty) ...[
+                  const SizedBox(height: 7),
+                  for (var i = 0; i < instructionLines.length; i += 1)
+                    Padding(
+                      padding: EdgeInsets.only(
+                        bottom: i == instructionLines.length - 1 ? 0 : 4,
+                      ),
+                      child: Text(
+                        '${i + 1}. ${instructionLines[i]}',
+                        key: ValueKey('onboarding-step7-step-${item.id}-$i'),
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                          color: OptivusColors.textPrimary.withValues(
+                            alpha: 0.86,
+                          ),
+                          height: 1.24,
+                        ),
+                      ),
+                    ),
+                ],
+                if (productNames.isNotEmpty) ...[
+                  const SizedBox(height: 7),
                   Text(
-                    timeLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
+                    productNames.join(', '),
+                    style: const TextStyle(
                       fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                      color: baseColor.withValues(alpha: 0.82),
+                      fontWeight: FontWeight.w700,
+                      color: OptivusColors.textSecondary,
+                      height: 1.25,
                     ),
                   ),
-                  if (instructionLines.isNotEmpty) ...[
-                    const SizedBox(height: 7),
-                    for (var i = 0; i < instructionLines.length; i += 1)
-                      Padding(
-                        padding: EdgeInsets.only(
-                          bottom: i == instructionLines.length - 1 ? 0 : 4,
+                ],
+                if (missingItems.isNotEmpty) ...[
+                  SizedBox(height: productNames.isNotEmpty ? 5 : 7),
+                  for (var i = 0; i < missingItems.length; i += 1)
+                    Padding(
+                      padding: EdgeInsets.only(
+                        bottom: i == missingItems.length - 1 ? 0 : 4,
+                      ),
+                      child: Container(
+                        key: ValueKey(
+                          'onboarding-step7-missing-item-${item.id}-$i',
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: OptivusColors.danger.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(9),
+                          border: Border.all(
+                            color: OptivusColors.danger.withValues(alpha: 0.22),
+                          ),
                         ),
                         child: Text(
-                          '${i + 1}. ${instructionLines[i]}',
-                          key: ValueKey('onboarding-step7-step-${item.id}-$i'),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
+                          missingItems[i],
                           style: TextStyle(
-                            fontSize: 11.5,
+                            fontSize: 10.5,
                             fontWeight: FontWeight.w800,
-                            color: OptivusColors.textPrimary.withValues(
-                              alpha: 0.86,
-                            ),
-                            height: 1.24,
+                            color: OptivusColors.danger.withValues(alpha: 0.92),
+                            height: 1.2,
                           ),
                         ),
-                      ),
-                  ],
-                  if (productNames.isNotEmpty) ...[
-                    const SizedBox(height: 7),
-                    Text(
-                      productNames.join(', '),
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        color: OptivusColors.textSecondary,
-                        height: 1.25,
                       ),
                     ),
-                  ],
-                  if (missingItems.isNotEmpty) ...[
-                    SizedBox(height: productNames.isNotEmpty ? 5 : 7),
-                    for (var i = 0; i < missingItems.length; i += 1)
-                      Padding(
-                        padding: EdgeInsets.only(
-                          bottom: i == missingItems.length - 1 ? 0 : 4,
-                        ),
-                        child: Container(
-                          key: ValueKey(
-                            'onboarding-step7-missing-item-${item.id}-$i',
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: OptivusColors.danger.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(9),
-                            border: Border.all(
-                              color: OptivusColors.danger.withValues(
-                                alpha: 0.22,
-                              ),
-                            ),
-                          ),
-                          child: Text(
-                            missingItems[i],
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w800,
-                              color: OptivusColors.danger.withValues(
-                                alpha: 0.92,
-                              ),
-                              height: 1.2,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
                 ],
-              ),
+                if (showFullDetails) ...[
+                  const SizedBox(height: 6),
+                  TextButton(
+                    key: ValueKey('onboarding-step7-full-details-${item.id}'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: baseColor,
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 28),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () => _showSkinCareBlockDetailsSheet(
+                      context,
+                      item,
+                      baseColor,
+                    ),
+                    child: const Text(
+                      'View full details',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+bool _skinCareBlockNeedsFullDetailsAffordance(TimelineBlockDraft item) {
+  final productsLength = item.skincareProducts.join(' ').trim().length;
+  final stepsLength = item.skincareSteps.join(' ').trim().length;
+  final missingLength = item.skincareMissingItems.join(' ').trim().length;
+  return item.title.trim().length > 70 ||
+      productsLength > 180 ||
+      stepsLength > 260 ||
+      missingLength > 120 ||
+      item.skincareSteps.length > 5 ||
+      item.skincareProducts.length > 5;
+}
+
+void _showSkinCareBlockDetailsSheet(
+  BuildContext context,
+  TimelineBlockDraft item,
+  Color accent,
+) {
+  final timeLabel = TimelineUtils.formatTimeRange(
+    item.startMinute,
+    item.endMinute,
+  );
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) => SafeArea(
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.82,
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: OptivusColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                timeLabel,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: accent,
+                ),
+              ),
+              if (item.skincareSteps.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const _SkinCareDetailsHeading('Steps'),
+                for (var i = 0; i < item.skincareSteps.length; i += 1)
+                  _SkinCareDetailsLine('${i + 1}. ${item.skincareSteps[i]}'),
+              ],
+              if (item.skincareProducts.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const _SkinCareDetailsHeading('Products'),
+                for (final product in item.skincareProducts)
+                  _SkinCareDetailsLine(product),
+              ],
+              if (item.skincareMissingItems.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const _SkinCareDetailsHeading('Missing Items'),
+                for (final product in item.skincareMissingItems)
+                  _SkinCareDetailsLine(product),
+              ],
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _SkinCareDetailsHeading extends StatelessWidget {
+  final String text;
+
+  const _SkinCareDetailsHeading(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w900,
+        color: OptivusColors.textPrimary,
+      ),
+    );
+  }
+}
+
+class _SkinCareDetailsLine extends StatelessWidget {
+  final String text;
+
+  const _SkinCareDetailsLine(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 12,
+          height: 1.35,
+          fontWeight: FontWeight.w700,
+          color: OptivusColors.textSecondary,
         ),
       ),
     );

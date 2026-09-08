@@ -15,6 +15,7 @@ class TimelineEditSheetShell extends StatefulWidget {
   final String saveLabel;
   final Color accent;
   final String? initialError;
+  final Key? saveButtonKey;
 
   const TimelineEditSheetShell({
     super.key,
@@ -26,6 +27,7 @@ class TimelineEditSheetShell extends StatefulWidget {
     this.saveLabel = 'Save',
     this.accent = OptivusColors.brandAccent,
     this.initialError,
+    this.saveButtonKey,
   });
 
   /// Helper to display this edit sheet in a modal bottom sheet.
@@ -39,6 +41,7 @@ class TimelineEditSheetShell extends StatefulWidget {
     String saveLabel = 'Save',
     Color accent = OptivusColors.brandAccent,
     String? initialError,
+    Key? saveButtonKey,
   }) {
     return showModalBottomSheet<T>(
       context: context,
@@ -52,6 +55,7 @@ class TimelineEditSheetShell extends StatefulWidget {
         saveLabel: saveLabel,
         accent: accent,
         initialError: initialError,
+        saveButtonKey: saveButtonKey,
         child: builder(ctx),
       ),
     );
@@ -93,9 +97,12 @@ class _TimelineEditSheetShellState extends State<TimelineEditSheetShell> {
       }
     } catch (e) {
       if (!mounted) return;
-      final raw =
-          e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '').trim();
-      final isCleanValidation = raw.isNotEmpty &&
+      final raw = e
+          .toString()
+          .replaceFirst(RegExp(r'^Exception:\s*'), '')
+          .trim();
+      final isCleanValidation =
+          raw.isNotEmpty &&
           !raw.toLowerCase().contains('raw_') &&
           !raw.toLowerCase().contains('secret') &&
           !raw.toLowerCase().contains('token') &&
@@ -223,7 +230,9 @@ class _TimelineEditSheetShellState extends State<TimelineEditSheetShell> {
 
                         // Save button
                         ElevatedButton(
-                          key: const Key('timeline-edit-save-button'),
+                          key:
+                              widget.saveButtonKey ??
+                              const Key('timeline-edit-save-button'),
                           onPressed: _isSaving ? null : _handleSave,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: widget.accent,

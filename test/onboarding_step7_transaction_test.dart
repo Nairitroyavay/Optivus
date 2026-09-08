@@ -419,8 +419,17 @@ void main() {
           container.read(skinCareFlowControllerProvider).state,
           SkinCareFlowState.noProductsEditing,
         );
+        expect(
+          container.read(skinCareFlowControllerProvider).noProductsEditStage,
+          NoProductsEditStage.productSelection,
+        );
 
         // Change details and trigger find products
+        controller.setNoProductsEditStage(NoProductsEditStage.details);
+        expect(
+          container.read(skinCareFlowControllerProvider).noProductsEditStage,
+          NoProductsEditStage.details,
+        );
         controller.startGeneration(SkinCareFlowState.noProductsFindingProducts);
         expect(
           container.read(skinCareFlowControllerProvider).generationOrigin,
@@ -473,6 +482,10 @@ void main() {
 
         final stateAfterFind = container.read(skinCareFlowControllerProvider);
         expect(stateAfterFind.state, SkinCareFlowState.noProductsEditing);
+        expect(
+          stateAfterFind.noProductsEditStage,
+          NoProductsEditStage.productSelection,
+        );
         expect(stateAfterFind.planASnapshot, isNotNull);
 
         // Plan A blocks are still preserved in draft

@@ -1314,6 +1314,54 @@ void main() {
         expect(draft.baseTimeline.conflictAcceptances, isEmpty);
       },
     );
+
+    testWidgets(
+      'AF. Custom blockBuilder still forwards whole-card taps through onEntryTapped',
+      (tester) async {
+        final entries = [
+          const TimelineEntry(
+            id: 'custom-skin',
+            sourceId: 'skin-src',
+            startMinute: 8 * 60,
+            endMinute: 8 * 60 + 15,
+            repeatDays: [1],
+            title: 'Custom Skin Routine',
+            category: TimelineCategory.skinCare,
+            minHeight: 96,
+          ),
+        ];
+
+        final tappedIds = <String>[];
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: FullScreenTimelineScaffold(
+                entries: entries,
+                selectedDay: 1,
+                onDayChanged: (_) {},
+                styleBuilder: (e) =>
+                    TimelineEntryStyle.defaultForCategory(e.category),
+                onEntryTapped: (e) => tappedIds.add(e.id),
+                blockBuilder: (context, positioned) => Container(
+                  key: const ValueKey('custom-skin-card'),
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.all(12),
+                  color: Colors.white,
+                  child: const Text('Custom Skin Routine'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const ValueKey('custom-skin-card')));
+        await tester.pumpAndSettle();
+
+        expect(tappedIds, ['custom-skin']);
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 
   group('AH-F018 Lifecycle & Back/Re-entry Invariant Verification', () {
@@ -1446,7 +1494,13 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('Your Routine'), findsNothing);
+        expect(find.text('Your Routine'), findsOneWidget);
+        expect(
+          find.byKey(
+            const ValueKey('onboarding-step7-special-care-notes-button'),
+          ),
+          findsNothing,
+        );
         expect(find.text('Morning Routine'), findsOneWidget);
       },
     );

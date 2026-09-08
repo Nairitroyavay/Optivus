@@ -45,6 +45,9 @@ enum SkinCareFlowState {
       this == SkinCareFlowState.noProductsEditing;
 }
 
+/// Explicit transient page within the no-products editor.
+enum NoProductsEditStage { details, productSelection }
+
 /// Pure state derivation function that deterministically reconstructs the
 /// appropriate [SkinCareFlowState] from persisted [BaseTimelineDraft].
 SkinCareFlowState deriveSkinCareFlowState(BaseTimelineDraft base, String uid) {

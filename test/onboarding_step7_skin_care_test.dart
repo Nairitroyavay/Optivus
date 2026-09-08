@@ -1629,7 +1629,11 @@ void main() {
       find.byKey(const ValueKey('onboarding-step7-full-timeline')),
       findsOneWidget,
     );
-    expect(find.text('Your Routine'), findsNothing);
+    expect(find.text('Your Routine'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('onboarding-step7-special-care-notes-button')),
+      findsNothing,
+    );
     final timelineRect = tester.getRect(
       find.byKey(const ValueKey('onboarding-step7-full-timeline')),
     );
@@ -3035,6 +3039,116 @@ void main() {
     expect(updated.startMinute, 455);
     expect(updated.endMinute, 470);
   });
+
+  testWidgets(
+    '17b. Skin-care edit sheet survives save, cancel, system back, and repeated teardown',
+    (tester) async {
+      useAndroidWidth(tester);
+      const skinBlock = TimelineBlockDraft(
+        id: 'skin-runtime-edit',
+        section: 'skin_care',
+        title: 'Morning Skin Care',
+        startMinute: 455,
+        endMinute: 470,
+        repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        blockType: TimelineBlockDraft.softBlockKey,
+        skincareProducts: ['Cleanser', 'Sunscreen'],
+        skincareSteps: ['Cleanse', 'Apply sunscreen'],
+      );
+
+      await tester.pumpWidget(
+        buildTestWidget(draft: _hasProductsDraft(blocks: const [skinBlock])),
+      );
+      await tester.pumpAndSettle();
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      );
+
+      Future<void> openEditor() async {
+        await tester.tap(
+          find.byKey(const ValueKey('onboarding-step7-edit-skin-runtime-edit')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('onboarding-step7-edit-title-field')),
+          findsOneWidget,
+        );
+      }
+
+      void expectNoModalException() {
+        final exception = tester.takeException();
+        expect(exception, isNull);
+      }
+
+      await openEditor();
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-edit-title-field')),
+        'Updated Morning Skin Care',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-edit-start-time-field')),
+        '7:45 AM',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-edit-products-field')),
+        'Cleanser\nVery Long Sunscreen',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-edit-steps-field')),
+        'Cleanse\nApply sunscreen generously',
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-edit-save-button')),
+      );
+      await tester.pumpAndSettle();
+      expectNoModalException();
+
+      var updated = container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline
+          .blocks
+          .singleWhere((block) => block.id == 'skin-runtime-edit');
+      expect(updated.title, 'Updated Morning Skin Care');
+      expect(updated.startMinute, 465);
+      expect(updated.skincareProducts, ['Cleanser', 'Very Long Sunscreen']);
+      expect(updated.skincareSteps, ['Cleanse', 'Apply sunscreen generously']);
+
+      await openEditor();
+      await tester.tap(find.byKey(const Key('timeline-edit-cancel-button')));
+      await tester.pumpAndSettle();
+      expectNoModalException();
+
+      await openEditor();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expectNoModalException();
+
+      for (var i = 0; i < 5; i += 1) {
+        await openEditor();
+        if (i.isEven) {
+          await tester.tap(
+            find.byKey(const ValueKey('onboarding-step7-edit-save-button')),
+          );
+        } else {
+          await tester.tap(
+            find.byKey(const Key('timeline-edit-cancel-button')),
+          );
+        }
+        await tester.pumpAndSettle();
+        expectNoModalException();
+      }
+
+      await openEditor();
+      expect(find.text('Updated Morning Skin Care'), findsWidgets);
+      expect(find.text('7:45 AM'), findsOneWidget);
+      expect(find.text('Very Long Sunscreen'), findsOneWidget);
+      expect(find.text('Apply sunscreen generously'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('timeline-edit-cancel-button')));
+      await tester.pumpAndSettle();
+      expectNoModalException();
+    },
+  );
 
   testWidgets(
     '18. AI returns 2 plans, selecting 3 without unsafe warning shows fewer-routines error',

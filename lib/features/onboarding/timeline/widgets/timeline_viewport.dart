@@ -35,6 +35,7 @@ class TimelineViewport extends StatefulWidget {
 class _TimelineViewportState extends State<TimelineViewport> {
   late final ScrollController _scrollController;
   bool _internalController = false;
+  bool _scrollScheduled = false;
 
   @override
   void initState() {
@@ -48,8 +49,30 @@ class _TimelineViewportState extends State<TimelineViewport> {
 
     if (widget.autoScrollToFirstEntry &&
         widget.layoutResult.entries.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToFirst());
+      _scheduleScrollToFirst();
     }
+  }
+
+  @override
+  void didUpdateWidget(covariant TimelineViewport oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.autoScrollToFirstEntry || widget.layoutResult.entries.isEmpty) {
+      return;
+    }
+    if (_layoutIdentity(widget.layoutResult) !=
+        _layoutIdentity(oldWidget.layoutResult)) {
+      _scheduleScrollToFirst();
+    }
+  }
+
+  void _scheduleScrollToFirst() {
+    if (_scrollScheduled) return;
+    _scrollScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollScheduled = false;
+      if (!mounted) return;
+      _scrollToFirst();
+    });
   }
 
   void _scrollToFirst() {
@@ -60,13 +83,21 @@ class _TimelineViewportState extends State<TimelineViewport> {
         .map((e) => e.top)
         .reduce(math.min);
     final target = math.max(0.0, firstTop - 40.0);
-    if (target > 0) {
+    if ((_scrollController.offset - target).abs() > 1.0) {
       _scrollController.animateTo(
         target,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOutCubic,
       );
     }
+  }
+
+  String _layoutIdentity(TimelineLayoutResult result) {
+    return result.entries
+        .map((entry) {
+          return '${entry.id}:${entry.top.toStringAsFixed(2)}:${entry.height.toStringAsFixed(2)}';
+        })
+        .join('|');
   }
 
   @override
@@ -129,14 +160,18 @@ class _TimelineViewportState extends State<TimelineViewport> {
                       left: positioned.left,
                       width: positioned.width,
                       height: positioned.height,
-                      child:
-                          widget.blockBuilder?.call(context, positioned) ??
-                          TimelineBlockCard(
-                            positioned: positioned,
-                            style: widget.styleBuilder(positioned.entry),
-                            onTap: () =>
-                                widget.onEntryTapped?.call(positioned.entry),
-                          ),
+                      child: _TimelineEntryTapRegion(
+                        onTap: widget.onEntryTapped == null
+                            ? null
+                            : () =>
+                                  widget.onEntryTapped?.call(positioned.entry),
+                        child:
+                            widget.blockBuilder?.call(context, positioned) ??
+                            TimelineBlockCard(
+                              positioned: positioned,
+                              style: widget.styleBuilder(positioned.entry),
+                            ),
+                      ),
                     ),
                 ],
               ),
@@ -144,6 +179,23 @@ class _TimelineViewportState extends State<TimelineViewport> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _TimelineEntryTapRegion extends StatelessWidget {
+  final VoidCallback? onTap;
+  final Widget child;
+
+  const _TimelineEntryTapRegion({required this.onTap, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    if (onTap == null) return child;
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: onTap,
+      child: child,
     );
   }
 }

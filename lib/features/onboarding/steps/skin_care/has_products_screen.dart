@@ -972,7 +972,7 @@ class _HasProductsModeScreenState
     if (lifecycleActive) {
       final isPhotoAnalyze =
           _inputSource == _ProductInputSource.photo && !photoProductsReviewed;
-      return Column(
+      final setupPane = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           AiThinkingCard(
@@ -1006,6 +1006,12 @@ class _HasProductsModeScreenState
           ],
         ],
       );
+      return isEditing
+          ? Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: setupPane,
+            )
+          : setupPane;
     }
 
     if (flowState != SkinCareFlowState.hasProductsReview) {
