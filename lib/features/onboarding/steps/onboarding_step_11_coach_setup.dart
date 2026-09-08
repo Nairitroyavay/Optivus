@@ -40,7 +40,7 @@ class _OnboardingCoachSetupStepState
   void initState() {
     super.initState();
     // We can't use ref.read here safely without Future.microtask if it's a provider that hasn't initialized,
-    // but mockOnboardingProvider is already initialized since we are in Step 8.
+    // but mockOnboardingProvider is already initialized since we are in Step 11.
     // However, in Riverpod it's safer to read it in didChangeDependencies or read it here if it's synchronous.
     // Since mockOnboardingProvider is a StateNotifierProvider, we can read it.
   }

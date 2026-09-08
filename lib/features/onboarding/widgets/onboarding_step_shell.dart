@@ -7,6 +7,7 @@ import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_theme.dart';
 import 'package:optivus/core/widgets/recoverable_error_views.dart';
+import 'package:optivus/features/onboarding/onboarding_step_id.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_action_bar.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_save_button.dart';
 
@@ -402,7 +403,7 @@ class OnboardingStepShell extends StatelessWidget {
         actions ??
         <OnboardingAction>[
           OnboardingAction(
-            kind: currentPage == 14
+            kind: currentPage == OnboardingStepId.todayReady.index
                 ? OnboardingActionKind.enterOptivus
                 : OnboardingActionKind.next,
             label: ctaLabel,
@@ -534,7 +535,9 @@ class OnboardingStepShell extends StatelessWidget {
                       child: OnboardingActionBar(
                         actions: resolvedActions,
                         reserveHiddenSpace: true,
-                        accessory: currentPage == 0 && showPrimaryCta
+                        accessory:
+                            currentPage == OnboardingStepId.welcome.index &&
+                                showPrimaryCta
                             ? const Padding(
                                 padding: EdgeInsets.only(top: 12),
                                 child: Text(
@@ -561,4 +564,3 @@ class OnboardingStepShell extends StatelessWidget {
     );
   }
 }
-

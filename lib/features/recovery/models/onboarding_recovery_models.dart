@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/features/onboarding/onboarding_step_id.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/services/onboarding_resume_validator.dart';
@@ -160,7 +161,11 @@ class RebuildBundleFromVerifiedDraftAction extends OnboardingRecoveryAction {
     final isDraftValid =
         draft.onboardingCompleted &&
         firstMissingStep == -1 &&
-        draft.validateStep(14, draft.stepCompleted) == null;
+        draft.validateStep(
+              OnboardingStepId.todayReady.index,
+              draft.stepCompleted,
+            ) ==
+            null;
     if (isDraftValid) {
       final bundle = OnboardingCompletionService.buildBundle(draft);
       await repo.saveCompletionBundle(bundle);

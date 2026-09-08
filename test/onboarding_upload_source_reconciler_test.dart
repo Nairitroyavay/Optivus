@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/features/onboarding/onboarding_step_id.dart';
 import 'package:optivus/models/skin_care_product_draft.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/upload_source_identity.dart';
@@ -80,7 +81,7 @@ void main() {
           final product = path == 'has_products';
           final draft = OnboardingDraft(
             uid: uid,
-            currentStep: 14,
+            currentStep: OnboardingStepId.todayReady.index,
             stepCompleted: List.filled(OnboardingDraft.stepCount, true),
             baseTimeline: BaseTimelineDraft(
               skinCareSetupPath: path,
@@ -155,8 +156,15 @@ void main() {
           expect(base.skinCareRoutineFingerprint, isNull);
           expect(base.blocks, isEmpty);
           expect(base.skinCareProductNames, 'Editable text');
-          expect(result.reconciledDraft.stepCompleted[7], isFalse);
-          expect(result.reconciledDraft.stepDirty[7], isTrue);
+          expect(
+            result.reconciledDraft
+                .stepCompleted[OnboardingStepId.skinCare.index],
+            isFalse,
+          );
+          expect(
+            result.reconciledDraft.stepDirty[OnboardingStepId.skinCare.index],
+            isTrue,
+          );
           if (!product) {
             expect(base.skinCareProductRecommendations, isEmpty);
             expect(base.skinCareSelectedProductNames, isEmpty);
@@ -499,7 +507,7 @@ void main() {
 
         final draft = OnboardingDraft(
           uid: uid,
-          currentStep: 8,
+          currentStep: OnboardingStepId.badHabits.index,
           stepCompleted: const [
             true,
             true,
@@ -564,13 +572,33 @@ void main() {
         );
 
         expect(result.changed, isTrue);
-        expect(result.earliestAffectedStep, equals(4));
+        expect(
+          result.earliestAffectedStep,
+          equals(OnboardingStepId.classesJob.index),
+        );
         expect(result.reasonCodes, contains('step4_class_source_stale'));
 
         final reconciled = result.reconciledDraft;
-        expect(reconciled.currentStep, equals(4));
-        expect(reconciled.stepCompleted[4], isFalse);
-        expect(reconciled.stepDirty[4], isTrue);
+        expect(
+          reconciled.currentStep,
+          equals(OnboardingStepId.classesJob.index),
+        );
+        expect(
+          reconciled.stepCompleted[OnboardingStepId.classesJob.index],
+          isFalse,
+        );
+        expect(
+          reconciled.stepDirty[OnboardingStepId.classesJob.index],
+          isTrue,
+        );
+        expect(
+          reconciled.stepCompleted[OnboardingStepId.todayReady.index],
+          isFalse,
+        );
+        expect(
+          reconciled.stepDirty[OnboardingStepId.todayReady.index],
+          isTrue,
+        );
 
         // Class AI blocks removed
         expect(
@@ -614,7 +642,7 @@ void main() {
 
         final draft = OnboardingDraft(
           uid: uid,
-          currentStep: 6,
+          currentStep: OnboardingStepId.fixedSchedule.index,
           stepCompleted: const [
             true,
             true,
@@ -679,7 +707,10 @@ void main() {
         );
 
         expect(result.changed, isTrue);
-        expect(result.earliestAffectedStep, equals(4));
+        expect(
+          result.earliestAffectedStep,
+          equals(OnboardingStepId.classesJob.index),
+        );
         expect(result.reasonCodes, contains('step4_work_source_stale'));
 
         final reconciled = result.reconciledDraft;
@@ -710,7 +741,7 @@ void main() {
 
         final draft = OnboardingDraft(
           uid: uid,
-          currentStep: 6,
+          currentStep: OnboardingStepId.fixedSchedule.index,
           lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
           baseTimeline: BaseTimelineDraft(
             classLogicalAssetId: workW1.assetId,
@@ -740,7 +771,10 @@ void main() {
         );
 
         expect(result.changed, isTrue);
-        expect(result.earliestAffectedStep, equals(4));
+        expect(
+          result.earliestAffectedStep,
+          equals(OnboardingStepId.classesJob.index),
+        );
 
         final reconciled = result.reconciledDraft;
         expect(
@@ -758,7 +792,7 @@ void main() {
       );
       final draft = OnboardingDraft(
         uid: uid,
-        currentStep: 5,
+        currentStep: OnboardingStepId.eating.index,
         lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
         baseTimeline: BaseTimelineDraft(
           classLogicalAssetId: classA.assetId,
@@ -788,7 +822,10 @@ void main() {
       );
 
       expect(result.changed, isTrue);
-      expect(result.earliestAffectedStep, equals(4));
+        expect(
+          result.earliestAffectedStep,
+          equals(OnboardingStepId.classesJob.index),
+        );
       expect(result.reconciledDraft.baseTimeline.classLogicalAssetId, isNull);
     });
 
@@ -799,7 +836,7 @@ void main() {
       );
       final draft = OnboardingDraft(
         uid: uid,
-        currentStep: 5,
+        currentStep: OnboardingStepId.eating.index,
         lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.workingKey),
         baseTimeline: BaseTimelineDraft(
           workLogicalAssetId: workA.assetId,
@@ -829,7 +866,10 @@ void main() {
       );
 
       expect(result.changed, isTrue);
-      expect(result.earliestAffectedStep, equals(4));
+        expect(
+          result.earliestAffectedStep,
+          equals(OnboardingStepId.classesJob.index),
+        );
       expect(result.reconciledDraft.baseTimeline.workLogicalAssetId, isNull);
     });
 
@@ -842,7 +882,7 @@ void main() {
         );
         final draft = OnboardingDraft(
           uid: uid,
-          currentStep: 6,
+          currentStep: OnboardingStepId.fixedSchedule.index,
           baseTimeline: BaseTimelineDraft(
             eatingSetupPath: 'has_routine',
             pendingFutureImports: [
@@ -898,7 +938,7 @@ void main() {
 
         final draft = OnboardingDraft(
           uid: uid,
-          currentStep: 8,
+          currentStep: OnboardingStepId.badHabits.index,
           stepCompleted: const [
             true,
             true,
@@ -953,13 +993,25 @@ void main() {
         );
 
         expect(result.changed, isTrue);
-        expect(result.earliestAffectedStep, equals(5));
+        expect(
+          result.earliestAffectedStep,
+          equals(OnboardingStepId.eating.index),
+        );
         expect(result.reasonCodes, contains('step5_eating_source_stale'));
 
         final reconciled = result.reconciledDraft;
-        expect(reconciled.currentStep, equals(5));
-        expect(reconciled.stepCompleted[5], isFalse);
-        expect(reconciled.stepDirty[5], isTrue);
+        expect(
+          reconciled.currentStep,
+          equals(OnboardingStepId.eating.index),
+        );
+        expect(
+          reconciled.stepCompleted[OnboardingStepId.eating.index],
+          isFalse,
+        );
+        expect(
+          reconciled.stepDirty[OnboardingStepId.eating.index],
+          isTrue,
+        );
 
         // Old Eating AI block removed
         expect(
@@ -973,8 +1025,14 @@ void main() {
         );
         expect(importB, isNull);
         expect(reconciled.baseTimeline.eatingSetupPath, 'has_routine');
-        expect(reconciled.stepCompleted[14], isFalse);
-        expect(reconciled.stepDirty[14], isTrue);
+        expect(
+          reconciled.stepCompleted[OnboardingStepId.todayReady.index],
+          isFalse,
+        );
+        expect(
+          reconciled.stepDirty[OnboardingStepId.todayReady.index],
+          isTrue,
+        );
         expect(reconciled.baseTimeline.validateEatingSetup(), isNotNull);
 
         final second = OnboardingUploadSourceReconciler.reconcile(
@@ -996,7 +1054,7 @@ void main() {
         );
         final draft = OnboardingDraft(
           uid: uid,
-          currentStep: 6,
+        currentStep: OnboardingStepId.fixedSchedule.index,
           baseTimeline: BaseTimelineDraft(
             eatingSetupPath: 'has_routine',
             pendingFutureImports: [
@@ -1034,7 +1092,10 @@ void main() {
         );
 
         expect(result.changed, isTrue);
-        expect(result.earliestAffectedStep, equals(5));
+        expect(
+          result.earliestAffectedStep,
+          equals(OnboardingStepId.eating.index),
+        );
         expect(result.reconciledDraft.baseTimeline.blocks, isEmpty);
         expect(
           result.reconciledDraft.baseTimeline.latestImportForSection('Eating'),
@@ -1046,7 +1107,7 @@ void main() {
     test('13. Step5 create path: no Eating upload -> unaffected', () {
       final draft = OnboardingDraft(
         uid: uid,
-        currentStep: 6,
+        currentStep: OnboardingStepId.fixedSchedule.index,
         baseTimeline: BaseTimelineDraft(
           eatingSetupPath: 'create',
           blocks: [
@@ -1089,7 +1150,7 @@ void main() {
 
       final draft = OnboardingDraft(
         uid: uid,
-        currentStep: 8,
+          currentStep: OnboardingStepId.badHabits.index,
         lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
         baseTimeline: BaseTimelineDraft(
           classLogicalAssetId: classA.assetId,
@@ -1353,7 +1414,7 @@ void main() {
         );
         final draft = OnboardingDraft(
           uid: uid,
-          currentStep: 10,
+          currentStep: OnboardingStepId.identityGoals.index,
           baseTimeline: BaseTimelineDraft(
             skinCareSetupPath: 'has_products',
             skinCareProductPhotoAssetId: productA.assetId,
@@ -1397,7 +1458,7 @@ void main() {
       final completed = List<bool>.filled(OnboardingDraft.stepCount, true);
       final draft = OnboardingDraft(
         uid: uid,
-        currentStep: 14,
+        currentStep: OnboardingStepId.todayReady.index,
         stepCompleted: completed,
         baseTimeline: BaseTimelineDraft(
           skinCareSetupPath: 'no_products',
@@ -1431,11 +1492,26 @@ void main() {
       );
 
       expect(result.changed, isTrue);
-      expect(result.earliestAffectedStep, 7);
+      expect(result.earliestAffectedStep, OnboardingStepId.skinCare.index);
       expect(result.reasonCodes, contains('step7_face_source_stale'));
-      expect(result.reconciledDraft.currentStep, 7);
-      expect(result.reconciledDraft.stepCompleted[7], isFalse);
-      expect(result.reconciledDraft.stepCompleted[14], isFalse);
+      expect(result.reconciledDraft.currentStep, OnboardingStepId.skinCare.index);
+      expect(
+        result.reconciledDraft.stepCompleted[OnboardingStepId.skinCare.index],
+        isFalse,
+      );
+      expect(
+        result.reconciledDraft.stepDirty[OnboardingStepId.skinCare.index],
+        isTrue,
+      );
+      expect(
+        result.reconciledDraft
+            .stepCompleted[OnboardingStepId.todayReady.index],
+        isFalse,
+      );
+      expect(
+        result.reconciledDraft.stepDirty[OnboardingStepId.todayReady.index],
+        isTrue,
+      );
       expect(
         result.reconciledDraft.baseTimeline.skinCareFacePhotoAssetId,
         faceB.assetId,

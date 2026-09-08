@@ -29,6 +29,92 @@ void main() {
       expect(offenders, isEmpty);
     });
 
+    test('semantic ownership and repository architecture stay singular', () {
+      final libDartFiles = Directory('lib')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.dart'))
+          .toList(growable: false);
+
+      final registryDeclarations = libDartFiles.fold<int>(
+        0,
+        (count, file) =>
+            count +
+            RegExp(
+              r'\benum\s+OnboardingStepId\b',
+            ).allMatches(file.readAsStringSync()).length,
+      );
+      expect(registryDeclarations, 1);
+
+      final duplicateRepositoryName = [
+        'onboarding',
+        'repositories.dart',
+      ].join('_');
+      final duplicateRepositoryPath = [
+        'lib/repositories',
+        duplicateRepositoryName,
+      ].join('/');
+      expect(File(duplicateRepositoryPath).existsSync(), isFalse);
+
+      final importRoots = [
+        'lib',
+        'test',
+        'integration_test',
+        'tools',
+        'scripts',
+        'workers',
+        'bin',
+      ].map(Directory.new).where((directory) => directory.existsSync());
+      final duplicateImportOffenders = importRoots
+          .expand((directory) => directory.listSync(recursive: true))
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.dart'))
+          .where(
+            (file) => file.readAsStringSync().contains(duplicateRepositoryName),
+          )
+          .map((file) => file.path)
+          .toList();
+      expect(duplicateImportOffenders, isEmpty);
+
+      final activeFoundationFiles = libDartFiles.where((file) {
+        final path = file.path;
+        return path.startsWith('lib/features/onboarding/') ||
+            path.startsWith('lib/features/recovery/') ||
+            path.startsWith('lib/services/onboarding_') ||
+            path == 'lib/state/app_state.dart' ||
+            path == 'lib/state/auth_state.dart' ||
+            path.startsWith('lib/models/onboarding');
+      });
+      final semanticVectorWrite = RegExp(
+        r'(?:stepCompleted|stepDirty|stepLoading|completed|dirty|loading)'
+        r'\s*\[\s*(?:[0-9]|1[0-4])\s*\]\s*=',
+      );
+      final semanticValidateCall = RegExp(
+        r'validateStep\s*\(\s*(?:[0-9]|1[0-4])\b',
+      );
+      final numericAffectedStep = RegExp(
+        r'earliestAffectedStep\s*=\s*(?:[0-9]|1[0-4])\b',
+      );
+      final semanticOffenders = <String>[];
+      for (final file in activeFoundationFiles) {
+        final source = file.readAsStringSync();
+        if (semanticVectorWrite.hasMatch(source) ||
+            semanticValidateCall.hasMatch(source) ||
+            numericAffectedStep.hasMatch(source)) {
+          semanticOffenders.add(file.path);
+        }
+      }
+      expect(semanticOffenders, isEmpty);
+
+      final shellSource = File(
+        'lib/features/onboarding/widgets/onboarding_step_shell.dart',
+      ).readAsStringSync();
+      expect(
+        RegExp(r'currentPage\s*==\s*(?:0|14)\b').hasMatch(shellSource),
+        isFalse,
+      );
+    });
+
     test('owns one unique current 0-14 order', () {
       expect(OnboardingStepId.values, hasLength(15));
       expect(OnboardingStepId.values.map((id) => id.index).toSet(), {

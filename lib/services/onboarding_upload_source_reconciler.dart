@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:optivus/features/onboarding/onboarding_step_id.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/upload_source_identity.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -485,30 +486,40 @@ class OnboardingUploadSourceReconciler {
     final stepCompleted = List<bool>.from(draft.stepCompleted);
     final stepDirty = List<bool>.from(draft.stepDirty);
 
+    final classJobStep = OnboardingStepId.classesJob.index;
+    final eatingStep = OnboardingStepId.eating.index;
+    final skinCareStep = OnboardingStepId.skinCare.index;
+    final todayReadyStep = OnboardingStepId.todayReady.index;
     int? earliestAffectedStep;
 
     if (step4Affected) {
-      stepCompleted[4] = false;
-      stepDirty[4] = true;
-      earliestAffectedStep = 4;
+      stepCompleted[classJobStep] = false;
+      stepDirty[classJobStep] = true;
+      earliestAffectedStep = classJobStep;
     }
 
     if (step5Affected) {
-      stepCompleted[5] = false;
-      stepDirty[5] = true;
-      earliestAffectedStep = min(earliestAffectedStep ?? 5, 5);
+      stepCompleted[eatingStep] = false;
+      stepDirty[eatingStep] = true;
+      earliestAffectedStep = min(
+        earliestAffectedStep ?? eatingStep,
+        eatingStep,
+      );
     }
 
     if (step7Affected) {
-      stepCompleted[7] = false;
-      stepDirty[7] = true;
-      earliestAffectedStep = min(earliestAffectedStep ?? 7, 7);
+      stepCompleted[skinCareStep] = false;
+      stepDirty[skinCareStep] = true;
+      earliestAffectedStep = min(
+        earliestAffectedStep ?? skinCareStep,
+        skinCareStep,
+      );
     }
 
     // Downstream Step 14 (final preview/bundle) requires revalidation.
     if (step4Affected || step5Affected || step7Affected) {
-      stepCompleted[14] = false;
-      stepDirty[14] = true;
+      stepCompleted[todayReadyStep] = false;
+      stepDirty[todayReadyStep] = true;
     }
 
     final nextCurrentStep = earliestAffectedStep != null

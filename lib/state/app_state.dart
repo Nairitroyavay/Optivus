@@ -15,6 +15,7 @@ import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_state.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/services/nutrition_target_service.dart';
+import 'package:optivus/features/onboarding/onboarding_step_id.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/state/mock_seed_data.dart';
 
@@ -1803,8 +1804,9 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
 
     // A role tap is input, not durable completion. Dynamic role fields still
     // need validation and an explicit Next/save before Step 3 is unlocked.
-    completed[2] = false;
-    dirty[2] = true;
+    final roleStep = OnboardingStepId.roleLifestyle.index;
+    completed[roleStep] = false;
+    dirty[roleStep] = true;
 
     // Step 4 is cleared, so it is incomplete and dirty
     completed[onboardingClassJobStepIndex] = false;
