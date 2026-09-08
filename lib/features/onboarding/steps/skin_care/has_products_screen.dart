@@ -1006,12 +1006,7 @@ class _HasProductsModeScreenState
           ],
         ],
       );
-      return isEditing
-          ? Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: setupPane,
-            )
-          : setupPane;
+      return _SkinCareContainedPane(enabled: isEditing, child: setupPane);
     }
 
     if (flowState != SkinCareFlowState.hasProductsReview) {
@@ -1026,7 +1021,34 @@ class _HasProductsModeScreenState
           onChanged: handleProductNamesChanged,
         );
       }
-      return Column(
+      final setupBody = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          setupCard,
+          if (uploadState?.cleanupPending == true)
+            TextButton(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      final resolved = await ref
+                          .read(onboardingUploadInteractionProvider.notifier)
+                          .remove(uploadState!.slotKey, uid: draft.uid);
+                      if (mounted && resolved) {
+                        setState(() {
+                          _uploadError = null;
+                        });
+                      }
+                    },
+              child: const Text('Retry private cleanup'),
+            ),
+          if (message != null) ...[
+            const SizedBox(height: 10),
+            _SkinCareInlineMessage(message: message),
+          ],
+        ],
+      );
+
+      final editorContent = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (isEditing) ...[
@@ -1058,30 +1080,25 @@ class _HasProductsModeScreenState
               ),
             ),
             const SizedBox(height: 4),
-          ],
-          setupCard,
-          if (uploadState?.cleanupPending == true)
-            TextButton(
-              onPressed: busy
-                  ? null
-                  : () async {
-                      final resolved = await ref
-                          .read(onboardingUploadInteractionProvider.notifier)
-                          .remove(uploadState!.slotKey, uid: draft.uid);
-                      if (mounted && resolved) {
-                        setState(() {
-                          _uploadError = null;
-                        });
-                      }
-                    },
-              child: const Text('Retry private cleanup'),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  bottom: hasSharedFooter
+                      ? OnboardingFooterMetrics.resolve(
+                          context,
+                        ).requiredContentInset
+                      : 8,
+                ),
+                child: SingleChildScrollView(child: setupBody),
+              ),
             ),
-          if (message != null) ...[
-            const SizedBox(height: 10),
-            _SkinCareInlineMessage(message: message),
+          ] else ...[
+            setupBody,
           ],
         ],
       );
+
+      return _SkinCareContainedPane(enabled: isEditing, child: editorContent);
     }
 
     return Column(

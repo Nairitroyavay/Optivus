@@ -143,6 +143,7 @@ class FullScreenTimelineScaffold extends StatelessWidget {
                       accent: accent,
                       scrollController: scrollController,
                       blockBuilder: blockBuilder,
+                      autoScrollIdentity: selectedDay,
                     ),
             ),
 

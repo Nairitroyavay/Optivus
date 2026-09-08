@@ -75,15 +75,17 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         ref.read(routineImportAiControllerProvider).isExtracting ||
         _createLifecycle.state.isActive;
 
+    final isGeneratedPath = base.eatingSetupPath == onboardingEatingPathCreate;
     final targets = currentDraft.canonicalNutritionTargets();
     final currentInputs = currentDraft.canonicalEatingGenerationInputs(
       targets: targets,
     );
     final currentFingerprint = currentInputs.computeFingerprint();
     final isFresh =
-        base.eatingGeneratedPlanVersion ==
-            BaseTimelineDraft.currentGate2EatingPlanVersion &&
-        base.eatingGeneratedInputFingerprint == currentFingerprint;
+        !isGeneratedPath ||
+        (base.eatingGeneratedPlanVersion ==
+                BaseTimelineDraft.currentGate2EatingPlanVersion &&
+            base.eatingGeneratedInputFingerprint == currentFingerprint);
 
     if (base.eatingSetupStep == 2 &&
         (eatingBlocks.isEmpty ||

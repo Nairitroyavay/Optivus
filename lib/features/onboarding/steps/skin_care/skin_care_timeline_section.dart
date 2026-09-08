@@ -1,6 +1,6 @@
 part of '../onboarding_step_7_skin_care_setup.dart';
 
-class _SkinCareTimelineSection extends ConsumerWidget {
+class _SkinCareTimelineSection extends ConsumerStatefulWidget {
   final int selectedDay;
   final List<TimelineBlockDraft> blocks;
   final ValueChanged<int> onDayChanged;
@@ -18,10 +18,64 @@ class _SkinCareTimelineSection extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final adapter = SkinTimelineAdapter(accent: accent);
+  ConsumerState<_SkinCareTimelineSection> createState() =>
+      _SkinCareTimelineSectionState();
+}
+
+class _SkinCareTimelineSectionState
+    extends ConsumerState<_SkinCareTimelineSection> {
+  bool _isOpeningSheet = false;
+
+  Future<void> _openEditSheet(TimelineBlockDraft block) async {
+    if (_isOpeningSheet) return;
+    _isOpeningSheet = true;
+    try {
+      await SkinTimelineAdapter.showSkinEditSheet(
+        context: context,
+        block: block,
+        accent: widget.accent,
+        findFreeStart: (candidate) {
+          final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
+          return onboarding7FindFreeStartForSkinCareEdit(
+            baseTimeline: base,
+            block: candidate,
+            preferredStartMinute: candidate.startMinute,
+          );
+        },
+        hasConflict: (candidate) {
+          final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
+          return onboarding7SkinCareCandidateConflicts(
+            baseTimeline: base,
+            candidate: candidate,
+            excludingBlockId: block.id,
+          );
+        },
+        onSave: (candidate) async {
+          updateBaseTimelineDraft(
+            ref,
+            onboardingSkinCareStepIndex,
+            (base) => base.copyWith(
+              blocks: [
+                for (final item in base.blocks)
+                  if (item.id == block.id) candidate else item,
+              ],
+            ),
+          );
+          return true;
+        },
+      );
+    } finally {
+      if (mounted) {
+        _isOpeningSheet = false;
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final adapter = SkinTimelineAdapter(accent: widget.accent);
     final initialEntries = [
-      for (final block in blocks) ...adapter.toEntries(block),
+      for (final block in widget.blocks) ...adapter.toEntries(block),
     ];
     return Expanded(
       child: LayoutBuilder(
@@ -35,14 +89,16 @@ class _SkinCareTimelineSection extends ConsumerWidget {
           final provisionalLayout = TimelineOverlapEngine.computeLayout(
             entries: initialEntries,
             availableWidth: constraints.maxWidth,
-            selectedDay: selectedDay,
+            selectedDay: widget.selectedDay,
             config: geometryConfig,
           );
           final widthsBySourceId = {
             for (final positioned in provisionalLayout.entries)
               positioned.entry.sourceId: positioned.width,
           };
-          final blocksById = {for (final block in blocks) block.id: block};
+          final blocksById = {
+            for (final block in widget.blocks) block.id: block,
+          };
           final measuredEntries = [
             for (final entry in initialEntries)
               entry.copyWith(
@@ -62,23 +118,22 @@ class _SkinCareTimelineSection extends ConsumerWidget {
           return FullScreenTimelineScaffold(
             key: const ValueKey('onboarding-step7-full-timeline'),
             entries: measuredEntries,
-            selectedDay: selectedDay,
-            onDayChanged: onDayChanged,
-            emptyDayMessage: emptyLabel,
-            accent: accent,
+            selectedDay: widget.selectedDay,
+            onDayChanged: widget.onDayChanged,
+            emptyDayMessage: widget.emptyLabel,
+            accent: widget.accent,
             geometryConfig: geometryConfig,
             styleBuilder: adapter.styleForEntry,
             blockBuilder: (context, positioned) {
-              final block = blocks
+              final block = widget.blocks
                   .where(
                     (candidate) => candidate.id == positioned.entry.sourceId,
                   )
                   .first;
               return _SkinCareBlockCard(
                 item: block,
-                baseColor: accent,
-                onEditRequested: () =>
-                    _showSkinCareBlockEditSheet(context, ref, block, accent),
+                baseColor: widget.accent,
+                onEditRequested: () => _openEditSheet(block),
               );
             },
             headerBanner: Row(
@@ -89,26 +144,29 @@ class _SkinCareTimelineSection extends ConsumerWidget {
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
                   ),
                 ),
-                if (specialCareNotes.isNotEmpty)
+                if (widget.specialCareNotes.isNotEmpty)
                   IconButton(
                     key: const ValueKey(
                       'onboarding-step7-special-care-notes-button',
                     ),
                     onPressed: () => _showSkinCareSpecialCareNotesSheet(
                       context,
-                      specialCareNotes,
-                      accent,
+                      widget.specialCareNotes,
+                      widget.accent,
                     ),
-                    icon: Icon(Icons.info_outline_rounded, color: accent),
+                    icon: Icon(
+                      Icons.info_outline_rounded,
+                      color: widget.accent,
+                    ),
                   ),
               ],
             ),
             onEntryTapped: (entry) {
-              final block = blocks
+              final block = widget.blocks
                   .where((candidate) => candidate.id == entry.sourceId)
                   .firstOrNull;
               if (block == null) return;
-              _showSkinCareBlockEditSheet(context, ref, block, accent);
+              _openEditSheet(block);
             },
           );
         },
@@ -118,74 +176,53 @@ class _SkinCareTimelineSection extends ConsumerWidget {
 }
 
 // ignore: unused_element
-Future<void> _showSkinCareBlockEditSheet(
-  BuildContext context,
-  WidgetRef ref,
-  TimelineBlockDraft block,
-  Color accent,
-) async {
-  await SkinTimelineAdapter.showSkinEditSheet(
-    context: context,
-    block: block,
-    accent: accent,
-    findFreeStart: (candidate) {
-      final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
-      return onboarding7FindFreeStartForSkinCareEdit(
-        baseTimeline: base,
-        block: candidate,
-        preferredStartMinute: candidate.startMinute,
-      );
-    },
-    hasConflict: (candidate) {
-      final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
-      return onboarding7SkinCareCandidateConflicts(
-        baseTimeline: base,
-        candidate: candidate,
-        excludingBlockId: block.id,
-      );
-    },
-    onSave: (candidate) async {
-      updateBaseTimelineDraft(
-        ref,
-        onboardingSkinCareStepIndex,
-        (base) => base.copyWith(
-          blocks: [
-            for (final item in base.blocks)
-              if (item.id == block.id) candidate else item,
-          ],
-        ),
-      );
-      return true;
-    },
-  );
-}
-
-// ignore: unused_element
 double _calculateRequiredSkinCareBlockHeight({
   required BuildContext context,
   required TimelineBlockDraft block,
   required String timeLabel,
   required double blockWidth,
 }) {
-  final steps = _skinCareInstructionLines(block);
-  final products = block.skincareProducts
+  final showFullDetails = _skinCareBlockNeedsFullDetailsAffordance(block);
+  final allSteps = _skinCareInstructionLines(block);
+  final steps = showFullDetails
+      ? allSteps.take(2).toList(growable: false)
+      : allSteps;
+
+  final allProducts = block.skincareProducts
       .map((item) => item.trim())
       .where((item) => item.isNotEmpty)
       .toList(growable: false);
-  final missingItems = block.skincareMissingItems
+  final products = showFullDetails
+      ? allProducts.take(2).toList(growable: false)
+      : allProducts;
+  final productsText = showFullDetails && allProducts.length > 2
+      ? '${products.join(', ')} +${allProducts.length - 2} more'
+      : products.join(', ');
+
+  final allMissingItems = block.skincareMissingItems
       .map((item) => item.trim())
       .where((item) => item.isNotEmpty)
       .toList(growable: false);
-  final contentWidth = math.max(80.0, blockWidth - 34.0);
-  final titleWidth = math.max(70.0, contentWidth - 56.0);
-  var height = 20.0;
-  height += _measureTextHeight(
+  final missingItems = showFullDetails
+      ? allMissingItems.take(1).toList(growable: false)
+      : allMissingItems;
+
+  final scaleFactor = MediaQuery.textScalerOf(context).scale(1.0);
+  final contentWidth = math.max(60.0, blockWidth - 34.0);
+  final titleWidth = math.max(60.0, contentWidth - 56.0);
+  var height =
+      30.0 +
+      24.0 *
+          scaleFactor; // container padding (20) + border (3.2) + scaled text buffer
+
+  final measuredTitle = _measureTextHeight(
     context: context,
     text: block.title,
     style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900),
     width: titleWidth,
   );
-  height += 5.0;
+  height += math.max(28.0, measuredTitle);
+  height += 4.0;
   height += _measureTextHeight(
     context: context,
     text: timeLabel,
@@ -198,39 +235,51 @@ double _calculateRequiredSkinCareBlockHeight({
       height += _measureTextHeight(
         context: context,
         text: '${i + 1}. ${steps[i]}',
-        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800),
+        style: const TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w800,
+          height: 1.24,
+        ),
         width: contentWidth,
       );
       if (i != steps.length - 1) height += 4.0;
     }
   }
-  if (products.isNotEmpty) {
-    height += 8.0;
+  if (productsText.isNotEmpty) {
+    height += 7.0;
     height += _measureTextHeight(
       context: context,
-      text: products.join(', '),
-      style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700),
+      text: productsText,
+      style: const TextStyle(
+        fontSize: 10.5,
+        fontWeight: FontWeight.w700,
+        height: 1.25,
+      ),
       width: contentWidth,
     );
   }
   if (missingItems.isNotEmpty) {
-    height += products.isNotEmpty ? 5.0 : 8.0;
+    height += productsText.isNotEmpty ? 5.0 : 7.0;
     for (var i = 0; i < missingItems.length; i += 1) {
       height += _measureTextHeight(
         context: context,
         text: missingItems[i],
-        style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800),
-        width: contentWidth - 18.0,
+        style: const TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w800,
+          height: 1.2,
+        ),
+        width: math.max(40.0, contentWidth - 18.0),
       );
-      height += 10.0;
+      height += 12.0; // padding 10 + border 2
       if (i != missingItems.length - 1) height += 4.0;
     }
   }
-  if (_skinCareBlockNeedsFullDetailsAffordance(block)) {
-    height += 30.0;
+  if (showFullDetails) {
+    height += 6.0;
+    height += 28.0;
   }
-  height += 96.0;
-  return math.max(110.0, height);
+  return math.max(105.0, height.ceilToDouble());
 }
 
 double _measureTextHeight({
@@ -275,7 +324,8 @@ class _SkinCareBlockCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final instructionLines = [
+    final showFullDetails = _skinCareBlockNeedsFullDetailsAffordance(item);
+    final allInstructionLines = [
       if (item.skincareSteps.isNotEmpty)
         ...item.skincareSteps.map((i) => i.trim()).where((i) => i.isNotEmpty)
       else
@@ -283,19 +333,33 @@ class _SkinCareBlockCard extends StatelessWidget {
             .map((i) => i.trim())
             .where((i) => i.isNotEmpty),
     ];
-    final productNames = item.skincareProducts
+    final instructionLines = showFullDetails
+        ? allInstructionLines.take(2).toList(growable: false)
+        : allInstructionLines;
+
+    final allProductNames = item.skincareProducts
         .map((product) => product.trim())
         .where((product) => product.isNotEmpty)
         .toList(growable: false);
-    final missingItems = item.skincareMissingItems
+    final productNames = showFullDetails
+        ? allProductNames.take(2).toList(growable: false)
+        : allProductNames;
+    final productsText = showFullDetails && allProductNames.length > 2
+        ? '${productNames.join(', ')} +${allProductNames.length - 2} more'
+        : productNames.join(', ');
+
+    final allMissingItems = item.skincareMissingItems
         .map((product) => product.trim())
         .where((product) => product.isNotEmpty)
         .toList(growable: false);
+    final missingItems = showFullDetails
+        ? allMissingItems.take(1).toList(growable: false)
+        : allMissingItems;
+
     final timeLabel = TimelineUtils.formatTimeRange(
       item.startMinute,
       item.endMinute,
     );
-    final showFullDetails = _skinCareBlockNeedsFullDetailsAffordance(item);
 
     return Container(
       key: ValueKey('onboarding-step7-block-${item.id}'),
@@ -396,10 +460,10 @@ class _SkinCareBlockCard extends StatelessWidget {
                       ),
                     ),
                 ],
-                if (productNames.isNotEmpty) ...[
+                if (productsText.isNotEmpty) ...[
                   const SizedBox(height: 7),
                   Text(
-                    productNames.join(', '),
+                    productsText,
                     style: const TextStyle(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w700,
@@ -409,7 +473,7 @@ class _SkinCareBlockCard extends StatelessWidget {
                   ),
                 ],
                 if (missingItems.isNotEmpty) ...[
-                  SizedBox(height: productNames.isNotEmpty ? 5 : 7),
+                  SizedBox(height: productsText.isNotEmpty ? 5 : 7),
                   for (var i = 0; i < missingItems.length; i += 1)
                     Padding(
                       padding: EdgeInsets.only(

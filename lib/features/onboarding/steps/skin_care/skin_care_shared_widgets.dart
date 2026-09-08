@@ -1,5 +1,26 @@
 part of '../onboarding_step_7_skin_care_setup.dart';
 
+/// Explicit horizontal inset container enforcing the canonical Step-7 24px inset contract.
+///
+/// Ensures full-bleed panes (such as rebuild editors when the root supplies 0px)
+/// receive exactly 24px horizontal padding, while already-padded setup modes
+/// do not double-pad.
+class _SkinCareContainedPane extends StatelessWidget {
+  final Widget child;
+  final bool enabled;
+
+  const _SkinCareContainedPane({required this.child, this.enabled = true});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!enabled) return child;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: child,
+    );
+  }
+}
+
 class _SkinCarePersonalizeSection extends StatelessWidget {
   final String skinType;
   final String concern;
@@ -50,8 +71,8 @@ class _SkinCarePersonalizeSection extends StatelessWidget {
         key: const ValueKey('onboarding-step7-personalize-tile'),
         behavior: HitTestBehavior.opaque,
         onTap: onSkinTypeChanged == null ? null : () => _open(context),
-        child: SizedBox(
-          height: 44,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 44),
           child: Row(
             children: [
               Expanded(
@@ -960,11 +981,11 @@ void _showSkinCareSelectedProductsSheet(
                     if (category.isNotEmpty)
                       _onboarding7ProductCategoryLabel(category),
                     if (recommendation?.estimatedPrice.isNotEmpty ?? false)
-                      [
+                      formatSkinCarePriceDisplay(
                         recommendation!.currencyCode,
                         recommendation.estimatedPrice,
-                      ].where((part) => part.isNotEmpty).join(' '),
-                  ].join(' • ');
+                      ),
+                  ].where((part) => part.isNotEmpty).join(' • ');
 
                   return Container(
                     padding: const EdgeInsets.all(12),

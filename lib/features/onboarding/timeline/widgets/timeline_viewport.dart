@@ -16,6 +16,7 @@ class TimelineViewport extends StatefulWidget {
   final ScrollController? scrollController;
   final bool autoScrollToFirstEntry;
   final Widget Function(BuildContext, PositionedTimelineEntry)? blockBuilder;
+  final Object? autoScrollIdentity;
 
   const TimelineViewport({
     super.key,
@@ -26,6 +27,7 @@ class TimelineViewport extends StatefulWidget {
     this.scrollController,
     this.autoScrollToFirstEntry = true,
     this.blockBuilder,
+    this.autoScrollIdentity,
   });
 
   @override
@@ -59,8 +61,12 @@ class _TimelineViewportState extends State<TimelineViewport> {
     if (!widget.autoScrollToFirstEntry || widget.layoutResult.entries.isEmpty) {
       return;
     }
-    if (_layoutIdentity(widget.layoutResult) !=
-        _layoutIdentity(oldWidget.layoutResult)) {
+    final identityChanged =
+        widget.autoScrollIdentity != null &&
+        widget.autoScrollIdentity != oldWidget.autoScrollIdentity;
+    if (identityChanged ||
+        _layoutIdentity(widget.layoutResult) !=
+            _layoutIdentity(oldWidget.layoutResult)) {
       _scheduleScrollToFirst();
     }
   }

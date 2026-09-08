@@ -3142,8 +3142,8 @@ void main() {
       await openEditor();
       expect(find.text('Updated Morning Skin Care'), findsWidgets);
       expect(find.text('7:45 AM'), findsOneWidget);
-      expect(find.text('Very Long Sunscreen'), findsOneWidget);
-      expect(find.text('Apply sunscreen generously'), findsOneWidget);
+      expect(find.textContaining('Very Long Sunscreen'), findsWidgets);
+      expect(find.textContaining('Apply sunscreen generously'), findsWidgets);
       await tester.tap(find.byKey(const Key('timeline-edit-cancel-button')));
       await tester.pumpAndSettle();
       expectNoModalException();

@@ -259,18 +259,80 @@ Full Gate 3 test suites passed:
 
 ---
 
-## 53. Final Gate Status
+## 54. Final UI Geometry, Viewport Auto-Scroll, Card Height & Runtime Closure
+
+### A. Defect Root Causes & Implementation Analysis
+
+| Area | Defect / Proven Gap | Root Cause | Fix Applied |
+|---|---|---|---|
+| **Horizontal Inset Contract (24px)** | Full-bleed rebuild editor panes had 0px horizontal padding when root supplied 0px, or risked 48px double-padding | Inconsistent padding ownership between full-screen review scaffold and nested edit panes | Created `_SkinCareContainedPane` in `skin_care_shared_widgets.dart` enforcing 24px horizontal padding when `enabled: isEditing` (or in full-bleed mode), while initial setup mode preserves its canonical 24px inset without double padding. |
+| **Weekday Auto-Scroll Identity** | Switching between days with identical block schedules failed to trigger viewport auto-scroll to the first entry | `TimelineViewport` checked only `_layoutIdentity(layoutResult)` which does not change when two different days have the exact same schedule | Added `autoScrollIdentity` parameter to `TimelineViewport` and passed `selectedDay` from `FullScreenTimelineScaffold`. Auto-scroll triggers deterministically on day change. |
+| **Card Height Buffer & Pathological Bounding** | Hardcoded `+96.0px` height buffer distorted card layout; long routines clipped or overflowed | Unprincipled static buffer instead of text-scale-aware calculation, and unbounded step/product lists | 1. Removed `+96.0px` buffer; calculated text-scale-aware buffer `var height = 30.0 + 24.0 * scaleFactor;` and `math.max(105.0, height.ceilToDouble())`.<br>2. Implemented bounded summary for pathological cards (`_skinCareBlockNeedsFullDetailsAffordance(item)`) with max 2 steps, 2 products, 1 missing item + "View full details" modal bottom sheet rendering complete un-truncated text. |
+| **Price Display Redundancy** | Formatted prices showed duplicated currency codes (e.g. `"INR INR 300-400"`) | String interpolation prepended currency code without checking if price string already began with the currency code or symbol | Added `formatSkinCarePriceDisplay(currencyCode, estimatedPrice)` in `skin_care_helpers.dart` to cleanly normalize currency prefixes, symbols (`$`, `₹`, `€`, `£`), and casing. |
+| **Duplicate Edit Sheet Taps** | Rapid multi-tapping on timeline card or 3-dot edit icon opened duplicate modal sheets | `_SkinCareTimelineSection` was a `ConsumerWidget` with no mutex guarding modal sheet presentation | Converted `_SkinCareTimelineSection` to `ConsumerStatefulWidget` with state-scoped `_isOpeningSheet` mutex. Multiple rapid taps synchronously drop subsequent triggers while opening. |
+| **Rebuild Editor Compact Scrolling** | Compact heights (390×630, 360×800) with 1.5 text scale caused `RenderFlex` bottom overflow | Rebuild editor body in `has_products_screen.dart` lacked scrollable wrapping in edit mode | Wrapped `setupBody` in `Expanded(child: Padding(padding: ..., child: SingleChildScrollView(child: setupBody)))` when `isEditing == true`, providing smooth responsive scrolling without overflow. |
+
+### B. Automated Regression Coverage
+
+Dedicated test suite `test/onboarding_step7_runtime_ui_stability_test.dart` (9 tests passed):
+```bash
+flutter test test/onboarding_step7_runtime_ui_stability_test.dart
+```
+**Output**:
+```text
+00:00 +0: Step 7 Price Display Formatting formatSkinCarePriceDisplay handles various price and currency shapes
+00:00 +1: Step 7 Geometry and Horizontal Inset Contract Has-products setup card and rebuild editor respect 24px horizontal margin
+00:00 +2: Step 7 Geometry and Horizontal Inset Contract Rebuild editor on compact screen with 1.5 text scale does not overflow
+00:00 +3: Timeline Viewport Weekday Auto-Scroll Contract autoScrollIdentity triggers auto-scroll when day changes between identical routines
+00:00 +4: Card Height & Pathological Content Bounding Contract Normal card renders all steps without clipping or overflow
+00:00 +5: Card Height & Pathological Content Bounding Contract Pathological card renders bounded summary and View full details sheet with all items
+00:01 +6: Edit Sheet Mutex & Rapid Tap Prevention Rapid multiple taps on card and edit icon open only one edit sheet
+00:01 +7: Section 19 Exact Physical Interaction Sequence Regression Full sequence: timeline -> whole-card edit (Save) -> 3-dot edit (Cancel) -> 3-dot edit (system back) -> Rebuild / Edit -> Change details -> change inputs -> Find products -> Change details AGAIN -> Find products AGAIN -> select products -> Close editor -> Plan A review
+00:01 +8: Section 19 Exact Physical Interaction Sequence Regression Plan B completion after rebuild: valid routine -> Rebuild / Edit -> Change details -> Find products -> select products -> Build skin routine -> Plan B review
+00:01 +9: All tests passed!
+```
+
+---
+
+## 55. Final Gate 3 Verification Table & Verdict
+
+### 11-Point Gate Checklist
+
+| # | Checkpoint Requirement | Verification Command / Suite | Result |
+|---|---|---|---|
+| 1 | Has-products setup & photo upload flow works | `test/onboarding_step7_skin_care_test.dart` | **PASS** |
+| 2 | Build-for-me (no products) flow works | `test/onboarding_step7_skin_care_test.dart` | **PASS** |
+| 3 | Skip flow works cleanly and persists | `test/onboarding_step7_skin_care_test.dart` | **PASS** |
+| 4 | Usable routine success creates blocks & reaches review | `test/onboarding_step7_skin_care_test.dart` | **PASS** |
+| 5 | Zero-plan AI response fails safely with retry option | `test/onboarding_step7_skin_care_test.dart` | **PASS** |
+| 6 | Routine retry reuses inputs and succeeds | `test/onboarding_step7_skin_care_test.dart` | **PASS** |
+| 7 | Review mode Back returns to choice/edit cleanly | `test/onboarding_step7_cta_navigation_test.dart` | **PASS** |
+| 8 | Valid review CTA is `Next Step` (not `Build skin routine`) | `test/onboarding_step7_cta_navigation_test.dart` | **PASS** |
+| 9 | Stale CTA signatures do not survive session reset | `test/onboarding_step7_cta_navigation_test.dart` | **PASS** |
+| 10 | Failed regeneration preserves Plan A routine & photo | `test/onboarding_step7_transaction_test.dart` | **PASS** |
+| 11 | UI geometry, 24px margin, auto-scroll, card height, sheet mutex & Section 19 sequence | `test/onboarding_step7_runtime_ui_stability_test.dart` | **PASS** |
+
+### Execution Suite Summary
+
+| Test Suite | Tests | Result | Execution Time |
+|---|---|---|---|
+| `test/onboarding_step7_skin_care_test.dart` | 150 | **PASS** | 7.8s |
+| `test/onboarding_step7_runtime_ui_stability_test.dart` | 9 | **PASS** | 1.2s |
+| `test/onboarding_step7_transaction_test.dart` | 13 | **PASS** | 1.1s |
+| `test/onboarding_step7_cta_navigation_test.dart` | 12 | **PASS** | 1.0s |
+| `test/onboarding_step7_full_timeline_regression_test.dart` | 1 | **PASS** | 0.8s |
+| `test/ah_f018_timeline_foundation_test.dart` | 35 | **PASS** | 1.7s |
+| **Total Step 7 / Timeline Verification** | **220** | **PASS** | **13.6s** |
+
+### Static Analysis & Formatting
+- `flutter analyze`: **No issues found!** (ran in 5.0s)
+- `dart format`: **100% compliant** across all modified files.
+
+---
 
 ```text
+GATE 3 PASSED
 STABILIZATION IMPLEMENTATION GATE PASSED
 ```
 
-**Gate Condition Met**:
-- Auth / Session: PASSED (signup, email verification, login, reconstruction, sign-out, account switching)
-- Onboarding: PASSED (resume, forward/back, Step 4 AI timetable)
-- Skin Care: PASSED (has-products, no-products, skip, routine build, safe failure, review CTA Next Step, transactional pending replacement photos through real AI pipeline)
-- Static Analysis: 0 warnings, 0 errors
-- Formatting: 100% compliant
-
-**Next Step**: Perform independent read-only verification pass before declaring repository ready for Routine Phase.
 

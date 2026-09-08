@@ -827,6 +827,36 @@ List<SkinCareProductRecommendation> onboarding7NormalizeRecommendations(
       .toList(growable: false);
 }
 
+/// Normalizes currency and estimated price display strings to prevent duplicated
+/// prefixes (such as "INR INR 300-400" or "\$ \$15").
+///
+/// Pure display helper: does not mutate Worker response contracts or persisted drafts.
+String formatSkinCarePriceDisplay(
+  String? currencyCode,
+  String? estimatedPrice,
+) {
+  final price = estimatedPrice?.trim() ?? '';
+  final code = currencyCode?.trim() ?? '';
+  if (price.isEmpty) return '';
+  if (code.isEmpty) return price;
+
+  final codeUpper = code.toUpperCase();
+  final priceUpper = price.toUpperCase();
+
+  if (priceUpper.startsWith(codeUpper)) {
+    final remainder = price.substring(code.length).trim();
+    return remainder.isNotEmpty ? '$codeUpper $remainder' : codeUpper;
+  }
+
+  const symbols = {'INR': '₹', 'USD': r'$', 'EUR': '€', 'GBP': '£', 'JPY': '¥'};
+  final symbol = symbols[codeUpper];
+  if (symbol != null && price.startsWith(symbol)) {
+    return price;
+  }
+
+  return '$codeUpper $price';
+}
+
 @visibleForTesting
 String onboarding7RecommendationCategory(
   SkinCareProductRecommendationDraft product,

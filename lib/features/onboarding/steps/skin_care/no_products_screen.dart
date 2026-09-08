@@ -1001,8 +1001,8 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     if (lifecycleActive) {
       final isFindProducts =
           _lifecycle.state.operationId?.contains('find-products') ?? false;
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
+      return _SkinCareContainedPane(
+        enabled: isEditing,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1222,289 +1222,300 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       final selectionMessage = _onboarding7EssentialSelectionMessage(
         missingEssentialSelections,
       );
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 0,
-            children: [
-              TextButton(
-                onPressed: busy ? null : _changeDetails,
-                child: const Text('Change details'),
-              ),
-              if (isEditing)
-                TextButton.icon(
-                  key: const ValueKey(
-                    'onboarding-step7-no-products-cancel-rebuild',
-                  ),
-                  onPressed: () {
-                    ref
-                        .read(skinCareFlowControllerProvider.notifier)
-                        .cancelEditing();
-                    setState(() {
-                      _pendingDesiredApplicationsPerDay = null;
-                      _generationError = null;
-                    });
-                  },
-                  icon: const Icon(Icons.close_rounded, size: 18),
-                  label: const Text('Close editor'),
+      return _SkinCareContainedPane(
+        enabled: isEditing,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 0,
+              children: [
+                TextButton(
+                  onPressed: busy ? null : _changeDetails,
+                  child: const Text('Change details'),
                 ),
-            ],
-          ),
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(
-                // The shell overlays its shared CTA. Reserve its measured
-                // obstruction so the final product card can scroll entirely
-                // above both the CTA and Android navigation.
-                bottom: hasSharedFooter
-                    ? OnboardingFooterMetrics.resolve(
-                        context,
-                      ).requiredContentInset
-                    : 8,
-              ),
-              child: OnboardingGlassCard(
-                tint: OptivusColors.purpleAccent.withValues(alpha: 0.06),
-                padding: const EdgeInsets.all(12),
-                radius: 18,
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        'Choose products available in $recommendationCountryName',
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w900,
-                          color: OptivusColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'AI matched these to your skin and ${base.skinCareBudget} budget. Select products for $desiredApplicationsPerDay times per day.',
-                        style: const TextStyle(
-                          fontSize: 10.5,
-                          height: 1.35,
-                          fontWeight: FontWeight.w700,
-                          color: OptivusColors.textSecondary,
-                        ),
-                      ),
-                      if (!hasSharedFooter) ...[
-                        const SizedBox(height: 10),
-                        _SkinCareGenerateRoutineButton(
-                          label: _routineRetryAvailable
-                              ? 'Retry routine'
-                              : 'Build skin routine',
-                          busy: busy,
-                          accent: OptivusColors.purpleAccent,
-                          onTap: !busy && missingEssentialSelections.isEmpty
-                              ? _generate
-                              : null,
-                        ),
-                      ],
-                      ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: base.skinCareProductRecommendations.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 8),
-                        itemBuilder: (context, index) {
-                          final product =
-                              base.skinCareProductRecommendations[index];
-                          final selected = selectedKeys.contains(
-                            product.selectionKey,
-                          );
-                          final normalizedCategory =
-                              onboarding7RecommendationCategory(product);
-                          final details = [
-                            if (normalizedCategory.isNotEmpty)
-                              _onboarding7ProductCategoryLabel(
-                                normalizedCategory,
-                              )
-                            else if (product.category.isNotEmpty)
-                              product.category,
-                            if (product.estimatedPrice.isNotEmpty)
-                              [
-                                product.currencyCode,
-                                product.estimatedPrice,
-                              ].where((part) => part.isNotEmpty).join(' '),
-                          ].join(' • ');
-                          return Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              key: ValueKey(
-                                'onboarding-step7-product-${product.selectionKey}',
-                              ),
-                              borderRadius: BorderRadius.circular(14),
-                              onTap: () => _toggleProduct(product),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 160),
-                                padding: const EdgeInsets.all(11),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(14),
-                                  color: selected
-                                      ? OptivusColors.purpleAccent.withValues(
-                                          alpha: 0.12,
-                                        )
-                                      : Colors.white.withValues(alpha: 0.38),
-                                  border: Border.all(
-                                    color: selected
-                                        ? OptivusColors.purpleAccent
-                                        : Colors.white.withValues(alpha: 0.65),
-                                  ),
-                                ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Icon(
-                                      selected
-                                          ? Icons.check_circle_rounded
-                                          : Icons
-                                                .radio_button_unchecked_rounded,
-                                      color: selected
-                                          ? OptivusColors.purpleAccent
-                                          : OptivusColors.textSecondary,
-                                      size: 21,
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            product.displayName,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w900,
-                                              color: OptivusColors.textPrimary,
-                                            ),
-                                          ),
-                                          if (details.isNotEmpty) ...[
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              details,
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w800,
-                                                color:
-                                                    OptivusColors.purpleAccent,
-                                              ),
-                                            ),
-                                          ],
-                                          if (product.reason.isNotEmpty) ...[
-                                            const SizedBox(height: 3),
-                                            Text(
-                                              product.reason,
-                                              maxLines: 3,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                fontSize: 10,
-                                                height: 1.3,
-                                                fontWeight: FontWeight.w700,
-                                                color:
-                                                    OptivusColors.textSecondary,
-                                              ),
-                                            ),
-                                          ],
-                                          if (_shouldShowRecommendationDetails(
-                                            product,
-                                            details,
-                                          )) ...[
-                                            const SizedBox(height: 3),
-                                            TextButton(
-                                              key: ValueKey(
-                                                'onboarding-step7-product-details-${product.selectionKey}',
-                                              ),
-                                              onPressed: () =>
-                                                  _showProductRecommendationDetailsSheet(
-                                                    context,
-                                                    product,
-                                                    details,
-                                                    OptivusColors.purpleAccent,
-                                                  ),
-                                              style: TextButton.styleFrom(
-                                                foregroundColor:
-                                                    OptivusColors.purpleAccent,
-                                                padding: EdgeInsets.zero,
-                                                minimumSize: const Size(0, 26),
-                                                tapTargetSize:
-                                                    MaterialTapTargetSize
-                                                        .shrinkWrap,
-                                              ),
-                                              child: const Text(
-                                                'View details',
-                                                style: TextStyle(
-                                                  fontSize: 10.5,
-                                                  fontWeight: FontWeight.w900,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                      if (uploadState?.cleanupPending == true)
-                        TextButton(
-                          onPressed: busy
-                              ? null
-                              : () async {
-                                  final resolved = await ref
-                                      .read(
-                                        onboardingUploadInteractionProvider
-                                            .notifier,
-                                      )
-                                      .remove(
-                                        uploadState!.slotKey,
-                                        uid: draft.uid,
-                                      );
-                                  if (mounted && resolved) {
-                                    setState(() {
-                                      _uploadError = null;
-                                    });
-                                  }
-                                },
-                          child: const Text('Retry private cleanup'),
-                        ),
-                      if (message != null) ...[
-                        const SizedBox(height: 8),
-                        _SkinCareInlineMessage(message: message),
-                      ],
-                      if (message == null && selectionMessage.isNotEmpty) ...[
-                        const SizedBox(height: 8),
+                if (isEditing)
+                  TextButton.icon(
+                    key: const ValueKey(
+                      'onboarding-step7-no-products-cancel-rebuild',
+                    ),
+                    onPressed: () {
+                      ref
+                          .read(skinCareFlowControllerProvider.notifier)
+                          .cancelEditing();
+                      setState(() {
+                        _pendingDesiredApplicationsPerDay = null;
+                        _generationError = null;
+                      });
+                    },
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    label: const Text('Close editor'),
+                  ),
+              ],
+            ),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  // The shell overlays its shared CTA. Reserve its measured
+                  // obstruction so the final product card can scroll entirely
+                  // above both the CTA and Android navigation.
+                  bottom: hasSharedFooter
+                      ? OnboardingFooterMetrics.resolve(
+                          context,
+                        ).requiredContentInset
+                      : 8,
+                ),
+                child: OnboardingGlassCard(
+                  tint: OptivusColors.purpleAccent.withValues(alpha: 0.06),
+                  padding: const EdgeInsets.all(12),
+                  radius: 18,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
                         Text(
-                          selectionMessage,
-                          key: const ValueKey(
-                            'onboarding-step7-essential-selection-message',
+                          'Choose products available in $recommendationCountryName',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                            color: OptivusColors.textPrimary,
                           ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'AI matched these to your skin and ${base.skinCareBudget} budget. Select products for $desiredApplicationsPerDay times per day.',
                           style: const TextStyle(
                             fontSize: 10.5,
-                            height: 1.3,
+                            height: 1.35,
                             fontWeight: FontWeight.w700,
                             color: OptivusColors.textSecondary,
                           ),
                         ),
+                        if (!hasSharedFooter) ...[
+                          const SizedBox(height: 10),
+                          _SkinCareGenerateRoutineButton(
+                            label: _routineRetryAvailable
+                                ? 'Retry routine'
+                                : 'Build skin routine',
+                            busy: busy,
+                            accent: OptivusColors.purpleAccent,
+                            onTap: !busy && missingEssentialSelections.isEmpty
+                                ? _generate
+                                : null,
+                          ),
+                        ],
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: base.skinCareProductRecommendations.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 8),
+                          itemBuilder: (context, index) {
+                            final product =
+                                base.skinCareProductRecommendations[index];
+                            final selected = selectedKeys.contains(
+                              product.selectionKey,
+                            );
+                            final normalizedCategory =
+                                onboarding7RecommendationCategory(product);
+                            final details = [
+                              if (normalizedCategory.isNotEmpty)
+                                _onboarding7ProductCategoryLabel(
+                                  normalizedCategory,
+                                )
+                              else if (product.category.isNotEmpty)
+                                product.category,
+                              if (product.estimatedPrice.isNotEmpty)
+                                formatSkinCarePriceDisplay(
+                                  product.currencyCode,
+                                  product.estimatedPrice,
+                                ),
+                            ].where((part) => part.isNotEmpty).join(' • ');
+                            return Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                key: ValueKey(
+                                  'onboarding-step7-product-${product.selectionKey}',
+                                ),
+                                borderRadius: BorderRadius.circular(14),
+                                onTap: () => _toggleProduct(product),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 160),
+                                  padding: const EdgeInsets.all(11),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(14),
+                                    color: selected
+                                        ? OptivusColors.purpleAccent.withValues(
+                                            alpha: 0.12,
+                                          )
+                                        : Colors.white.withValues(alpha: 0.38),
+                                    border: Border.all(
+                                      color: selected
+                                          ? OptivusColors.purpleAccent
+                                          : Colors.white.withValues(
+                                              alpha: 0.65,
+                                            ),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Icon(
+                                        selected
+                                            ? Icons.check_circle_rounded
+                                            : Icons
+                                                  .radio_button_unchecked_rounded,
+                                        color: selected
+                                            ? OptivusColors.purpleAccent
+                                            : OptivusColors.textSecondary,
+                                        size: 21,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              product.displayName,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w900,
+                                                color:
+                                                    OptivusColors.textPrimary,
+                                              ),
+                                            ),
+                                            if (details.isNotEmpty) ...[
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                details,
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: OptivusColors
+                                                      .purpleAccent,
+                                                ),
+                                              ),
+                                            ],
+                                            if (product.reason.isNotEmpty) ...[
+                                              const SizedBox(height: 3),
+                                              Text(
+                                                product.reason,
+                                                maxLines: 3,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontSize: 10,
+                                                  height: 1.3,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: OptivusColors
+                                                      .textSecondary,
+                                                ),
+                                              ),
+                                            ],
+                                            if (_shouldShowRecommendationDetails(
+                                              product,
+                                              details,
+                                            )) ...[
+                                              const SizedBox(height: 3),
+                                              TextButton(
+                                                key: ValueKey(
+                                                  'onboarding-step7-product-details-${product.selectionKey}',
+                                                ),
+                                                onPressed: () =>
+                                                    _showProductRecommendationDetailsSheet(
+                                                      context,
+                                                      product,
+                                                      details,
+                                                      OptivusColors
+                                                          .purpleAccent,
+                                                    ),
+                                                style: TextButton.styleFrom(
+                                                  foregroundColor: OptivusColors
+                                                      .purpleAccent,
+                                                  padding: EdgeInsets.zero,
+                                                  minimumSize: const Size(
+                                                    0,
+                                                    26,
+                                                  ),
+                                                  tapTargetSize:
+                                                      MaterialTapTargetSize
+                                                          .shrinkWrap,
+                                                ),
+                                                child: const Text(
+                                                  'View details',
+                                                  style: TextStyle(
+                                                    fontSize: 10.5,
+                                                    fontWeight: FontWeight.w900,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        if (uploadState?.cleanupPending == true)
+                          TextButton(
+                            onPressed: busy
+                                ? null
+                                : () async {
+                                    final resolved = await ref
+                                        .read(
+                                          onboardingUploadInteractionProvider
+                                              .notifier,
+                                        )
+                                        .remove(
+                                          uploadState!.slotKey,
+                                          uid: draft.uid,
+                                        );
+                                    if (mounted && resolved) {
+                                      setState(() {
+                                        _uploadError = null;
+                                      });
+                                    }
+                                  },
+                            child: const Text('Retry private cleanup'),
+                          ),
+                        if (message != null) ...[
+                          const SizedBox(height: 8),
+                          _SkinCareInlineMessage(message: message),
+                        ],
+                        if (message == null && selectionMessage.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            selectionMessage,
+                            key: const ValueKey(
+                              'onboarding-step7-essential-selection-message',
+                            ),
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              height: 1.3,
+                              fontWeight: FontWeight.w700,
+                              color: OptivusColors.textSecondary,
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       );
     }
 
@@ -1822,12 +1833,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         ),
       ],
     );
-    return isEditing
-        ? Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: detailsPane,
-          )
-        : detailsPane;
+    return _SkinCareContainedPane(enabled: isEditing, child: detailsPane);
   }
 }
 
