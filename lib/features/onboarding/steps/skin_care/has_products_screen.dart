@@ -143,13 +143,12 @@ class _HasProductsModeScreenState
     UploadSlotRuntimeState? uploadState,
     OnboardingDraft draft,
   ) {
-    final asset = uploadState?.effectiveAsset;
-    if (asset == null) return null;
-    final base = draft.baseTimeline;
-    return asset.assetId == base.skinCareProductPhotoAssetId &&
-            asset.r2Key == base.skinCareProductPhotoR2Key
-        ? asset
-        : null;
+    if (uploadState?.effectiveAsset == null) return null;
+    return currentSkinPhotoForTransaction(
+      slot: uploadState,
+      draft: draft,
+      purpose: UploadedAssetPurpose.skinProducts,
+    );
   }
 
   Future<void> _startUpload() async {
@@ -353,14 +352,11 @@ class _HasProductsModeScreenState
 
     final activeSource = _inputSource;
     final draft = ref.read(mockOnboardingProvider).draft;
-    final asset =
-        _uploadedAsset ??
-        _restoredSkinAssetForSlot(
-          restored: ref.read(restoredUploadsProvider),
-          draft: draft,
-          purpose: UploadedAssetPurpose.skinProducts,
-        ) ??
-        durableSkinProductsAssetFromDraft(draft);
+    final asset = currentSkinPhotoForTransaction(
+      slot: uploadState,
+      draft: draft,
+      purpose: UploadedAssetPurpose.skinProducts,
+    );
     var typedProductDetails = onboarding7ParseTypedProductDetails(
       _controller.text,
     );
@@ -447,15 +443,13 @@ class _HasProductsModeScreenState
               uid &&
           (currentSource != _ProductInputSource.photo ||
               (() {
-                final live =
-                    ref
-                        .read(
-                          onboardingUploadInteractionProvider,
-                        )[onboardingSkinProductsUploadSlot]
-                        ?.durableAsset ??
-                    durableSkinProductsAssetFromDraft(
-                      ref.read(mockOnboardingProvider).draft,
-                    );
+                final live = currentSkinPhotoForTransaction(
+                  slot: ref.read(
+                    onboardingUploadInteractionProvider,
+                  )[onboardingSkinProductsUploadSlot],
+                  draft: ref.read(mockOnboardingProvider).draft,
+                  purpose: UploadedAssetPurpose.skinProducts,
+                );
                 return live?.assetId == currentAssetId &&
                     live?.r2Key == currentAssetKey;
               })()) &&
@@ -695,14 +689,12 @@ class _HasProductsModeScreenState
               final prov = List<String>.from(block.provenanceSourceIds);
               final token = 'skin-care-generation:$routineFingerprint';
               if (!prov.contains(token)) prov.add(token);
-              if (_uploadedAsset != null) {
-                if (_uploadedAsset!.assetId.isNotEmpty &&
-                    !prov.contains(_uploadedAsset!.assetId)) {
-                  prov.add(_uploadedAsset!.assetId);
+              if (asset != null) {
+                if (asset.assetId.isNotEmpty && !prov.contains(asset.assetId)) {
+                  prov.add(asset.assetId);
                 }
-                if (_uploadedAsset!.r2Key.isNotEmpty &&
-                    !prov.contains(_uploadedAsset!.r2Key)) {
-                  prov.add(_uploadedAsset!.r2Key);
+                if (asset.r2Key.isNotEmpty && !prov.contains(asset.r2Key)) {
+                  prov.add(asset.r2Key);
                 }
               }
               return block.copyWith(provenanceSourceIds: prov);
@@ -750,7 +742,6 @@ class _HasProductsModeScreenState
 
   @override
   Widget build(BuildContext context) {
-    final restored = ref.watch(restoredUploadsProvider);
     final draft = ref.watch(mockOnboardingProvider).draft;
     final flowStateHolder = ref.watch(skinCareFlowControllerProvider);
     final flowState = flowStateHolder.state;
@@ -797,6 +788,7 @@ class _HasProductsModeScreenState
       }
     });
 
+    final restored = ref.watch(restoredUploadsProvider);
     final restoredAsset = _restoredSkinAssetForSlot(
       restored: restored,
       draft: draft,
@@ -807,9 +799,9 @@ class _HasProductsModeScreenState
     )[onboardingSkinProductsUploadSlot];
     final slotAsset = _slotAssetIfBoundToDraft(uploadState, draft);
     final effectiveAsset =
-        _uploadedAsset ??
         slotAsset ??
         restoredAsset ??
+        _uploadedAsset ??
         durableSkinProductsAssetFromDraft(draft);
     final uploadBusy = uploadState?.isBusy == true;
     final uploadError =

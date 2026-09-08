@@ -1288,3 +1288,56 @@ String? _productInputSourceLabel(_ProductInputSource source) {
     _ProductInputSource.none => null,
   };
 }
+
+/// Resolves the canonical active uploaded asset for a Skin Care transaction.
+///
+/// In an active transaction (such as deferred replacement during Edit/Rebuild),
+/// [slot.effectiveAsset] yields [pendingReplacementAsset]. If that candidate
+/// matches the current Step-7 draft asset identity and strictly belongs to
+/// [draft.uid], it is returned as the active transactional photo.
+///
+/// An empty or mismatched owner is strictly rejected for active transactions.
+/// Otherwise, it falls back to the canonical durable asset constructed from
+/// [draft.baseTimeline] (which preserves existing legacy migration logic).
+UploadedAsset? currentSkinPhotoForTransaction({
+  required UploadSlotRuntimeState? slot,
+  required OnboardingDraft draft,
+  required UploadedAssetPurpose purpose,
+}) {
+  final candidate = slot?.effectiveAsset;
+  final base = draft.baseTimeline;
+  final currentUid = draft.uid.trim();
+
+  if (currentUid.isEmpty) return null;
+
+  if (purpose == UploadedAssetPurpose.skinProducts) {
+    final expectedAssetId = base.skinCareProductPhotoAssetId?.trim();
+    final expectedR2Key = base.skinCareProductPhotoR2Key?.trim();
+    if (candidate != null &&
+        expectedAssetId != null &&
+        expectedAssetId.isNotEmpty &&
+        expectedR2Key != null &&
+        expectedR2Key.isNotEmpty &&
+        candidate.assetId == expectedAssetId &&
+        candidate.r2Key == expectedR2Key &&
+        candidate.ownerUid == currentUid) {
+      return candidate;
+    }
+    return durableSkinProductsAssetFromDraft(draft);
+  } else if (purpose == UploadedAssetPurpose.skinFace) {
+    final expectedAssetId = base.skinCareFacePhotoAssetId?.trim();
+    final expectedR2Key = base.skinCareFacePhotoR2Key?.trim();
+    if (candidate != null &&
+        expectedAssetId != null &&
+        expectedAssetId.isNotEmpty &&
+        expectedR2Key != null &&
+        expectedR2Key.isNotEmpty &&
+        candidate.assetId == expectedAssetId &&
+        candidate.r2Key == expectedR2Key &&
+        candidate.ownerUid == currentUid) {
+      return candidate;
+    }
+    return durableSkinFaceAssetFromDraft(draft);
+  }
+  return null;
+}

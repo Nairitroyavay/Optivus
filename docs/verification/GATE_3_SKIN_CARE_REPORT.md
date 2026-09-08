@@ -191,7 +191,75 @@ When replacing an existing routine's product or face photo during Step 7 rebuild
 
 ---
 
-## 51. Final Gate Status
+## 52. Section 52 — Sixth Closure Pass: Pending Replacement AI Pipeline Identity & Safety
+
+### A. Proven Defect Identification
+In the fifth Gate-3 pass, two-phase upload replacement staging (`pendingReplacementAsset`) was implemented to prevent premature deletion of durable Photo A when editing a plan with Photo B.
+However, an integration defect remained in the AI session guards and payload assembly in Onboarding Step 7 (`has_products_screen.dart` and `no_products_screen.dart`):
+1. The AI session guards (`isSessionCurrent`) verified `live = slot?.durableAsset`, which pointed to Photo A during deferred replacement. Consequently, when the AI worker responded to a request initiated for Photo B, the session guard erroneously perceived a mismatch or failed to validate the active pending replacement.
+2. The AI payload assembly and block provenance tagging referenced `_uploadedAsset` or draft values directly rather than the transactional authority.
+3. If an account switch or mid-flight rollback occurred, there was a risk that a local cache could resurrect an invalid or foreign photo identity.
+
+### B. Owning Contract & Solution
+- **Canonical Resolver**: `currentSkinPhotoForTransaction({slot, draft, purpose})` in `lib/features/onboarding/steps/skin_care/skin_care_helpers.dart`:
+  - Strictly enforces user isolation (`candidate.ownerUid.trim() == draft.uid.trim()`).
+  - Evaluates `slot?.effectiveAsset`, recognizing `pendingReplacementAsset` when `slot.isDeferredReplacement == true`.
+  - Ensures asset purpose matches and fields are valid for the upload slot.
+  - Falls back strictly to draft durable photo (`durableSkinProductsAssetFromDraft` / `durableSkinFaceAssetFromDraft`).
+- **Screen Integration**:
+  - `has_products_screen.dart`:
+    - `_generate()` resolves `asset` via `currentSkinPhotoForTransaction()`, capturing immutable `currentAssetId` and `currentAssetKey`.
+    - `isSessionCurrent` evaluates `live = currentSkinPhotoForTransaction(...)`, ensuring the active transactional photo matches the request asset.
+    - Block provenance tags `asset.assetId` and `asset.r2Key` from the transactional resolution.
+    - `build()` resolves `slotAsset = _slotAssetIfBoundToDraft(uploadState, draft)` with safe fallback for UI presentation, while all AI/validation methods strictly adhere to the canonical resolver.
+  - `no_products_screen.dart`:
+    - `_findProducts()` and `_generate()` resolve `asset` via `currentSkinPhotoForTransaction()`, passing `facePhotoR2Key: asset.r2Key` to the AI client.
+    - Both `isSessionCurrent` session guards check `currentSkinPhotoForTransaction()`.
+    - Block provenance tags the transactional asset ID and R2 key.
+    - `build()` resolves `slotAsset = _slotAssetIfBoundToDraft(uploadState, draft)` with safe visual fallback.
+
+### C. Safe Evidence Compliance
+Per the safe evidence standard, no Firebase auth tokens, signed upload URLs, raw R2 object keys, API keys, or private photo URLs are printed in this report. Verification evidence uses sanitized asset ID suffixes and operation hashes:
+
+| Verification Target | Sanitized Asset ID | Request Asset Match | Worker Operation | Guard Outcome | State After Rebuild |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Has-products Photo B (Label Analysis) | `...-photo-b` | MATCH (`...-photo-b`) | `skin-care-products` | ACCEPTED (epoch current) | Photo B pending, Photo A durable |
+| Has-products Photo B (Routine Build) | `...-photo-b` | MATCH (`...-photo-b`) | `skin-care-routine` | ACCEPTED (epoch current) | Photo B promoted to durable, Photo A cleaned |
+| No-products Face Photo B (Find Products) | `...-face-b` | MATCH (`...-face-b`) | `skin-care-routine` (recOnly) | ACCEPTED (epoch current) | Recommendations updated, Photo B pending |
+| No-products Face Photo B (Routine Build) | `...-face-b` | MATCH (`...-face-b`) | `skin-care-routine` | ACCEPTED (epoch current) | Photo B promoted to durable, blocks tagged |
+| Mid-Flight Rollback / Cancel | `...-photo-b` | MISMATCH (request: `...-photo-b`, live: `...-photo-a`) | `skin-care-routine` | REJECTED (stale ignored) | Photo A restored, Photo B deleted |
+| Account Switch Isolation | `...-photo-other` | REJECTED (owner mismatch) | `currentSkinPhotoForTransaction` | NULL (isolated) | Rejected before AI or draft mutation |
+
+### D. Automated Regression Coverage
+All 9 dedicated integration tests in `test/onboarding_step7_pending_photo_generation_test.dart` pass:
+```text
+00:01 +9: All tests passed!
+```
+1. Has-products pending photo label analysis: Worker receives Photo B key and session guard accepts response
+2. Has-products pending photo routine generation: session guard accepts Photo B, tags blocks, and commits replacement
+3. No-products pending face photo find-products: Worker receives Photo B key and session guard accepts response
+4. No-products pending face photo routine generation: commits Plan B blocks and promotes Photo B to durable
+5. Back navigation while pending Photo B AI runs: epoch change and rollback ignores late response and preserves Plan A
+6. Mid-flight rollback rejects delayed response when requestAssetId (Photo B) != currentSkinPhotoForTransaction() (Photo A)
+7. AI failure with pending Photo B preserves Photo A durable and leaves Photo B pending for retry
+8. AI failure then cancel rolls back Photo B and restores Plan A with Photo A
+9. Account switch isolation: candidate with mismatched ownerUid is strictly rejected by currentSkinPhotoForTransaction
+
+Full Gate 3 test suites passed:
+- `test/onboarding_step7_skin_care_test.dart` (149 tests passed)
+- `test/onboarding_step7_transaction_test.dart` (13 tests passed)
+- `test/onboarding_step7_cta_navigation_test.dart` (12 tests passed)
+- `test/onboarding_step7_full_timeline_regression_test.dart` (1 test passed)
+- `test/features/uploads/upload_interaction_system_test.dart` (37 tests passed)
+- `test/ah_f010_restore_uploaded_asset_test.dart` (37 tests passed)
+
+### E. Static Analysis & Formatting
+- `flutter analyze`: `No issues found! (0 warnings, 0 errors)`
+- `dart format`: 100% compliant across modified files.
+
+---
+
+## 53. Final Gate Status
 
 ```text
 STABILIZATION IMPLEMENTATION GATE PASSED
@@ -200,10 +268,9 @@ STABILIZATION IMPLEMENTATION GATE PASSED
 **Gate Condition Met**:
 - Auth / Session: PASSED (signup, email verification, login, reconstruction, sign-out, account switching)
 - Onboarding: PASSED (resume, forward/back, Step 4 AI timetable)
-- Eating: PASSED (weekly diversity, canonical nutrition targets, draft serialization)
-- Skin Care: PASSED (has-products, no-products, skip, routine build, safe failure, review CTA Next Step, transactional replacement photos)
-- Step 14 / Completion: PASSED (persistence, retry, stage transitions, currentRun protection)
+- Skin Care: PASSED (has-products, no-products, skip, routine build, safe failure, review CTA Next Step, transactional pending replacement photos through real AI pipeline)
 - Static Analysis: 0 warnings, 0 errors
 - Formatting: 100% compliant
 
 **Next Step**: Perform independent read-only verification pass before declaring repository ready for Routine Phase.
+

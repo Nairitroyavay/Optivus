@@ -132,13 +132,12 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     UploadSlotRuntimeState? uploadState,
     OnboardingDraft draft,
   ) {
-    final asset = uploadState?.effectiveAsset;
-    if (asset == null) return null;
-    final base = draft.baseTimeline;
-    return asset.assetId == base.skinCareFacePhotoAssetId &&
-            asset.r2Key == base.skinCareFacePhotoR2Key
-        ? asset
-        : null;
+    if (uploadState?.effectiveAsset == null) return null;
+    return currentSkinPhotoForTransaction(
+      slot: uploadState,
+      draft: draft,
+      purpose: UploadedAssetPurpose.skinFace,
+    );
   }
 
   Future<void> _startUpload() async {
@@ -328,14 +327,11 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final desiredApplicationsPerDay = _effectiveDesiredApplications(
       currentBase,
     );
-    final restored = ref.read(restoredUploadsProvider);
-    final restoredAsset = _restoredSkinAssetForSlot(
-      restored: restored,
+    final asset = currentSkinPhotoForTransaction(
+      slot: uploadState,
       draft: draft,
       purpose: UploadedAssetPurpose.skinFace,
     );
-    final asset =
-        _uploadedAsset ?? restoredAsset ?? durableSkinFaceAssetFromDraft(draft);
     if (asset == null ||
         asset.r2Key.trim().isEmpty ||
         currentBase.skinCareSkinType == null ||
@@ -392,15 +388,13 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                   ref.read(mockOnboardingProvider).draft.uid) ==
               uid &&
           (() {
-            final live =
-                ref
-                    .read(
-                      onboardingUploadInteractionProvider,
-                    )[onboardingSkinFaceUploadSlot]
-                    ?.durableAsset ??
-                durableSkinFaceAssetFromDraft(
-                  ref.read(mockOnboardingProvider).draft,
-                );
+            final live = currentSkinPhotoForTransaction(
+              slot: ref.read(
+                onboardingUploadInteractionProvider,
+              )[onboardingSkinFaceUploadSlot],
+              draft: ref.read(mockOnboardingProvider).draft,
+              purpose: UploadedAssetPurpose.skinFace,
+            );
             return live?.assetId == currentAssetId &&
                 live?.r2Key == currentAssetKey;
           })(),
@@ -551,14 +545,14 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final selected = currentBase.skinCareProductRecommendations
         .where((product) => selectedKeys.contains(product.selectionKey))
         .toList(growable: false);
-    final asset =
-        _uploadedAsset ??
-        _restoredSkinAssetForSlot(
-          restored: ref.read(restoredUploadsProvider),
-          draft: draft,
-          purpose: UploadedAssetPurpose.skinFace,
-        ) ??
-        durableSkinFaceAssetFromDraft(draft);
+    final uploadState = ref.read(
+      onboardingUploadInteractionProvider,
+    )[onboardingSkinFaceUploadSlot];
+    final asset = currentSkinPhotoForTransaction(
+      slot: uploadState,
+      draft: draft,
+      purpose: UploadedAssetPurpose.skinFace,
+    );
     if (selected.isEmpty) {
       setState(() => _generationError = 'Select at least one product.');
       return;
@@ -616,15 +610,13 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                   ref.read(mockOnboardingProvider).draft.uid) ==
               uid &&
           (() {
-            final live =
-                ref
-                    .read(
-                      onboardingUploadInteractionProvider,
-                    )[onboardingSkinFaceUploadSlot]
-                    ?.durableAsset ??
-                durableSkinFaceAssetFromDraft(
-                  ref.read(mockOnboardingProvider).draft,
-                );
+            final live = currentSkinPhotoForTransaction(
+              slot: ref.read(
+                onboardingUploadInteractionProvider,
+              )[onboardingSkinFaceUploadSlot],
+              draft: ref.read(mockOnboardingProvider).draft,
+              purpose: UploadedAssetPurpose.skinFace,
+            );
             return live?.assetId == currentAssetId &&
                 live?.r2Key == currentAssetKey;
           })(),
@@ -901,9 +893,9 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     )[onboardingSkinFaceUploadSlot];
     final slotAsset = _slotAssetIfBoundToDraft(uploadState, draft);
     final effectiveAsset =
-        _uploadedAsset ??
         slotAsset ??
         restoredAsset ??
+        _uploadedAsset ??
         durableSkinFaceAssetFromDraft(draft);
     final uploadBusy = uploadState?.isBusy == true;
     final uploadError =
