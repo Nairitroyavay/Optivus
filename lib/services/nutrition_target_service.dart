@@ -178,17 +178,26 @@ class NutritionTargetService {
 
   /// Maps onboarding exercise level keys to conservative activity multipliers.
   static double activityFactor(String? exerciseLevel) {
-    final key = exerciseLevel?.trim().toLowerCase();
+    final key = normalizeExerciseLevel(exerciseLevel);
     return switch (key) {
       'rarely' => 1.25,
       '1_2_days' => 1.30,
       '3_4_days' => 1.35,
       '5_plus_days' => 1.45,
-      // Legacy compatibility aliases
-      'high' || 'active' => 1.45,
-      'medium' || 'moderate' => 1.35,
-      'low' || 'sedentary' => 1.25,
       _ => 1.30,
+    };
+  }
+
+  /// Canonicalizes the historical activity aliases already accepted by the
+  /// nutrition contract. Unknown values remain unsupported.
+  static String? normalizeExerciseLevel(String? value) {
+    final lower = value?.trim().toLowerCase();
+    return switch (lower) {
+      'rarely' || 'low' || 'sedentary' => 'rarely',
+      '1_2_days' => '1_2_days',
+      '3_4_days' || 'medium' || 'moderate' => '3_4_days',
+      '5_plus_days' || 'high' || 'active' => '5_plus_days',
+      _ => null,
     };
   }
 
@@ -238,11 +247,21 @@ class NutritionTargetService {
 
   /// Normalizes body goal to 'gain', 'lose', or 'maintain'.
   static String normalizeGoal(String? value) {
+    return normalizeSupportedGoal(value) ?? 'maintain';
+  }
+
+  /// Returns a canonical current body-goal key for known current and legacy
+  /// values. Unknown values stay invalid instead of becoming a different goal.
+  static String? normalizeSupportedGoal(String? value) {
     final lower = value?.trim().toLowerCase();
     return switch (lower) {
       'gain' || 'gain_weight' || 'build_muscle' || 'muscle_gain' => 'gain',
       'lose' || 'lose_fat' || 'fat_loss' || 'weight_loss' => 'lose',
-      _ => 'maintain',
+      'maintain' ||
+      'maintenance' ||
+      'eat_healthier' ||
+      'balanced' => 'maintain',
+      _ => null,
     };
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_spacing.dart';
 import 'package:optivus/features/onboarding/steps/base_timeline_step.dart';
+import 'package:optivus/features/onboarding/onboarding_step_id.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/routine_import_review_screen.dart';
 import 'package:optivus/features/routine/providers/routine_navigation_provider.dart';
@@ -14,10 +15,10 @@ import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/upload_state.dart';
 
-const onboardingClassJobStepIndex = 4;
-const onboardingEatingStepIndex = 5;
-const onboardingFixedStepIndex = 6;
-const onboardingSkinCareStepIndex = 7;
+final onboardingClassJobStepIndex = OnboardingStepId.classesJob.index;
+final onboardingEatingStepIndex = OnboardingStepId.eating.index;
+final onboardingFixedStepIndex = OnboardingStepId.fixedSchedule.index;
+final onboardingSkinCareStepIndex = OnboardingStepId.skinCare.index;
 
 const onboardingSectionClasses = 'Classes';
 const onboardingSectionWork = 'Job / Work / Business';

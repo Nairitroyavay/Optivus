@@ -26,13 +26,46 @@ import 'package:optivus/features/uploads/providers/onboarding_upload_interaction
 
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_primary_action.dart';
 import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_controller.dart';
 import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_state.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_action_bar.dart';
 import 'package:optivus/features/onboarding/onboarding_step_readiness.dart';
+import 'package:optivus/features/onboarding/onboarding_step_id.dart';
+
+@visibleForTesting
+Widget onboardingPageForStep(
+  OnboardingStepId stepId, {
+  Key? todayReadyKey,
+  ValueChanged<int>? onJumpToStep,
+  VoidCallback? onCompletionStarted,
+  ValueChanged<bool>? onFullTimelinePreviewChanged,
+}) {
+  return switch (stepId) {
+    OnboardingStepId.welcome => const OnboardingStep0(),
+    OnboardingStepId.patience => const OnboardingStep1(),
+    OnboardingStepId.roleLifestyle => const OnboardingStep2(),
+    OnboardingStepId.bodyBasics => const OnboardingStep3(),
+    OnboardingStepId.classesJob => const OnboardingStep4(),
+    OnboardingStepId.eating => const OnboardingStep5(),
+    OnboardingStepId.fixedSchedule => const OnboardingStep6(),
+    OnboardingStepId.skinCare => const OnboardingStep7(),
+    OnboardingStepId.badHabits => const OnboardingBadHabitsStep(),
+    OnboardingStepId.goodHabits => const OnboardingGoodHabitsStep(),
+    OnboardingStepId.identityGoals => const OnboardingIdentityGoalsStep(),
+    OnboardingStepId.coachSetup => const OnboardingCoachSetupStep(),
+    OnboardingStepId.slipUp => const OnboardingSlipUpStep(),
+    OnboardingStepId.notifications => const OnboardingNotificationsStep(),
+    OnboardingStepId.todayReady => OnboardingTodayReadyStep(
+      key: todayReadyKey,
+      onJumpToStep: onJumpToStep,
+      onCompletionStarted: onCompletionStarted,
+      onFullTimelinePreviewChanged: onFullTimelinePreviewChanged,
+    ),
+  };
+}
 
 // ── Main Onboarding Flow Wizard ──────────────────────────────────────────────
 class OnboardingFlow extends ConsumerStatefulWidget {
@@ -43,8 +76,8 @@ class OnboardingFlow extends ConsumerStatefulWidget {
 }
 
 class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
-  final GlobalKey<OnboardingStep14State> _step14Key =
-      GlobalKey<OnboardingStep14State>();
+  final GlobalKey<OnboardingTodayReadyStepState> _step14Key =
+      GlobalKey<OnboardingTodayReadyStepState>();
   late PageController _pageController;
 
   double _pageOffset = 0.0;
@@ -279,9 +312,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   }) {
     final now = DateTime.now();
     var draft = ref.read(mockOnboardingProvider).draft;
-    if (step == 0) {
+    if (step == OnboardingStepId.welcome.index) {
       draft = draft.copyWith(welcomeSaved: true);
-    } else if (step == 3) {
+    } else if (step == OnboardingStepId.bodyBasics.index) {
       draft = draft.copyWith(bodyBasics: draft.bodyBasics.withEstimates());
     } else if (step == onboardingFixedStepIndex) {
       draft = draft.copyWith(
@@ -318,7 +351,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     }
 
     final readiness = _readStepReadiness(_currentPage);
-    if (_currentPage >= 1 && _currentPage <= 13 && !readiness.canSubmit) {
+    if (_currentPage >= OnboardingStepId.patience.index &&
+        _currentPage <= OnboardingStepId.notifications.index &&
+        !readiness.canSubmit) {
       ref
           .read(mockOnboardingProvider.notifier)
           .setValidationMessage(
@@ -399,9 +434,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     // `_onEnterOptivusPressed` owns the completion guard. Keeping this method
     // unguarded lets the initial CTA and the Step 14 recovery retry converge.
     final onboarding = ref.read(mockOnboardingProvider);
-    for (var step = 0; step <= OnboardingDraft.lastStepIndex; step++) {
+    for (final stepId in currentOnboardingStepOrder) {
       final error = onboarding.draft.validateStep(
-        step,
+        stepId.index,
         onboarding.stepCompleted,
       );
       if (error != null) {
@@ -784,11 +819,11 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       if (closed == true) return true;
     }
     final draft = ref.read(mockOnboardingProvider).draft;
-    return switch (_currentPage) {
-      onboardingClassJobStepIndex => _backClassesJob(draft),
-      onboardingEatingStepIndex => _backEating(draft),
-      onboardingFixedStepIndex => _backFixed(draft),
-      onboardingSkinCareStepIndex => _backSkinCare(draft),
+    return switch (OnboardingStepId.fromIndex(_currentPage)) {
+      OnboardingStepId.classesJob => _backClassesJob(draft),
+      OnboardingStepId.eating => _backEating(draft),
+      OnboardingStepId.fixedSchedule => _backFixed(draft),
+      OnboardingStepId.skinCare => _backSkinCare(draft),
       _ => false,
     };
   }
@@ -1026,7 +1061,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         !_isNavigating &&
         !_isSaving &&
         !onboardingState.stepLoading[_currentPage];
-    if (_currentPage == 0) {
+    if (_currentPage == OnboardingStepId.welcome.index) {
       ctaLabel = 'Get Started';
     } else if (_currentPage == OnboardingDraft.lastStepIndex) {
       ctaLabel = 'Enter Optivus';
@@ -1042,7 +1077,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       ctaOnPressed = _onEnterOptivusPressed;
     }
     ctaEnabled = ctaEnabled && readiness.canSubmit;
-    if (_currentPage >= 1 && _currentPage <= 13 && readiness.canRevealPrimary) {
+    if (_currentPage >= OnboardingStepId.patience.index &&
+        _currentPage <= OnboardingStepId.notifications.index &&
+        readiness.canRevealPrimary) {
       _stepsWithRevealedPrimaryCta.add(_currentPage);
     }
     final defaultShowPrimaryCta = shouldShowOnboardingPrimaryCta(
@@ -1127,31 +1164,20 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         child: PageView(
           controller: _pageController,
           physics: const NeverScrollableScrollPhysics(),
-          children: [
-            const OnboardingStep0(),
-            const OnboardingStep1(),
-            const OnboardingStep2(),
-            const OnboardingStep3(),
-            const OnboardingStep4(),
-            const OnboardingStep5(),
-            const OnboardingStep6(),
-            const OnboardingStep7(),
-            const OnboardingStep8(),
-            const OnboardingStep9(),
-            const OnboardingStep10(),
-            const OnboardingStep11(),
-            const OnboardingStep12(),
-            const OnboardingStep13(),
-            OnboardingStep14(
-              key: _step14Key,
-              onJumpToStep: _onDotTapped,
-              onCompletionStarted: _onEnterOptivusPressed,
-              onFullTimelinePreviewChanged: (isOpen) {
-                if (_step14FullTimelinePreviewOpen == isOpen) return;
-                setState(() => _step14FullTimelinePreviewOpen = isOpen);
-              },
-            ),
-          ],
+          children: currentOnboardingStepOrder
+              .map(
+                (stepId) => onboardingPageForStep(
+                  stepId,
+                  todayReadyKey: _step14Key,
+                  onJumpToStep: _onDotTapped,
+                  onCompletionStarted: _onEnterOptivusPressed,
+                  onFullTimelinePreviewChanged: (isOpen) {
+                    if (_step14FullTimelinePreviewOpen == isOpen) return;
+                    setState(() => _step14FullTimelinePreviewOpen = isOpen);
+                  },
+                ),
+              )
+              .toList(),
         ),
       ),
     );
@@ -1159,11 +1185,11 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
   Future<bool> _handleInternalNextIfNeeded() async {
     final draft = ref.read(mockOnboardingProvider).draft;
-    return switch (_currentPage) {
-      onboardingClassJobStepIndex => _nextClassesJob(draft),
-      onboardingEatingStepIndex => _nextEating(draft),
-      onboardingFixedStepIndex => _nextFixed(draft),
-      onboardingSkinCareStepIndex => _nextSkinCare(draft),
+    return switch (OnboardingStepId.fromIndex(_currentPage)) {
+      OnboardingStepId.classesJob => _nextClassesJob(draft),
+      OnboardingStepId.eating => _nextEating(draft),
+      OnboardingStepId.fixedSchedule => _nextFixed(draft),
+      OnboardingStepId.skinCare => _nextSkinCare(draft),
       _ => Future.value(false),
     };
   }

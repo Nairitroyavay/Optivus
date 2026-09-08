@@ -8,7 +8,7 @@ import '../../../models/onboarding_draft.dart';
 import '../../routine/utils/timeline_utils.dart';
 import '../../../state/app_state.dart' show mockOnboardingProvider;
 import 'onboarding_base_timeline_helpers.dart' show onboardingFixedStepIndex;
-import 'onboarding_class_setup_timeline.dart' show ClassRoutineBlock;
+import 'onboarding_step_4_schedule_models.dart' show ClassRoutineBlock;
 
 class OnboardingStep6 extends ConsumerStatefulWidget {
   const OnboardingStep6({super.key});

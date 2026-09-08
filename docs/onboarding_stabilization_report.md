@@ -716,8 +716,8 @@ Group E (Issues 22-28), Group F (Issues 29-30), Group G (Issues 31-32)
 #### Issue 51: Onboarding stage summary screen layout clipping on landscape
 - **Status**: `PASSED`
 - **Root Cause**: Summary step screen (`OnboardingStep14`) used fixed height column constraints, causing summary card content to clip or overflow off screen when device was rotated to landscape orientation (<450px height).
-- **Files Inspected**: `lib/features/onboarding/widgets/onboarding_glass_widgets.dart`, `lib/features/onboarding/steps/onboarding_step_11_today_ready.dart`
-- **Files Changed**: `lib/features/onboarding/widgets/onboarding_glass_widgets.dart`, `lib/features/onboarding/steps/onboarding_step_11_today_ready.dart`
+- **Files Inspected**: `lib/features/onboarding/widgets/onboarding_glass_widgets.dart`, `lib/features/onboarding/steps/onboarding_step_14_today_ready.dart`
+- **Files Changed**: `lib/features/onboarding/widgets/onboarding_glass_widgets.dart`, `lib/features/onboarding/steps/onboarding_step_14_today_ready.dart`
 - **Fix Implemented**: Updated `OnboardingScrollView` constraints to check `isLandscape`. Adjusted bottom reserve padding (`ctaH + media.padding.bottom + media.viewInsets.bottom + (isLandscape ? 20.0 : 48.0)`) and set `minHeight: isLandscape ? 0.0 : math.max(0.0, constraints.maxHeight - bottomReserve)`. Enclosed summary step screen elements in scrollable viewport in landscape mode.
 - **Targeted Tests**: `test/group_i_issues_43_to_55_test.dart` ("Issue 51: OnboardingScrollView adapts constraints in landscape")
 - **Regression Tests**: `test/onboarding_step6_fixed_schedule_test.dart`

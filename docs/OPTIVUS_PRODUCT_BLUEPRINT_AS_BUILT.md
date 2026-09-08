@@ -202,8 +202,13 @@ evidence of durable backend behavior.
 
 ## 6. Onboarding — current 15-page flow
 
-The active onboarding schema is version 2 and contains 15 top-level pages,
-indexed 0–14. Older 12-step drafts are migrated into the new page layout.
+The current `OnboardingDraft` data schema is version 3 and the product contains
+15 top-level pages, indexed 0–14. Data-schema version and page-layout topology
+are separate contracts: schema-v2 documents can already use the current
+15-page layout. A document-level layout detector migrates only drafts with
+evidence of the historical 12-page topology; current and ambiguous partial
+vectors keep current numeric meaning and are safely padded before resume
+validation.
 
 The page is not swipe-navigable. The bottom CTA saves/validates the current
 page before progressing. Completed pages may be revisited through the progress

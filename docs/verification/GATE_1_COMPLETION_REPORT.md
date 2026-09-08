@@ -10,7 +10,7 @@ Inventoried 587 files under lib, test, tests, workers and docs. Searched the rep
 
 | Area | File | Current behavior before edits | Evidence | Bug / intended | Risk |
 |---|---|---|---|---|---|
-| Step 14 presentation | lib/features/onboarding/steps/onboarding_step_11_today_ready.dart | Recovery requires preview bundle | Non-review branch checks bundle != null | Bug | High |
+| Step 14 presentation | lib/features/onboarding/steps/onboarding_step_14_today_ready.dart | Recovery requires preview bundle | Non-review branch checks bundle != null | Bug | High |
 | Step 14 failure UI | Same | Safe generic copy, no stage/code | _buildFailureView | Observability defect | High |
 | Completion service | lib/services/onboarding_completion_job_service.dart | Ordered checkpoints and final proof | Entire pipeline traced | Intended | Preserve |
 | Initial activation | Same | Atomic draft/run/pointer batch outside stage catch; notifier publishes before commit | _saveJobStatus and caller | Bug | High |

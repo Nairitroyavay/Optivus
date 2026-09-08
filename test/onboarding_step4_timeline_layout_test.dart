@@ -7,7 +7,7 @@ import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpe
 import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step4_unified.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_5_eating_setup.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_step_11_today_ready.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_14_today_ready.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
@@ -989,7 +989,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: Scaffold(body: OnboardingStep14())),
+          child: const MaterialApp(home: Scaffold(body: OnboardingTodayReadyStep())),
         ),
       );
       await tester.pumpAndSettle();

@@ -3,17 +3,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_spacing.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
+import 'package:optivus/features/onboarding/onboarding_step_id.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/widgets/animated_bot_avatar.dart';
 
-class OnboardingStep11 extends ConsumerStatefulWidget {
-  const OnboardingStep11({super.key});
+class OnboardingCoachSetupStep extends ConsumerStatefulWidget {
+  const OnboardingCoachSetupStep({super.key});
 
   @override
-  ConsumerState<OnboardingStep11> createState() => _OnboardingStep11State();
+  ConsumerState<OnboardingCoachSetupStep> createState() =>
+      _OnboardingCoachSetupStepState();
 }
 
-class _OnboardingStep11State extends ConsumerState<OnboardingStep11> {
+class _OnboardingCoachSetupStepState
+    extends ConsumerState<OnboardingCoachSetupStep> {
   final _customCtrl = TextEditingController();
   static const coaches = [
     'Coach',
@@ -120,7 +123,10 @@ class _OnboardingStep11State extends ConsumerState<OnboardingStep11> {
                               );
                           ref
                               .read(mockOnboardingProvider.notifier)
-                              .setStepDirty(11, true);
+                              .setStepDirty(
+                                OnboardingStepId.coachSetup.index,
+                                true,
+                              );
                         },
                       );
                     }).toList(),
@@ -152,7 +158,10 @@ class _OnboardingStep11State extends ConsumerState<OnboardingStep11> {
                             );
                         ref
                             .read(mockOnboardingProvider.notifier)
-                            .setStepDirty(11, true);
+                            .setStepDirty(
+                              OnboardingStepId.coachSetup.index,
+                              true,
+                            );
                       },
                     ),
                   ),
@@ -181,7 +190,10 @@ class _OnboardingStep11State extends ConsumerState<OnboardingStep11> {
                                   );
                               ref
                                   .read(mockOnboardingProvider.notifier)
-                                  .setStepDirty(11, true);
+                                  .setStepDirty(
+                                    OnboardingStepId.coachSetup.index,
+                                    true,
+                                  );
                             },
                           ),
                         )
@@ -205,7 +217,9 @@ class _OnboardingStep11State extends ConsumerState<OnboardingStep11> {
                             shape: BoxShape.circle,
                             gradient: RadialGradient(
                               colors: [
-                                OptivusColors.aquaAccent.withValues(alpha: 0.35),
+                                OptivusColors.aquaAccent.withValues(
+                                  alpha: 0.35,
+                                ),
                                 OptivusColors.aquaAccent.withValues(alpha: 0.0),
                               ],
                             ),

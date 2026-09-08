@@ -181,6 +181,13 @@ Entry/setup persistence is separate:
 | Authentication | Firebase email/password, verification, reset, and session restore when Firebase mode is active | `AuthRepository` | Identity/session gate; not an application-area data store |
 | Onboarding | Draft, completion bundle, profile patch, upload metadata, and import review in Firebase mode | `OnboardingRepository`, upload/import repositories, Onboarding services | Versioned setup draft and bootstrap snapshot; projects into feature owners |
 
+Onboarding page identity is owned by
+`lib/features/onboarding/onboarding_step_id.dart`. The current semantic order
+contains 15 IDs and converts to the existing numeric persistence fields at the
+draft boundary. `OnboardingDraft.schemaVersion` versions the full data model;
+it is not a page-layout version. Historical 12-page progression is recognized
+from document-level topology evidence and explicitly mapped to current IDs.
+
 A Firestore path in `lib/repositories/firestore_paths.dart` is a target contract,
 not proof that its repository or security schema is implemented.
 

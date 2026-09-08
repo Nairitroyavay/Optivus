@@ -9,6 +9,9 @@ import 'package:optivus/models/skin_care_product_draft.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/services/nutrition_target_service.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
+import 'package:optivus/features/onboarding/onboarding_step_id.dart';
+
+enum PersistedOnboardingStepLayout { legacy12, current15, ambiguous }
 
 class OnboardingDraft {
   static const int schemaVersion = 3;
@@ -125,26 +128,26 @@ class OnboardingDraft {
   });
 
   factory OnboardingDraft.fromMap(Map<String, dynamic> map) {
-    final migrateLegacySteps = _shouldMigrateLegacySteps(map);
+    final persistedStepLayout = _detectPersistedStepLayout(map);
     return OnboardingDraft(
       uid: map['uid'] as String? ?? '',
       storedSchemaVersion:
           (map['schemaVersion'] as num?)?.toInt() ?? schemaVersion,
-      currentStep: _migratedStepIndex(
+      currentStep: _readCurrentStepIndex(
         _readStoredStepIndex(map['currentStep']),
-        migrateLegacySteps: migrateLegacySteps,
+        persistedStepLayout: persistedStepLayout,
       ),
       stepCompleted: _readStepBoolList(
         map['stepCompleted'],
-        migrateLegacySteps: migrateLegacySteps,
+        persistedStepLayout: persistedStepLayout,
       ),
       stepDirty: _readStepBoolList(
         map['stepDirty'],
-        migrateLegacySteps: migrateLegacySteps,
+        persistedStepLayout: persistedStepLayout,
       ),
       stepLoading: _readStepBoolList(
         map['stepLoading'],
-        migrateLegacySteps: migrateLegacySteps,
+        persistedStepLayout: persistedStepLayout,
       ),
       createdAt: _readDateTime(map['createdAt']),
       updatedAt: _readDateTime(map['updatedAt']),
@@ -353,50 +356,50 @@ class OnboardingDraft {
   }
 
   String? validateStep(int step, List<bool> completedSteps) {
-    switch (step) {
-      case 0:
+    switch (OnboardingStepId.fromIndex(step)) {
+      case OnboardingStepId.welcome:
         return null;
-      case 1:
+      case OnboardingStepId.patience:
         return patiencePledgeAccepted
             ? null
             : 'Please read and commit to the Patience Pledge to proceed.';
-      case 2:
+      case OnboardingStepId.roleLifestyle:
         return lifeRole.validate();
-      case 3:
+      case OnboardingStepId.bodyBasics:
         return bodyBasics.validate();
-      case 4:
+      case OnboardingStepId.classesJob:
         return baseTimeline.validateClassesAndWorkForRole(lifeRole.lifeRole);
-      case 5:
+      case OnboardingStepId.eating:
         final targets = canonicalNutritionTargets();
         return baseTimeline.validateEatingSetup(
           targets: targets,
           generationInputs: canonicalEatingGenerationInputs(targets: targets),
         );
-      case 6:
+      case OnboardingStepId.fixedSchedule:
         return baseTimeline.validateFixedSchedule();
-      case 7:
+      case OnboardingStepId.skinCare:
         return baseTimeline.validateSkinCareSetup(uid);
-      case 8:
+      case OnboardingStepId.badHabits:
         return badHabitsNotNow || badHabits.isNotEmpty
             ? null
             : 'Choose Not now or select at least one bad habit.';
-      case 9:
+      case OnboardingStepId.goodHabits:
         return goodHabitsNotNow || goodHabits.isNotEmpty
             ? null
             : 'Choose Not now or select at least one good habit.';
-      case 10:
+      case OnboardingStepId.identityGoals:
         return identityGoals.isNotEmpty
             ? null
             : 'Select at least one long-term identity goal.';
-      case 11:
+      case OnboardingStepId.coachSetup:
         return coachSetup.validate();
-      case 12:
+      case OnboardingStepId.slipUp:
         return slipUpHandling == null
             ? 'Choose a slip-up handling style.'
             : null;
-      case 13:
+      case OnboardingStepId.notifications:
         return notifications.validate();
-      case 14:
+      case OnboardingStepId.todayReady:
         if (!completedSteps.take(lastStepIndex).every((done) => done)) {
           return 'Complete and save all previous onboarding steps first.';
         }
@@ -420,8 +423,9 @@ class OnboardingDraft {
           return preview.blockingWarnings.first;
         }
         return null;
+      case null:
+        return null;
     }
-    return null;
   }
 
   FinalTimelinePreview buildFinalPreview() {
@@ -863,21 +867,51 @@ class OnboardingDraft {
     );
   }
 
-  static bool _shouldMigrateLegacySteps(Map<String, dynamic> map) {
+  static PersistedOnboardingStepLayout _detectPersistedStepLayout(
+    Map<String, dynamic> map,
+  ) {
     final version = (map['schemaVersion'] as num?)?.toInt();
-    if (version != null && version >= schemaVersion) return false;
-    final completed = map['stepCompleted'];
-    if (completed is List && completed.length == _legacyStepCount) return true;
-    final dirty = map['stepDirty'];
-    if (dirty is List && dirty.length == _legacyStepCount) return true;
-    final loading = map['stepLoading'];
-    if (loading is List && loading.length == _legacyStepCount) return true;
-    return version != null && version < schemaVersion;
+    final lengths = <int>[
+      for (final key in const ['stepCompleted', 'stepDirty', 'stepLoading'])
+        if (map[key] is List) (map[key] as List).length,
+    ];
+    final hasCurrentVector = lengths.contains(stepCount);
+    final hasLegacyVector = lengths.contains(_legacyStepCount);
+
+    // A mixed 15/12 document is conflicting. Preserve current numeric meaning
+    // and pad vectors rather than aggressively shifting progression.
+    if (hasCurrentVector && hasLegacyVector) {
+      return PersistedOnboardingStepLayout.ambiguous;
+    }
+    if (hasCurrentVector) return PersistedOnboardingStepLayout.current15;
+
+    // Current-schema short vectors are partial/corrupt current vectors.
+    if (version != null && version >= schemaVersion) {
+      return PersistedOnboardingStepLayout.current15;
+    }
+    if (hasLegacyVector) return PersistedOnboardingStepLayout.legacy12;
+
+    // Schema v1 is the only explicit historical data-schema evidence that a
+    // partial vector belongs to the 12-page topology. Schema v2 already
+    // existed with the current 15-page product layout.
+    if (version != null &&
+        version <= 1 &&
+        lengths.any((length) => length > 0)) {
+      return PersistedOnboardingStepLayout.legacy12;
+    }
+    return PersistedOnboardingStepLayout.ambiguous;
   }
 
-  static int _migratedStepIndex(int step, {required bool migrateLegacySteps}) {
-    final migrated = migrateLegacySteps && step >= 5 ? step + 3 : step;
-    return migrated.clamp(0, lastStepIndex).toInt();
+  static int _readCurrentStepIndex(
+    int storedStep, {
+    required PersistedOnboardingStepLayout persistedStepLayout,
+  }) {
+    if (persistedStepLayout != PersistedOnboardingStepLayout.legacy12) {
+      return storedStep.clamp(0, lastStepIndex).toInt();
+    }
+    return (legacyOnboardingIndexToCurrentStepId(storedStep) ??
+            OnboardingStepId.welcome)
+        .index;
   }
 
   static int _readStoredStepIndex(Object? value) {
@@ -888,12 +922,12 @@ class OnboardingDraft {
 
   static List<bool> _readStepBoolList(
     dynamic value, {
-    required bool migrateLegacySteps,
+    required PersistedOnboardingStepLayout persistedStepLayout,
   }) {
     final raw = value is List
         ? value.map((e) => e == true).toList(growable: false)
         : <bool>[];
-    if (migrateLegacySteps && raw.length <= _legacyStepCount) {
+    if (persistedStepLayout == PersistedOnboardingStepLayout.legacy12) {
       return _migrateLegacyStepBoolList(raw);
     }
     return _normalizeBoolList(raw, stepCount);
@@ -901,23 +935,22 @@ class OnboardingDraft {
 
   static List<bool> _migrateLegacyStepBoolList(List<bool> legacy) {
     bool old(int index) => index >= 0 && index < legacy.length && legacy[index];
-    return <bool>[
-      old(0),
-      old(1),
-      old(2),
-      old(3),
-      old(4),
-      old(4),
-      old(4),
-      old(4),
-      old(5),
-      old(6),
-      old(7),
-      old(8),
-      old(9),
-      old(10),
-      old(11),
-    ];
+    final migrated = List<bool>.filled(stepCount, false);
+    for (
+      var legacyIndex = 0;
+      legacyIndex < legacy.length && legacyIndex < _legacyStepCount;
+      legacyIndex++
+    ) {
+      final currentId = legacyOnboardingIndexToCurrentStepId(legacyIndex);
+      if (currentId != null) migrated[currentId.index] = old(legacyIndex);
+    }
+    // The old combined Base Timeline completion covers each page created by
+    // its split. Resume validation remains the final monotonic authority.
+    final baseTimelineComplete = old(4);
+    migrated[OnboardingStepId.eating.index] = baseTimelineComplete;
+    migrated[OnboardingStepId.fixedSchedule.index] = baseTimelineComplete;
+    migrated[OnboardingStepId.skinCare.index] = baseTimelineComplete;
+    return migrated;
   }
 
   static List<T> _readList<T>(
@@ -961,7 +994,9 @@ class LifeRoleDraft {
       lifeRole: map['lifeRole'] as String?,
       workType: map['workType'] as String?,
       businessMode: map['businessMode'] as String?,
-      exerciseLevel: map['exerciseLevel'] as String?,
+      exerciseLevel: NutritionTargetService.normalizeExerciseLevel(
+        map['exerciseLevel'] as String?,
+      ),
       waterIntake: map['waterIntake'] as String?,
       stressLevel: map['stressLevel'] as String?,
       sleepQuality: map['sleepQuality'] as String?,
@@ -1377,7 +1412,9 @@ class BaseTimelineDraft {
       eatingSetupPath: map['eatingSetupPath'] as String?,
       eatingMode: map['eatingMode'] as String?,
       shouldPlanMeals: map['shouldPlanMeals'] as bool?,
-      mealPlanningGoal: map['mealPlanningGoal'] as String?,
+      mealPlanningGoal: NutritionTargetService.normalizeSupportedGoal(
+        map['mealPlanningGoal'] as String?,
+      ),
       foodType: map['foodType'] as String?,
       foodStyleCustomText: map['foodStyleCustomText'] as String?,
       mealBudget: map['mealBudget'] as String?,
@@ -2707,67 +2744,6 @@ class BaseTimelineDraft {
     final generated = blocks.where((block) => block.section == 'skin_care');
     return generated.isNotEmpty &&
         generated.every((block) => block.provenanceSourceIds.contains(token));
-  }
-
-  String? validateForRole(String? lifeRole) {
-    final classesRequired =
-        lifeRole == LifeRoleDraft.studentKey ||
-        lifeRole == LifeRoleDraft.studentWorkingKey;
-    final jobRequired =
-        lifeRole == LifeRoleDraft.workingKey ||
-        lifeRole == LifeRoleDraft.studentWorkingKey ||
-        lifeRole == LifeRoleDraft.businessKey;
-    if (lifeRole == null) {
-      return 'Choose your role before setting the base timeline.';
-    }
-    if (classesRequired && !_hasConfirmedSection('classes')) {
-      return 'Add at least one class block for your role.';
-    }
-    if (jobRequired && !_hasConfirmedSection('job_work_business')) {
-      return 'Add at least one job/work/business block for your role.';
-    }
-    if (lifeRole == LifeRoleDraft.businessKey) {
-      if (businessMode == null) {
-        return 'Choose your business schedule mode.';
-      }
-      if (businessMode != 'fixed_business') {
-        if (workDurationMinutes == null || workDurationMinutes! <= 0) {
-          return 'Choose your business work duration.';
-        }
-        if (workBestTime == null) return 'Choose your business best time.';
-        if (workPriority == null) return 'Choose your business priority.';
-      }
-    }
-    if (eatingMode == null) return 'Choose your eating mode.';
-    if ((eatingMode == 'flat' || eatingMode == 'staying_alone') &&
-        shouldPlanMeals == null) {
-      return 'Choose whether Optivus should plan meals or only remind you.';
-    }
-    if (shouldPlanMeals == true &&
-        (mealPlanningGoal == null ||
-            foodType == null ||
-            mealBudget == null ||
-            cookingAbility == null ||
-            mealsPerDay == null)) {
-      return 'Complete meal planning details or choose Only remind me.';
-    }
-    if (!_hasConfirmedSection('eating')) {
-      return 'Add at least one eating block.';
-    }
-    if (!_hasConfirmedSection('fixed')) {
-      return 'Add at least one fixed block.';
-    }
-    if (!_hasSleepBlock(blocks)) {
-      return 'Keep the default Sleep fixed block and set its timing.';
-    }
-    if (!_hasBathBlock(blocks)) {
-      return 'Keep the default Bath fixed block and set its timing.';
-    }
-    final blocking = detectConflicts().where((conflict) => conflict.isBlocking);
-    if (blocking.isNotEmpty) {
-      return 'Resolve or explicitly keep hard-block timeline conflicts.';
-    }
-    return null;
   }
 
   List<TimelineBlockDraft> confirmedBlocksForSection(String section) {

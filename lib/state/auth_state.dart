@@ -28,7 +28,7 @@ import 'package:optivus/features/recovery/services/recovery_retry_controller.dar
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/features/coach/providers/coach_navigation_provider.dart';
 import 'package:optivus/features/goals/providers/goals_navigation_provider.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
 import 'package:optivus/features/home/providers/home_mind_note_provider.dart';
 import 'package:optivus/features/home/providers/home_navigation_provider.dart';

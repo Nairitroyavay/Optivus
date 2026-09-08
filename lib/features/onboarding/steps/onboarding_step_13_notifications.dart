@@ -3,16 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_spacing.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
+import 'package:optivus/features/onboarding/onboarding_step_id.dart';
 import 'package:optivus/state/app_state.dart';
 
-class OnboardingStep13 extends ConsumerStatefulWidget {
-  const OnboardingStep13({super.key});
+class OnboardingNotificationsStep extends ConsumerStatefulWidget {
+  const OnboardingNotificationsStep({super.key});
 
   @override
-  ConsumerState<OnboardingStep13> createState() => _OnboardingStep13State();
+  ConsumerState<OnboardingNotificationsStep> createState() =>
+      _OnboardingNotificationsStepState();
 }
 
-class _OnboardingStep13State extends ConsumerState<OnboardingStep13> {
+class _OnboardingNotificationsStepState
+    extends ConsumerState<OnboardingNotificationsStep> {
   @override
   Widget build(BuildContext context) {
     final notifications = ref.watch(mockOnboardingProvider).draft.notifications;
@@ -149,7 +152,10 @@ class _OnboardingStep13State extends ConsumerState<OnboardingStep13> {
                                   );
                               ref
                                   .read(mockOnboardingProvider.notifier)
-                                  .setStepDirty(13, true);
+                                  .setStepDirty(
+                                    OnboardingStepId.notifications.index,
+                                    true,
+                                  );
                             },
                             accent: OptivusColors.brandAccent,
                           ),
@@ -196,7 +202,10 @@ class _OnboardingStep13State extends ConsumerState<OnboardingStep13> {
                                       );
                                   ref
                                       .read(mockOnboardingProvider.notifier)
-                                      .setStepDirty(13, true);
+                                      .setStepDirty(
+                                        OnboardingStepId.notifications.index,
+                                        true,
+                                      );
                                 },
                                 accent: OptivusColors.aquaAccent,
                               ),
@@ -258,7 +267,10 @@ class _OnboardingStep13State extends ConsumerState<OnboardingStep13> {
                               );
                           ref
                               .read(mockOnboardingProvider.notifier)
-                              .setStepDirty(13, true);
+                              .setStepDirty(
+                                OnboardingStepId.notifications.index,
+                                true,
+                              );
                         },
                       ),
                     ],
@@ -313,7 +325,10 @@ class _OnboardingStep13State extends ConsumerState<OnboardingStep13> {
                                       );
                                   ref
                                       .read(mockOnboardingProvider.notifier)
-                                      .setStepDirty(13, true);
+                                      .setStepDirty(
+                                        OnboardingStepId.notifications.index,
+                                        true,
+                                      );
                                 },
                                 child: const Text(
                                   'Don\'t Allow',
@@ -339,7 +354,10 @@ class _OnboardingStep13State extends ConsumerState<OnboardingStep13> {
                                       );
                                   ref
                                       .read(mockOnboardingProvider.notifier)
-                                      .setStepDirty(13, true);
+                                      .setStepDirty(
+                                        OnboardingStepId.notifications.index,
+                                        true,
+                                      );
                                 },
                                 child: const Text(
                                   'Allow',

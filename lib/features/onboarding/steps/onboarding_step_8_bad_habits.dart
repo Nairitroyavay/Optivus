@@ -3,17 +3,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_spacing.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
+import 'package:optivus/features/onboarding/onboarding_step_id.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/state/app_state.dart';
 
-class OnboardingStep8 extends ConsumerStatefulWidget {
-  const OnboardingStep8({super.key});
+class OnboardingBadHabitsStep extends ConsumerStatefulWidget {
+  const OnboardingBadHabitsStep({super.key});
 
   @override
-  ConsumerState<OnboardingStep8> createState() => _OnboardingStep8State();
+  ConsumerState<OnboardingBadHabitsStep> createState() =>
+      _OnboardingBadHabitsStepState();
 }
 
-class _OnboardingStep8State extends ConsumerState<OnboardingStep8> {
+class _OnboardingBadHabitsStepState
+    extends ConsumerState<OnboardingBadHabitsStep> {
   final _customCtrl = TextEditingController();
   bool _notNow = false;
   final List<_BadHabit> _habits = [
@@ -55,8 +58,9 @@ class _OnboardingStep8State extends ConsumerState<OnboardingStep8> {
     super.dispose();
   }
 
-  void _dirty() =>
-      ref.read(mockOnboardingProvider.notifier).setStepDirty(8, true);
+  void _dirty() => ref
+      .read(mockOnboardingProvider.notifier)
+      .setStepDirty(OnboardingStepId.badHabits.index, true);
 
   void _syncDraft() {
     final selected = _notNow

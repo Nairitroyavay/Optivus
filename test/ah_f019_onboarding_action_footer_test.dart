@@ -612,7 +612,7 @@ void main() {
                     () {},
                   ),
                 ],
-                child: const OnboardingStep14(),
+                child: const OnboardingTodayReadyStep(),
               ),
             ),
           ),
@@ -623,7 +623,7 @@ void main() {
         final footer = tester.getRect(
           find.byKey(const ValueKey('onboarding-cta-visible')),
         );
-        final step = tester.getRect(find.byType(OnboardingStep14));
+        final step = tester.getRect(find.byType(OnboardingTodayReadyStep));
         expect(step.bottom, equals(footer.bottom));
         expect(tester.takeException(), isNull);
 
@@ -666,7 +666,7 @@ void main() {
                   enabled: isReady,
                 ),
               ],
-              child: const OnboardingStep14(),
+              child: const OnboardingTodayReadyStep(),
             ),
           ),
         );
@@ -744,7 +744,7 @@ void main() {
                   },
                 ),
               ],
-              child: const OnboardingStep14(),
+              child: const OnboardingTodayReadyStep(),
             ),
           ),
         ),
@@ -1050,7 +1050,7 @@ void main() {
                   () {},
                 ),
               ],
-              child: const OnboardingStep14(),
+              child: const OnboardingTodayReadyStep(),
             ),
           ),
         ),
@@ -1120,7 +1120,7 @@ void main() {
                   () {},
                 ),
               ],
-              child: const OnboardingStep14(),
+              child: const OnboardingTodayReadyStep(),
             ),
           ),
         ),
@@ -1188,7 +1188,7 @@ void main() {
                       : OnboardingActionOperationState.idle,
                 ),
               ],
-              child: const OnboardingStep14(),
+              child: const OnboardingTodayReadyStep(),
             ),
           ),
         );

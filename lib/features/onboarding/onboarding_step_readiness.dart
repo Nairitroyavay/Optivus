@@ -1,4 +1,5 @@
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/features/onboarding/onboarding_step_id.dart';
 
 enum OnboardingStepRequirement {
   required,
@@ -78,85 +79,86 @@ class OnboardingStepReadiness {
 }
 
 OnboardingStepDefinition onboardingStepDefinition(int step) {
-  return switch (step) {
-    1 => const OnboardingStepDefinition(
-      step: 1,
+  final stepId = OnboardingStepId.fromIndex(step);
+  return switch (stepId) {
+    OnboardingStepId.patience => OnboardingStepDefinition(
+      step: OnboardingStepId.patience.index,
       requirement: OnboardingStepRequirement.required,
       requiredCondition: 'Patience Pledge explicitly accepted',
     ),
-    2 => const OnboardingStepDefinition(
-      step: 2,
+    OnboardingStepId.roleLifestyle => OnboardingStepDefinition(
+      step: OnboardingStepId.roleLifestyle.index,
       requirement: OnboardingStepRequirement.conditionalRequired,
       requiredCondition:
           'Role and lifestyle choices; work type or business mode when the selected role requires it',
     ),
-    3 => const OnboardingStepDefinition(
-      step: 3,
+    OnboardingStepId.bodyBasics => OnboardingStepDefinition(
+      step: OnboardingStepId.bodyBasics.index,
       requirement: OnboardingStepRequirement.required,
       requiredCondition: 'Valid age range, height, weight, and gender',
     ),
-    4 => const OnboardingStepDefinition(
-      step: 4,
+    OnboardingStepId.classesJob => OnboardingStepDefinition(
+      step: OnboardingStepId.classesJob.index,
       requirement: OnboardingStepRequirement.conditionalRequired,
       requiredCondition:
           'Class schedule for Student, work schedule for Working/Business, both for Student + Working, none for Not Student + Not Working',
     ),
-    5 => const OnboardingStepDefinition(
-      step: 5,
+    OnboardingStepId.eating => OnboardingStepDefinition(
+      step: OnboardingStepId.eating.index,
       requirement: OnboardingStepRequirement.required,
       requiredCondition: 'Structurally valid, confirmed weekly meal routine',
     ),
-    6 => const OnboardingStepDefinition(
-      step: 6,
+    OnboardingStepId.fixedSchedule => OnboardingStepDefinition(
+      step: OnboardingStepId.fixedSchedule.index,
       requirement: OnboardingStepRequirement.required,
       requiredCondition:
           'Valid sleep and bath blocks plus explicit fixed-schedule confirmation',
     ),
-    7 => const OnboardingStepDefinition(
-      step: 7,
+    OnboardingStepId.skinCare => OnboardingStepDefinition(
+      step: OnboardingStepId.skinCare.index,
       requirement: OnboardingStepRequirement.optional,
       requiredCondition: 'Valid reviewed skin-care routine, or explicit Skip',
       skipAllowed: true,
     ),
-    8 => const OnboardingStepDefinition(
-      step: 8,
+    OnboardingStepId.badHabits => OnboardingStepDefinition(
+      step: OnboardingStepId.badHabits.index,
       requirement: OnboardingStepRequirement.optional,
       requiredCondition: 'At least one bad habit, or explicit Not now',
       skipAllowed: true,
     ),
-    9 => const OnboardingStepDefinition(
-      step: 9,
+    OnboardingStepId.goodHabits => OnboardingStepDefinition(
+      step: OnboardingStepId.goodHabits.index,
       requirement: OnboardingStepRequirement.optional,
       requiredCondition: 'At least one good habit, or explicit Not now',
       skipAllowed: true,
     ),
-    10 => const OnboardingStepDefinition(
-      step: 10,
+    OnboardingStepId.identityGoals => OnboardingStepDefinition(
+      step: OnboardingStepId.identityGoals.index,
       requirement: OnboardingStepRequirement.required,
       requiredCondition: 'At least one identity goal',
     ),
-    11 => const OnboardingStepDefinition(
-      step: 11,
+    OnboardingStepId.coachSetup => OnboardingStepDefinition(
+      step: OnboardingStepId.coachSetup.index,
       requirement: OnboardingStepRequirement.required,
       requiredCondition: 'Explicit coach name and coaching style',
     ),
-    12 => const OnboardingStepDefinition(
-      step: 12,
+    OnboardingStepId.slipUp => OnboardingStepDefinition(
+      step: OnboardingStepId.slipUp.index,
       requirement: OnboardingStepRequirement.required,
       requiredCondition: 'Explicit slip-up recovery style',
     ),
-    13 => const OnboardingStepDefinition(
-      step: 13,
+    OnboardingStepId.notifications => OnboardingStepDefinition(
+      step: OnboardingStepId.notifications.index,
       requirement: OnboardingStepRequirement.required,
       requiredCondition:
           'App reminder preferences explicitly confirmed; Android permission is not required',
     ),
-    14 => const OnboardingStepDefinition(
-      step: 14,
+    OnboardingStepId.todayReady => OnboardingStepDefinition(
+      step: OnboardingStepId.todayReady.index,
       requirement: OnboardingStepRequirement.excluded,
       requiredCondition: 'Dedicated final review and completion pipeline',
     ),
-    _ => OnboardingStepDefinition(
+    OnboardingStepId.welcome || null => OnboardingStepDefinition(
       step: step,
       requirement: OnboardingStepRequirement.excluded,
       requiredCondition: 'Outside the progressive Steps 1-13 contract',
@@ -188,7 +190,9 @@ OnboardingStepReadiness evaluateOnboardingStepReadiness({
   final verifiedComplete = completed && !dirty;
 
   // Welcome and final review retain their existing dedicated CTA semantics.
-  if (step == 0 || step == OnboardingDraft.lastStepIndex) {
+  final stepId = OnboardingStepId.fromIndex(step);
+  if (stepId == OnboardingStepId.welcome ||
+      stepId == OnboardingStepId.todayReady) {
     return OnboardingStepReadiness(
       definition: definition,
       requiredInputsSatisfied: true,
@@ -205,7 +209,8 @@ OnboardingStepReadiness evaluateOnboardingStepReadiness({
   var validationPassed = draftValidationMessage == null;
   String? validationMessage = draftValidationMessage;
 
-  if (step == 4 && effectiveRuntime.classJobReviewReady != null) {
+  if (stepId == OnboardingStepId.classesJob &&
+      effectiveRuntime.classJobReviewReady != null) {
     validationPassed = effectiveRuntime.classJobReviewReady!;
     if (!validationPassed) {
       validationMessage =
@@ -214,7 +219,8 @@ OnboardingStepReadiness evaluateOnboardingStepReadiness({
     }
   }
 
-  if (step == 5 && effectiveRuntime.eatingReviewReady != null) {
+  if (stepId == OnboardingStepId.eating &&
+      effectiveRuntime.eatingReviewReady != null) {
     validationPassed = effectiveRuntime.eatingReviewReady!;
     if (!validationPassed) {
       validationMessage =
@@ -223,8 +229,10 @@ OnboardingStepReadiness evaluateOnboardingStepReadiness({
     }
   }
 
-  final reviewCompleted = switch (step) {
-    4 || 5 || 7 => validationPassed,
+  final reviewCompleted = switch (stepId) {
+    OnboardingStepId.classesJob ||
+    OnboardingStepId.eating ||
+    OnboardingStepId.skinCare => validationPassed,
     _ => true,
   };
 
@@ -245,8 +253,14 @@ bool shouldShowOnboardingPrimaryCta({
   required OnboardingStepReadiness readiness,
   required bool revealedDuringInteraction,
 }) {
-  if (step < 1 || step > 13) return true;
-  if (step == 4 || step == 5) {
+  final stepId = OnboardingStepId.fromIndex(step);
+  if (stepId == null ||
+      stepId == OnboardingStepId.welcome ||
+      stepId == OnboardingStepId.todayReady) {
+    return true;
+  }
+  if (stepId == OnboardingStepId.classesJob ||
+      stepId == OnboardingStepId.eating) {
     return readiness.canRevealPrimary;
   }
   return readiness.canRevealPrimary || revealedDuringInteraction;

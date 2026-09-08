@@ -5,7 +5,7 @@ import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timelin
 import 'package:optivus/features/onboarding/steps/onboarding_step4_unified.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_5_eating_setup.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_setup.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_step_11_today_ready.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_14_today_ready.dart';
 import 'package:optivus/features/onboarding/timeline/onboarding_timeline.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/state/app_state.dart';
@@ -1538,7 +1538,7 @@ void main() {
             ),
           ],
           child: const MaterialApp(
-            home: Scaffold(body: SizedBox.expand(child: OnboardingStep14())),
+            home: Scaffold(body: SizedBox.expand(child: OnboardingTodayReadyStep())),
           ),
         ),
       );

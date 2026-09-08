@@ -5,7 +5,7 @@ import 'package:optivus/core/errors/completion_error_mapper.dart';
 import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/features/onboarding/presentation/step14_presentation_models.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_step_11_today_ready.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_14_today_ready.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/recovery/screens/onboarding_startup_status_screens.dart';
@@ -22,12 +22,12 @@ void main() {
 
   Widget buildTestHost({
     required OnboardingDraft draft,
-    OnboardingStep14? child,
+    OnboardingTodayReadyStep? child,
     OnboardingCompletionJobService? completionService,
     void Function(ProviderContainer)? onContainerCreated,
     Size size = const Size(393, 873),
     double textScale = 1.0,
-    GlobalKey<OnboardingStep14State>? step14Key,
+    GlobalKey<OnboardingTodayReadyStepState>? step14Key,
     ValueChanged<int>? onJumpToStep,
     VoidCallback? onCompletionStarted,
   }) {
@@ -50,7 +50,7 @@ void main() {
           child: Scaffold(
             body:
                 child ??
-                OnboardingStep14(
+                OnboardingTodayReadyStep(
                   key: step14Key,
                   onJumpToStep: onJumpToStep,
                   onCompletionStarted: onCompletionStarted,
@@ -1235,7 +1235,7 @@ void main() {
       'Z & AA: View full timeline opens AH-F018 scaffold and Back returns to review context',
       (tester) async {
         final draft = buildReadyDraft();
-        final step14Key = GlobalKey<OnboardingStep14State>();
+        final step14Key = GlobalKey<OnboardingTodayReadyStepState>();
         var fullPreviewOpen = false;
         await tester.pumpWidget(
           ProviderScope(
@@ -1272,7 +1272,7 @@ void main() {
                                   ?.closeFullTimelinePreviewIfOpen(),
                             )
                           : null,
-                      child: OnboardingStep14(
+                      child: OnboardingTodayReadyStep(
                         key: step14Key,
                         onFullTimelinePreviewChanged: (isOpen) {
                           setHostState(() => fullPreviewOpen = isOpen);
@@ -1454,7 +1454,7 @@ void main() {
     testWidgets('AN & AO: Completion terminalization triggers success view', (
       tester,
     ) async {
-      final step14Key = GlobalKey<OnboardingStep14State>();
+      final step14Key = GlobalKey<OnboardingTodayReadyStepState>();
       final draft = buildReadyDraft();
 
       await tester.pumpWidget(
@@ -1473,7 +1473,7 @@ void main() {
     testWidgets(
       'AP & AQ, BO: Completion failure renders RecoverableError with Back to Review',
       (tester) async {
-        final step14Key = GlobalKey<OnboardingStep14State>();
+        final step14Key = GlobalKey<OnboardingTodayReadyStepState>();
         final draft = buildReadyDraft();
 
         await tester.pumpWidget(
@@ -1515,7 +1515,7 @@ void main() {
   testWidgets(
     'Gate 1 failure diagnostics survive an unavailable preview and reject secret fields',
     (tester) async {
-      final key = GlobalKey<OnboardingStep14State>();
+      final key = GlobalKey<OnboardingTodayReadyStepState>();
       final ready = buildReadyDraft();
       final draft = ready.copyWith(
         baseTimeline: ready.baseTimeline.copyWith(
@@ -1575,7 +1575,7 @@ void main() {
   testWidgets(
     'Gate 1 completed authoritative pointer hides Back to Review with no active notifier',
     (tester) async {
-      final key = GlobalKey<OnboardingStep14State>();
+      final key = GlobalKey<OnboardingTodayReadyStepState>();
       final draft = buildReadyDraft();
       final now = DateTime.now();
       final store = OnboardingCompletionMemoryStore();
@@ -1755,7 +1755,7 @@ void main() {
         expect(ctaLabel, 'Enter Optivus');
 
         await tester.pumpWidget(
-          buildTestHost(draft: draft, child: const OnboardingStep14()),
+          buildTestHost(draft: draft, child: const OnboardingTodayReadyStep()),
         );
         await tester.pumpAndSettle();
         expect(find.text('Breakfast ↔ Software Engineering'), findsNothing);
@@ -1787,7 +1787,7 @@ void main() {
       expect(ctaLabel, 'Enter Optivus');
 
       await tester.pumpWidget(
-        buildTestHost(draft: draft, child: const OnboardingStep14()),
+        buildTestHost(draft: draft, child: const OnboardingTodayReadyStep()),
       );
       await tester.pumpAndSettle();
       expect(find.text('Everything is ready'), findsOneWidget);
@@ -1834,7 +1834,7 @@ void main() {
       tester,
     ) async {
       var starts = 0;
-      final step14Key = GlobalKey<OnboardingStep14State>();
+      final step14Key = GlobalKey<OnboardingTodayReadyStepState>();
       final draft = buildReadyDraft();
 
       await tester.pumpWidget(
@@ -1869,7 +1869,7 @@ void main() {
     testWidgets(
       'AR & AS: Reauthenticate retry action provides Sign In Again button',
       (tester) async {
-        final step14Key = GlobalKey<OnboardingStep14State>();
+        final step14Key = GlobalKey<OnboardingTodayReadyStepState>();
         final draft = buildReadyDraft();
 
         await tester.pumpWidget(
@@ -1897,7 +1897,7 @@ void main() {
     testWidgets(
       'AT & AU: RestartRecovery retry action provides Recover Setup button',
       (tester) async {
-        final step14Key = GlobalKey<OnboardingStep14State>();
+        final step14Key = GlobalKey<OnboardingTodayReadyStepState>();
         final draft = buildReadyDraft();
 
         await tester.pumpWidget(
@@ -1926,7 +1926,7 @@ void main() {
       'AU: Raw error firewall prevents technical strings from surfacing in UI',
       (tester) async {
         const secret = 'RAW_STEP14_SECRET_98421';
-        final step14Key = GlobalKey<OnboardingStep14State>();
+        final step14Key = GlobalKey<OnboardingTodayReadyStepState>();
         final draft = buildReadyDraft();
 
         await tester.pumpWidget(

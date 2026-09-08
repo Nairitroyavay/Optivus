@@ -1661,11 +1661,16 @@ class _CompactMealTimeRow extends StatelessWidget {
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.32),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.48)),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.48),
+                    ),
                   ),
                   child: Text(
                     onboardingTimeLabel(spec.minute),
@@ -2624,13 +2629,7 @@ String _onboarding5GeneratedMealBlockId(int day, String mealSlot) =>
     'eating-ai-d$day-$mealSlot';
 
 String? _normalizedBodyGoal(String? value) {
-  final lower = value?.trim().toLowerCase();
-  return switch (lower) {
-    'gain' || 'gain_weight' || 'build_muscle' || 'muscle_gain' => 'gain',
-    'lose' || 'lose_fat' || 'fat_loss' || 'weight_loss' => 'lose',
-    'maintain' || 'maintenance' || 'eat_healthier' || 'balanced' => 'maintain',
-    _ => null,
-  };
+  return NutritionTargetService.normalizeSupportedGoal(value);
 }
 
 Map<String, int> _mealTimesForBase(BaseTimelineDraft base, int mealsPerDay) {

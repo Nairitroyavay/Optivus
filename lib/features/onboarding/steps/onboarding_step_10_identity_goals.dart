@@ -3,17 +3,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_spacing.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
+import 'package:optivus/features/onboarding/onboarding_step_id.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/state/app_state.dart';
 
-class OnboardingStep10 extends ConsumerStatefulWidget {
-  const OnboardingStep10({super.key});
+class OnboardingIdentityGoalsStep extends ConsumerStatefulWidget {
+  const OnboardingIdentityGoalsStep({super.key});
 
   @override
-  ConsumerState<OnboardingStep10> createState() => _OnboardingStep10State();
+  ConsumerState<OnboardingIdentityGoalsStep> createState() =>
+      _OnboardingIdentityGoalsStepState();
 }
 
-class _OnboardingStep10State extends ConsumerState<OnboardingStep10> {
+class _OnboardingIdentityGoalsStepState
+    extends ConsumerState<OnboardingIdentityGoalsStep> {
   final List<_IdentityGoal> _goals = [
     _IdentityGoal(
       'financially_free',
@@ -94,7 +97,9 @@ class _OnboardingStep10State extends ConsumerState<OnboardingStep10> {
           (draft) =>
               draft.copyWith(identityGoals: selected, clearFinalPreview: true),
         );
-    ref.read(mockOnboardingProvider.notifier).setStepDirty(10, true);
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .setStepDirty(OnboardingStepId.identityGoals.index, true);
   }
 
   @override

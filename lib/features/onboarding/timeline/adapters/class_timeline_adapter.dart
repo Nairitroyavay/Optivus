@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/optivus_colors.dart';
 import '../../../routine/utils/timeline_utils.dart';
-import '../../steps/onboarding_class_setup_timeline.dart';
+import '../../steps/onboarding_step_4_schedule_models.dart';
 import '../models/timeline_entry.dart';
 import '../models/timeline_style.dart';
 import '../widgets/timeline_edit_sheet_shell.dart';

@@ -4,18 +4,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/core/theme/optivus_spacing.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_0_welcome.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_step_10_notifications.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_step_11_today_ready.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_13_notifications.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_14_today_ready.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_1_patience.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_2_role_lifestyle.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_3_body_basics.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_base_timeline.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_step_5_bad_habits.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_8_bad_habits.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_6_fixed_schedule.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_step_6_good_habits.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_step_7_identity_goals.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_step_8_coach_setup.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_step_9_slip_up.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_9_good_habits.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_10_identity_goals.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_11_coach_setup.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_12_slip_up.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/models/onboarding_completion_job.dart';
@@ -225,12 +225,12 @@ void main() {
         subtitle: 'No class or work schedule is needed for this role.',
         children: [Text('Content')],
       ),
-      'Step 8 (Bad Habits)': const OnboardingStep8(),
-      'Step 9 (Good Habits)': const OnboardingStep9(),
-      'Step 10 (Identity Goals)': const OnboardingStep10(),
-      'Step 11 (Coach Setup)': const OnboardingStep11(),
-      'Step 12 (Slip-up Handling)': const OnboardingStep12(),
-      'Step 13 (Notifications)': const OnboardingStep13(),
+      'Step 8 (Bad Habits)': const OnboardingBadHabitsStep(),
+      'Step 9 (Good Habits)': const OnboardingGoodHabitsStep(),
+      'Step 10 (Identity Goals)': const OnboardingIdentityGoalsStep(),
+      'Step 11 (Coach Setup)': const OnboardingCoachSetupStep(),
+      'Step 12 (Slip-up Handling)': const OnboardingSlipUpStep(),
+      'Step 13 (Notifications)': const OnboardingNotificationsStep(),
     };
 
     for (final entry in standardStepCases.entries) {
@@ -515,12 +515,12 @@ void main() {
         stepCompleted: [for (int i = 0; i < 15; i++) i < 14],
       );
       await tester.pumpWidget(
-        _wrapStep(const OnboardingStep14(), draft: draft),
+        _wrapStep(const OnboardingTodayReadyStep(), draft: draft),
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.byType(OnboardingStep14), findsOneWidget);
+      expect(find.byType(OnboardingTodayReadyStep), findsOneWidget);
       expect(find.byType(OnboardingSectionTitle), findsNothing);
     });
   });
