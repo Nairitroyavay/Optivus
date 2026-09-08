@@ -113,6 +113,23 @@ void main() {
         RegExp(r'currentPage\s*==\s*(?:0|14)\b').hasMatch(shellSource),
         isFalse,
       );
+
+      final activeDartFiles = [Directory('lib'), Directory('test')]
+          .expand((directory) => directory.listSync(recursive: true))
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.dart'))
+          .toList(growable: false);
+      final legacyActionName = ['MigrateLegacy', 'SetupAction'].join('');
+      final legacyActionId = ['migrate_legacy', 'setup'].join('_');
+      final legacyMigrationActionOffenders = activeDartFiles
+          .where((file) {
+            final source = file.readAsStringSync();
+            return source.contains(legacyActionName) ||
+                source.contains(legacyActionId);
+          })
+          .map((file) => file.path)
+          .toList();
+      expect(legacyMigrationActionOffenders, isEmpty);
     });
 
     test('owns one unique current 0-14 order', () {

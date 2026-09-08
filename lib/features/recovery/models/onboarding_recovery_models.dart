@@ -189,33 +189,6 @@ class RebuildBundleFromVerifiedDraftAction extends OnboardingRecoveryAction {
   }
 }
 
-class MigrateLegacySetupAction extends OnboardingRecoveryAction {
-  const MigrateLegacySetupAction()
-    : super(
-        actionId: 'migrate_legacy_setup',
-        label: 'Update Setup Data',
-        description: 'Migrate older setup data to the current version.',
-      );
-
-  @override
-  Future<void> execute(
-    Ref ref,
-    String uid,
-    OnboardingRecoveryOperations operations,
-  ) async {
-    final draft = await ref.read(onboardingRepositoryProvider).fetchDraft(uid);
-    if (draft == null) {
-      throw StateError('No legacy onboarding draft is available to migrate.');
-    }
-    if (draft.uid != uid) {
-      throw StateError('Legacy onboarding draft owner mismatch.');
-    }
-    throw StateError(
-      'This setup schema requires an explicit supported migration.',
-    );
-  }
-}
-
 class ResetSetupSafelyAction extends OnboardingRecoveryAction {
   const ResetSetupSafelyAction()
     : super(
