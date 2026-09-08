@@ -114,6 +114,93 @@ OnboardingDraft _buildDraftForStep({
   );
 }
 
+List<TimelineBlockDraft> _makeGate2EatingBlocks({
+  required OnboardingDraft draft,
+  int mealsPerDay = 3,
+}) {
+  final targets = draft.canonicalNutritionTargets();
+  final targetCal = targets.targetCalories ?? 2000.0;
+  final targetProt = targets.proteinTarget ?? 140.0;
+  final calPerMeal = (targetCal / mealsPerDay).round();
+  final protPerMeal = (targetProt / mealsPerDay).round();
+
+  final slotNames = mealsPerDay == 4
+      ? const ['breakfast', 'lunch', 'afternoon_snack', 'dinner']
+      : const ['breakfast', 'lunch', 'dinner'];
+  return [
+    for (var d = 1; d <= 7; d++)
+      for (final slot in slotNames)
+        TimelineBlockDraft(
+          id: '$slot-$d',
+          section: 'eating',
+          title: slot == 'afternoon_snack'
+              ? 'Snack'
+              : slot[0].toUpperCase() + slot.substring(1),
+          mealCategory: slot == 'afternoon_snack' ? 'snack' : slot,
+          mealSlot: slot,
+          startMinute: slot == 'breakfast'
+              ? 8 * 60
+              : slot == 'lunch'
+                  ? 13 * 60
+                  : slot == 'afternoon_snack'
+                      ? 17 * 60
+                      : 20 * 60,
+          endMinute: (slot == 'breakfast'
+                  ? 8 * 60
+                  : slot == 'lunch'
+                      ? 13 * 60
+                      : slot == 'afternoon_snack'
+                          ? 17 * 60
+                          : 20 * 60) +
+              30,
+          repeatDays: [d],
+          dishes: switch (slot) {
+            'breakfast' => ['Pancakes $d', 'Blueberries $d'],
+            'lunch' => ['Grilled Chicken $d', 'Brown Rice $d'],
+            'afternoon_snack' => ['Greek Yogurt $d', 'Walnuts $d'],
+            _ => ['Baked Salmon $d', 'Steamed Broccoli $d'],
+          },
+          source: onboardingEatingGeneratedSource,
+          calories: calPerMeal.toDouble(),
+          protein: protPerMeal.toDouble(),
+          blockType: TimelineBlockDraft.hardBlockKey,
+        ),
+  ];
+}
+
+OnboardingDraft _buildGate2Step5Draft({
+  int eatingSetupStep = 2,
+  int mealsPerDay = 3,
+  String eatingSetupPath = onboardingEatingPathCreate,
+}) {
+  final baseDraft = _buildDraftForStep(
+    targetStep: onboardingEatingStepIndex,
+    baseTimeline: BaseTimelineDraft(
+      eatingSetupStep: eatingSetupStep,
+      eatingSetupPath: eatingSetupPath,
+      mealsPerDay: mealsPerDay,
+      breakfastMinute: 8 * 60,
+      lunchMinute: 13 * 60,
+      snackMinute: mealsPerDay == 4 ? 17 * 60 : null,
+      dinnerMinute: 20 * 60,
+    ),
+  );
+  final blocks = _makeGate2EatingBlocks(draft: baseDraft, mealsPerDay: mealsPerDay);
+  final withBlocks = baseDraft.copyWith(
+    baseTimeline: baseDraft.baseTimeline.copyWith(
+      eatingGeneratedPlanVersion: BaseTimelineDraft.currentGate2EatingPlanVersion,
+      blocks: blocks,
+    ),
+  );
+  final targets = withBlocks.canonicalNutritionTargets();
+  final inputs = withBlocks.canonicalEatingGenerationInputs(targets: targets);
+  return withBlocks.copyWith(
+    baseTimeline: withBlocks.baseTimeline.copyWith(
+      eatingGeneratedInputFingerprint: inputs.computeFingerprint(),
+    ),
+  );
+}
+
 Future<void> _settle(WidgetTester tester, [int ms = 300]) async {
   await tester.pump();
   await tester.pump(Duration(milliseconds: ms));
@@ -990,19 +1077,9 @@ void main() {
     testWidgets(
       'Step 5: Internal Back pops review (2) -> setup (1) -> choice (0)',
       (tester) async {
-        final meal = _makeEatingBlock(
-          id: 'lunch',
-          title: 'Lunch',
-          startMinute: 12 * 60,
-          endMinute: 13 * 60,
-        );
-        final draft = _buildDraftForStep(
-          targetStep: onboardingEatingStepIndex,
-          baseTimeline: BaseTimelineDraft(
-            eatingSetupStep: 2,
-            eatingSetupPath: onboardingEatingPathCreate,
-            blocks: [meal],
-          ),
+        final draft = _buildGate2Step5Draft(
+          eatingSetupStep: 2,
+          eatingSetupPath: onboardingEatingPathCreate,
         );
         final notifier = MockOnboardingNotifier()..loadSeedData(draft);
 
@@ -1056,19 +1133,9 @@ void main() {
     testWidgets(
       'Step 5: "View current meal routine" button returns from setup to review without regenerating',
       (tester) async {
-        final meal = _makeEatingBlock(
-          id: 'dinner',
-          title: 'Dinner',
-          startMinute: 19 * 60,
-          endMinute: 20 * 60,
-        );
-        final draft = _buildDraftForStep(
-          targetStep: onboardingEatingStepIndex,
-          baseTimeline: BaseTimelineDraft(
-            eatingSetupStep: 2,
-            eatingSetupPath: onboardingEatingPathCreate,
-            blocks: [meal],
-          ),
+        final draft = _buildGate2Step5Draft(
+          eatingSetupStep: 2,
+          eatingSetupPath: onboardingEatingPathCreate,
         );
         final notifier = MockOnboardingNotifier()..loadSeedData(draft);
 
@@ -1516,27 +1583,12 @@ void main() {
     );
 
     testWidgets(
-      'Step 5: Modifying Create inputs clears generated AI blocks and hides View-current routine button',
+      'Step 5: Modifying Create inputs retains valid Plan A and keeps View current meal routine visible',
       (tester) async {
-        final generatedMeal = TimelineBlockDraft(
-          id: 'meal-ai-1',
-          section: 'eating',
-          title: 'Oatmeal',
-          startMinute: 8 * 60,
-          endMinute: 8 * 60 + 30,
-          repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-          blockType: TimelineBlockDraft.softBlockKey,
-          source: onboardingEatingGeneratedSource,
-        );
-        final draft = _buildDraftForStep(
-          targetStep: onboardingEatingStepIndex,
-          baseTimeline: BaseTimelineDraft(
-            eatingSetupStep: 1,
-            eatingSetupPath: onboardingEatingPathCreate,
-            mealPlanningGoal: 'maintain',
-            mealsPerDay: 4,
-            blocks: [generatedMeal],
-          ),
+        final draft = _buildGate2Step5Draft(
+          eatingSetupStep: 1,
+          eatingSetupPath: onboardingEatingPathCreate,
+          mealsPerDay: 4,
         );
 
         final notifier = MockOnboardingNotifier()..loadSeedData(draft);
@@ -1567,14 +1619,14 @@ void main() {
           findsOneWidget,
         );
 
-        // Change meals from 4 to 3 (calls _updateCreateDraft which clears generated blocks)
+        // Change meals from 4 to 3 (Gate 2 preserves Plan A until Plan B is generated)
         await tester.tap(find.text('3'));
         await _settle(tester, 400);
 
-        // "View current meal routine" should now be gone because blocks were invalidated
+        // "View current meal routine" remains visible because previous valid routine is retained
         expect(
           find.byKey(const ValueKey('onboarding-step5-view-current-routine')),
-          findsNothing,
+          findsOneWidget,
         );
       },
     );

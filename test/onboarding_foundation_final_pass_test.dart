@@ -16,6 +16,85 @@ import 'package:optivus/services/server_reconstructor.dart';
 import 'package:optivus/services/uploads/image_prepare_service.dart';
 import 'package:optivus/state/upload_state.dart';
 
+List<TimelineBlockDraft> _validGate2EatingBlocks({
+  int mealsPerDay = 3,
+  OnboardingDraft? draft,
+}) {
+  final d = draft ?? const OnboardingDraft();
+  final targets = d.canonicalNutritionTargets();
+  final targetCal = targets.targetCalories ?? 2000.0;
+  final targetProt = targets.proteinTarget ?? 140.0;
+  final calPerMeal = (targetCal / mealsPerDay);
+  final protPerMeal = (targetProt / mealsPerDay);
+
+  final slotNames = mealsPerDay == 4
+      ? const ['breakfast', 'lunch', 'afternoon_snack', 'dinner']
+      : const ['breakfast', 'lunch', 'dinner'];
+  return [
+    for (var day = 1; day <= 7; day++)
+      for (final slot in slotNames)
+        TimelineBlockDraft(
+          id: '$slot-$day',
+          section: 'eating',
+          title: slot == 'afternoon_snack'
+              ? 'Snack'
+              : slot[0].toUpperCase() + slot.substring(1),
+          mealCategory: slot == 'afternoon_snack' ? 'snack' : slot,
+          mealSlot: slot,
+          startMinute: slot == 'breakfast'
+              ? 8 * 60
+              : slot == 'lunch'
+                  ? 13 * 60
+                  : slot == 'afternoon_snack'
+                      ? 17 * 60
+                      : 20 * 60,
+          endMinute: (slot == 'breakfast'
+                  ? 8 * 60
+                  : slot == 'lunch'
+                      ? 13 * 60
+                      : slot == 'afternoon_snack'
+                          ? 17 * 60
+                          : 20 * 60) +
+              30,
+          repeatDays: [day],
+          dishes: switch (slot) {
+            'breakfast' => ['Pancakes $day', 'Blueberries $day'],
+            'lunch' => ['Grilled Chicken $day', 'Brown Rice $day'],
+            'afternoon_snack' => ['Greek Yogurt $day', 'Walnuts $day'],
+            _ => ['Baked Salmon $day', 'Steamed Broccoli $day'],
+          },
+          source: 'ai_generated_meal_setup',
+          calories: calPerMeal,
+          protein: protPerMeal,
+          blockType: TimelineBlockDraft.hardBlockKey,
+        ),
+  ];
+}
+
+BaseTimelineDraft _validGate2EatingTimeline({
+  int mealsPerDay = 3,
+  OnboardingDraft? draft,
+}) {
+  final blocks = _validGate2EatingBlocks(mealsPerDay: mealsPerDay, draft: draft);
+  final base = BaseTimelineDraft(
+    eatingSetupPath: 'create',
+    eatingSetupStep: 2,
+    mealsPerDay: mealsPerDay,
+    breakfastMinute: 8 * 60,
+    lunchMinute: 13 * 60,
+    snackMinute: mealsPerDay == 4 ? 17 * 60 : null,
+    dinnerMinute: 20 * 60,
+    eatingGeneratedPlanVersion: BaseTimelineDraft.currentGate2EatingPlanVersion,
+    blocks: blocks,
+  );
+  final testDraft = (draft ?? const OnboardingDraft()).copyWith(baseTimeline: base);
+  final targets = testDraft.canonicalNutritionTargets();
+  final inputs = testDraft.canonicalEatingGenerationInputs(targets: targets);
+  return base.copyWith(
+    eatingGeneratedInputFingerprint: inputs.computeFingerprint(),
+  );
+}
+
 void main() {
   group('Onboarding Foundation Final Pass - Body Basics Validation', () {
     test('height boundary validation: 120 to 220 cm', () {
@@ -64,8 +143,8 @@ void main() {
       ).withEstimates();
       expect(validBody.bodyDataCompleted, isTrue);
       expect(validBody.bmiEstimate, isNotNull);
-      expect(validBody.calorieEstimate, isNotNull);
-      expect(validBody.proteinEstimate, isNotNull);
+      expect(validBody.calorieEstimate, isNull);
+      expect(validBody.proteinEstimate, isNull);
     });
   });
 
@@ -874,24 +953,7 @@ void main() {
       test(
         '30. create path + valid generated Eating blocks + no upload provenance -> PASSES',
         () {
-          final base = BaseTimelineDraft(
-            eatingSetupPath: 'create',
-            blocks: [
-              TimelineBlockDraft(
-                id: 'm1',
-                section: 'eating',
-                title: 'Breakfast',
-                startMinute: 480,
-                endMinute: 510,
-                repeatDays: const [1],
-                blockType: TimelineBlockDraft.softBlockKey,
-                source: 'ai_import',
-                provenanceSourceIds:
-                    const [], // Photo provenance not required for Create path
-              ),
-            ],
-          );
-
+          final base = _validGate2EatingTimeline();
           final error = base.validateEatingSetup();
           expect(error, isNull);
         },
@@ -1028,6 +1090,24 @@ void main() {
             UploadedAssetPurpose.classTimetable,
           );
 
+          final eatingTimeline = _validGate2EatingTimeline(
+            draft: const OnboardingDraft(
+              bodyBasics: BodyBasicsDraft(
+                ageRange: '25-34',
+                gender: 'male',
+                heightCm: 175,
+                weightKg: 70,
+              ),
+              lifeRole: LifeRoleDraft(
+                lifeRole: LifeRoleDraft.studentKey,
+                exerciseLevel: 'light',
+                waterIntake: '2_liters',
+                stressLevel: 'moderate',
+                sleepQuality: 'good',
+              ),
+            ),
+          );
+
           final draft = OnboardingDraft(
             uid: ownerUid,
             currentStep: 8,
@@ -1062,10 +1142,9 @@ void main() {
               stressLevel: 'moderate',
               sleepQuality: 'good',
             ),
-            baseTimeline: BaseTimelineDraft(
+            baseTimeline: eatingTimeline.copyWith(
               classLogicalAssetId: classA.assetId,
               classLogicalAssetR2Key: classA.r2Key,
-              eatingSetupPath: 'create',
               skinCareSkipped: true,
               blocks: [
                 TimelineBlockDraft(
@@ -1079,16 +1158,7 @@ void main() {
                   source: 'ai_import',
                   provenanceSourceIds: [classA.assetId, classA.r2Key],
                 ),
-                TimelineBlockDraft(
-                  id: 'm1',
-                  section: 'eating',
-                  title: 'Lunch',
-                  startMinute: 720,
-                  endMinute: 780,
-                  repeatDays: const [1],
-                  blockType: TimelineBlockDraft.softBlockKey,
-                  source: 'ai_import',
-                ),
+                ...eatingTimeline.blocks,
                 BaseTimelineDraft.defaultSleepBlock(),
                 BaseTimelineDraft.defaultBathBlock(),
               ],

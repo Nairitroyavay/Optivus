@@ -40,11 +40,25 @@ void main() {
           dinnerMinute: 20 * 60 + 30,
         ),
       );
-      final draft = OnboardingDraft(
-        baseTimeline: BaseTimelineDraft(
-          eatingSetupStep: 2,
-          eatingSetupPath: 'create',
-          blocks: mapped.blocks,
+      final base = BaseTimelineDraft(
+        eatingSetupStep: 2,
+        eatingSetupPath: 'create',
+        mealsPerDay: 4,
+        breakfastMinute: 8 * 60,
+        lunchMinute: 13 * 60,
+        snackMinute: 17 * 60,
+        dinnerMinute: 20 * 60 + 30,
+        eatingGeneratedPlanVersion:
+            BaseTimelineDraft.currentGate2EatingPlanVersion,
+        blocks: mapped.blocks,
+      );
+      final initialDraft = OnboardingDraft(baseTimeline: base);
+      final targets = initialDraft.canonicalNutritionTargets();
+      final inputs =
+          initialDraft.canonicalEatingGenerationInputs(targets: targets);
+      final draft = initialDraft.copyWith(
+        baseTimeline: initialDraft.baseTimeline.copyWith(
+          eatingGeneratedInputFingerprint: inputs.computeFingerprint(),
         ),
       );
 
@@ -88,41 +102,80 @@ void main() {
   testWidgets('Onboarding 5 short meal timeline alignment test', (
     tester,
   ) async {
-    final draft = OnboardingDraft(
-      baseTimeline: BaseTimelineDraft(
-        eatingSetupStep: 2,
-        eatingSetupPath: 'create',
-        blocks: [
-          TimelineBlockDraft(
-            id: 'short-snack',
-            title: 'Snack',
-            section: 'eating',
-            blockType: 'hard_block',
-            startMinute: 17 * 60, // 5:00 PM
-            endMinute: 17 * 60 + 20, // 5:20 PM
-            repeatDays: [1, 2, 3, 4, 5],
-            dishes: [
-              'Roasted Almonds',
-              'Green Tea',
-              'Protein Bar',
-              'Apple Slices',
-              'Greek Yogurt',
-              'Dark Chocolate',
-            ],
-            source: 'ai_generated_meal_setup',
-          ),
-          TimelineBlockDraft(
-            id: 'long-dinner',
-            title: 'Dinner',
-            section: 'eating',
-            blockType: 'hard_block',
-            startMinute: 19 * 60, // 7:00 PM
-            endMinute: 20 * 60, // 8:00 PM
-            repeatDays: [1, 2, 3, 4, 5],
-            dishes: ['Steak', 'Salad'],
-            source: 'ai_generated_meal_setup',
-          ),
-        ],
+    final testBlocks = <TimelineBlockDraft>[
+      for (var d = 1; d <= 7; d++) ...[
+        TimelineBlockDraft(
+          id: 'breakfast-$d',
+          title: 'Breakfast',
+          section: 'eating',
+          mealCategory: 'breakfast',
+          blockType: 'hard_block',
+          startMinute: 8 * 60,
+          endMinute: 8 * 60 + 30,
+          repeatDays: [d],
+          dishes: ['Pancakes', 'Berries'],
+          source: 'ai_generated_meal_setup',
+          calories: 500,
+          protein: 30,
+        ),
+        TimelineBlockDraft(
+          id: 'short-snack-$d',
+          title: 'Snack',
+          section: 'eating',
+          mealCategory: 'snack',
+          blockType: 'hard_block',
+          startMinute: 17 * 60, // 5:00 PM
+          endMinute: 17 * 60 + 20, // 5:20 PM
+          repeatDays: [d],
+          dishes: d == 1
+              ? [
+                  'Roasted Almonds',
+                  'Green Tea',
+                  'Protein Bar',
+                  'Apple Slices',
+                  'Greek Yogurt',
+                  'Dark Chocolate',
+                ]
+              : ['Almonds', 'Tea'],
+          source: 'ai_generated_meal_setup',
+          calories: 300,
+          protein: 20,
+        ),
+        TimelineBlockDraft(
+          id: 'long-dinner-$d',
+          title: 'Dinner',
+          section: 'eating',
+          mealCategory: 'dinner',
+          blockType: 'hard_block',
+          startMinute: 19 * 60, // 7:00 PM
+          endMinute: 20 * 60, // 8:00 PM
+          repeatDays: [d],
+          dishes: ['Steak', 'Salad'],
+          source: 'ai_generated_meal_setup',
+          calories: 700,
+          protein: 40,
+        ),
+      ],
+    ];
+
+    final base = BaseTimelineDraft(
+      eatingSetupStep: 2,
+      eatingSetupPath: 'create',
+      mealsPerDay: 3,
+      breakfastMinute: 8 * 60,
+      snackMinute: 17 * 60,
+      dinnerMinute: 19 * 60,
+      eatingGeneratedPlanVersion:
+          BaseTimelineDraft.currentGate2EatingPlanVersion,
+      blocks: testBlocks,
+    );
+    final initialDraft = OnboardingDraft(baseTimeline: base);
+    final targets = initialDraft.canonicalNutritionTargets();
+    final inputs =
+        initialDraft.canonicalEatingGenerationInputs(targets: targets);
+    final draft = initialDraft.copyWith(
+      baseTimeline: initialDraft.baseTimeline.copyWith(
+        eatingGeneratedInputFingerprint: inputs.computeFingerprint(),
       ),
     );
 
@@ -146,7 +199,6 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-
     expect(tester.takeException(), isNull);
 
     // 6 dishes should be visible inside the block

@@ -278,8 +278,6 @@ void main() {
           uid: 'user_issue_30',
           onboardingCompleted: true,
           baseTimeline: BaseTimelineDraft(
-            eatingSetupPath: 'create',
-            eatingSetupStep: 1,
             blocks: [
               TimelineBlockDraft(
                 id: 'fixed_sleep',

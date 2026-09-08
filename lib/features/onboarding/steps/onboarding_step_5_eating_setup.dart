@@ -1597,7 +1597,10 @@ class _CompactMealTimeRows extends ConsumerWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final itemWidth = math.max(120.0, (constraints.maxWidth - 8) / 2);
+        final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+        final itemWidth = textScale > 1.3
+            ? constraints.maxWidth
+            : math.max(120.0, (constraints.maxWidth - 8) / 2);
         return Wrap(
           spacing: 8,
           runSpacing: 6,
@@ -1632,8 +1635,8 @@ class _CompactMealTimeRow extends StatelessWidget {
         spec.onChanged(onboardingMinuteFromTime(picked));
       },
       child: Container(
-        height: 38,
-        padding: const EdgeInsets.symmetric(horizontal: 9),
+        constraints: const BoxConstraints(minHeight: 38),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.18),
           borderRadius: BorderRadius.circular(13),
@@ -1644,25 +1647,34 @@ class _CompactMealTimeRow extends StatelessWidget {
             Expanded(
               child: Text(
                 spec.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w900,
                 ),
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.32),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.48)),
-              ),
-              child: Text(
-                onboardingTimeLabel(spec.minute),
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  color: OptivusColors.roseAccent,
+            const SizedBox(width: 4),
+            Flexible(
+              flex: 0,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.32),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.48)),
+                  ),
+                  child: Text(
+                    onboardingTimeLabel(spec.minute),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.roseAccent,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1706,12 +1718,16 @@ class _EatingGenerateRoutineButton extends StatelessWidget {
           children: [
             const Icon(Icons.auto_awesome_rounded, color: Colors.white),
             const SizedBox(width: 8),
-            const Text(
-              'Generate meal routine',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w900,
+            const Flexible(
+              child: Text(
+                'Generate meal routine',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ),
           ],
@@ -1878,7 +1894,8 @@ void _showEatingBlockDetails(BuildContext context, TimelineBlockDraft block) {
               ),
               if (block.calories != null || block.protein != null) ...[
                 const SizedBox(height: 8),
-                Row(
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     if (block.calories != null)
                       Text(

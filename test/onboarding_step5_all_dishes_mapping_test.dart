@@ -6,6 +6,78 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/state/app_state.dart';
 
+OnboardingDraft _makeGate2Draft(
+  List<String> snackDishes, {
+  int startMinute = 700,
+  int endMinute = 730,
+}) {
+  final blocks = <TimelineBlockDraft>[
+    for (var d = 1; d <= 7; d++) ...[
+      TimelineBlockDraft(
+        id: 'b-$d',
+        title: 'Breakfast',
+        section: 'eating',
+        mealCategory: 'breakfast',
+        blockType: 'hard_block',
+        startMinute: 8 * 60,
+        endMinute: 8 * 60 + 30,
+        repeatDays: [d],
+        dishes: const [],
+        source: 'ai_generated_meal_setup',
+        calories: 500,
+        protein: 30,
+      ),
+      TimelineBlockDraft(
+        id: 's-$d',
+        title: 'Huge Snack',
+        section: 'eating',
+        mealCategory: 'snack',
+        blockType: 'soft_block',
+        startMinute: startMinute,
+        endMinute: endMinute,
+        repeatDays: [d],
+        dishes: d == 1 ? snackDishes : const [],
+        source: 'ai_generated_meal_setup',
+        calories: 300,
+        protein: 20,
+      ),
+      TimelineBlockDraft(
+        id: 'd-$d',
+        title: 'Dinner',
+        section: 'eating',
+        mealCategory: 'dinner',
+        blockType: 'hard_block',
+        startMinute: 19 * 60,
+        endMinute: 20 * 60,
+        repeatDays: [d],
+        dishes: const [],
+        source: 'ai_generated_meal_setup',
+        calories: 700,
+        protein: 40,
+      ),
+    ],
+  ];
+  final base = BaseTimelineDraft(
+    eatingSetupStep: 2,
+    eatingSetupPath: 'create',
+    mealsPerDay: 3,
+    breakfastMinute: 8 * 60,
+    snackMinute: startMinute,
+    dinnerMinute: 19 * 60,
+    eatingGeneratedPlanVersion: BaseTimelineDraft.currentGate2EatingPlanVersion,
+    blocks: blocks,
+  );
+  final initialDraft = OnboardingDraft(baseTimeline: base);
+  final targets = initialDraft.canonicalNutritionTargets();
+  final inputs =
+      initialDraft.canonicalEatingGenerationInputs(targets: targets);
+  return initialDraft.copyWith(
+    baseTimeline: initialDraft.baseTimeline.copyWith(
+      eatingGeneratedInputFingerprint: inputs.computeFingerprint(),
+    ),
+  );
+}
+
 void main() {
   group('Onboarding 5 Dish Extraction Mapping and UI', () {
     testWidgets(
@@ -47,32 +119,14 @@ void main() {
         expect(allDishes.length, 7);
 
         // 2. Now test the actual Step 5 UI rendering with 6 dishes
-        final draft = OnboardingDraft(
-          baseTimeline: BaseTimelineDraft(
-            eatingSetupStep: 2,
-            eatingSetupPath: 'create',
-            blocks: [
-              TimelineBlockDraft(
-                id: 'large-snack',
-                title: 'Huge Snack',
-                section: 'eating',
-                blockType: 'soft_block',
-                startMinute: 700,
-                endMinute: 730,
-                repeatDays: [1, 2, 3, 4, 5],
-                dishes: [
-                  'First Long Dish Name',
-                  'Second Long Dish Name',
-                  'Third Long Dish Name',
-                  'Fourth Long Dish Name',
-                  'Fifth Long Dish Name',
-                  'Sixth Long Dish Name',
-                ],
-                source: 'ai_generated_meal_setup',
-              ),
-            ],
-          ),
-        );
+        final draft = _makeGate2Draft(const [
+          'First Long Dish Name',
+          'Second Long Dish Name',
+          'Third Long Dish Name',
+          'Fourth Long Dish Name',
+          'Fifth Long Dish Name',
+          'Sixth Long Dish Name',
+        ]);
 
         tester.view.physicalSize = const Size(1080, 2400);
         tester.view.devicePixelRatio = 3.0;
@@ -113,34 +167,16 @@ void main() {
     testWidgets(
       'renders +N more when available height is restricted and long dishes cause overflow',
       (tester) async {
-        final draft = OnboardingDraft(
-          baseTimeline: BaseTimelineDraft(
-            eatingSetupStep: 2,
-            eatingSetupPath: 'create',
-            blocks: [
-              TimelineBlockDraft(
-                id: 'large-snack-overflow',
-                title: 'Huge Snack Overflow',
-                section: 'eating',
-                blockType: 'soft_block',
-                startMinute: 700,
-                endMinute: 730, // 30 mins = small height
-                repeatDays: [1, 2, 3, 4, 5],
-                dishes: [
-                  'First Extremely Long Dish Name That Takes Space',
-                  'Second Extremely Long Dish Name That Takes Space',
-                  'Third Extremely Long Dish Name That Takes Space',
-                  'Fourth Extremely Long Dish Name That Takes Space',
-                  'Fifth Extremely Long Dish Name That Takes Space',
-                  'Sixth Extremely Long Dish Name That Takes Space',
-                  'Seventh Extremely Long Dish Name That Takes Space',
-                  'Eighth Extremely Long Dish Name That Takes Space',
-                ],
-                source: 'ai_generated_meal_setup',
-              ),
-            ],
-          ),
-        );
+        final draft = _makeGate2Draft(const [
+          'First Extremely Long Dish Name That Takes Space',
+          'Second Extremely Long Dish Name That Takes Space',
+          'Third Extremely Long Dish Name That Takes Space',
+          'Fourth Extremely Long Dish Name That Takes Space',
+          'Fifth Extremely Long Dish Name That Takes Space',
+          'Sixth Extremely Long Dish Name That Takes Space',
+          'Seventh Extremely Long Dish Name That Takes Space',
+          'Eighth Extremely Long Dish Name That Takes Space',
+        ], startMinute: 700, endMinute: 730);
 
         tester.view.physicalSize = const Size(1080, 2400);
         tester.view.devicePixelRatio = 3.0;
@@ -173,11 +209,13 @@ void main() {
 
         expect(tester.takeException(), isNull);
 
-        // Check that +N more is shown
-        expect(find.textContaining('more'), findsOneWidget);
+        // Check that +8 more is shown
+        expect(find.text('+8 more'), findsOneWidget);
 
         // Tap the +N more block to open details
-        await tester.tap(find.textContaining('more'));
+        await tester.ensureVisible(find.text('+8 more'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('+8 more'));
         await tester.pumpAndSettle();
 
         // Now all dishes should be fully visible in the details modal

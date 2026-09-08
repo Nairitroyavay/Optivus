@@ -297,30 +297,73 @@ void main() {
       expect(r.canRevealPrimary, isFalse);
 
       // Valid confirmed eating blocks -> complete
-      final eatingBase = BaseTimelineDraft(
-        eatingSetupPath: 'create',
-        blocks: [
+      final eatingBlocks = <TimelineBlockDraft>[
+        for (var d = 1; d <= 7; d++) ...[
           TimelineBlockDraft(
-            id: 'm1',
+            id: 'm1-$d',
             section: 'eating',
             title: 'Breakfast',
+            mealCategory: 'breakfast',
+            mealSlot: 'breakfast',
             startMinute: 8 * 60,
             endMinute: 8 * 60 + 30,
-            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+            repeatDays: [d],
+            dishes: ['Pancakes $d', 'Berries $d'],
+            source: 'ai_generated_meal_setup',
+            calories: 500,
+            protein: 30,
             blockType: TimelineBlockDraft.hardBlockKey,
           ),
           TimelineBlockDraft(
-            id: 'm2',
+            id: 'm2-$d',
             section: 'eating',
             title: 'Lunch',
+            mealCategory: 'lunch',
+            mealSlot: 'lunch',
             startMinute: 13 * 60,
             endMinute: 13 * 60 + 30,
-            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+            repeatDays: [d],
+            dishes: ['Salad $d', 'Chicken $d'],
+            source: 'ai_generated_meal_setup',
+            calories: 700,
+            protein: 40,
+            blockType: TimelineBlockDraft.hardBlockKey,
+          ),
+          TimelineBlockDraft(
+            id: 'm3-$d',
+            section: 'eating',
+            title: 'Dinner',
+            mealCategory: 'dinner',
+            mealSlot: 'dinner',
+            startMinute: 19 * 60,
+            endMinute: 19 * 60 + 30,
+            repeatDays: [d],
+            dishes: ['Soup $d', 'Bread $d'],
+            source: 'ai_generated_meal_setup',
+            calories: 600,
+            protein: 35,
             blockType: TimelineBlockDraft.hardBlockKey,
           ),
         ],
+      ];
+      final eatingBase = BaseTimelineDraft(
+        eatingSetupPath: 'create',
+        mealsPerDay: 3,
+        breakfastMinute: 8 * 60,
+        lunchMinute: 13 * 60,
+        dinnerMinute: 19 * 60,
+        eatingGeneratedPlanVersion:
+            BaseTimelineDraft.currentGate2EatingPlanVersion,
+        blocks: eatingBlocks,
       );
       draft = draft.copyWith(baseTimeline: eatingBase);
+      final targets = draft.canonicalNutritionTargets();
+      final inputs = draft.canonicalEatingGenerationInputs(targets: targets);
+      draft = draft.copyWith(
+        baseTimeline: draft.baseTimeline.copyWith(
+          eatingGeneratedInputFingerprint: inputs.computeFingerprint(),
+        ),
+      );
       r = evaluateOnboardingStepReadiness(
         draft: draft,
         step: 5,

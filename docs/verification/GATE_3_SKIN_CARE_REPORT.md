@@ -383,8 +383,8 @@ dart format --output=none --set-exit-if-changed .
 Formatted 10 files (0 changed) in 0.30 seconds.
 ```
 
-### E. Physical / Viewport Acceptance Matrix
-Automated physical test verification across target viewports and physical interaction sequences:
+### E. Automated Viewport Acceptance Matrix
+Automated test verification across target viewports and physical interaction sequences:
 
 | Flow / Checkpoint | Test Condition | Result | Evidence |
 |---|---|---|---|
@@ -408,27 +408,76 @@ Automated physical test verification across target viewports and physical intera
 
 ---
 
+### F. Real Physical Device Acceptance Matrix
+
+Physical device acceptance requires a physical Android handset attached via ADB with live Firebase, live R2, and live Skin Care Worker endpoints.
+
+| Metric / Checkpoint | Environment State | Status | Evidence Summary |
+|---|---|---|---|
+| **Connected Android Handset** | `adb devices -l` | **NO DEVICE ATTACHED** | Zero Android devices attached via USB or wireless ADB (`List of devices attached` empty). |
+| **Android Virtual Device (AVD)** | `emulator -list-avds` | **NONE AVAILABLE** | Zero AVDs configured on host. |
+| **Skin Care Worker Dev Endpoint** | `https://optivus-skin-care-worker-dev.nairitstock.workers.dev/health` | **PASS (HTTP 200)** | Worker endpoint is healthy and operational. |
+| **Has-products physical first build** | Real Android device | **NOT RUN** | Blocked on physical Android device availability. |
+| **Has-products edit stress** | Real Android device | **NOT RUN** | Blocked on physical Android device availability. |
+| **Has-products rebuild** | Real Android device | **NOT RUN** | Blocked on physical Android device availability. |
+| **No-products physical first build** | Real Android device | **NOT RUN** | Blocked on physical Android device availability. |
+| **Change details twice** | Real Android device | **NOT RUN** | Blocked on physical Android device availability. |
+| **No-products rebuild** | Real Android device | **NOT RUN** | Blocked on physical Android device availability. |
+| **Timeline long content** | Real Android device | **NOT RUN** | Blocked on physical Android device availability. |
+| **Identical-day auto-scroll** | Real Android device | **NOT RUN** | Blocked on physical Android device availability. |
+| **Footer clearance** | Real Android device | **NOT RUN** | Blocked on physical Android device availability. |
+| **Product authority** | Real Android device | **NOT RUN** | Blocked on physical Android device availability. |
+| **Failed rebuild preserves Plan A** | Real Android device | **NOT RUN** | Blocked on physical Android device availability. |
+| **Step 7 → Step 8 transition** | Real Android device | **NOT RUN** | Blocked on physical Android device availability. |
+| **Step-7 framework exceptions** | Real Android device | **NOT RUN** | Blocked on physical Android device availability. |
+
+---
+
 ## 57. Required Final Gate Table
 
 | # | Checkpoint Requirement | Status | Evidence Summary |
 |---|---|---|---|
-| 1 | **Explicit authoritative Step-7 state machine** | **PASS** | `SkinCareFlowController` drives exact states (`choice`, `hasProductsInput`, `hasProductsEditing`, `hasProductsReview`, `noProductsInput`, `noProductsProductSelection`, `noProductsReview`, `skipped`). Verified in `onboarding_step7_state_machine_test.dart`. |
-| 2 | **Stale shared CTA** | **PASS** | Token and epoch matching in `SkinCareActionBridge` prevents stale CTA publish/republish. Stale callbacks safely dropped. |
+| 1 | **Explicit authoritative Step-7 state machine** | **PASS** | `SkinCareFlowController` drives exact states (`choice`, `hasProductsInput`, `hasProductsEditing`, `hasProductsReview`, `noProductsInput`, `noProductsProductSelection`, `noProductsReview`, `skipped`). Verified in `onboarding_step7_state_machine_test.dart` (21 tests). |
+| 2 | **Stale shared CTA cleared** | **PASS** | Token and epoch matching in `SkinCareActionBridge` prevents stale CTA publish/republish. Stale callbacks safely dropped. Verified in `onboarding_step7_cta_navigation_test.dart` (12 tests). |
 | 3 | **Final valid routine → Next Step** | **PASS** | When valid routine exists, `SkinCareActionBridge` provides `null` custom action, delegating directly to shell's canonical `Next Step` CTA. Verified in `onboarding_step7_cta_navigation_test.dart` and real shell integration. |
-| 4 | **Build state → Build skin routine** | **PASS** | When routine is not yet built, primary action publishes `Build skin routine` owned by Step 7. |
-| 5 | **Back transitions** | **PASS** | Review → Choice (preserves blocks), Editing → Review (restores Plan A snapshot), Subflows → Choice / Input. Hardware and on-screen back gestures handled correctly. |
-| 6 | **Stale callbacks + widget lifecycle** | **PASS** | Async controller cancellation on dispose and back navigation. Bridge clearing deferred safely to microtask. Zero `TextEditingController used after dispose`. |
-| 7 | **Step-7 CTA shell safety** | **PASS** | Clean boundary between shell and step CTA. Session reset and account switch clear action bridge completely. |
-| 8 | **Transactional Edit/Rebuild** | **PASS** | Plan A snapshot preserved during edit; Photo B deferred staging; atomic promotion on `commitRebuildSuccess()`; rollback on cancel, back, error, or account switch. |
-| 9 | **Navigation / CTA / runtime / data-integrity regressions** | **PASS** | Timeline edit product authority prevents unowned products; `validateSkinCareSetup()` provides defense-in-depth; zero geometry jumps. |
-| 10 | **Step-7 implementation split** | **PASS** | Maintained existing architecture and boundaries without unauthorized rewrites or premature cleanup splits. |
-| 11 | **Full-screen timeline + stable contained geometry** | **PASS** | Full-screen review timeline full bleed; 24px inset containment preserved across setup, editor, first-time AI, and rebuild AI across 390px/360px and 1.0/1.5 text scale viewports. |
+| 4 | **Build state → Build skin routine** | **PASS** | When routine is not yet built, primary action publishes `Build skin routine` owned by Step 7. Verified in `onboarding_step7_cta_navigation_test.dart` & `onboarding_step7_skin_care_test.dart`. |
+| 5 | **Back transitions** | **PASS** | Review → Choice (preserves blocks), Editing → Review (restores Plan A snapshot), Subflows → Choice / Input. Hardware and on-screen back gestures handled correctly. Verified in `onboarding_step7_state_machine_test.dart`. |
+| 6 | **Stale callbacks + widget lifecycle** | **PASS** | Async controller cancellation on dispose and back navigation. Bridge clearing deferred safely to microtask. Zero `TextEditingController used after dispose`. Verified in `onboarding_step7_pending_photo_generation_test.dart` & `onboarding_step7_skin_care_test.dart`. |
+| 7 | **Step-7 CTA shell safety** | **PASS** | Clean boundary between shell and step CTA. Session reset and account switch clear action bridge completely. Verified in `onboarding_step7_cta_navigation_test.dart` & `onboarding_step7_runtime_ui_stability_test.dart`. |
+| 8 | **Transactional Edit/Rebuild** | **PASS** | Plan A snapshot preserved during edit; Photo B deferred staging; atomic promotion on `commitRebuildSuccess()`; rollback on cancel, back, error, or account switch. Verified in `onboarding_step7_transaction_test.dart` (13 tests) & `upload_interaction_system_test.dart` (37 tests). |
+| 9 | **Navigation / CTA / runtime / data-integrity regressions** | **PASS** | Timeline edit product authority prevents unowned products; `validateSkinCareSetup()` provides defense-in-depth; zero geometry jumps. Verified in `onboarding_step7_runtime_ui_stability_test.dart` (17 tests) & `onboarding_step7_p0_migration_test.dart` (4 tests). |
+| 10 | **Step-7 implementation split** | **PASS** | Maintained existing architecture and boundaries without unauthorized rewrites or premature cleanup splits. Verified in source audit. |
+| 11 | **Full-screen timeline + stable/readable geometry** | **PASS** | Full-screen review timeline full bleed; 24px inset containment preserved across setup, editor, first-time AI, and rebuild AI across 390px/360px and 1.0/1.5 text scale viewports. Verified in `onboarding_step7_full_timeline_regression_test.dart` & `ah_f018_timeline_foundation_test.dart`. |
 
 ---
 
+## 58. Final Gate Evidence Matrix & Verdict
+
+| Dimension | Result | Evidence / Notes |
+|---|---|---|
+| **Source audit** | **PASS** | All 11 architectural requirements verified in current source |
+| **Focused Gate-3 tests** | **PASS** | 352 / 352 passed across 12 test suites (100% pass rate) |
+| **Full flutter test suite** | **PASS (Gate 3)** | 1905 passed, 10 skipped, 12 failed (0 failed in Gate 3 / Step 7) |
+| **Gate-3 failures in full suite** | **0** | Zero Gate 3 / Step 7 failures across entire 1,917 test repository suite |
+| **Flutter analyze** | **PASS** | No issues found! (0 warnings, 0 errors) |
+| **Has-products physical first build** | **NOT RUN** | Blocked — No physical Android device connected (`adb devices` empty) |
+| **Has-products edit stress** | **NOT RUN** | Blocked — No physical Android device connected (`adb devices` empty) |
+| **Has-products rebuild** | **NOT RUN** | Blocked — No physical Android device connected (`adb devices` empty) |
+| **No-products physical first build** | **NOT RUN** | Blocked — No physical Android device connected (`adb devices` empty) |
+| **Change details twice** | **NOT RUN** | Blocked — No physical Android device connected (`adb devices` empty) |
+| **No-products rebuild** | **NOT RUN** | Blocked — No physical Android device connected (`adb devices` empty) |
+| **Timeline long content** | **NOT RUN** | Blocked — No physical Android device connected (`adb devices` empty) |
+| **Identical-day auto-scroll** | **NOT RUN** | Blocked — No physical Android device connected (`adb devices` empty) |
+| **Footer clearance** | **NOT RUN** | Blocked — No physical Android device connected (`adb devices` empty) |
+| **Product authority** | **NOT RUN** | Blocked — No physical Android device connected (`adb devices` empty) |
+| **Failed rebuild preserves Plan A** | **NOT RUN** | Blocked — No physical Android device connected (`adb devices` empty) |
+| **Step 7 → Step 8 transition** | **NOT RUN** | Blocked — No physical Android device connected (`adb devices` empty) |
+| **Step-7 framework exceptions** | **0 (Automated)** | 0 framework exceptions across all automated tests; physical device not attached |
+
 ```text
-GATE 3 PASSED
-STABILIZATION IMPLEMENTATION GATE PASSED
+GATE 3 BLOCKED
 ```
+
+*(Gate 3 implementation and automated verification are 100% complete and passed. Final Gate 3 physical acceptance is BLOCKED solely by physical Android device availability per the strict requirement: "Gate 3 PASSED requires: CURRENT SOURCE + CURRENT GATE-3 TESTS + CURRENT PHYSICAL DEVICE + ZERO STEP-7 FRAMEWORK ASSERTIONS".)*
 
 
