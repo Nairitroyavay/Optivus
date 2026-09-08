@@ -8,20 +8,22 @@ import 'package:optivus/models/onboarding_draft.dart';
 
 void main() {
   group('semantic onboarding step registry', () {
-    test('active production Step 4 has no legacy widget-file dependency', () {
-      final offenders = Directory('lib')
-          .listSync(recursive: true)
+    test('dead split Step 4 file and import path cannot return', () {
+      final legacyPath = [
+        'lib/features/onboarding/steps',
+        ['onboarding_class_setup', 'timeline.dart'].join('_'),
+      ].join('/');
+      expect(File(legacyPath).existsSync(), isFalse);
+
+      final legacyImportName = [
+        'onboarding_class_setup',
+        'timeline.dart',
+      ].join('_');
+      final offenders = [Directory('lib'), Directory('test')]
+          .expand((directory) => directory.listSync(recursive: true))
           .whereType<File>()
           .where((file) => file.path.endsWith('.dart'))
-          .where(
-            (file) =>
-                !file.path.endsWith('onboarding_class_setup_timeline.dart'),
-          )
-          .where(
-            (file) => file.readAsStringSync().contains(
-              'onboarding_class_setup_timeline.dart',
-            ),
-          )
+          .where((file) => file.readAsStringSync().contains(legacyImportName))
           .map((file) => file.path)
           .toList();
       expect(offenders, isEmpty);
@@ -128,6 +130,62 @@ void main() {
       expect(draft.currentStep, OnboardingStepId.badHabits.index);
     });
 
+    test('schema-v2 exact 12-vector is ambiguous and is not shifted', () {
+      final completed = vector(12)..[4] = true;
+      final draft = OnboardingDraft.fromMap({
+        'schemaVersion': 2,
+        'currentStep': 8,
+        'stepCompleted': completed,
+      });
+      expect(draft.currentStep, OnboardingStepId.badHabits.index);
+      expect(draft.stepCompleted.take(12), completed);
+      expect(draft.stepCompleted.skip(12), [false, false, false]);
+      expect(draft.stepCompleted[OnboardingStepId.eating.index], isFalse);
+      expect(draft.stepCompleted[OnboardingStepId.skinCare.index], isFalse);
+    });
+
+    test('schema-v2 short completed vector preserves current meaning', () {
+      final completed = [true, true, true, true, true, false];
+      final draft = OnboardingDraft.fromMap({
+        'schemaVersion': 2,
+        'currentStep': 5,
+        'stepCompleted': completed,
+      });
+      expect(draft.currentStep, OnboardingStepId.eating.index);
+      expect(draft.stepCompleted.take(6), completed);
+      expect(draft.stepCompleted.skip(6).every((value) => !value), isTrue);
+    });
+
+    test('schema-v2 exact 12 dirty and loading vectors stay positional', () {
+      final dirty = vector(12)..[8] = true;
+      final loading = vector(12)..[8] = true;
+      final draft = OnboardingDraft.fromMap({
+        'schemaVersion': 2,
+        'currentStep': 8,
+        'stepDirty': dirty,
+        'stepLoading': loading,
+      });
+      expect(draft.currentStep, OnboardingStepId.badHabits.index);
+      expect(draft.stepDirty[8], isTrue);
+      expect(draft.stepLoading[8], isTrue);
+      expect(draft.stepDirty[11], isFalse);
+      expect(draft.stepLoading[11], isFalse);
+    });
+
+    test('schema-v2 ambiguous round trip becomes unequivocally current', () {
+      final first = OnboardingDraft.fromMap({
+        'schemaVersion': 2,
+        'currentStep': 8,
+        'stepCompleted': vector(12)..[8] = true,
+      });
+      final serialized = first.toMap();
+      final second = OnboardingDraft.fromMap(serialized);
+      expect(serialized['schemaVersion'], OnboardingDraft.schemaVersion);
+      expect((serialized['stepCompleted'] as List), hasLength(15));
+      expect(second.currentStep, 8);
+      expect(second.stepCompleted, first.stepCompleted);
+    });
+
     test('C current schema and full vectors remain unchanged', () {
       final completed = [for (var index = 0; index < 15; index++) index.isEven];
       final draft = OnboardingDraft.fromMap({
@@ -211,6 +269,19 @@ void main() {
         false,
       ]);
       expect(draft.stepCompleted.skip(6).every((value) => !value), isTrue);
+    });
+
+    test('current schema exact 12-vector is padded without legacy fan-out', () {
+      final completed = vector(12)..[4] = true;
+      final draft = OnboardingDraft.fromMap({
+        'schemaVersion': OnboardingDraft.schemaVersion,
+        'currentStep': 8,
+        'stepCompleted': completed,
+      });
+      expect(draft.currentStep, 8);
+      expect(draft.stepCompleted.take(12), completed);
+      expect(draft.stepCompleted[OnboardingStepId.eating.index], isFalse);
+      expect(draft.stepCompleted.skip(12), [false, false, false]);
     });
 
     test('I mixed vector lengths fail safe without shifting progression', () {

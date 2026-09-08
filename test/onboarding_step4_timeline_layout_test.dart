@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/onboarding_flow.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step4_unified.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_5_eating_setup.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_14_today_ready.dart';

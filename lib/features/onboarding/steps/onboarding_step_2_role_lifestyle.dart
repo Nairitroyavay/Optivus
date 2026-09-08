@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_spacing.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
+import 'package:optivus/features/onboarding/onboarding_step_id.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/state/app_state.dart';
 
@@ -144,7 +145,10 @@ class OnboardingStep2 extends ConsumerWidget {
                           );
                       ref
                           .read(mockOnboardingProvider.notifier)
-                          .setStepDirty(2, true);
+                          .setStepDirty(
+                            OnboardingStepId.roleLifestyle.index,
+                            true,
+                          );
                     },
                   ),
                 ],
@@ -175,7 +179,10 @@ class OnboardingStep2 extends ConsumerWidget {
                           );
                       ref
                           .read(mockOnboardingProvider.notifier)
-                          .setStepDirty(2, true);
+                          .setStepDirty(
+                            OnboardingStepId.roleLifestyle.index,
+                            true,
+                          );
                     },
                   ),
                 ],
@@ -311,7 +318,9 @@ class _LifestyleSection extends ConsumerWidget {
                       clearFinalPreview: true,
                     ),
                   );
-              ref.read(mockOnboardingProvider.notifier).setStepDirty(2, true);
+              ref
+                  .read(mockOnboardingProvider.notifier)
+                  .setStepDirty(OnboardingStepId.roleLifestyle.index, true);
             },
           ),
           _SegmentRow(
@@ -331,7 +340,9 @@ class _LifestyleSection extends ConsumerWidget {
                       clearFinalPreview: true,
                     ),
                   );
-              ref.read(mockOnboardingProvider.notifier).setStepDirty(2, true);
+              ref
+                  .read(mockOnboardingProvider.notifier)
+                  .setStepDirty(OnboardingStepId.roleLifestyle.index, true);
             },
           ),
           _SegmentRow(
@@ -351,7 +362,9 @@ class _LifestyleSection extends ConsumerWidget {
                       clearFinalPreview: true,
                     ),
                   );
-              ref.read(mockOnboardingProvider.notifier).setStepDirty(2, true);
+              ref
+                  .read(mockOnboardingProvider.notifier)
+                  .setStepDirty(OnboardingStepId.roleLifestyle.index, true);
             },
           ),
           _SegmentRow(
@@ -371,7 +384,9 @@ class _LifestyleSection extends ConsumerWidget {
                       clearFinalPreview: true,
                     ),
                   );
-              ref.read(mockOnboardingProvider.notifier).setStepDirty(2, true);
+              ref
+                  .read(mockOnboardingProvider.notifier)
+                  .setStepDirty(OnboardingStepId.roleLifestyle.index, true);
             },
           ),
         ],

@@ -889,6 +889,10 @@ class OnboardingDraft {
     if (version != null && version >= schemaVersion) {
       return PersistedOnboardingStepLayout.current15;
     }
+    // Schema v2 already existed with the current 15-page layout. A short or
+    // exact-12 vector therefore conflicts with known current-layout evidence;
+    // preserve numeric meaning and let resume validation rewind safely.
+    if (version == 2) return PersistedOnboardingStepLayout.ambiguous;
     if (hasLegacyVector) return PersistedOnboardingStepLayout.legacy12;
 
     // Schema v1 is the only explicit historical data-schema evidence that a

@@ -5,7 +5,7 @@ import 'package:optivus/features/routine/services/routine_conflict_engine.dart';
 import 'package:optivus/features/routine/domain/routine_conflict.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step4_unified.dart';
 import 'package:optivus/models/routine_import_review.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 
 void main() {
   group(

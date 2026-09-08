@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step4_unified.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_5_eating_setup.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_setup.dart';

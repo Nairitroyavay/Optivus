@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_spacing.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
+import 'package:optivus/features/onboarding/onboarding_step_id.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/services/nutrition_target_service.dart';
 import 'package:optivus/state/app_state.dart';
@@ -85,7 +86,10 @@ class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
                           );
                           ref
                               .read(mockOnboardingProvider.notifier)
-                              .setStepDirty(3, true);
+                              .setStepDirty(
+                                OnboardingStepId.bodyBasics.index,
+                                true,
+                              );
                         },
                         accent: OptivusColors.brandAccent,
                       ),
@@ -117,7 +121,10 @@ class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
                           );
                           ref
                               .read(mockOnboardingProvider.notifier)
-                              .setStepDirty(3, true);
+                              .setStepDirty(
+                                OnboardingStepId.bodyBasics.index,
+                                true,
+                              );
                         },
                         accent: OptivusColors.brandAccent,
                       ),
@@ -156,7 +163,7 @@ class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
                     );
                     ref
                         .read(mockOnboardingProvider.notifier)
-                        .setStepDirty(3, true);
+                        .setStepDirty(OnboardingStepId.bodyBasics.index, true);
                   },
                   sliderKey: const ValueKey('height-slider'),
                 ),
@@ -192,7 +199,7 @@ class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
                     );
                     ref
                         .read(mockOnboardingProvider.notifier)
-                        .setStepDirty(3, true);
+                        .setStepDirty(OnboardingStepId.bodyBasics.index, true);
                   },
                   sliderKey: const ValueKey('weight-slider'),
                 ),

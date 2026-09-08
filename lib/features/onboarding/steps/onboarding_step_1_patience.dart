@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
+import 'package:optivus/features/onboarding/onboarding_step_id.dart';
 import 'package:optivus/state/app_state.dart';
 
 class OnboardingStep1 extends ConsumerWidget {
@@ -82,7 +83,7 @@ class OnboardingStep1 extends ConsumerWidget {
                         );
                     ref
                         .read(mockOnboardingProvider.notifier)
-                        .setStepDirty(1, true);
+                        .setStepDirty(OnboardingStepId.patience.index, true);
                   },
                   child: OnboardingGlassCard(
                     padding: const EdgeInsets.symmetric(
