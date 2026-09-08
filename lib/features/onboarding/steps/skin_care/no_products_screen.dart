@@ -931,6 +931,10 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final flowStateHolder = ref.watch(skinCareFlowControllerProvider);
     final flowState = flowStateHolder.state;
     final isEditing = flowState == SkinCareFlowState.noProductsEditing;
+    final isEditingTransaction =
+        isEditing ||
+        (flowState.isGenerating &&
+            flowStateHolder.generationOrigin?.isEditing == true);
     final inReviewMode = flowState == SkinCareFlowState.noProductsReview;
     final lifecycleActive = _lifecycle.state.isActive && flowState.isGenerating;
     final busy = uploadBusy || lifecycleActive || _removingPhoto;
@@ -1002,7 +1006,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       final isFindProducts =
           _lifecycle.state.operationId?.contains('find-products') ?? false;
       return _SkinCareContainedPane(
-        enabled: isEditing,
+        enabled: isEditingTransaction,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1223,7 +1227,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         missingEssentialSelections,
       );
       return _SkinCareContainedPane(
-        enabled: isEditing,
+        enabled: isEditingTransaction,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1833,7 +1837,10 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         ),
       ],
     );
-    return _SkinCareContainedPane(enabled: isEditing, child: detailsPane);
+    return _SkinCareContainedPane(
+      enabled: isEditingTransaction,
+      child: detailsPane,
+    );
   }
 }
 

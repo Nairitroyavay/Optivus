@@ -8,6 +8,7 @@ import 'package:optivus/models/conflict_acceptance.dart';
 import 'package:optivus/models/skin_care_product_draft.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/services/nutrition_target_service.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
 
 class OnboardingDraft {
   static const int schemaVersion = 3;
@@ -2585,6 +2586,11 @@ class BaseTimelineDraft {
       final msg = _missingSkinCareRoutineMessage(desired);
       if (msg != null) return msg;
 
+      for (final block in blocks.where((b) => b.section == 'skin_care')) {
+        final blockErr = onboarding7ValidateEditedSkinCareBlock(this, block);
+        if (blockErr != null) return blockErr;
+      }
+
       return null;
     }
 
@@ -2655,6 +2661,11 @@ class BaseTimelineDraft {
 
       final msg = _missingSkinCareRoutineMessage(desired);
       if (msg != null) return msg;
+
+      for (final block in blocks.where((b) => b.section == 'skin_care')) {
+        final blockErr = onboarding7ValidateEditedSkinCareBlock(this, block);
+        if (blockErr != null) return blockErr;
+      }
 
       return null;
     }

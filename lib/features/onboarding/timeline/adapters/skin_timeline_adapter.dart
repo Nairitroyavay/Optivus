@@ -67,6 +67,7 @@ class SkinTimelineAdapter
     required Future<bool> Function(TimelineBlockDraft updated) onSave,
     int? Function(TimelineBlockDraft candidate)? findFreeStart,
     bool Function(TimelineBlockDraft candidate)? hasConflict,
+    String? Function(TimelineBlockDraft candidate)? validateBlock,
     Color accent = OptivusColors.roseAccent,
   }) {
     return showModalBottomSheet<bool>(
@@ -79,6 +80,7 @@ class SkinTimelineAdapter
         onSave: onSave,
         findFreeStart: findFreeStart,
         hasConflict: hasConflict,
+        validateBlock: validateBlock,
       ),
     );
   }
@@ -113,6 +115,7 @@ class _SkinCareBlockEditSheet extends StatefulWidget {
   final Future<bool> Function(TimelineBlockDraft updated) onSave;
   final int? Function(TimelineBlockDraft candidate)? findFreeStart;
   final bool Function(TimelineBlockDraft candidate)? hasConflict;
+  final String? Function(TimelineBlockDraft candidate)? validateBlock;
   final Color accent;
 
   const _SkinCareBlockEditSheet({
@@ -121,6 +124,7 @@ class _SkinCareBlockEditSheet extends StatefulWidget {
     required this.accent,
     this.findFreeStart,
     this.hasConflict,
+    this.validateBlock,
   });
 
   @override
@@ -217,6 +221,12 @@ class _SkinCareBlockEditSheetState extends State<_SkinCareBlockEditSheet> {
       setState(() => _localError = null);
     }
     final candidate = _candidateFromInputs();
+    if (widget.validateBlock != null) {
+      final validationError = widget.validateBlock!(candidate);
+      if (validationError != null) {
+        throw Exception(validationError);
+      }
+    }
     if (widget.hasConflict?.call(candidate) == true) {
       throw Exception(
         'That time overlaps another onboarding block. Choose a free 15-minute slot.',

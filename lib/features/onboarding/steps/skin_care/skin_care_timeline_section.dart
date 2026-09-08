@@ -50,13 +50,25 @@ class _SkinCareTimelineSectionState
             excludingBlockId: block.id,
           );
         },
+        validateBlock: (candidate) {
+          final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
+          return onboarding7ValidateEditedSkinCareBlock(base, candidate);
+        },
         onSave: (candidate) async {
+          final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
+          final validationError = onboarding7ValidateEditedSkinCareBlock(
+            base,
+            candidate,
+          );
+          if (validationError != null) {
+            throw Exception(validationError);
+          }
           updateBaseTimelineDraft(
             ref,
             onboardingSkinCareStepIndex,
-            (base) => base.copyWith(
+            (b) => b.copyWith(
               blocks: [
-                for (final item in base.blocks)
+                for (final item in b.blocks)
                   if (item.id == block.id) candidate else item,
               ],
             ),

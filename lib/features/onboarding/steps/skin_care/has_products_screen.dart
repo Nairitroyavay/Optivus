@@ -746,6 +746,10 @@ class _HasProductsModeScreenState
     final flowStateHolder = ref.watch(skinCareFlowControllerProvider);
     final flowState = flowStateHolder.state;
     final isEditing = flowState == SkinCareFlowState.hasProductsEditing;
+    final isEditingTransaction =
+        isEditing ||
+        (flowState.isGenerating &&
+            flowStateHolder.generationOrigin?.isEditing == true);
     final inReviewMode = flowState == SkinCareFlowState.hasProductsReview;
     final lifecycleActive = _lifecycle.state.isActive && flowState.isGenerating;
 
@@ -1006,7 +1010,10 @@ class _HasProductsModeScreenState
           ],
         ],
       );
-      return _SkinCareContainedPane(enabled: isEditing, child: setupPane);
+      return _SkinCareContainedPane(
+        enabled: isEditingTransaction,
+        child: setupPane,
+      );
     }
 
     if (flowState != SkinCareFlowState.hasProductsReview) {
@@ -1098,7 +1105,10 @@ class _HasProductsModeScreenState
         ],
       );
 
-      return _SkinCareContainedPane(enabled: isEditing, child: editorContent);
+      return _SkinCareContainedPane(
+        enabled: isEditingTransaction,
+        child: editorContent,
+      );
     }
 
     return Column(

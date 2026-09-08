@@ -316,6 +316,11 @@ class _OwnedProductCatalog {
       }
     }
 
+    final significant = _significantProductTokens(query);
+    if (significant.isNotEmpty) {
+      return null;
+    }
+
     final lower = value.toLowerCase();
     return _matchByCategory(lower);
   }
@@ -356,6 +361,105 @@ class _OwnedProductCatalog {
     final matches = products.where(test).toList(growable: false);
     return matches.length == 1 ? matches.single : null;
   }
+}
+
+class Onboarding7AllowedProductsCatalog {
+  final _OwnedProductCatalog _catalog;
+
+  const Onboarding7AllowedProductsCatalog._(this._catalog);
+
+  bool get isEmpty => _catalog.isEmpty;
+  bool get hasSunscreen => _catalog.hasSunscreen;
+  bool get hasCleanser => _catalog.hasCleanser;
+  bool get hasMoisturizer => _catalog.hasMoisturizer;
+
+  bool containsProduct(String productName) {
+    final clean = productName.trim();
+    if (clean.isEmpty) return false;
+    return _catalog.match(clean) != null;
+  }
+}
+
+Onboarding7AllowedProductsCatalog onboarding7AllowedProductsCatalog(
+  BaseTimelineDraft base,
+) {
+  if (base.skinCareSetupPath == 'has_products') {
+    if (base.skinCareReviewedProducts.isNotEmpty) {
+      return Onboarding7AllowedProductsCatalog._(
+        _ownedProductCatalogFromBasis(
+          productNames: const [],
+          productDetails: base.skinCareReviewedProducts,
+        ),
+      );
+    }
+    final names = <String>[];
+    if (base.skinCareProductNames != null &&
+        base.skinCareProductNames!.trim().isNotEmpty) {
+      names.addAll(
+        base.skinCareProductNames!
+            .split(RegExp(r'[\n,]+'))
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty),
+      );
+    }
+    return Onboarding7AllowedProductsCatalog._(
+      _ownedProductCatalogFromBasis(
+        productNames: names,
+        productDetails: const [],
+      ),
+    );
+  } else if (base.skinCareSetupPath == 'no_products') {
+    final selectedKeys = base.skinCareSelectedProductNames
+        .map(normalizeSkinCareSelectionKey)
+        .toSet();
+    final selectedRecommendations = base.skinCareProductRecommendations
+        .where((rec) => selectedKeys.contains(rec.selectionKey))
+        .toList();
+    final detected = [
+      for (final rec in selectedRecommendations)
+        SkinCareDetectedProduct(
+          name: rec.displayName,
+          brand: rec.brand,
+          category: rec.canonicalCategory,
+        ),
+    ];
+    return Onboarding7AllowedProductsCatalog._(
+      _ownedProductCatalogFromBasis(
+        productNames: base.skinCareSuggestedProducts,
+        productDetails: detected,
+      ),
+    );
+  }
+  return const Onboarding7AllowedProductsCatalog._(_OwnedProductCatalog([]));
+}
+
+String? onboarding7ValidateEditedSkinCareBlock(
+  BaseTimelineDraft base,
+  TimelineBlockDraft candidate,
+) {
+  final products = candidate.skincareProducts
+      .map((p) => p.trim())
+      .where((p) => p.isNotEmpty)
+      .toList();
+  final steps = candidate.skincareSteps
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
+
+  if (products.isEmpty && steps.isEmpty) {
+    return 'Add at least one product or routine step.';
+  }
+
+  if (products.isNotEmpty) {
+    final catalog = onboarding7AllowedProductsCatalog(base);
+    for (final product in products) {
+      if (!catalog.containsProduct(product)) {
+        return 'Use only products from your current Skin Care setup ("$product").';
+      }
+    }
+  }
+
+  return null;
 }
 
 @visibleForTesting

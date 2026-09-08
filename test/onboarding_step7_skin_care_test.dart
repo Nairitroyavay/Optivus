@@ -3057,7 +3057,12 @@ void main() {
       );
 
       await tester.pumpWidget(
-        buildTestWidget(draft: _hasProductsDraft(blocks: const [skinBlock])),
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            productNames: 'Cleanser\nSunscreen\nVery Long Sunscreen',
+            blocks: const [skinBlock],
+          ),
+        ),
       );
       await tester.pumpAndSettle();
       final container = ProviderScope.containerOf(
@@ -5340,7 +5345,7 @@ void main() {
   test('55b. Step completion requires a valid routine or explicit skip', () {
     final validRoutine = _hasProductsDraft(
       uid: 'test_uid',
-      productNames: 'Cleanser',
+      productNames: 'Cleanser\nSunscreen',
       blocks: _skinCareBlocksForEveryDay(2),
     ).baseTimeline;
     expect(onboarding7CanContinue(validRoutine, 'test_uid'), isTrue);
@@ -7650,9 +7655,16 @@ OnboardingDraft _hasProductsDraft({
   bool includePrerequisites = false,
 }) {
   final hasSkinBlocks = blocks.any((b) => b.section == 'skin_care');
+  final blockProducts = blocks
+      .where((b) => b.section == 'skin_care')
+      .expand((b) => b.skincareProducts)
+      .where((p) => p.trim().isNotEmpty)
+      .toSet();
   final effectiveProductNames =
       productNames ??
-      (hasSkinBlocks && productPhotoR2Key == null ? 'Cleanser' : null);
+      (blockProducts.isNotEmpty
+          ? blockProducts.join('\n')
+          : (hasSkinBlocks && productPhotoR2Key == null ? 'Cleanser' : null));
   final draftBase = BaseTimelineDraft(
     skinCareSetupStep: 1,
     skinCareSetupPath: 'has_products',

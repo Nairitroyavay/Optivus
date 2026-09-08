@@ -1,17 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/features/onboarding/onboarding_flow.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_setup.dart';
 import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_controller.dart';
+import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_state.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/skin_timeline_adapter.dart';
 import 'package:optivus/features/onboarding/timeline/layout/timeline_overlap_engine.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_entry.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/timeline_viewport.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
+import 'package:optivus/features/uploads/controllers/upload_interaction_controller.dart';
+import 'package:optivus/features/uploads/providers/onboarding_upload_interaction_provider.dart';
+import 'package:optivus/features/uploads/services/upload_permission_service.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/repositories/auth_repository.dart';
+import 'package:optivus/repositories/uploaded_asset_repository.dart';
+import 'package:optivus/services/cloudflare/cloudflare_clients.dart';
+import 'package:optivus/services/device_country_service.dart';
 import 'package:optivus/services/skin_care_ai_client.dart';
+import 'package:optivus/services/uploads/image_prepare_service.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/auth_state.dart';
 
 class _FakeSkinCareAiClient implements SkinCareAiClient {
   const _FakeSkinCareAiClient();
@@ -96,19 +107,85 @@ class _FakeSkinCareAiClient implements SkinCareAiClient {
   }
 }
 
+class _DummyAssetRepo implements UploadedAssetRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _DummyAuthRepo implements AuthRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _DummyImageService implements ImagePrepareService {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _DummyR2Client implements R2UploadClient {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _TestDeviceCountryService implements DeviceCountryService {
+  final DeviceCountry? result;
+  const _TestDeviceCountryService(this.result);
+  @override
+  Future<DeviceCountry?> detectCountry() async => result;
+}
+
+class _TestUploadInteractionController extends UploadInteractionController {
+  _TestUploadInteractionController()
+    : super(
+        shellConfig: onboardingUploadShellConfig,
+        assetRepository: _DummyAssetRepo(),
+        authRepository: _DummyAuthRepo(),
+        imagePrepareService: _DummyImageService(),
+        r2UploadClient: _DummyR2Client(),
+        permissionService: const DefaultUploadPermissionService(),
+      );
+}
+
+class _FakeAuthNotifier extends StateNotifier<AuthState>
+    implements AuthNotifier {
+  _FakeAuthNotifier()
+    : super(
+        const AuthState(
+          user: AuthUser(
+            uid: 'shell-integration-user',
+            email: 'test@example.com',
+            emailVerified: true,
+          ),
+          status: AuthFlowStatus.signedInOnboardingIncomplete,
+        ),
+      );
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 Widget _buildTestApp({
   required OnboardingDraft draft,
   Size screenSize = const Size(390, 844),
   double textScale = 1.0,
+  Widget? home,
 }) {
   return ProviderScope(
+    key: ValueKey(draft.uid),
     overrides: [
+      authProvider.overrideWith((ref) => _FakeAuthNotifier()),
       mockOnboardingProvider.overrideWith((ref) {
         final notifier = MockOnboardingNotifier();
         notifier.loadSeedData(draft);
         return notifier;
       }),
       skinCareAiClientProvider.overrideWithValue(const _FakeSkinCareAiClient()),
+      onboardingUploadInteractionProvider.overrideWith(
+        (_) => _TestUploadInteractionController(),
+      ),
+      deviceCountryServiceProvider.overrideWithValue(
+        const _TestDeviceCountryService(null),
+      ),
     ],
     child: MediaQuery(
       data: MediaQueryData(
@@ -117,8 +194,154 @@ Widget _buildTestApp({
       ),
       child: MaterialApp(
         theme: ThemeData(useMaterial3: true),
-        home: const Scaffold(body: OnboardingStep7()),
+        home: home ?? const Scaffold(body: OnboardingStep7()),
       ),
+    ),
+  );
+}
+
+OnboardingDraft buildInitialDraft({String uid = 'user-seq-test'}) {
+  const planABlocks = [
+    TimelineBlockDraft(
+      id: 'plan-a-morning',
+      section: 'skin_care',
+      title: 'Morning Skin Care',
+      startMinute: 480,
+      endMinute: 495,
+      repeatDays: [1, 2, 3, 4, 5, 6, 7],
+      blockType: TimelineBlockDraft.softBlockKey,
+      skincareProducts: [
+        'Minimalist Gentle Cleanser',
+        'Minimalist SPF 50 Sunscreen',
+      ],
+      skincareSteps: ['Wash face', 'Apply sunscreen'],
+      skincareSlotLabel: 'morning',
+    ),
+    TimelineBlockDraft(
+      id: 'plan-a-night',
+      section: 'skin_care',
+      title: 'Night Skin Care',
+      startMinute: 1260,
+      endMinute: 1275,
+      repeatDays: [1, 2, 3, 4, 5, 6, 7],
+      blockType: TimelineBlockDraft.softBlockKey,
+      skincareProducts: [
+        'Minimalist Gentle Cleanser',
+        'Minimalist Barrier Moisturizer',
+      ],
+      skincareSteps: ['Wash face', 'Moisturize'],
+      skincareSlotLabel: 'night',
+    ),
+  ];
+
+  final draftBase = BaseTimelineDraft(
+    skinCareSetupStep: 1,
+    skinCareSetupPath: 'no_products',
+    skinCareSkinType: 'oily',
+    skinCareProblems: const ['pimples'],
+    skinCareBudget: 'medium',
+    skinCareDesiredApplicationsPerDay: 2,
+    skinCareFacePhotoAssetId: 'skin-asset',
+    skinCareFacePhotoR2Key: 'users/$uid/onboarding/skin_face/skin-asset.jpg',
+    skinCareFacePhotoStatus: 'uploaded',
+    skinCareFacePhotoCreatedAt: DateTime.utc(2026, 6, 15, 10),
+    skinCareFacePhotoUpdatedAt: DateTime.utc(2026, 6, 15, 10),
+    eatingSetupPath: 'skip',
+    eatingSetupStep: 1,
+    skinCareProductNames:
+        'Minimalist Gentle Cleanser\nMinimalist Barrier Moisturizer\nMinimalist SPF 50 Sunscreen',
+    skinCareSuggestedProducts: const [
+      'Minimalist Gentle Cleanser',
+      'Minimalist Barrier Moisturizer',
+      'Minimalist SPF 50 Sunscreen',
+    ],
+    skinCareSelectedProductNames: const [
+      'Minimalist Gentle Cleanser',
+      'Minimalist Barrier Moisturizer',
+      'Minimalist SPF 50 Sunscreen',
+    ],
+    skinCareProductRecommendations: const [
+      SkinCareProductRecommendationDraft(
+        name: 'Minimalist Gentle Cleanser',
+        category: 'cleanser',
+        brand: 'Minimalist',
+        estimatedPrice: '300-400',
+        currencyCode: 'INR',
+        reason: 'Gentle daily cleanser',
+      ),
+      SkinCareProductRecommendationDraft(
+        name: 'Minimalist Barrier Moisturizer',
+        category: 'moisturizer',
+        brand: 'Minimalist',
+        estimatedPrice: '400-500',
+        currencyCode: 'INR',
+        reason: 'Barrier repair hydration',
+      ),
+      SkinCareProductRecommendationDraft(
+        name: 'Minimalist SPF 50 Sunscreen',
+        category: 'sunscreen',
+        brand: 'Minimalist',
+        estimatedPrice: '500-600',
+        currencyCode: 'INR',
+        reason: 'Broad spectrum UV protection',
+      ),
+    ],
+    blocks: [
+      BaseTimelineDraft.defaultSleepBlock(),
+      BaseTimelineDraft.defaultBathBlock(),
+      const TimelineBlockDraft(
+        id: 'meal-lunch',
+        section: 'eating',
+        title: 'Lunch',
+        startMinute: 720,
+        endMinute: 750,
+        repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      ),
+      ...planABlocks,
+    ],
+  );
+
+  final recFingerprint = draftBase.computeSkinCareRecommendationFingerprint();
+  final baseWithRec = draftBase.copyWith(
+    skinCareRecommendationFingerprint: recFingerprint,
+  );
+  final routineFingerprint = baseWithRec.computeSkinCareRoutineFingerprint();
+  final taggedBlocks = baseWithRec.blocks.map((block) {
+    if (block.section != 'skin_care') return block;
+    return block.copyWith(
+      provenanceSourceIds: [
+        ...block.provenanceSourceIds,
+        'skin-care-generation:$routineFingerprint',
+      ],
+    );
+  }).toList();
+
+  return OnboardingDraft(
+    uid: uid,
+    currentStep: 7,
+    welcomeSaved: true,
+    patiencePledgeAccepted: true,
+    stepCompleted: List<bool>.generate(
+      OnboardingDraft.stepCount,
+      (index) => index < 7,
+    ),
+    lifeRole: const LifeRoleDraft(
+      lifeRole: LifeRoleDraft.notStudentNotWorkingKey,
+      exerciseLevel: 'moderate',
+      waterIntake: 'medium',
+      stressLevel: 'medium',
+      sleepQuality: 'good',
+    ),
+    bodyBasics: const BodyBasicsDraft(
+      ageRange: '25-34',
+      heightCm: 175,
+      weightKg: 70,
+      gender: 'other',
+    ),
+    baseTimeline: baseWithRec.copyWith(
+      skinCareRoutineFingerprint: routineFingerprint,
+      blocks: taggedBlocks,
     ),
   );
 }
@@ -253,6 +476,164 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+
+    for (final width in [390.0, 360.0]) {
+      for (final textScale in [1.0, 1.5]) {
+        testWidgets(
+          'Geometry matrix (${width.toInt()}px, textScale $textScale): setup, editor, first-time AI, rebuild AI respect 24px inset; review timeline is full bleed',
+          (tester) async {
+            tester.view.physicalSize = Size(width, 844);
+            tester.view.devicePixelRatio = 1.0;
+            addTearDown(tester.view.resetPhysicalSize);
+            addTearDown(tester.view.resetDevicePixelRatio);
+
+            // 1. Has-products setup mode
+            final hasDraft = OnboardingDraft(
+              uid: 'geo-has-$width-$textScale',
+              currentStep: 7,
+              baseTimeline: const BaseTimelineDraft(
+                skinCareSetupStep: 1,
+                skinCareSetupPath: 'has_products',
+                skinCareDesiredApplicationsPerDay: 2,
+                skinCareProductNames: 'Cleanser\nMoisturizer',
+              ),
+            );
+            await tester.pumpWidget(
+              _buildTestApp(
+                draft: hasDraft,
+                screenSize: Size(width, 844),
+                textScale: textScale,
+              ),
+            );
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+
+            final hasSetupRect = tester.getRect(
+              find.byType(OnboardingGlassCard).first,
+            );
+            expect(hasSetupRect.left, 24.0);
+            expect(hasSetupRect.right, width - 24.0);
+
+            // Has-products rebuild editor mode
+            final hasContext = tester.element(find.byType(OnboardingStep7));
+            final hasContainer = ProviderScope.containerOf(hasContext);
+            hasContainer
+                .read(skinCareFlowControllerProvider.notifier)
+                .startEditing(hasDraft.baseTimeline);
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+
+            final hasRebuildRect = tester.getRect(
+              find.byType(OnboardingGlassCard).first,
+            );
+            expect(hasRebuildRect.left, 24.0);
+            expect(hasRebuildRect.right, width - 24.0);
+
+            // 2. No-products setup mode
+            final noDraft = OnboardingDraft(
+              uid: 'geo-no-$width-$textScale',
+              currentStep: 7,
+              baseTimeline: const BaseTimelineDraft(
+                skinCareSetupStep: 1,
+                skinCareSetupPath: 'no_products',
+                skinCareSkinType: 'oily',
+                skinCareProblems: ['pimples'],
+                skinCareBudget: 'medium',
+                skinCareDesiredApplicationsPerDay: 2,
+              ),
+            );
+            await tester.pumpWidget(
+              _buildTestApp(
+                draft: noDraft,
+                screenSize: Size(width, 844),
+                textScale: textScale,
+              ),
+            );
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+
+            final noSetupRect = tester.getRect(
+              find.byType(OnboardingGlassCard).first,
+            );
+            expect(noSetupRect.left, 24.0);
+            expect(noSetupRect.right, width - 24.0);
+
+            // First-time AI thinking card
+            final noContext = tester.element(find.byType(OnboardingStep7));
+            final noContainer = ProviderScope.containerOf(noContext);
+            noContainer
+                .read(skinCareFlowControllerProvider.notifier)
+                .startGeneration(SkinCareFlowState.noProductsFindingProducts);
+            await tester.pump();
+            expect(tester.takeException(), isNull);
+
+            final firstAiRect = tester.getRect(
+              find.byType(OnboardingGlassCard).first,
+            );
+            expect(firstAiRect.left, 24.0);
+            expect(firstAiRect.right, width - 24.0);
+
+            // Rebuild AI thinking card
+            noContainer
+                .read(skinCareFlowControllerProvider.notifier)
+                .startEditing(noDraft.baseTimeline);
+            await tester.pump();
+            noContainer
+                .read(skinCareFlowControllerProvider.notifier)
+                .startGeneration(SkinCareFlowState.noProductsGeneratingRoutine);
+            await tester.pump();
+            expect(tester.takeException(), isNull);
+
+            final rebuildAiRect = tester.getRect(
+              find.byType(OnboardingGlassCard).first,
+            );
+            expect(rebuildAiRect.left, 24.0);
+            expect(rebuildAiRect.right, width - 24.0);
+
+            // 3. Full-screen review timeline
+            const reviewBlock = TimelineBlockDraft(
+              id: 'geo-review-block',
+              section: 'skin_care',
+              title: 'Morning Care',
+              startMinute: 480,
+              endMinute: 510,
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+              blockType: TimelineBlockDraft.softBlockKey,
+              skincareProducts: ['Cleanser', 'Moisturizer'],
+              skincareSteps: ['Wash face', 'Apply cream'],
+            );
+            final reviewDraft = OnboardingDraft(
+              uid: 'geo-review-$width-$textScale',
+              currentStep: 7,
+              baseTimeline: const BaseTimelineDraft(
+                skinCareSetupStep: 1,
+                skinCareSetupPath: 'has_products',
+                skinCareDesiredApplicationsPerDay: 1,
+                skinCareRoutineFingerprint: 'geo-fp',
+                blocks: [reviewBlock],
+              ),
+            );
+            await tester.pumpWidget(
+              _buildTestApp(
+                draft: reviewDraft,
+                screenSize: Size(width, 844),
+                textScale: textScale,
+              ),
+            );
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+
+            final timelineFinder = find.byKey(
+              const ValueKey('onboarding-step7-full-timeline'),
+            );
+            expect(timelineFinder, findsOneWidget);
+            final timelineRect = tester.getRect(timelineFinder);
+            expect(timelineRect.left, 0.0);
+            expect(timelineRect.right, width);
+          },
+        );
+      }
+    }
   });
 
   group('Timeline Viewport Weekday Auto-Scroll Contract', () {
@@ -364,6 +745,19 @@ void main() {
       expect(
         find.byKey(const ValueKey('onboarding-step7-full-details-normal-1')),
         findsNothing,
+      );
+
+      // Verify normal card height boundary geometry: content does not exceed card bottom
+      final cardRect = tester.getRect(
+        find.byKey(const ValueKey('onboarding-step7-block-normal-1')),
+      );
+      final productsTextFinder = find.text('Cleanser, Moisturizer, Sunscreen');
+      expect(productsTextFinder, findsOneWidget);
+      final productsRect = tester.getRect(productsTextFinder);
+      expect(
+        productsRect.bottom,
+        lessThanOrEqualTo(cardRect.bottom),
+        reason: 'Normal card content bottom must not exceed card bottom',
       );
 
       expect(tester.takeException(), isNull);
@@ -528,124 +922,322 @@ void main() {
     );
   });
 
-  group('Section 19 Exact Physical Interaction Sequence Regression', () {
-    OnboardingDraft buildInitialDraft({String uid = 'user-seq-test'}) {
-      const planABlocks = [
-        TimelineBlockDraft(
-          id: 'plan-a-morning',
-          section: 'skin_care',
-          title: 'Morning Skin Care',
-          startMinute: 480,
-          endMinute: 495,
-          repeatDays: [1, 2, 3, 4, 5, 6, 7],
-          blockType: TimelineBlockDraft.softBlockKey,
-          skincareProducts: [
-            'Minimalist Gentle Cleanser',
-            'Minimalist SPF 50 Sunscreen',
-          ],
-          skincareSteps: ['Wash face', 'Apply sunscreen'],
-          skincareSlotLabel: 'morning',
-        ),
-        TimelineBlockDraft(
-          id: 'plan-a-night',
-          section: 'skin_care',
-          title: 'Night Skin Care',
-          startMinute: 1260,
-          endMinute: 1275,
-          repeatDays: [1, 2, 3, 4, 5, 6, 7],
-          blockType: TimelineBlockDraft.softBlockKey,
-          skincareProducts: [
-            'Minimalist Gentle Cleanser',
-            'Minimalist Barrier Moisturizer',
-          ],
-          skincareSteps: ['Wash face', 'Moisturize'],
-          skincareSlotLabel: 'night',
-        ),
-      ];
+  group('Step 7 Timeline Edit Product Authority and Validation Defense', () {
+    test(
+      'validateSkinCareSetup enforces product ownership defense-in-depth',
+      () {
+        const uid = 'defense-uid';
 
-      final draftBase = BaseTimelineDraft(
-        skinCareSetupStep: 1,
-        skinCareSetupPath: 'no_products',
-        skinCareSkinType: 'oily',
-        skinCareProblems: const ['pimples'],
-        skinCareBudget: 'medium',
-        skinCareDesiredApplicationsPerDay: 2,
-        skinCareFacePhotoAssetId: 'skin-asset',
-        skinCareFacePhotoR2Key:
-            'users/$uid/onboarding/skin_face/skin-asset.jpg',
-        skinCareFacePhotoStatus: 'uploaded',
-        skinCareProductNames:
-            'Minimalist Gentle Cleanser\nMinimalist Barrier Moisturizer\nMinimalist SPF 50 Sunscreen',
-        skinCareSuggestedProducts: const [
-          'Minimalist Gentle Cleanser',
-          'Minimalist Barrier Moisturizer',
-          'Minimalist SPF 50 Sunscreen',
-        ],
-        skinCareSelectedProductNames: const [
-          'Minimalist Gentle Cleanser',
-          'Minimalist Barrier Moisturizer',
-          'Minimalist SPF 50 Sunscreen',
-        ],
-        skinCareProductRecommendations: const [
-          SkinCareProductRecommendationDraft(
-            name: 'Minimalist Gentle Cleanser',
-            category: 'cleanser',
-            brand: 'Minimalist',
-            estimatedPrice: '300-400',
-            currencyCode: 'INR',
-            reason: 'Gentle daily cleanser',
-          ),
-          SkinCareProductRecommendationDraft(
-            name: 'Minimalist Barrier Moisturizer',
-            category: 'moisturizer',
-            brand: 'Minimalist',
-            estimatedPrice: '400-500',
-            currencyCode: 'INR',
-            reason: 'Barrier repair hydration',
-          ),
-          SkinCareProductRecommendationDraft(
-            name: 'Minimalist SPF 50 Sunscreen',
-            category: 'sunscreen',
-            brand: 'Minimalist',
-            estimatedPrice: '500-600',
-            currencyCode: 'INR',
-            reason: 'Broad spectrum UV protection',
-          ),
-        ],
-        blocks: [
-          BaseTimelineDraft.defaultSleepBlock(),
-          BaseTimelineDraft.defaultBathBlock(),
-          ...planABlocks,
-        ],
-      );
-
-      final recFingerprint = draftBase
-          .computeSkinCareRecommendationFingerprint();
-      final baseWithRec = draftBase.copyWith(
-        skinCareRecommendationFingerprint: recFingerprint,
-      );
-      final routineFingerprint = baseWithRec
-          .computeSkinCareRoutineFingerprint();
-      final taggedBlocks = baseWithRec.blocks.map((block) {
-        if (block.section != 'skin_care') return block;
-        return block.copyWith(
-          provenanceSourceIds: [
-            ...block.provenanceSourceIds,
-            'skin-care-generation:$routineFingerprint',
+        const reviewedProduct = SkinCareDetectedProduct(
+          name: 'Cleanser',
+          brand: 'Simple',
+          category: 'cleanser',
+        );
+        var baseHas = const BaseTimelineDraft(
+          skinCareSetupStep: 1,
+          skinCareSetupPath: 'has_products',
+          skinCareDesiredApplicationsPerDay: 2,
+          skinCareProductNames: 'Cleanser',
+          skinCareReviewedProducts: [reviewedProduct],
+        );
+        final fpHas = baseHas.computeSkinCareRoutineFingerprint();
+        baseHas = baseHas.copyWith(
+          skinCareRoutineFingerprint: fpHas,
+          blocks: [
+            TimelineBlockDraft(
+              id: 'b1',
+              section: 'skin_care',
+              title: 'Morning',
+              startMinute: 480,
+              endMinute: 495,
+              repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+              blockType: TimelineBlockDraft.softBlockKey,
+              skincareProducts: const ['Cleanser'],
+              provenanceSourceIds: ['skin-care-generation:$fpHas'],
+            ),
+            TimelineBlockDraft(
+              id: 'b2',
+              section: 'skin_care',
+              title: 'Night',
+              startMinute: 1260,
+              endMinute: 1275,
+              repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+              blockType: TimelineBlockDraft.softBlockKey,
+              skincareProducts: const ['Cleanser'],
+              provenanceSourceIds: ['skin-care-generation:$fpHas'],
+            ),
           ],
         );
-      }).toList();
 
-      return OnboardingDraft(
-        uid: uid,
-        currentStep: 7,
-        baseTimeline: baseWithRec.copyWith(
-          skinCareRoutineFingerprint: routineFingerprint,
-          blocks: taggedBlocks,
-        ),
-      );
-    }
+        // 1. Has-products valid
+        expect(baseHas.validateSkinCareSetup(uid), isNull);
 
+        // 2. Has-products with unowned product
+        final invalidHas = baseHas.copyWith(
+          blocks: baseHas.blocks.map((b) {
+            if (b.id != 'b1') return b;
+            return b.copyWith(
+              skincareProducts: ['Cleanser', 'Prescription Retinol X'],
+            );
+          }).toList(),
+        );
+        final hasErr = invalidHas.validateSkinCareSetup(uid);
+        expect(hasErr, isNotNull);
+        expect(hasErr, contains('Prescription Retinol X'));
+
+        // 3. No-products valid
+        final validNo = buildInitialDraft(uid: uid);
+        expect(validNo.baseTimeline.validateSkinCareSetup(uid), isNull);
+
+        // 4. No-products with unselected recommendation
+        final invalidNoBlocks = validNo.baseTimeline.blocks.map((b) {
+          if (b.section != 'skin_care') return b;
+          return b.copyWith(
+            skincareProducts: [...b.skincareProducts, 'Unselected Serum X'],
+          );
+        }).toList();
+        final invalidNo = validNo.copyWith(
+          baseTimeline: validNo.baseTimeline.copyWith(blocks: invalidNoBlocks),
+        );
+        final noErr = invalidNo.baseTimeline.validateSkinCareSetup(uid);
+        expect(noErr, isNotNull);
+        expect(noErr, contains('Unselected Serum X'));
+      },
+    );
+
+    testWidgets(
+      'Has-products timeline edit rejects unowned product, keeps sheet open with error, and preserves block until valid',
+      (tester) async {
+        final draft = OnboardingDraft(
+          uid: 'user-authority-has',
+          currentStep: 7,
+          baseTimeline: const BaseTimelineDraft(
+            skinCareSetupStep: 1,
+            skinCareSetupPath: 'has_products',
+            skinCareDesiredApplicationsPerDay: 2,
+            skinCareProductNames: 'Cleanser\nMoisturizer',
+            skinCareRoutineFingerprint: 'valid-fp',
+            blocks: [
+              TimelineBlockDraft(
+                id: 'auth-has-1',
+                section: 'skin_care',
+                title: 'Morning Skin Care',
+                startMinute: 480,
+                endMinute: 495,
+                repeatDays: [1, 2, 3, 4, 5, 6, 7],
+                blockType: TimelineBlockDraft.softBlockKey,
+                skincareProducts: ['Cleanser'],
+                skincareSteps: ['Wash face'],
+                skincareSlotLabel: 'morning',
+              ),
+            ],
+          ),
+        );
+
+        await tester.pumpWidget(_buildTestApp(draft: draft));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        // Open edit sheet
+        final cardFinder = find.byKey(
+          const ValueKey('onboarding-step7-block-auth-has-1'),
+        );
+        expect(cardFinder, findsOneWidget);
+        await tester.tap(cardFinder);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        final titleField = find.byKey(
+          const ValueKey('onboarding-step7-edit-title-field'),
+        );
+        final productsField = find.byKey(
+          const ValueKey('onboarding-step7-edit-products-field'),
+        );
+        final saveBtn = find.byKey(
+          const ValueKey('onboarding-step7-edit-save-button'),
+        );
+        expect(titleField, findsOneWidget);
+        expect(productsField, findsOneWidget);
+
+        // Enter unowned product
+        await tester.enterText(
+          productsField,
+          'Cleanser\nPrescription Retinol X',
+        );
+        await tester.pump();
+        await tester.tap(saveBtn);
+        await tester.pumpAndSettle();
+
+        // Sheet must remain open and display validation error
+        expect(titleField, findsOneWidget);
+        expect(
+          find.byWidgetPredicate(
+            (w) =>
+                w is Text &&
+                (w.data?.contains('Prescription Retinol X') ?? false),
+          ),
+          findsOneWidget,
+        );
+
+        // Underlying draft block must remain unchanged
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(OnboardingStep7)),
+        );
+        final blockBefore = container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline
+            .blocks
+            .firstWhere((b) => b.id == 'auth-has-1');
+        expect(blockBefore.skincareProducts, ['Cleanser']);
+
+        // Now enter valid owned product and save
+        await tester.enterText(productsField, 'Cleanser\nMoisturizer');
+        await tester.pump();
+        await tester.tap(saveBtn);
+        await tester.pumpAndSettle();
+
+        // Sheet closed
+        expect(titleField, findsNothing);
+
+        // Block updated
+        final blockAfter = container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline
+            .blocks
+            .firstWhere((b) => b.id == 'auth-has-1');
+        expect(blockAfter.skincareProducts, ['Cleanser', 'Moisturizer']);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'No-products timeline edit rejects unselected recommendation, keeps sheet open with error, and preserves block until valid',
+      (tester) async {
+        final draft = OnboardingDraft(
+          uid: 'user-authority-no',
+          currentStep: 7,
+          baseTimeline: const BaseTimelineDraft(
+            skinCareSetupStep: 1,
+            skinCareSetupPath: 'no_products',
+            skinCareDesiredApplicationsPerDay: 2,
+            skinCareRoutineFingerprint: 'valid-fp',
+            skinCareProductNames:
+                'Minimalist Gentle Cleanser\nMinimalist Barrier Moisturizer\nMinimalist SPF 50 Sunscreen',
+            skinCareSuggestedProducts: [
+              'Minimalist Gentle Cleanser',
+              'Minimalist Barrier Moisturizer',
+              'Minimalist SPF 50 Sunscreen',
+            ],
+            skinCareSelectedProductNames: [
+              'Minimalist Gentle Cleanser',
+              'Minimalist Barrier Moisturizer',
+              'Minimalist SPF 50 Sunscreen',
+            ],
+            blocks: [
+              TimelineBlockDraft(
+                id: 'auth-no-1',
+                section: 'skin_care',
+                title: 'Morning Care',
+                startMinute: 480,
+                endMinute: 495,
+                repeatDays: [1, 2, 3, 4, 5, 6, 7],
+                blockType: TimelineBlockDraft.softBlockKey,
+                skincareProducts: ['Minimalist Gentle Cleanser'],
+                skincareSteps: ['Wash face'],
+                skincareSlotLabel: 'morning',
+              ),
+            ],
+          ),
+        );
+
+        await tester.pumpWidget(_buildTestApp(draft: draft));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        // Open edit sheet
+        final cardFinder = find.byKey(
+          const ValueKey('onboarding-step7-block-auth-no-1'),
+        );
+        expect(cardFinder, findsOneWidget);
+        await tester.tap(cardFinder);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        final titleField = find.byKey(
+          const ValueKey('onboarding-step7-edit-title-field'),
+        );
+        final productsField = find.byKey(
+          const ValueKey('onboarding-step7-edit-products-field'),
+        );
+        final saveBtn = find.byKey(
+          const ValueKey('onboarding-step7-edit-save-button'),
+        );
+        expect(titleField, findsOneWidget);
+        expect(productsField, findsOneWidget);
+
+        // Enter unselected recommendation
+        await tester.enterText(
+          productsField,
+          'Minimalist Gentle Cleanser\nUnselected Vitamin C Serum B',
+        );
+        await tester.pump();
+        await tester.tap(saveBtn);
+        await tester.pumpAndSettle();
+
+        // Sheet must remain open with validation error
+        expect(titleField, findsOneWidget);
+        expect(
+          find.byWidgetPredicate(
+            (w) =>
+                w is Text &&
+                (w.data?.contains('Unselected Vitamin C Serum B') ?? false),
+          ),
+          findsOneWidget,
+        );
+
+        // Underlying draft block unchanged
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(OnboardingStep7)),
+        );
+        final blockBefore = container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline
+            .blocks
+            .firstWhere((b) => b.id == 'auth-no-1');
+        expect(blockBefore.skincareProducts, ['Minimalist Gentle Cleanser']);
+
+        // Enter valid selected recommendation and save
+        await tester.enterText(
+          productsField,
+          'Minimalist Gentle Cleanser\nMinimalist SPF 50 Sunscreen',
+        );
+        await tester.pump();
+        await tester.tap(saveBtn);
+        await tester.pumpAndSettle();
+
+        // Sheet closed
+        expect(titleField, findsNothing);
+
+        // Block updated
+        final blockAfter = container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline
+            .blocks
+            .firstWhere((b) => b.id == 'auth-no-1');
+        expect(blockAfter.skincareProducts, [
+          'Minimalist Gentle Cleanser',
+          'Minimalist SPF 50 Sunscreen',
+        ]);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  });
+
+  group('Section 19 Exact Physical Interaction Sequence Regression', () {
     Future<void> ensureAllProductsSelected(WidgetTester tester) async {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
@@ -916,6 +1508,94 @@ void main() {
           ),
           isTrue,
         );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'Real shell OnboardingFlow integration: Plan A -> Rebuild / Edit -> Change details -> Find products -> select products -> Build skin routine -> Plan B review -> Next Step advances to Step 8',
+      (tester) async {
+        final draft = buildInitialDraft(uid: 'shell-integration-user');
+        await tester.pumpWidget(
+          _buildTestApp(draft: draft, home: const OnboardingFlow()),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(tester.takeException(), isNull);
+
+        // 1. Initial State: Valid Plan A routine review in OnboardingFlow shell
+        expect(
+          find.byKey(const ValueKey('onboarding-step7-full-timeline')),
+          findsOneWidget,
+        );
+        expect(find.text('Morning Skin Care'), findsOneWidget);
+        expect(find.text('Next Step'), findsOneWidget);
+
+        // 2. Rebuild / Edit
+        final rebuildBtn = find.text('Rebuild / Edit');
+        expect(rebuildBtn, findsOneWidget);
+        await tester.tap(rebuildBtn);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(tester.takeException(), isNull);
+
+        // 3. Change details
+        final changeDetailsBtn = find.text('Change details');
+        expect(changeDetailsBtn, findsOneWidget);
+        await tester.ensureVisible(changeDetailsBtn);
+        await tester.tap(changeDetailsBtn);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(tester.takeException(), isNull);
+
+        // 4. Find products
+        final findProductsBtn = find.text('Find products');
+        expect(findProductsBtn, findsOneWidget);
+        await tester.ensureVisible(findProductsBtn);
+        await tester.tap(findProductsBtn);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(tester.takeException(), isNull);
+
+        await ensureAllProductsSelected(tester);
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+
+        // Shell CTA should now be 'Build skin routine'
+        final buildRoutineShellBtn = find.byKey(
+          const ValueKey('onboarding-step7-generate-button'),
+        );
+        expect(buildRoutineShellBtn, findsOneWidget);
+        expect(find.textContaining('Build skin routine'), findsOneWidget);
+
+        // 6. Tap Build skin routine in shell
+        await tester.tap(buildRoutineShellBtn);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(tester.takeException(), isNull);
+
+        // 7. Plan B review is shown with Next Step
+        expect(
+          find.byKey(const ValueKey('onboarding-step7-full-timeline')),
+          findsOneWidget,
+        );
+        expect(find.text('Next Step'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('onboarding-step7-generate-button')),
+          findsNothing,
+        );
+
+        // 8. Tap Next Step in shell
+        await tester.tap(find.text('Next Step'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(tester.takeException(), isNull);
+
+        // Flow advances to Step 8
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(OnboardingFlow)),
+        );
+        expect(container.read(mockOnboardingProvider).currentStep, 8);
         expect(tester.takeException(), isNull);
       },
     );

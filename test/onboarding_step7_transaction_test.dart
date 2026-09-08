@@ -22,6 +22,7 @@ TimelineBlockDraft _bathBlock() => BaseTimelineDraft.defaultBathBlock();
 List<TimelineBlockDraft> _fullWeekSkinBlocks(
   int count, {
   String prefix = 'Plan A',
+  String product = 'Minimalist Gentle Cleanser',
 }) {
   return List.generate(
     count,
@@ -33,7 +34,7 @@ List<TimelineBlockDraft> _fullWeekSkinBlocks(
       section: 'skin_care',
       repeatDays: onboarding7EveryDay,
       blockType: TimelineBlockDraft.softBlockKey,
-      skincareProducts: const ['Minimalist Gentle Cleanser'],
+      skincareProducts: [product],
       skincareSteps: const ['Cleanse'],
     ),
   );
@@ -547,7 +548,11 @@ void main() {
         final hpRoutineFp = hpBase.computeSkinCareRoutineFingerprint();
         final hpBlocks = _tagBlocks([
           _bathBlock(),
-          ..._fullWeekSkinBlocks(2, prefix: 'HP Plan A'),
+          ..._fullWeekSkinBlocks(
+            2,
+            prefix: 'HP Plan A',
+            product: 'Original Cleanser',
+          ),
         ], hpRoutineFp);
         hpBase = hpBase.copyWith(
           skinCareRoutineFingerprint: hpRoutineFp,

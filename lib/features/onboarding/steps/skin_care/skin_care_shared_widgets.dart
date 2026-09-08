@@ -797,7 +797,21 @@ class _SkinCarePhotoTarget extends ConsumerWidget {
           ),
         ] else if (helperText != null) ...[
           const SizedBox(height: 4),
-          Text(helperText!, textAlign: TextAlign.center),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              helperText!,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 9.5,
+                height: 1.15,
+                fontWeight: FontWeight.w800,
+                color: OptivusColors.textSecondary,
+              ),
+            ),
+          ),
         ],
       ],
     );
