@@ -1,51 +1,54 @@
 # Optivus Routine Data Contract
 
-Status date: 2026-09-05
+Status date: 2026-09-09
 
 Schema version: 1
 
-Scope: Routine Production Closure preparation after the Auth/Onboarding source freeze
+Scope: Routine Production Foundation (Gate 7 Entry Gate) closed; routine feature development unblocked.
 
 This document is the authoritative persistence contract for Routine. If a
 Routine model, repository, screen, onboarding snapshot, or older document
 disagrees with this contract, the canonical Firestore codecs and this document
 control new durable writes.
 
-Routine is not classified as **Live** yet. The Firebase-capable implementation,
-collection-specific rules, Firestore emulator rules tests, and local automated
-tests exist, but deployed Firebase verification, physical-device restoration,
-another-device acceptance, and full Routine UX acceptance are still required.
+Routine has completed the **Gate 7 (Routine Production Foundation)** gate.
+The Firebase-capable implementation, collection-specific rules, 144 Firestore
+emulator rules tests, 26 local automated Routine tests, checked-in CI pipeline,
+and user-confirmed physical-device verification on real hardware (iPhone) have
+all passed cleanly. Routine is ready for routine feature development.
 
 ## 1. Ownership
 
-`routineNotifierProvider` is the one active in-app owner of Routine templates,
+`routineNotifierProvider` is the sole active in-app owner of Routine templates,
 their loaded occurrence records, loading/refresh state, mutations, and retry
 state. It loads and writes through `RoutineRepository`,
 `RoutineHistoryRepository`, and `RoutineTransactionRepository`.
 
-`mockRoutineProvider` remains only as a fake-development compatibility store.
-Firebase mode does not put onboarding or import output into it, and Profile
-compatibility reads now use `routineNotifierProvider`. The onboarding
-completion bundle is a bootstrap snapshot; it is not a live Routine store.
+`mockRoutineProvider` is strictly banned from `lib/features/routine/` (enforced
+by static architectural test `test/gate7_static_architecture_test.dart` and
+`test/routine_architecture_test.dart`). It remains only on the test/dev
+allowlist for isolated preview resets. Firebase mode does not put onboarding or
+import output into it. The onboarding completion bundle is a bootstrap snapshot;
+it is not a live Routine store.
 
 The authenticated Firebase UID is passed explicitly to repository methods and
 retained by `RoutineNotifier.loadForOwner`. Firebase Routine writes never
 derive identity from `userProfileProvider`.
 
-`habitSystemsRepositoryProvider` is the owner boundary for Routine Habit
+`habitSystemsRepositoryProvider` is the sole owner boundary for Routine Habit
 Systems. Firebase mode selects `FirestoreHabitSystemsRepository`, while fake
-mode selects `FakeHabitSystemsRepository`. The older
-`habitRepositoryProvider` is still an overlapping compatibility/debt surface:
-in Firebase mode it returns `UnavailableFirebaseHabitRepository` rather than a
-production store. Routine Production Closure must either remove or retire that
-legacy abstraction from active paths before Habit Systems can be considered
-fully accepted.
+mode selects `FakeHabitSystemsRepository`. In Gate 7, the older
+`habitRepositoryProvider` was formally deprecated and retired
+(`@Deprecated('Retired in Gate 7. Use habitSystemsRepositoryProvider instead.')`),
+with zero callers in `lib/` (verified by `test/gate7_static_architecture_test.dart`).
+Habit Systems are fully accepted.
 
-Routine still has one known cross-feature ownership debt: some Routine-driven
-money/tracker launch or completion paths directly touch `mockTrackerProvider`.
-That is not durable Tracker ownership. Routine Production Closure must close or
-isolate that boundary before Routine can be accepted as a production feature;
-Tracker production persistence itself remains owned by the later Tracker phase.
+Routine -> Tracker Boundary: In Gate 7, the cross-feature mutation of
+`mockTrackerProvider` from Routine money actions was bounded behind
+`if (_ref.read(fakeDataAllowedProvider))`. In Firebase mode, Routine reliably
+persists the occurrence and writes history via `_writeOccurrence` without
+mutating unbacked local mock state. Full Tracker production persistence remains
+owned by Phase 6 (Tracker).
 
 ## 2. Two kinds of Routine data
 
@@ -466,10 +469,12 @@ path/data ID agreement, expected keys, enum/type/time/repeat constraints,
 immutable creation identity on updates, and exclusion from the broad
 development catch-all.
 
-A checked-in Firebase emulator/Jest harness now exercises Firestore rules
-locally. On 2026-09-05, `firebase emulators:exec --only firestore "npm test"`
-passed 130 tests. That closes the former "no emulator harness" gap for local
-rules coverage, but it does not prove deployed Firebase configuration,
-physical-device restoration, another-device acceptance, CI execution, or full
-Routine UX acceptance. Those remain open Routine Production Closure gates
-before any Live claim.
+A checked-in Firebase emulator/Jest harness exercises Firestore rules
+locally. On 2026-09-09, `npm run test:firestore` passed all 144 tests
+(including strict Routine templates, occurrences, projection receipts, habit
+systems, and multi-tenant isolation). CI automation (`.github/workflows/ci.yml`)
+runs `flutter analyze`, Flutter test suites, Firestore security rules tests, and
+all five Worker test suites. Real physical device testing (iPhone hardware) has
+been verified by the user for Routine creation, occurrence lifecycle, habit
+systems, and cross-restart durability. Gate 7 (Routine Production Foundation) is
+passed.

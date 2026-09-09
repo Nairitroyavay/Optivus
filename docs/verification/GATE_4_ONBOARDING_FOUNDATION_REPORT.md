@@ -689,3 +689,44 @@ To eliminate ambiguity between legacy pre-lineage documents (where `setupGenerat
 | 50 | flutter analyze has 0 issues | PASS | 0 issues found |
 | 51 | git diff --check passes | PASS | Clean |
 | 52 | Gate 4 report matches current source, deployment, automation, and physical evidence | PASS | Document updated and aligned |
+
+---
+
+## 4. Final 2026-09-09 Closure Addendum
+
+### 4.1 Lineage Transaction Migration Fix (Commit 2e76daa)
+
+An edge case was identified and resolved where an account possessed a modern `UserProfile` (`setupLineageVersion: 1`, `currentSetupGeneration: 1`) but retained a legacy `OnboardingDraft` (`setupLineageVersion: 0` or missing). Previously, an initial check outside the transaction evaluated only the profile, skipping migration for the legacy draft.
+
+The fix in `OnboardingSetupLineageMigrationCoordinator`:
+- Fetches and rechecks both `UserProfile` and `OnboardingDraft` atomically inside the Firestore transaction.
+- If the draft remains at legacy lineage (`setupLineageVersion < 1`), migration proceeds and upgrades the draft to lineage version 1, aligning its `setupGeneration` with the target generation without clobbering user answers.
+- Regression suite: `test/onboarding_lineage_transaction_regression_test.dart` verifies atomic draft repair alongside modern profile.
+
+### 4.2 Physical Device Restore Acceptance
+
+- **USER-CONFIRMED PHYSICAL PASS**: The user verified on a physical iPhone running production build:
+  - Step 2 kill / reopen resumed at Step 3.
+  - Step 2 logout / login resumed at Step 3.
+  - Step 5 kill / reopen resumed at Step 6.
+  - Step 5 reinstall / login resumed at Step 6.
+  - Step 7 kill / reopen resumed at Step 8.
+  - Step 7 reinstall / login resumed at Step 8.
+  - Completed onboarding kill / reopen routed directly to Home.
+  - Completed onboarding logout / login routed directly to Home.
+  - Re-run setup restored cleanly.
+
+### 4.3 Automated Verification Status
+
+- `test/onboarding_setup_lineage_regression_test.dart`: 11/11 pass.
+- `test/onboarding_setup_lineage_migration_test.dart`: 9/9 pass.
+- `test/onboarding_foundation_restore_matrix_test.dart`: 30/30 pass.
+- `test/onboarding_lineage_transaction_regression_test.dart`: Pass.
+- `npm run test:firestore`: 144/144 rules tests pass.
+- `flutter analyze`: 0 issues found.
+
+### 4.4 Final Gate Verdict
+
+```text
+GATE 4 PASSED — ONBOARDING FOUNDATION & LINEAGE MIGRATION VERIFIED
+```

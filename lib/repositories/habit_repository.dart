@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 
+@Deprecated('Retired in Gate 7. Use HabitSystemsRepository instead.')
 abstract class HabitRepository {
   Future<List<GoodHabitTemplateBundle>> fetchGoodHabits(String uid);
   Future<void> saveGoodHabits(String uid, List<GoodHabitTemplateBundle> habits);
@@ -10,6 +11,7 @@ abstract class HabitRepository {
   Future<void> saveBadHabits(String uid, List<BadHabitCheckInBundle> habits);
 }
 
+@Deprecated('Retired in Gate 7. Use FakeHabitSystemsRepository instead.')
 class FakeHabitRepository implements HabitRepository {
   final Map<String, List<GoodHabitTemplateBundle>> _goodHabits = {};
   final Map<String, List<BadHabitCheckInBundle>> _badHabits = {};
@@ -45,6 +47,7 @@ class FakeHabitRepository implements HabitRepository {
   }
 }
 
+@Deprecated('Retired in Gate 7. Use FirestoreHabitSystemsRepository instead.')
 class UnavailableFirebaseHabitRepository implements HabitRepository {
   @override
   dynamic noSuchMethod(Invocation invocation) {
@@ -52,6 +55,7 @@ class UnavailableFirebaseHabitRepository implements HabitRepository {
   }
 }
 
+@Deprecated('Retired in Gate 7. Use habitSystemsRepositoryProvider instead.')
 final habitRepositoryProvider = Provider<HabitRepository>((ref) {
   return ref
       .watch(fakeBackendPolicyProvider)

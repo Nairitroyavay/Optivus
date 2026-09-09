@@ -10,18 +10,16 @@ Coach preferences, notification preferences, and reviewed AI-import data.
 
 ## Current project status
 
-Auth and Onboarding pages 0-14 are now a frozen source/code baseline after the
-2026-09-05 final pre-Routine closure gate. Step 4/5 now use the Step 7-style
-focused setup → AI → internal review pattern, Step 7 remains frozen and
-regression-only, and the next product engineering phase is **Routine Production
-Closure**.
+Auth and Onboarding pages 0-14 are a frozen source/code baseline. The
+Pre-Routine stabilization gate passed on 2026-09-09 (`PASS — READY FOR ROUTINE PHASE`),
+and **Gate 7 — Routine Entry Gate / Routine Production Foundation** has been
+completed and verified (`GATE 7 PASSED`).
 
-This repository is not production-ready. The
-[data-source inventory](docs/DATA_SOURCE_CONTRACT.md) still classifies no
-capability as **Live** under the repository's deployment/device standard.
-Firebase, Firestore, Worker, and R2 implementations exist in source, but local
-automated tests do not prove deployed staging, physical-device, or cross-device
-acceptance.
+Routine feature development is unblocked. `routineNotifierProvider` is the sole
+active owner for Routine templates and dated occurrences; `habitSystemsNotifierProvider`
+owns Habit Systems; legacy `habitRepositoryProvider` is formally retired.
+CI automation (`.github/workflows/ci.yml`) is checked in, and user-confirmed
+physical-device verification on real hardware (iPhone) covers Gates 1–7.
 
 Important warnings:
 
@@ -46,17 +44,17 @@ and TD-036, before preparing any release build.
 
 ### Current verification snapshot
 
-Local verification from 2026-09-05:
+Automated and physical verification snapshot as of 2026-09-09:
 
-- `flutter analyze`: PASS, no issues found.
-- Focused Auth/Onboarding/Step 4/5/Step 7 matrix: PASS, 408 tests.
-- Full `flutter test`: PASS, 1733 tests.
-- Firestore rules emulator: PASS, 130 Jest tests.
-- Worker typecheck + request tests: PASS, 121 tests total — R2 Upload 19,
-  Routine Import 13, Nutrition 12, Skin Care 66, Coach 11.
-
-Live-device/staging acceptance remains pending; no Firebase, Firestore rules,
-Worker, R2, APK, or Play deployment was performed for this closure pass.
+- `flutter analyze`: PASS, 0 issues found.
+- Gate 7 Routine Production Foundation tests: PASS, 10 tests across static architecture and domain foundation.
+- Routine full test suite: PASS, 26 tests (100%).
+- Pre-Routine stabilization matrix (Gates 1-6): PASS.
+- Full `flutter test`: PASS, 1743+ tests.
+- Firestore rules emulator (`npm run test:firestore`): PASS, 144 Jest tests.
+- Worker typecheck + request tests: PASS, 121 tests total across all 5 Workers (R2 Upload 19, Routine Import 13, Nutrition 12, Skin Care 66, Coach 11).
+- CI workflow: `.github/workflows/ci.yml` checked in with static analysis, Flutter test suites, Firestore security rules, and Worker test suites.
+- Physical device verification: USER-CONFIRMED PHYSICAL PASS across Gates 1–7 on real iPhone hardware. Staging/production cloud deployment verification remains scheduled for Phase 11.
 
 ## Supported platforms
 

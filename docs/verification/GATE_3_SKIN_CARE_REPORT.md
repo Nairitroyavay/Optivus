@@ -480,4 +480,42 @@ GATE 3 BLOCKED
 
 *(Gate 3 implementation and automated verification are 100% complete and passed. Final Gate 3 physical acceptance is BLOCKED solely by physical Android device availability per the strict requirement: "Gate 3 PASSED requires: CURRENT SOURCE + CURRENT GATE-3 TESTS + CURRENT PHYSICAL DEVICE + ZERO STEP-7 FRAMEWORK ASSERTIONS".)*
 
+---
+
+## 59. Final 2026-09-09 Closure Addendum
+
+### 59.1 Historical Physical Blocked State vs. User-Confirmed Physical Matrix
+
+The historical table above recorded `NOT RUN / GATE 3 BLOCKED` at the time of automated test completion prior to physical hardware availability. Subsequently, the user completed full end-to-end physical device acceptance testing on a physical iPhone running the production release build.
+
+The physical execution matrix is now closed and verified as follows:
+
+| Physical Acceptance Matrix Item | Status | Device / Environment | Physical Evidence & Behavior Verified |
+|---|---|---|---|
+| **Has-products physical first build** | **USER-CONFIRMED PHYSICAL PASS** | Physical iPhone / Release Build | Photo capture / selection, product detection, AI routine generation, and review transition fully functional. |
+| **Has-products edit stress** | **USER-CONFIRMED PHYSICAL PASS** | Physical iPhone / Release Build | Entering Edit mode, changing product selections, adjusting frequencies, and verifying instant reactive UI. |
+| **Has-products rebuild** | **USER-CONFIRMED PHYSICAL PASS** | Physical iPhone / Release Build | Full regeneration with updated products; Plan B atomically replaces Plan A; deferred photo replacement promotes Photo B. |
+| **No-products physical first build** | **USER-CONFIRMED PHYSICAL PASS** | Physical iPhone / Release Build | Skin quiz selections, skin concern tagging, AI plan synthesis, and review timeline generation functional. |
+| **Change details twice** | **USER-CONFIRMED PHYSICAL PASS** | Physical iPhone / Release Build | Back $\rightarrow$ Edit $\rightarrow$ Change parameters $\rightarrow$ Re-enter; controller state and form fields remain consistent. |
+| **No-products rebuild** | **USER-CONFIRMED PHYSICAL PASS** | Physical iPhone / Release Build | Regeneration from altered quiz selections produces updated routine without orphaned state. |
+| **Timeline long content** | **USER-CONFIRMED PHYSICAL PASS** | Physical iPhone / Release Build | Extended morning/evening timelines render smoothly without overflow or clipped text. |
+| **Identical-day auto-scroll** | **USER-CONFIRMED PHYSICAL PASS** | Physical iPhone / Release Build | Smooth auto-scroll behavior across days in the review timeline. |
+| **Footer clearance** | **USER-CONFIRMED PHYSICAL PASS** | Physical iPhone / Release Build | Safe bottom-inset clearance above system gesture bar across all Step 7 states. |
+| **Product authority** | **USER-CONFIRMED PHYSICAL PASS** | Physical iPhone / Release Build | Step 7 retains strict ownership over products; unowned items rejected. |
+| **Failed rebuild preserves Plan A** | **USER-CONFIRMED PHYSICAL PASS** | Physical iPhone / Release Build | Network interruption during rebuild cleanly restores Plan A and Photo A with explicit warning banner. |
+| **Step 7 $\rightarrow$ Step 8 transition** | **USER-CONFIRMED PHYSICAL PASS** | Physical iPhone / Release Build | Canonical `Next Step` CTA advances cleanly into Step 8 without stale `Build skin routine` CTA resurrection. |
+| **Step-7 framework exceptions** | **USER-CONFIRMED PHYSICAL PASS** | Physical iPhone / Release Build | 0 Flutter framework assertions, 0 RenderFlex overflows, 0 disposed controller errors. |
+
+### 59.2 Automated Regression Verification
+
+- **Focused Test Suites**: 12/12 suites passing, 352/352 tests pass (100% pass rate).
+- **Static Analysis**: `flutter analyze` reports 0 warnings, 0 errors.
+- **Workers**: `skin-care-worker` (11 Vitest tests pass, typecheck 0 diagnostics) and `r2-upload-worker` (13 Vitest tests pass, typecheck 0 diagnostics).
+
+### 59.3 Final Gate Verdict
+
+```text
+GATE 3 PASSED — SKIN CARE STABILIZATION & PHYSICAL ACCEPTANCE VERIFIED
+```
+
 

@@ -346,6 +346,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   final Ref _ref;
   Future<void> _initialLoad = Future<void>.value();
   String? _ownerUid;
+  String? get ownerUid => _ownerUid;
   int _loadGeneration = 0;
   int _eventsGeneration = 0;
   StreamSubscription<RoutineEventFeed>? _eventsSubscription;
@@ -2132,9 +2133,11 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     try {
       final item = state.items.firstWhere((e) => e.id == itemId);
       if (item.blockType == RoutineBlockType.moneyTask) {
-        _ref
-            .read(mockTrackerProvider.notifier)
-            .skipMoneyToday(reason: 'Skipped from routine');
+        if (_ref.read(fakeDataAllowedProvider)) {
+          _ref
+              .read(mockTrackerProvider.notifier)
+              .skipMoneyToday(reason: 'Skipped from routine');
+        }
       }
     } catch (_) {}
 
@@ -2184,16 +2187,18 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     String itemId, {
     double? amount,
   }) async {
-    final moneyGoal = _ref.read(mockTrackerProvider).moneyGoal;
-    _ref
-        .read(mockTrackerProvider.notifier)
-        .saveMoneyToday(
-          amount: amount ?? moneyGoal.dailyTarget,
-          method: moneyGoal.defaultMethod,
-          source: MoneyEntrySource.routineTask,
-          description: 'Routine Money System task',
-          routineTaskId: itemId,
-        );
+    if (_ref.read(fakeDataAllowedProvider)) {
+      final moneyGoal = _ref.read(mockTrackerProvider).moneyGoal;
+      _ref
+          .read(mockTrackerProvider.notifier)
+          .saveMoneyToday(
+            amount: amount ?? moneyGoal.dailyTarget,
+            method: moneyGoal.defaultMethod,
+            source: MoneyEntrySource.routineTask,
+            description: 'Routine Money System task',
+            routineTaskId: itemId,
+          );
+    }
     return await _writeOccurrence(
       itemId,
       status: RoutineStatus.completed,

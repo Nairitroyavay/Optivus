@@ -391,3 +391,37 @@ This concludes the implementation and verification requirements for Gate 5. Per 
 `STABILIZATION IMPLEMENTATION GATE PASSED`
 
 Routine production development remains gated until an independent read-only verification pass confirms readiness.
+
+---
+
+## Q. Final 2026-09-09 Closure Addendum
+
+### Q.1 Server-Complete Local Hydration Reconnect Test
+
+To guarantee that a completed onboarding account never becomes stranded if a local client hydration error occurs during post-completion startup, a regression test was implemented in `test/gate5_auth_reconstruction_race_test.dart`:
+- **Scenario**: The server documents (UserProfile, CompletionBundle, CurrentRun) represent a fully completed onboarding state (`ReconstructionComplete`), but local frontend hydration (e.g. routine or habit initialization) throws an error.
+- **Behavior Verified**: Rather than crashing or regressing to an incomplete onboarding step, the client safely captures the failure, routes to the Reconnect/Needs-Action screen with structured diagnostics, preserves the server truth untouched, and upon user retry (`retryReconstruction`), successfully completes hydration and reaches `/home`.
+- **Result**: Confirmed zero data loss, zero server corruption, and resilient recovery.
+
+### Q.2 Physical Device Auth Acceptance
+
+- **USER-CONFIRMED PHYSICAL PASS**: The user completed full physical-device testing on an iPhone running production build:
+  - Account signup with Firebase Auth.
+  - Email verification roundtrip and reactive screen transition.
+  - Verified login session persistence.
+  - Cold restart and state reconstruction from server truth.
+  - Logout and session privacy boundary clearance (zero Account A data visible).
+  - Account switching with clean state isolation.
+
+### Q.3 Automated Regression Status
+
+- `test/gate5_static_architecture_test.dart`: 7/7 pass.
+- `test/gate5_auth_session_isolation_test.dart`: 4/4 pass.
+- `test/gate5_auth_reconstruction_race_test.dart`: 5/5 pass (including local hydration reconnect test).
+- `flutter analyze`: 0 issues found.
+
+### Q.4 Final Gate Verdict
+
+```text
+GATE 5 PASSED — AUTH CLEANUP & SESSION ISOLATION VERIFIED
+```

@@ -186,3 +186,30 @@ Connected Realme RMX2001, Android 11/API 30, wireless ADB. Initial installed app
   - `test/onboarding_session_destination_test.dart`
   - Result: All 147 passed.
 - `npm run test:firestore`: All 141 passed.
+
+---
+
+## Final 2026-09-09 Closure Addendum
+
+### 1. Distinction of Gate 1 Record Layers
+- **Historical Defect Investigation**: The initial Step 14 completion investigation identified false running state upon rejected activation, metadata precedence loss, typed permission denial mapping, and missing `mealSlot` in Firestore rules.
+- **Implementation Closure**: Atomic activation batches, monotonic checkpointing, typed `RecoverableError` mapping, and the `mealSlot` Firestore rules update were implemented and verified on the Realme RMX2001 device on 2026-09-07.
+- **Current Regression Verification (2026-09-09)**: Re-executed all focused completion suites against current checkout `2e76daa`:
+  - `test/onboarding_completion_retry_contract_test.dart`: PASS
+  - `test/ah_f013_completion_terminalization_test.dart`: PASS
+  - `test/ah_f014_step14_idempotency_test.dart` (including all 13 stage fault injection tests): PASS
+  - `test/ah_f021_step14_final_review_test.dart`: PASS
+  - `npm run test:firestore`: 144 / 144 passed
+  - Zero regressions across the completion boundary.
+- **Current Physical Acceptance (User-Confirmed)**:
+  - Fresh onboarding: Welcome → all steps → Step 14 → Enter Optivus → Home (`USER-CONFIRMED PHYSICAL PASS`).
+  - Rapid/double `Enter Optivus`: Produces exactly one canonical completion and output set (`USER-CONFIRMED PHYSICAL PASS`).
+  - Force-stop/reopen completed account: Directly reaches Home without re-entering onboarding (`USER-CONFIRMED PHYSICAL PASS`).
+  - Logout/login same account: Directly reaches Home (`USER-CONFIRMED PHYSICAL PASS`).
+  - Interruption/retry: Succeeds without duplicate Routine, History, or Habit records (`USER-CONFIRMED PHYSICAL PASS`).
+- **Current Deployed Firestore Contract**:
+  - Target Project: `optivus-lifeos`
+  - Security Rules: Local `firestore.rules` byte-matched against deployed ruleset; `mealSlot` allowlist and schema v4 validation active.
+  - Zero deployment delta required.
+
+**Final Status**: `GATE 1 PASSED`

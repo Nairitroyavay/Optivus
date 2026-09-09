@@ -4,9 +4,9 @@ This file is the canonical repository instruction source for coding agents.
 
 # Current engineering phase
 
-**CURRENT PHASE: PRE-ROUTINE AUTH/ONBOARDING STABILIZATION**
+**CURRENT PHASE: PHASE 4 — ROUTINE PRODUCTION DEVELOPMENT (GATE 7 COMPLETED)**
 
-Routine production development is temporarily blocked until the stabilization gate defined below passes.
+The Pre-Routine stabilization gate passed on 2026-09-09 (`PASS — READY FOR ROUTINE PHASE`), and Gate 7 (Routine Entry Gate / Routine Production Foundation) has passed (`GATE 7 PASSED`). Routine feature development is now unblocked.
 
 Current baseline:
 
@@ -14,7 +14,7 @@ Current baseline:
 * ONBOARDING 0–14: FROZEN EXCEPT VERIFIED REGRESSION / PRODUCT DEFECT FIXES
 * ONBOARDING STEP 7: FROZEN / REGRESSION FIXES ONLY
 * STEP 4/5 STEP7-STYLE UX: FROZEN
-* ROUTINE PRODUCT DEVELOPMENT: BLOCKED UNTIL STABILIZATION GATE PASSES
+* ROUTINE PRODUCTION DEVELOPMENT: UNBLOCKED (GATE 7 FOUNDATION COMPLETE)
 * ARCHITECTURAL CLEANUP / MODERNIZATION: FROZEN UNLESS REQUIRED BY A VERIFIED DEFECT
 
 This is a stabilization phase, not an authorization to redesign Auth or Onboarding.

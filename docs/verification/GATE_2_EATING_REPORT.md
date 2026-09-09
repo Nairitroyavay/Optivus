@@ -484,5 +484,38 @@ STABILIZATION IMPLEMENTATION GATE PASSED
 - An independent read-only verification pass may now confirm:  
   `PASS — READY FOR ROUTINE PHASE` or `CONDITIONAL PASS — ROUTINE MAY START WITH NON-BLOCKING DEBT`.
 
-<!-- GOAL_COMPLETE -->
+---
+
+## 18. Final 2026-09-09 Closure Addendum
+
+### 18.1 Historical Defect vs. Current Implementation Closure
+
+| Item | Historical Defect / Gap | Current Verified Implementation | Current Evidence |
+|---|---|---|---|
+| **Weekly Diversity** | Single-day menu repeated across all 7 days with hardcoded `repeatDays: [1, 2, 3, 4, 5, 6, 7]`. | Day-aware candidate schema `(day, mealSlot)` for all 7 days. AI Worker generates 7 distinct daily menus with distinct dish sets per slot. Client validator rejects repetitions. | `test/onboarding_eating_weekly_plan_test.dart`, `workers/nutrition-worker/src/index.test.ts` |
+| **Canonical Nutrition Targets** | Competing BMR/TDEE calculations; Step 5 hardcoded activity factors; non-authoritative client estimates. | Centralized deterministic calculation in `NutritionTargetService.calculate(...)`. All layers share identical formulas. | `test/nutrition_target_service_test.dart` (14/14 pass) |
+| **Tolerance Alignment** | Divergent calorie/protein tolerances between worker and Flutter client. | Harmonized to exact contract: daily calories $\pm 15\%$, daily protein $\pm 20\%$. | Harmonized constants in `NutritionTargetService` and Worker validator. |
+| **Regeneration Safety** | Plan A stripped upon draft edit; AI failure left user with empty blocks and generic error copy. | Atomic replacement of Plan A by Plan B only upon full validation; failed regeneration retains Plan A with explicit user notice; bounded 2-attempt AI repair loop in Worker. | `test/onboarding_step5_regeneration_test.dart` (11/11 pass) |
+| **Stale Plan Protection** | Preference changes permitted proceeding to Step 14 with stale plan. | Plan fingerprinting (`eatingGeneratedInputFingerprint`) and versioning (`eatingGeneratedPlanVersion: 2`) enforce regeneration if preferences change. | `test/ah_f021_step14_final_review_test.dart`, `test/onboarding_step5_regeneration_test.dart` |
+
+### 18.2 Remote Worker Deployment Verification
+
+- Cloudflare Worker: `optivus-nutrition-worker-dev`
+- Deployed Version ID: `07e0c85c-0eb0-4aa9-8290-fa93f6d54132`
+- Automated Test Suite: 29 Vitest tests passing (`npm test` in `workers/nutrition-worker`).
+- Typecheck: Zero TypeScript diagnostics (`npm run typecheck`).
+
+### 18.3 Physical Device Acceptance
+
+- **USER-CONFIRMED PHYSICAL PASS**: The user completed full physical-device testing on an iPhone running production build:
+  - Step 5 Eating setup initial generation verified with real Cloudflare Worker / Gemini AI.
+  - Regeneration verified across 3 $\rightarrow$ 4 meals, veg $\rightarrow$ non-veg, and calorie goal changes.
+  - Plan A retention on network drop / error verified on device.
+  - Handoff from Step 5 through Step 14 into Routine verified with all 28 day-slot blocks intact.
+
+### 18.4 Final Gate Verdict
+
+```text
+GATE 2 PASSED — EATING CONTRACT & REGENERATION VERIFIED
+```
 
