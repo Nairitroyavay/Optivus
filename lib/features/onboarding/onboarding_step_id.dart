@@ -21,6 +21,11 @@ enum OnboardingStepId {
 
   final String label;
 
+  /// Version of the frozen durable-completion contract owned by this step.
+  /// Interactive screen validation may evolve independently. Breaking a
+  /// persisted completion contract requires a new version and migration.
+  int get durableCompletionContractVersion => 1;
+
   static OnboardingStepId? fromIndex(int index) {
     if (index < 0 || index >= values.length) return null;
     return values[index];

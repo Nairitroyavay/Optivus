@@ -493,8 +493,18 @@ ReconstructionResult classifyServerReconstruction({
   if (!hasReconstructionProgress(draft)) {
     return ReconstructionFresh(ownerUid: ownerUid, profile: profile);
   }
+  final restoreDiagnostics = onboardingRestoreDiagnostics(
+    draft: draft,
+    validation: resumeValidation,
+  );
   developer.log(
-    '[OnboardingRestore] uid=${_safeUid(ownerUid)} step=${resumeValidation.resumeStep} reason=${resumeValidation.reason.name} code=${resumeValidation.diagnosticCode}',
+    '[OnboardingRestore] schema=${restoreDiagnostics['schemaVersion']} '
+    'layout=${restoreDiagnostics['detectedTopology']} '
+    'migration=${restoreDiagnostics['migrationAction']} '
+    'completedThrough=${restoreDiagnostics['originalAcknowledgedCompletionBoundary']} '
+    'uploads=${restoreDiagnostics['uploadReconciliation']} '
+    'finalResume=${restoreDiagnostics['finalResumeStep']} '
+    'reason=${restoreDiagnostics['reasonCode']}',
     name: 'server_reconstructor',
   );
   return ReconstructionIncomplete(
@@ -503,12 +513,7 @@ ReconstructionResult classifyServerReconstruction({
     step: resumeValidation.resumeStep,
     draft: draft,
     diagnosticCode: resumeValidation.diagnosticCode,
-    diagnostics: {
-      'resumeStep': resumeValidation.resumeStep,
-      'validThroughStep': resumeValidation.validThroughStep,
-      'reason': resumeValidation.reason.name,
-      'diagnosticCode': resumeValidation.diagnosticCode,
-    },
+    diagnostics: restoreDiagnostics,
   );
 }
 

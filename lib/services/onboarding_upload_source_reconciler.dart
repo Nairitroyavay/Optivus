@@ -67,27 +67,23 @@ class OnboardingUploadSourceReconciler {
       );
     }
 
-    UploadedAsset? getValidDurableAsset(UploadedAssetPurpose purpose) {
-      final restored = restoredUploads.forPurpose(purpose);
-      if (restored == null) return null;
-      final asset = restored.asset;
-      if (uploadedAssetIsDurablyUploadedForSlot(
-        asset: asset,
-        uid: ownerUid,
-        purpose: purpose,
-      )) {
-        return asset;
-      }
-      return null;
-    }
-
     UploadedAsset? getValidAssetForExactId(String? assetId, String? r2Key) {
       if (assetId == null || assetId.trim().isEmpty) return null;
-      final restored = restoredUploads.forAssetId(assetId.trim());
+      final normalizedId = assetId.trim();
+      final restored =
+          restoredUploads.forAssetId(normalizedId) ??
+          restoredUploads.assetsByPurpose.values
+              .where((entry) => entry.asset.assetId == normalizedId)
+              .firstOrNull;
       if (restored == null) return null;
       final asset = restored.asset;
       if (asset.ownerUid == ownerUid &&
           asset.status == UploadedAssetStatus.uploaded &&
+          uploadedAssetHasLegitimateIdentityForSlot(
+            asset: asset,
+            uid: ownerUid,
+            purpose: asset.purpose,
+          ) &&
           (r2Key == null ||
               r2Key.trim().isEmpty ||
               asset.r2Key == r2Key.trim())) {
@@ -96,15 +92,56 @@ class OnboardingUploadSourceReconciler {
       return null;
     }
 
-    final currentClassAsset = getValidDurableAsset(
-      UploadedAssetPurpose.classTimetable,
-    );
-    final currentWorkAsset = getValidDurableAsset(
-      UploadedAssetPurpose.workSchedule,
-    );
-    final currentEatingAsset = getValidDurableAsset(
-      UploadedAssetPurpose.eatingMenu,
-    );
+    UploadedAsset? rawExactAsset(String? assetId) {
+      final id = assetId?.trim() ?? '';
+      if (id.isEmpty) return null;
+      return restoredUploads.exactLookupAssetsById[id] ??
+          restoredUploads.forAssetId(id)?.asset ??
+          restoredUploads.assetsByPurpose.values
+              .where((entry) => entry.asset.assetId == id)
+              .map((entry) => entry.asset)
+              .firstOrNull;
+    }
+
+    String? exactAssetIntegrityCode({
+      required String codePrefix,
+      required String? assetId,
+      required String? r2Key,
+      required Set<UploadedAssetPurpose> allowedPurposes,
+    }) {
+      final raw = rawExactAsset(assetId);
+      if (raw == null || raw.status == UploadedAssetStatus.deleted) return null;
+      if (raw.ownerUid != ownerUid) return '${codePrefix}_owner_mismatch';
+      if (raw.status != UploadedAssetStatus.uploaded) {
+        return '${codePrefix}_status_invalid';
+      }
+      if (!allowedPurposes.contains(raw.purpose)) {
+        return '${codePrefix}_purpose_mismatch';
+      }
+      if (!uploadedAssetHasLegitimateIdentityForSlot(
+        asset: raw,
+        uid: ownerUid,
+        purpose: raw.purpose,
+      )) {
+        return '${codePrefix}_identity_invalid';
+      }
+      final expectedKey = r2Key?.trim() ?? '';
+      if (expectedKey.isEmpty || raw.r2Key != expectedKey) {
+        return '${codePrefix}_r2_key_mismatch';
+      }
+      return null;
+    }
+
+    OnboardingUploadSourceReconciliationResult integrityFailure(
+      String reasonCode,
+    ) {
+      return OnboardingUploadSourceReconciliationResult(
+        reconciledDraft: draft,
+        changed: false,
+        reasonCodes: [reasonCode],
+        integrityFailure: true,
+      );
+    }
 
     final reasonCodes = <String>[];
     var step4Affected = false;
@@ -182,22 +219,21 @@ class OnboardingUploadSourceReconciler {
       final hasClassAiBlocks = currentBlocks.any(
         (b) => b.section == 'classes' && b.source == 'ai_import',
       );
+      final classIntegrity = exactAssetIntegrityCode(
+        codePrefix: 'step4_class_source',
+        assetId: classLogicalId,
+        r2Key: classLogicalKey,
+        allowedPurposes: const {
+          UploadedAssetPurpose.classTimetable,
+          UploadedAssetPurpose.workSchedule,
+        },
+      );
+      if (classIntegrity != null) return integrityFailure(classIntegrity);
       final exactClassAsset = getValidAssetForExactId(
         classLogicalId,
         classLogicalKey,
       );
-      final matchingClassAsset =
-          exactClassAsset ??
-          [currentClassAsset, currentWorkAsset]
-              .whereType<UploadedAsset>()
-              .where(
-                (asset) => uploadedSourceIdentityMatches(
-                  assetId: classLogicalId,
-                  r2Key: classLogicalKey,
-                  asset: asset,
-                ),
-              )
-              .firstOrNull;
+      final matchingClassAsset = exactClassAsset;
       final classBlocksMatch =
           !hasClassAiBlocks ||
           currentBlocks
@@ -227,25 +263,11 @@ class OnboardingUploadSourceReconciler {
               entry.section == 'Classes' || entry.section == 'Class Timetable',
         );
 
-        // Preserve logical mapping intent if ancestry can be determined safely.
-        final wasSwappedToWorkSlot =
-            classLogicalKey != null &&
-            classLogicalKey.contains('/work_schedule/');
-        if (wasSwappedToWorkSlot && currentWorkAsset != null) {
-          currentBaseTimeline = currentBaseTimeline.copyWith(
-            classLogicalAssetId: currentWorkAsset.assetId,
-            classLogicalAssetR2Key: currentWorkAsset.r2Key,
-          );
-        } else if (!wasSwappedToWorkSlot && currentClassAsset != null) {
-          currentBaseTimeline = currentBaseTimeline.copyWith(
-            classLogicalAssetId: currentClassAsset.assetId,
-            classLogicalAssetR2Key: currentClassAsset.r2Key,
-          );
-        } else {
-          currentBaseTimeline = currentBaseTimeline.copyWith(
-            clearClassLogicalAsset: true,
-          );
-        }
+        // The persisted exact identity is authoritative. A newer upload is
+        // only adopted by an explicit user replacement write.
+        currentBaseTimeline = currentBaseTimeline.copyWith(
+          clearClassLogicalAsset: true,
+        );
       }
     }
 
@@ -256,22 +278,21 @@ class OnboardingUploadSourceReconciler {
       final hasWorkAiBlocks = currentBlocks.any(
         (b) => b.section == 'job_work_business' && b.source == 'ai_import',
       );
+      final workIntegrity = exactAssetIntegrityCode(
+        codePrefix: 'step4_work_source',
+        assetId: workLogicalId,
+        r2Key: workLogicalKey,
+        allowedPurposes: const {
+          UploadedAssetPurpose.classTimetable,
+          UploadedAssetPurpose.workSchedule,
+        },
+      );
+      if (workIntegrity != null) return integrityFailure(workIntegrity);
       final exactWorkAsset = getValidAssetForExactId(
         workLogicalId,
         workLogicalKey,
       );
-      final matchingWorkAsset =
-          exactWorkAsset ??
-          [currentWorkAsset, currentClassAsset]
-              .whereType<UploadedAsset>()
-              .where(
-                (asset) => uploadedSourceIdentityMatches(
-                  assetId: workLogicalId,
-                  r2Key: workLogicalKey,
-                  asset: asset,
-                ),
-              )
-              .firstOrNull;
+      final matchingWorkAsset = exactWorkAsset;
       final workBlocksMatch =
           !hasWorkAiBlocks ||
           currentBlocks
@@ -306,24 +327,9 @@ class OnboardingUploadSourceReconciler {
               entry.section == 'Job / Work / Business',
         );
 
-        final wasSwappedToClassSlot =
-            workLogicalKey != null &&
-            workLogicalKey.contains('/class_timetable/');
-        if (wasSwappedToClassSlot && currentClassAsset != null) {
-          currentBaseTimeline = currentBaseTimeline.copyWith(
-            workLogicalAssetId: currentClassAsset.assetId,
-            workLogicalAssetR2Key: currentClassAsset.r2Key,
-          );
-        } else if (!wasSwappedToClassSlot && currentWorkAsset != null) {
-          currentBaseTimeline = currentBaseTimeline.copyWith(
-            workLogicalAssetId: currentWorkAsset.assetId,
-            workLogicalAssetR2Key: currentWorkAsset.r2Key,
-          );
-        } else {
-          currentBaseTimeline = currentBaseTimeline.copyWith(
-            clearWorkLogicalAsset: true,
-          );
-        }
+        currentBaseTimeline = currentBaseTimeline.copyWith(
+          clearWorkLogicalAsset: true,
+        );
       }
     }
 
@@ -336,11 +342,19 @@ class OnboardingUploadSourceReconciler {
         (b) => b.section == 'eating' && b.source == 'ai_import',
       );
 
+      final eatingIntegrity = exactAssetIntegrityCode(
+        codePrefix: 'step5_eating_source',
+        assetId: eatingImport?.uploadedAssetId,
+        r2Key: eatingImport?.uploadedAssetR2Key,
+        allowedPurposes: const {UploadedAssetPurpose.eatingMenu},
+      );
+      if (eatingIntegrity != null) return integrityFailure(eatingIntegrity);
+
       final exactEatingAsset = getValidAssetForExactId(
         eatingImport?.uploadedAssetId,
         eatingImport?.uploadedAssetR2Key,
       );
-      final effectiveEatingAsset = exactEatingAsset ?? currentEatingAsset;
+      final effectiveEatingAsset = exactEatingAsset;
       final hasCurrentEatingAsset = effectiveEatingAsset != null;
       final importMatchesCurrentAsset =
           hasCurrentEatingAsset &&
@@ -393,43 +407,6 @@ class OnboardingUploadSourceReconciler {
     // STEP 7 RECONCILIATION: Skin Care Setup
     // -------------------------------------------------------------------------
     var step7Affected = false;
-    var currentSkinProductsAsset = getValidDurableAsset(
-      UploadedAssetPurpose.skinProducts,
-    );
-    var currentSkinFaceAsset = getValidDurableAsset(
-      UploadedAssetPurpose.skinFace,
-    );
-
-    // Legacy objects only satisfy an established, exactly matching active slot.
-    // Modern generations always win; a legacy object is never adopted anew.
-    final legacy = restoredUploads
-        .forPurpose(UploadedAssetPurpose.skinCare)
-        ?.asset;
-    if (legacy != null &&
-        legacySkinCareUploadHasOwnedExactIdentity(
-          assetId: legacy.assetId,
-          ownerUid: legacy.ownerUid,
-          r2Key: legacy.r2Key,
-          status: legacy.status,
-          uid: ownerUid,
-        )) {
-      if (currentBaseTimeline.skinCareSetupPath == 'has_products' &&
-          uploadedSourceIdentityMatches(
-            assetId: currentBaseTimeline.skinCareProductPhotoAssetId,
-            r2Key: currentBaseTimeline.skinCareProductPhotoR2Key,
-            asset: legacy,
-          )) {
-        currentSkinProductsAsset ??= legacy;
-      } else if (currentBaseTimeline.skinCareSetupPath == 'no_products' &&
-          uploadedSourceIdentityMatches(
-            assetId: currentBaseTimeline.skinCareFacePhotoAssetId,
-            r2Key: currentBaseTimeline.skinCareFacePhotoR2Key,
-            asset: legacy,
-          )) {
-        currentSkinFaceAsset ??= legacy;
-      }
-    }
-
     if (currentBaseTimeline.skinCareSetupPath == 'has_products') {
       final productAssetId = currentBaseTimeline.skinCareProductPhotoAssetId;
       final productR2Key = currentBaseTimeline.skinCareProductPhotoR2Key;
@@ -437,14 +414,24 @@ class OnboardingUploadSourceReconciler {
           productAssetId?.trim().isNotEmpty == true ||
           productR2Key?.trim().isNotEmpty == true;
 
+      final productIntegrity = exactAssetIntegrityCode(
+        codePrefix: 'step7_product_source',
+        assetId: productAssetId,
+        r2Key: productR2Key,
+        allowedPurposes: const {
+          UploadedAssetPurpose.skinProducts,
+          UploadedAssetPurpose.skinCare,
+        },
+      );
+      if (productIntegrity != null) return integrityFailure(productIntegrity);
+
       final exactProductAsset = getValidAssetForExactId(
         productAssetId,
         productR2Key,
       );
-      final effectiveProductAsset =
-          exactProductAsset ?? currentSkinProductsAsset;
+      final effectiveProductAsset = exactProductAsset;
 
-      if (hasPhotoUsed || effectiveProductAsset != null) {
+      if (hasPhotoUsed) {
         final matchesRestored =
             effectiveProductAsset != null &&
             uploadedSourceIdentityMatches(
@@ -457,13 +444,7 @@ class OnboardingUploadSourceReconciler {
           reasonCodes.add('step7_product_source_stale');
           currentBlocks.removeWhere((b) => b.section == 'skin_care');
           currentBaseTimeline = currentBaseTimeline.copyWith(
-            skinCareProductPhotoAssetId: currentSkinProductsAsset?.assetId,
-            skinCareProductPhotoR2Key: currentSkinProductsAsset?.r2Key,
-            skinCareProductPhotoStatus:
-                currentSkinProductsAsset?.status.wireName,
-            skinCareProductPhotoCreatedAt: currentSkinProductsAsset?.createdAt,
-            skinCareProductPhotoUpdatedAt: currentSkinProductsAsset?.updatedAt,
-            clearSkinCareProductPhoto: currentSkinProductsAsset == null,
+            clearSkinCareProductPhoto: true,
             clearSkinCareReviewedProducts: true,
             clearSkinCareSuggestedProducts: true,
             skinCareSpecialCareNotes: const [],
@@ -478,10 +459,21 @@ class OnboardingUploadSourceReconciler {
           faceAssetId?.trim().isNotEmpty == true ||
           faceR2Key?.trim().isNotEmpty == true;
 
-      final exactFaceAsset = getValidAssetForExactId(faceAssetId, faceR2Key);
-      final effectiveFaceAsset = exactFaceAsset ?? currentSkinFaceAsset;
+      final faceIntegrity = exactAssetIntegrityCode(
+        codePrefix: 'step7_face_source',
+        assetId: faceAssetId,
+        r2Key: faceR2Key,
+        allowedPurposes: const {
+          UploadedAssetPurpose.skinFace,
+          UploadedAssetPurpose.skinCare,
+        },
+      );
+      if (faceIntegrity != null) return integrityFailure(faceIntegrity);
 
-      if (hasFacePhotoUsed || effectiveFaceAsset != null) {
+      final exactFaceAsset = getValidAssetForExactId(faceAssetId, faceR2Key);
+      final effectiveFaceAsset = exactFaceAsset;
+
+      if (hasFacePhotoUsed) {
         final matchesRestored =
             effectiveFaceAsset != null &&
             uploadedSourceIdentityMatches(
@@ -494,12 +486,7 @@ class OnboardingUploadSourceReconciler {
           reasonCodes.add('step7_face_source_stale');
           currentBlocks.removeWhere((b) => b.section == 'skin_care');
           currentBaseTimeline = currentBaseTimeline.copyWith(
-            skinCareFacePhotoAssetId: currentSkinFaceAsset?.assetId,
-            skinCareFacePhotoR2Key: currentSkinFaceAsset?.r2Key,
-            skinCareFacePhotoStatus: currentSkinFaceAsset?.status.wireName,
-            skinCareFacePhotoCreatedAt: currentSkinFaceAsset?.createdAt,
-            skinCareFacePhotoUpdatedAt: currentSkinFaceAsset?.updatedAt,
-            clearSkinCareFacePhoto: currentSkinFaceAsset == null,
+            clearSkinCareFacePhoto: true,
             clearSkinCareSuggestedProducts: true,
             skinCareSpecialCareNotes: const [],
             clearSkinCareRecommendationFingerprint: true,

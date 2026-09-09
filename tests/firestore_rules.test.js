@@ -260,13 +260,14 @@ function appPreferencesData(uid = "user123", overrides = {}) {
 function onboardingDraftData(uid = "user123", overrides = {}) {
   return {
     uid,
-    schemaVersion: 3,
+    schemaVersion: 4,
     source: "onboarding",
     revision: 7,
     sourceFingerprint: fingerprint,
     timezoneId: "Asia/Kolkata",
     currentStep: 2,
     stepCompleted: [true, true, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    stepCompletionContractVersions: Array(15).fill(1),
     stepDirty: Array(15).fill(false),
     stepLoading: Array(15).fill(false),
     onboardingCompleted: false,
@@ -1398,11 +1399,14 @@ describe("Phase 4.6.4 canonical production contracts", () => {
     })));
   });
 
-  it("accepts only the canonical schema-v3 onboarding draft timezone contract", async () => {
+  it("accepts only the canonical schema-v4 onboarding draft completion contract", async () => {
     const db = ownerDb();
     const ref = db.collection("users").doc("user123").collection("onboarding").doc("draft");
     await assertSucceeds(ref.set(onboardingDraftData()));
     await assertFails(ref.set(onboardingDraftData("user123", { schemaVersion: 2 })));
+    await assertFails(ref.set(onboardingDraftData("user123", {
+      stepCompletionContractVersions: Array(15).fill(0),
+    })));
     await assertFails(ref.set(onboardingDraftData("user123", { timezoneId: "" })));
     const missingTimezone = onboardingDraftData();
     delete missingTimezone.timezoneId;

@@ -595,6 +595,223 @@ void main() {
         isFalse,
       );
     });
+
+    test('Eating dependency matrix invalidates Step 5 at mutation time', () {
+      final initial = _validDraftAt(testUid, 14).copyWith(
+        stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
+        incrementRevision: false,
+      );
+      final mutations =
+          <(String, BaseTimelineDraft Function(BaseTimelineDraft))>[
+            ('setupPath', (base) => base.copyWith(eatingSetupPath: 'create')),
+            ('mode', (base) => base.copyWith(eatingMode: 'planned')),
+            ('shouldPlan', (base) => base.copyWith(shouldPlanMeals: true)),
+            ('goal', (base) => base.copyWith(mealPlanningGoal: 'gain')),
+            ('foodType', (base) => base.copyWith(foodType: 'vegetarian')),
+            (
+              'customFood',
+              (base) => base.copyWith(foodStyleCustomText: 'local'),
+            ),
+            ('budget', (base) => base.copyWith(mealBudget: 'medium')),
+            ('ability', (base) => base.copyWith(cookingAbility: 'basic')),
+            ('mealCount', (base) => base.copyWith(mealsPerDay: 4)),
+            ('breakfast', (base) => base.copyWith(breakfastMinute: 500)),
+            ('lunch', (base) => base.copyWith(lunchMinute: 800)),
+            ('dinner', (base) => base.copyWith(dinnerMinute: 1220)),
+            ('snack', (base) => base.copyWith(snackMinute: 1000)),
+            ('extraSnack', (base) => base.copyWith(extraSnackMinute: 650)),
+            (
+              'planVersion',
+              (base) => base.copyWith(eatingGeneratedPlanVersion: 2),
+            ),
+            (
+              'fingerprint',
+              (base) =>
+                  base.copyWith(eatingGeneratedInputFingerprint: 'changed'),
+            ),
+            (
+              'importIdentity',
+              (base) => base.copyWith(
+                pendingFutureImports: [
+                  PendingFutureImportDraft(
+                    id: 'changed-import',
+                    section: 'Eating',
+                    mode: 'Photo AI',
+                    createdAt: DateTime.utc(2026),
+                    uploadedAssetId: 'asset-A',
+                    uploadedAssetR2Key:
+                        'users/$testUid/onboarding/eating_menu/asset-A.jpg',
+                  ),
+                ],
+              ),
+            ),
+            (
+              'eatingBlock',
+              (base) => base.copyWith(
+                blocks: [
+                  ...base.blocks,
+                  const TimelineBlockDraft(
+                    id: 'changed-eating',
+                    section: 'eating',
+                    title: 'Changed meal',
+                    startMinute: 780,
+                    endMinute: 810,
+                    repeatDays: [1],
+                    blockType: TimelineBlockDraft.softBlockKey,
+                  ),
+                ],
+              ),
+            ),
+          ];
+      for (final mutation in mutations) {
+        final updated = initial.copyWith(
+          baseTimeline: mutation.$2(initial.baseTimeline),
+          incrementRevision: false,
+        );
+        final invalidated = updated.invalidateDownstreamDependencies(initial);
+        expect(
+          invalidated.stepCompleted[OnboardingStepId.eating.index],
+          isFalse,
+          reason: mutation.$1,
+        );
+        expect(
+          invalidated.stepDirty[OnboardingStepId.eating.index],
+          isTrue,
+          reason: mutation.$1,
+        );
+      }
+    });
+
+    test('Skin Care dependency matrix invalidates Step 7 at mutation time', () {
+      final initial = _validDraftAt(testUid, 14).copyWith(
+        stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
+        incrementRevision: false,
+      );
+      final mutations =
+          <(String, BaseTimelineDraft Function(BaseTimelineDraft))>[
+            (
+              'setupPath',
+              (base) => base.copyWith(skinCareSetupPath: 'has_products'),
+            ),
+            ('skip', (base) => base.copyWith(skinCareSkipped: false)),
+            (
+              'productId',
+              (base) => base.copyWith(skinCareProductPhotoAssetId: 'A'),
+            ),
+            (
+              'productKey',
+              (base) => base.copyWith(skinCareProductPhotoR2Key: 'key-A'),
+            ),
+            (
+              'productStatus',
+              (base) => base.copyWith(skinCareProductPhotoStatus: 'uploaded'),
+            ),
+            ('faceId', (base) => base.copyWith(skinCareFacePhotoAssetId: 'F')),
+            (
+              'faceKey',
+              (base) => base.copyWith(skinCareFacePhotoR2Key: 'key-F'),
+            ),
+            (
+              'faceStatus',
+              (base) => base.copyWith(skinCareFacePhotoStatus: 'uploaded'),
+            ),
+            (
+              'faceSkip',
+              (base) => base.copyWith(skinCareFacePhotoSkipped: true),
+            ),
+            (
+              'productNames',
+              (base) => base.copyWith(skinCareProductNames: 'Cleanser'),
+            ),
+            ('skinType', (base) => base.copyWith(skinCareSkinType: 'dry')),
+            (
+              'problems',
+              (base) => base.copyWith(skinCareProblems: const ['dryness']),
+            ),
+            ('budget', (base) => base.copyWith(skinCareBudget: 'medium')),
+            (
+              'preference',
+              (base) => base.copyWith(skinCarePreference: 'simple'),
+            ),
+            (
+              'applications',
+              (base) => base.copyWith(skinCareDesiredApplicationsPerDay: 2),
+            ),
+            (
+              'reviewed',
+              (base) => base.copyWith(
+                skinCareReviewedProducts: const [
+                  SkinCareDetectedProduct(name: 'Cleanser'),
+                ],
+              ),
+            ),
+            (
+              'recommendations',
+              (base) => base.copyWith(
+                skinCareProductRecommendations: const [
+                  SkinCareProductRecommendationDraft(name: 'Cleanser'),
+                ],
+              ),
+            ),
+            (
+              'selected',
+              (base) => base.copyWith(
+                skinCareSelectedProductNames: const ['Cleanser'],
+              ),
+            ),
+            (
+              'recommendationFingerprint',
+              (base) => base.copyWith(skinCareRecommendationFingerprint: 'rec'),
+            ),
+            (
+              'routineFingerprint',
+              (base) => base.copyWith(skinCareRoutineFingerprint: 'routine'),
+            ),
+            (
+              'country',
+              (base) => base.copyWith(skinCareRecommendationCountryCode: 'US'),
+            ),
+            (
+              'currency',
+              (base) =>
+                  base.copyWith(skinCareRecommendationCurrencyCode: 'USD'),
+            ),
+            (
+              'routineBlock',
+              (base) => base.copyWith(
+                blocks: [
+                  ...base.blocks,
+                  const TimelineBlockDraft(
+                    id: 'changed-skin',
+                    section: 'skin_care',
+                    title: 'Changed routine',
+                    startMinute: 480,
+                    endMinute: 495,
+                    repeatDays: [1],
+                    blockType: TimelineBlockDraft.softBlockKey,
+                  ),
+                ],
+              ),
+            ),
+          ];
+      for (final mutation in mutations) {
+        final updated = initial.copyWith(
+          baseTimeline: mutation.$2(initial.baseTimeline),
+          incrementRevision: false,
+        );
+        final invalidated = updated.invalidateDownstreamDependencies(initial);
+        expect(
+          invalidated.stepCompleted[OnboardingStepId.skinCare.index],
+          isFalse,
+          reason: mutation.$1,
+        );
+        expect(
+          invalidated.stepDirty[OnboardingStepId.skinCare.index],
+          isTrue,
+          reason: mutation.$1,
+        );
+      }
+    });
   });
 
   group(

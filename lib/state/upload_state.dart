@@ -170,6 +170,10 @@ class RestoredUploadsState {
   final bool isHydrating;
   final Map<UploadedAssetPurpose, RestoredUploadedAsset> assetsByPurpose;
   final Map<String, RestoredUploadedAsset> assetsById;
+
+  /// Raw metadata returned for exact draft-referenced IDs, including deleted
+  /// or malformed records needed to distinguish deletion from corruption.
+  final Map<String, UploadedAsset> exactLookupAssetsById;
   final String? errorMessage;
 
   const RestoredUploadsState({
@@ -177,6 +181,7 @@ class RestoredUploadsState {
     this.isHydrating = false,
     this.assetsByPurpose = const {},
     this.assetsById = const {},
+    this.exactLookupAssetsById = const {},
     this.errorMessage,
   });
 
@@ -273,6 +278,7 @@ class RestoredUploadsController extends StateNotifier<RestoredUploadsState> {
       isHydrating: true,
       assetsByPurpose: state.assetsByPurpose,
       assetsById: state.assetsById,
+      exactLookupAssetsById: state.exactLookupAssetsById,
     );
     try {
       final candidates = [
@@ -307,6 +313,20 @@ class RestoredUploadsController extends StateNotifier<RestoredUploadsState> {
 
       final byPurpose = <UploadedAssetPurpose, RestoredUploadedAsset>{};
       final byId = <String, RestoredUploadedAsset>{};
+      final exactLookupById = <String, UploadedAsset>{};
+
+      if (requiredAssetIds != null) {
+        for (final requiredId in requiredAssetIds) {
+          final normalizedId = requiredId.trim();
+          if (normalizedId.isEmpty) continue;
+          for (final candidate in candidates) {
+            if (candidate.assetId == normalizedId) {
+              exactLookupById[normalizedId] = candidate;
+              break;
+            }
+          }
+        }
+      }
 
       for (final candidate in candidates) {
         if (candidate.ownerUid == normalizedUid &&
@@ -338,6 +358,7 @@ class RestoredUploadsController extends StateNotifier<RestoredUploadsState> {
         uid: normalizedUid,
         assetsByPurpose: Map.unmodifiable(byPurpose),
         assetsById: Map.unmodifiable(byId),
+        exactLookupAssetsById: Map.unmodifiable(exactLookupById),
       );
       for (final purpose in byPurpose.keys) {
         final previewGeneration = _nextPreviewGeneration(purpose);
@@ -356,6 +377,7 @@ class RestoredUploadsController extends StateNotifier<RestoredUploadsState> {
       state = RestoredUploadsState(
         uid: normalizedUid,
         errorMessage: 'Uploaded photos could not be restored yet.',
+        exactLookupAssetsById: state.exactLookupAssetsById,
       );
     }
   }
@@ -375,6 +397,7 @@ class RestoredUploadsController extends StateNotifier<RestoredUploadsState> {
       uid: uid,
       assetsByPurpose: Map.unmodifiable(nextPurpose),
       assetsById: Map.unmodifiable(nextId),
+      exactLookupAssetsById: state.exactLookupAssetsById,
     );
     _resolvePreview(
       uid: uid,
@@ -493,6 +516,7 @@ class RestoredUploadsController extends StateNotifier<RestoredUploadsState> {
       uid: state.uid,
       assetsByPurpose: Map.unmodifiable(next),
       assetsById: Map.unmodifiable(nextId),
+      exactLookupAssetsById: state.exactLookupAssetsById,
       errorMessage: state.errorMessage,
     );
   }

@@ -1356,6 +1356,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
             effectiveResult = _uploadIntegrityRecovery(
               ownerUid: ownerUid,
               profile: profile,
+              draft: draft,
               reasonCodes: reconciliation.reasonCodes,
             );
             _ref.read(onboardingStateProvider.notifier).reset(user.uid);
@@ -1382,12 +1383,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
               step: effectiveStep,
               draft: finalDraft,
               diagnosticCode: resumeValidation.diagnosticCode,
-              diagnostics: {
-                'resumeStep': resumeValidation.resumeStep,
-                'validThroughStep': resumeValidation.validThroughStep,
-                'reason': resumeValidation.reason.name,
-                'diagnosticCode': resumeValidation.diagnosticCode,
-              },
+              diagnostics: onboardingRestoreDiagnostics(
+                draft: draft,
+                validation: resumeValidation,
+                uploadReconciliation: reconciliation.changed
+                    ? 'affected'
+                    : 'valid',
+                uploadReasonCodes: reconciliation.reasonCodes,
+              ),
             );
           }
 
@@ -1423,6 +1426,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
                 reconciliation.reasonCodes,
               ),
               diagnostics: {
+                ...onboardingRestoreDiagnostics(
+                  draft: draft,
+                  validation: validateOnboardingResume(draft),
+                  uploadReconciliation: 'integrity_failure',
+                  uploadReasonCodes: reconciliation.reasonCodes,
+                ),
                 'code':
                     reconciliation.reasonCodes.firstOrNull ??
                     'upload_source_integrity_failure',
@@ -1434,7 +1443,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
               ownerUid: ownerUid,
               profile: profile,
               reason: ReconstructionRecoveryReason.durableStateConflict,
-              diagnostics: const {
+              diagnostics: {
+                ...onboardingRestoreDiagnostics(
+                  draft: draft,
+                  validation: validateOnboardingResume(
+                    reconciliation.reconciledDraft,
+                  ),
+                  uploadReconciliation: 'affected',
+                  uploadReasonCodes: reconciliation.reasonCodes,
+                ),
                 'code': 'finishing_draft_upload_source_mismatch',
               },
             );
@@ -1506,6 +1523,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       _ref.read(homeDashboardProvider.notifier).setOwnerUid(user.uid);
       _ref.read(fitnessCenterProvider.notifier).setOwnerUid(user.uid);
+      _logOnboardingRestoreResult(effectiveResult);
       _applySessionDestination(
         user,
         resolveReconstructionDestination(effectiveResult),
@@ -1538,6 +1556,40 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (kDebugMode) debugPrint('[Reconstruction] $event');
   }
 
+  void _logOnboardingRestoreResult(ReconstructionResult result) {
+    if (!kDebugMode) return;
+    final diagnostics = switch (result) {
+      ReconstructionIncomplete(:final diagnostics) => diagnostics,
+      ReconstructionRecovery(:final diagnostics) => diagnostics,
+      ReconstructionFinishing(:final draft) => onboardingRestoreDiagnostics(
+        draft: draft,
+        validation: validateOnboardingResume(draft),
+        uploadReconciliation: 'valid',
+      ),
+      ReconstructionCompleted(:final draft) => <String, Object?>{
+        'schemaVersion': draft.storedSchemaVersion,
+        'detectedTopology': draft.restoredStepLayout.name,
+        'migrationAction':
+            draft.storedSchemaVersion < OnboardingDraft.schemaVersion
+            ? 'completion_contracts_v1_migrated'
+            : 'none',
+        'originalAcknowledgedCompletionBoundary':
+            durableAcknowledgedCompletionBoundary(draft),
+        'durableValidatorResult': 'verified_completion_bundle',
+        'uploadReconciliation': 'valid',
+        'finalResumeStep': 'home',
+        'reasonCode': 'completed_onboarding',
+      },
+      ReconstructionFresh() => const <String, Object?>{
+        'migrationAction': 'none',
+        'uploadReconciliation': 'valid',
+        'finalResumeStep': 0,
+        'reasonCode': 'fresh_account',
+      },
+    };
+    debugPrint('[OnboardingRestore] $diagnostics');
+  }
+
   bool _isCurrentRestore(int restoreGeneration) {
     return mounted && restoreGeneration == _backendRestoreGeneration;
   }
@@ -1566,6 +1618,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   ReconstructionRecovery _uploadIntegrityRecovery({
     required String ownerUid,
     required UserProfile profile,
+    required OnboardingDraft draft,
     required List<String> reasonCodes,
   }) {
     return ReconstructionRecovery(
@@ -1573,6 +1626,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       profile: profile,
       reason: _uploadIntegrityRecoveryReason(reasonCodes),
       diagnostics: {
+        ...onboardingRestoreDiagnostics(
+          draft: draft,
+          validation: validateOnboardingResume(draft),
+          uploadReconciliation: 'integrity_failure',
+          uploadReasonCodes: reasonCodes,
+        ),
         'code': reasonCodes.firstOrNull ?? 'upload_source_integrity_failure',
       },
     );

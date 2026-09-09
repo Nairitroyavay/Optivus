@@ -1,13 +1,11 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
-import 'package:optivus/features/routine/domain/conflict_policy.dart';
 import 'package:optivus/models/coach_models.dart';
 import 'package:optivus/models/goal_models.dart';
 import 'package:optivus/models/money_models.dart';
 import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
-import 'package:optivus/models/conflict_acceptance.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -332,54 +330,6 @@ class OnboardingCompletionService {
       generatedSourceIds: generatedSourceIds,
       expectedAcceptanceIds: const [],
     );
-  }
-
-  // ignore: unused_element
-  static List<ConflictAcceptance> _canonicalSourceAcceptances(
-    OnboardingDraft draft,
-  ) {
-    final owner = draft.uid;
-    if (owner.isEmpty) return const [];
-    final accepted = <ConflictAcceptance>[];
-    for (final source in draft.baseTimeline.conflictAcceptances) {
-      if (!source.isActive) continue;
-      final first = draft.baseTimeline.blockById(source.firstSourceBlockId);
-      final second = draft.baseTimeline.blockById(source.secondSourceBlockId);
-      if (first == null || second == null) continue;
-      final firstDescriptor = timelineScheduleDescriptor(
-        first,
-        ownerUid: owner,
-        timezoneId: draft.timezoneId,
-      );
-      final secondDescriptor = timelineScheduleDescriptor(
-        second,
-        ownerUid: owner,
-        timezoneId: draft.timezoneId,
-      );
-      final decision = ConflictPolicy.classify(
-        firstDescriptor,
-        secondDescriptor,
-      );
-      if (!decision.canKeepBoth || decision.type.name != source.conflictType) {
-        continue;
-      }
-      accepted.add(
-        ConflictAcceptance.create(
-          ownerUid: owner,
-          first: firstDescriptor,
-          second: secondDescriptor,
-          conflictType: decision.type.name,
-          scope: source.scope,
-          applicableWeekdays: source.applicableWeekdays,
-          timezoneId: draft.timezoneId,
-          acceptedFrom: source.acceptedFrom,
-          dateKey: source.dateKey,
-          acceptedAt: source.acceptedAt,
-        ),
-      );
-    }
-    accepted.sort((a, b) => a.acceptanceId.compareTo(b.acceptanceId));
-    return accepted;
   }
 
   static List<OnboardingUploadedAssetReference> _uploadedAssetReferences(

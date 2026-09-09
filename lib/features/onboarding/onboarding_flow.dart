@@ -328,12 +328,18 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     }
 
     final completed = List<bool>.from(draft.stepCompleted)..[step] = true;
+    final completionContracts =
+        List<int>.from(draft.stepCompletionContractVersions)
+          ..[step] = OnboardingStepId.fromIndex(
+            step,
+          )!.durableCompletionContractVersion;
     final dirty = List<bool>.from(draft.stepDirty)..[step] = false;
     final loading = List<bool>.from(draft.stepLoading)..[step] = false;
     return draft.copyWith(
       uid: uid,
       currentStep: step,
       stepCompleted: completed,
+      stepCompletionContractVersions: completionContracts,
       stepDirty: dirty,
       stepLoading: loading,
       createdAt: draft.createdAt ?? now,
@@ -519,6 +525,10 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         onboardingCompleted: true,
         currentStep: OnboardingDraft.lastStepIndex,
         stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
+        stepCompletionContractVersions: [
+          for (final stepId in currentOnboardingStepOrder)
+            stepId.durableCompletionContractVersion,
+        ],
         stepDirty: List<bool>.filled(OnboardingDraft.stepCount, false),
         stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
         finalPreview:

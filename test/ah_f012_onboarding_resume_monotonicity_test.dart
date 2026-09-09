@@ -86,10 +86,13 @@ void main() {
       final bothInvalid = _validDraftAt(uid, 6).copyWith(
         bodyBasics: const BodyBasicsDraft(),
         baseTimeline: validBase.copyWith(
+          eatingSetupPath: 'create',
           blocks: validBase.blocks
               .where((block) => block.section != 'eating')
               .toList(),
           clearMealPlanning: true,
+          clearEatingGeneratedPlanVersion: true,
+          clearEatingGeneratedInputFingerprint: true,
         ),
         incrementRevision: false,
       );

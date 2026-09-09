@@ -14,7 +14,7 @@ import 'package:optivus/features/onboarding/onboarding_step_id.dart';
 enum PersistedOnboardingStepLayout { legacy12, current15, ambiguous }
 
 class OnboardingDraft {
-  static const int schemaVersion = 3;
+  static const int schemaVersion = 4;
   static const String sourceOnboarding = 'onboarding';
   static const int _legacyStepCount = 12;
   static const int stepCount = 15;
@@ -22,8 +22,10 @@ class OnboardingDraft {
 
   final String uid;
   final int storedSchemaVersion;
+  final PersistedOnboardingStepLayout restoredStepLayout;
   final int currentStep;
   final List<bool> stepCompleted;
+  final List<int> stepCompletionContractVersions;
   final List<bool> stepDirty;
   final List<bool> stepLoading;
   final DateTime? createdAt;
@@ -52,6 +54,7 @@ class OnboardingDraft {
   const OnboardingDraft({
     this.uid = '',
     this.storedSchemaVersion = schemaVersion,
+    this.restoredStepLayout = PersistedOnboardingStepLayout.current15,
     this.currentStep = 0,
     this.stepCompleted = const [
       false,
@@ -69,6 +72,23 @@ class OnboardingDraft {
       false,
       false,
       false,
+    ],
+    this.stepCompletionContractVersions = const [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
     ],
     this.stepDirty = const [
       false,
@@ -129,6 +149,8 @@ class OnboardingDraft {
 
   factory OnboardingDraft.fromMap(Map<String, dynamic> map) {
     final persistedStepLayout = _detectPersistedStepLayout(map);
+    final storedSchemaVersion =
+        (map['schemaVersion'] as num?)?.toInt() ?? schemaVersion;
     final uid = map['uid'] as String? ?? '';
     final baseTimeline = map['baseTimeline'] is Map
         ? BaseTimelineDraft.fromMap(
@@ -139,8 +161,8 @@ class OnboardingDraft {
 
     return OnboardingDraft(
       uid: uid,
-      storedSchemaVersion:
-          (map['schemaVersion'] as num?)?.toInt() ?? schemaVersion,
+      storedSchemaVersion: storedSchemaVersion,
+      restoredStepLayout: persistedStepLayout,
       currentStep: _readCurrentStepIndex(
         _readStoredStepIndex(map['currentStep']),
         persistedStepLayout: persistedStepLayout,
@@ -151,6 +173,11 @@ class OnboardingDraft {
         baseTimeline: baseTimeline,
         uid: uid,
         onboardingCompleted: onboardingCompleted,
+      ),
+      stepCompletionContractVersions: _readStepCompletionContractVersions(
+        map['stepCompletionContractVersions'],
+        storedSchemaVersion: storedSchemaVersion,
+        persistedStepLayout: persistedStepLayout,
       ),
       stepDirty: _readStepDirty(
         map['stepDirty'],
@@ -222,6 +249,7 @@ class OnboardingDraft {
       'timezoneId': timezoneId,
       'currentStep': currentStep,
       'stepCompleted': stepCompleted,
+      'stepCompletionContractVersions': stepCompletionContractVersions,
       'stepDirty': stepDirty,
       'stepLoading': stepLoading,
       if (createdAt != null) 'createdAt': createdAt?.toIso8601String(),
@@ -262,8 +290,10 @@ class OnboardingDraft {
   OnboardingDraft copyWith({
     String? uid,
     int? storedSchemaVersion,
+    PersistedOnboardingStepLayout? restoredStepLayout,
     int? currentStep,
     List<bool>? stepCompleted,
+    List<int>? stepCompletionContractVersions,
     List<bool>? stepDirty,
     List<bool>? stepLoading,
     DateTime? createdAt,
@@ -295,11 +325,16 @@ class OnboardingDraft {
     return OnboardingDraft(
       uid: uid ?? this.uid,
       storedSchemaVersion: storedSchemaVersion ?? this.storedSchemaVersion,
+      restoredStepLayout: restoredStepLayout ?? this.restoredStepLayout,
       currentStep: (currentStep ?? this.currentStep)
           .clamp(0, lastStepIndex)
           .toInt(),
       stepCompleted: _normalizeBoolList(
         stepCompleted ?? this.stepCompleted,
+        stepCount,
+      ),
+      stepCompletionContractVersions: _normalizeIntList(
+        stepCompletionContractVersions ?? this.stepCompletionContractVersions,
         stepCount,
       ),
       stepDirty: _normalizeBoolList(stepDirty ?? this.stepDirty, stepCount),
@@ -654,6 +689,8 @@ class OnboardingDraft {
 
     // 4. Eating inputs / routine changes:
     final eatingInputsChanged =
+        canonicalEatingGenerationInputs().computeFingerprint() !=
+            previous.canonicalEatingGenerationInputs().computeFingerprint() ||
         baseTimeline.eatingSetupPath != previous.baseTimeline.eatingSetupPath ||
         baseTimeline.eatingMode != previous.baseTimeline.eatingMode ||
         baseTimeline.shouldPlanMeals != previous.baseTimeline.shouldPlanMeals ||
@@ -673,6 +710,18 @@ class OnboardingDraft {
             previous.baseTimeline.extraSnackMinute ||
         baseTimeline.eatingGeneratedPlanVersion !=
             previous.baseTimeline.eatingGeneratedPlanVersion ||
+        baseTimeline.eatingGeneratedInputFingerprint !=
+            previous.baseTimeline.eatingGeneratedInputFingerprint ||
+        !_jsonValuesEqual(
+          baseTimeline.pendingFutureImports
+              .where((entry) => entry.section == 'Eating')
+              .map((entry) => entry.toMap())
+              .toList(),
+          previous.baseTimeline.pendingFutureImports
+              .where((entry) => entry.section == 'Eating')
+              .map((entry) => entry.toMap())
+              .toList(),
+        ) ||
         !_blocksEqualForSection(
           previous.baseTimeline.blocks,
           baseTimeline.blocks,
@@ -680,7 +729,7 @@ class OnboardingDraft {
         );
 
     if (eatingInputsChanged) {
-      nextDirty[OnboardingStepId.eating.index] = true;
+      invalidateStep(OnboardingStepId.eating);
       invalidateStep(OnboardingStepId.todayReady);
     }
 
@@ -702,12 +751,59 @@ class OnboardingDraft {
         baseTimeline.skinCareSkipped != previous.baseTimeline.skinCareSkipped ||
         baseTimeline.skinCareProductPhotoAssetId !=
             previous.baseTimeline.skinCareProductPhotoAssetId ||
+        baseTimeline.skinCareProductPhotoR2Key !=
+            previous.baseTimeline.skinCareProductPhotoR2Key ||
+        baseTimeline.skinCareProductPhotoStatus !=
+            previous.baseTimeline.skinCareProductPhotoStatus ||
         baseTimeline.skinCareFacePhotoAssetId !=
             previous.baseTimeline.skinCareFacePhotoAssetId ||
+        baseTimeline.skinCareFacePhotoR2Key !=
+            previous.baseTimeline.skinCareFacePhotoR2Key ||
+        baseTimeline.skinCareFacePhotoStatus !=
+            previous.baseTimeline.skinCareFacePhotoStatus ||
+        baseTimeline.skinCareFacePhotoSkipped !=
+            previous.baseTimeline.skinCareFacePhotoSkipped ||
         baseTimeline.skinCareDesiredApplicationsPerDay !=
             previous.baseTimeline.skinCareDesiredApplicationsPerDay ||
         baseTimeline.skinCareProductNames !=
             previous.baseTimeline.skinCareProductNames ||
+        baseTimeline.skinCareSkinType !=
+            previous.baseTimeline.skinCareSkinType ||
+        !_jsonValuesEqual(
+          baseTimeline.skinCareProblems,
+          previous.baseTimeline.skinCareProblems,
+        ) ||
+        baseTimeline.skinCareBudget != previous.baseTimeline.skinCareBudget ||
+        baseTimeline.skinCarePreference !=
+            previous.baseTimeline.skinCarePreference ||
+        !_jsonValuesEqual(
+          baseTimeline.skinCareReviewedProducts
+              .map((product) => product.toMap())
+              .toList(),
+          previous.baseTimeline.skinCareReviewedProducts
+              .map((product) => product.toMap())
+              .toList(),
+        ) ||
+        !_jsonValuesEqual(
+          baseTimeline.skinCareProductRecommendations
+              .map((product) => product.toMap())
+              .toList(),
+          previous.baseTimeline.skinCareProductRecommendations
+              .map((product) => product.toMap())
+              .toList(),
+        ) ||
+        !_jsonValuesEqual(
+          baseTimeline.skinCareSelectedProductNames,
+          previous.baseTimeline.skinCareSelectedProductNames,
+        ) ||
+        baseTimeline.skinCareRecommendationFingerprint !=
+            previous.baseTimeline.skinCareRecommendationFingerprint ||
+        baseTimeline.skinCareRoutineFingerprint !=
+            previous.baseTimeline.skinCareRoutineFingerprint ||
+        baseTimeline.skinCareRecommendationCountryCode !=
+            previous.baseTimeline.skinCareRecommendationCountryCode ||
+        baseTimeline.skinCareRecommendationCurrencyCode !=
+            previous.baseTimeline.skinCareRecommendationCurrencyCode ||
         !_blocksEqualForSection(
           previous.baseTimeline.blocks,
           baseTimeline.blocks,
@@ -715,7 +811,7 @@ class OnboardingDraft {
         );
 
     if (skinCareChanged) {
-      nextDirty[OnboardingStepId.skinCare.index] = true;
+      invalidateStep(OnboardingStepId.skinCare);
       invalidateStep(OnboardingStepId.todayReady);
     }
 
@@ -760,27 +856,19 @@ class OnboardingDraft {
     List<TimelineBlockDraft> bList,
     String section,
   ) {
-    final aBlocks = aList.where((b) => b.section == section).toList();
-    final bBlocks = bList.where((b) => b.section == section).toList();
-    if (aBlocks.length != bBlocks.length) return false;
-    for (var i = 0; i < aBlocks.length; i++) {
-      final a = aBlocks[i];
-      final b = bBlocks[i];
-      if (a.id != b.id ||
-          a.startMinute != b.startMinute ||
-          a.endMinute != b.endMinute ||
-          a.title != b.title ||
-          a.source != b.source ||
-          a.blockType != b.blockType) {
-        return false;
-      }
-      if (a.repeatDays.length != b.repeatDays.length ||
-          !a.repeatDays.every((day) => b.repeatDays.contains(day))) {
-        return false;
-      }
-    }
-    return true;
+    final aBlocks = aList
+        .where((block) => block.section == section)
+        .map((block) => block.toMap())
+        .toList();
+    final bBlocks = bList
+        .where((block) => block.section == section)
+        .map((block) => block.toMap())
+        .toList();
+    return _jsonValuesEqual(aBlocks, bBlocks);
   }
+
+  static bool _jsonValuesEqual(Object? a, Object? b) =>
+      jsonEncode(a) == jsonEncode(b);
 
   List<FinalTimelineItem> _standaloneGoodHabitItems(
     List<FinalTimelineItem> occupiedItems,
@@ -1114,6 +1202,14 @@ class OnboardingDraft {
     );
   }
 
+  static List<int> _normalizeIntList(List<int> value, int length) {
+    if (value.length == length) return List<int>.from(value);
+    return List<int>.generate(
+      length,
+      (index) => index < value.length ? value[index] : 0,
+    );
+  }
+
   static PersistedOnboardingStepLayout _detectPersistedStepLayout(
     Map<String, dynamic> map,
   ) {
@@ -1132,8 +1228,9 @@ class OnboardingDraft {
     }
     if (hasCurrentVector) return PersistedOnboardingStepLayout.current15;
 
-    // Current-schema short vectors are partial/corrupt current vectors.
-    if (version != null && version >= schemaVersion) {
+    // Schema v3 introduced the current 15-page layout. Its short vectors are
+    // partial/corrupt current vectors even after later data-schema bumps.
+    if (version != null && version >= 3) {
       return PersistedOnboardingStepLayout.current15;
     }
     // Schema v2 already existed with the current 15-page layout. A short or
@@ -1222,44 +1319,20 @@ class OnboardingDraft {
       // May migrate complete only when persisted Eating data satisfies an
       // explicit supported migration contract. If the persisted meal plan
       // belongs to the obsolete weekly format, Step 5 remains false (reopened).
-      final hasPhotoImport =
-          baseTimeline.eatingSetupPath == 'has_routine' &&
-          (baseTimeline.latestImportForSection('Eating') != null ||
-              baseTimeline.blocks.any(
-                (b) => b.section == 'eating' && b.source == 'ai_import',
-              ));
-      final hasValidGeneratedPlan =
-          (baseTimeline.eatingSetupPath == 'no_routine' ||
-              baseTimeline.eatingMode != null ||
-              baseTimeline.shouldPlanMeals != null) &&
-          baseTimeline.blocks.any(
-            (b) =>
-                b.section == 'eating' && b.source == 'ai_generated_meal_setup',
-          ) &&
-          !isLegacyGeneratedEatingPlan(baseTimeline);
-      final hasEatingSkip = baseTimeline.eatingSetupPath == 'skip';
-
       migrated[OnboardingStepId.eating.index] =
-          hasEatingSkip || hasPhotoImport || hasValidGeneratedPlan;
+          baseTimeline.validateLegacyEatingMigrationEvidenceV1() == null;
 
       // Step 6 Fixed Schedule:
       // May migrate complete only when persisted fixed-schedule data satisfies its migration contract.
       migrated[OnboardingStepId.fixedSchedule.index] =
-          baseTimeline.validateFixedSchedule() == null;
+          baseTimeline.validateDurableFixedScheduleRestoreV1() == null;
 
       // Step 7 Skin Care:
       // May migrate complete only when:
       // 1. A valid supported persisted routine exists, OR
       // 2. Explicit durable Skin Care skip exists.
-      final hasSkinCareSkip =
-          baseTimeline.skinCareSkipped ||
-          baseTimeline.skinCareSetupPath == 'skip';
-      final hasValidSkinCareRoutine =
-          baseTimeline.blocks.any((b) => b.section == 'skin_care') &&
-          baseTimeline.validateSkinCareSetup(uid) == null;
-
       migrated[OnboardingStepId.skinCare.index] =
-          hasSkinCareSkip || hasValidSkinCareRoutine;
+          baseTimeline.validateDurableSkinCareRestoreV1(uid) == null;
     } else {
       migrated[OnboardingStepId.eating.index] = false;
       migrated[OnboardingStepId.fixedSchedule.index] = false;
@@ -1280,6 +1353,30 @@ class OnboardingDraft {
       return _migrateLegacyStepDirty(raw);
     }
     return _normalizeBoolList(raw, stepCount);
+  }
+
+  static List<int> _readStepCompletionContractVersions(
+    dynamic value, {
+    required int storedSchemaVersion,
+    required PersistedOnboardingStepLayout persistedStepLayout,
+  }) {
+    final raw = value is List
+        ? value.map((entry) => entry is num ? entry.toInt() : 0).toList()
+        : <int>[];
+    if (raw.isNotEmpty) {
+      return _normalizeIntList(raw, stepCount);
+    }
+
+    // Completion receipts were introduced in schema v4. Supported older
+    // drafts are deterministically migrated to the frozen v1 contracts; the
+    // durable validators still decide whether their persisted evidence is
+    // trustworthy. A missing receipt in a v4+ document is corruption and is
+    // deliberately left as zero so restore requests explicit recovery.
+    if (storedSchemaVersion < 4 ||
+        persistedStepLayout == PersistedOnboardingStepLayout.legacy12) {
+      return List<int>.filled(stepCount, 1);
+    }
+    return List<int>.filled(stepCount, 0);
   }
 
   static List<bool> _migrateLegacyStepDirty(List<bool> legacy) {
@@ -2654,6 +2751,64 @@ class BaseTimelineDraft {
     return null;
   }
 
+  /// Frozen structural contract for Step 4 completions written under durable
+  /// completion contract v1. Do not tighten this when the editing UI changes;
+  /// introduce a new contract version and migration instead.
+  String? validateDurableClassesAndWorkRestoreV1(String? lifeRole) {
+    final classesRequired =
+        lifeRole == LifeRoleDraft.studentKey ||
+        lifeRole == LifeRoleDraft.studentWorkingKey;
+    final workRequired =
+        lifeRole == LifeRoleDraft.workingKey ||
+        lifeRole == LifeRoleDraft.studentWorkingKey ||
+        lifeRole == LifeRoleDraft.businessKey;
+    if (lifeRole == null) return 'step_4_role_missing';
+
+    String? validateSection({
+      required String section,
+      required bool required,
+      required String? logicalAssetId,
+      required String? logicalR2Key,
+    }) {
+      if (!required) return null;
+      final confirmed = confirmedBlocksForSection(section);
+      if (confirmed.isEmpty) return 'step_4_${section}_blocks_missing';
+      if (confirmed.any((block) => !_durableBlockIsStructurallyValid(block))) {
+        return 'step_4_${section}_block_invalid';
+      }
+      final imported = confirmed.where((block) => block.source == 'ai_import');
+      if (imported.isEmpty) return null;
+      final assetId = logicalAssetId?.trim() ?? '';
+      final r2Key = logicalR2Key?.trim() ?? '';
+      if (assetId.isEmpty || r2Key.isEmpty) {
+        return 'step_4_${section}_source_missing';
+      }
+      if (imported.any(
+        (block) => !provenanceContainsExactUploadIdentity(
+          block.provenanceSourceIds,
+          assetId,
+          r2Key,
+        ),
+      )) {
+        return 'step_4_${section}_provenance_mismatch';
+      }
+      return null;
+    }
+
+    return validateSection(
+          section: 'classes',
+          required: classesRequired,
+          logicalAssetId: classLogicalAssetId,
+          logicalR2Key: classLogicalAssetR2Key,
+        ) ??
+        validateSection(
+          section: 'job_work_business',
+          required: workRequired,
+          logicalAssetId: workLogicalAssetId,
+          logicalR2Key: workLogicalAssetR2Key,
+        );
+  }
+
   String? validateMealScheduleDensity() {
     final eatingBlocks = blocks
         .where((b) => b.section == 'eating' && b.title.trim().isNotEmpty)
@@ -2676,6 +2831,33 @@ class BaseTimelineDraft {
         final nextStart = dayMeals[i + 1].startMinute;
         if (nextStart - currentStart < 120) {
           return 'Meals must be spaced at least 120 minutes apart.';
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Frozen meal-density portion of the Step 5 completion contract v1.
+  String? validateDurableMealScheduleDensityV1() {
+    final eatingBlocks = blocks
+        .where(
+          (block) => block.section == 'eating' && block.title.trim().isNotEmpty,
+        )
+        .toList();
+    for (var day = 1; day <= 7; day++) {
+      final dayMeals =
+          eatingBlocks
+              .where(
+                (block) =>
+                    block.repeatDays.isEmpty || block.repeatDays.contains(day),
+              )
+              .toList()
+            ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
+      if (dayMeals.length > 6) return 'step_5_meal_density_invalid';
+      for (var index = 0; index < dayMeals.length - 1; index++) {
+        if (dayMeals[index + 1].startMinute - dayMeals[index].startMinute <
+            120) {
+          return 'step_5_meal_density_invalid';
         }
       }
     }
@@ -2782,6 +2964,9 @@ class BaseTimelineDraft {
   /// Validates the durable structural integrity and supported format version of
   /// a saved eating plan without re-evaluating ephemeral target fingerprints.
   String? validateDurableEatingRestore() {
+    // An acknowledged skip is its own complete persisted outcome and has no
+    // timeline block to carry a section-confirmation marker.
+    if (eatingSetupPath == 'skip') return null;
     if (!_hasConfirmedSection('eating')) {
       return 'step_5_eating_not_confirmed';
     }
@@ -2847,18 +3032,28 @@ class BaseTimelineDraft {
         return 'step_5_eating_fingerprint_missing';
       }
 
-      final planError = validateGeneratedEatingWeeklyPlan(this, targets: null);
+      final planError = validateGeneratedEatingWeeklyPlanV2(
+        this,
+        targets: null,
+      );
       if (planError != null) return 'step_5_eating_plan_invalid';
-    } else if (eatingSetupPath == 'skip') {
-      // Explicit skip path is allowed when eating section is confirmed.
     } else {
       return 'step_5_eating_path_missing';
     }
 
-    final densityErr = validateMealScheduleDensity();
-    if (densityErr != null) return 'step_5_meal_density_invalid';
+    final densityErr = validateDurableMealScheduleDensityV1();
+    if (densityErr != null) return densityErr;
 
     return null;
+  }
+
+  /// Frozen evidence rule used only while expanding the historical combined
+  /// Step 4 into today's independent Eating step. In that topology, the
+  /// combined completion bit itself confirmed an explicit persisted skip, so
+  /// no modern section-confirmation marker is required for that one case.
+  String? validateLegacyEatingMigrationEvidenceV1() {
+    if (eatingSetupPath == 'skip') return null;
+    return validateDurableEatingRestore();
   }
 
   String? validateFixedSchedule() {
@@ -2918,7 +3113,49 @@ class BaseTimelineDraft {
     return null;
   }
 
+  /// Frozen structural contract for Step 6 completion receipt v1.
+  String? validateDurableFixedScheduleRestoreV1() {
+    final fixedBlocks = blocks.where((block) => block.section == 'fixed');
+    final sleep = fixedBlocks
+        .where((block) => block.id == fixedSleepId)
+        .toList();
+    final bath = fixedBlocks.where((block) => block.id == fixedBathId).toList();
+    if (sleep.length != 1) return 'step_6_sleep_block_invalid';
+    if (bath.length != 1) return 'step_6_bath_block_invalid';
+    if (sleep.single.startMinute == sleep.single.endMinute) {
+      return 'step_6_sleep_window_invalid';
+    }
+    if (bath.single.endMinute <= bath.single.startMinute) {
+      return 'step_6_bath_window_invalid';
+    }
+    for (final block in fixedBlocks) {
+      if (!_durableBlockIsStructurallyValid(
+        block,
+        allowCrossMidnight: block.id == fixedSleepId,
+      )) {
+        return 'step_6_fixed_block_invalid';
+      }
+      if (block.blockType != TimelineBlockDraft.hardBlockKey) {
+        return 'step_6_fixed_block_type_invalid';
+      }
+      if (block.repeatDays.toSet().length != 7 ||
+          !block.repeatDays.toSet().containsAll(const {1, 2, 3, 4, 5, 6, 7})) {
+        return 'step_6_fixed_repeat_days_invalid';
+      }
+    }
+    return null;
+  }
+
   String computeSkinCareRecommendationFingerprint({
+    String? countryCode,
+    String? currencyCode,
+  }) => computeSkinCareRecommendationFingerprintV1(
+    countryCode: countryCode,
+    currencyCode: currencyCode,
+  );
+
+  /// Frozen fingerprint algorithm owned by the Step 7 receipt-v1 contract.
+  String computeSkinCareRecommendationFingerprintV1({
     String? countryCode,
     String? currencyCode,
   }) {
@@ -2947,6 +3184,15 @@ class BaseTimelineDraft {
   }
 
   String computeSkinCareRoutineFingerprint({
+    String? countryCode,
+    String? currencyCode,
+  }) => computeSkinCareRoutineFingerprintV1(
+    countryCode: countryCode,
+    currencyCode: currencyCode,
+  );
+
+  /// Frozen fingerprint algorithm owned by the Step 7 receipt-v1 contract.
+  String computeSkinCareRoutineFingerprintV1({
     String? countryCode,
     String? currencyCode,
   }) {
@@ -2983,7 +3229,7 @@ class BaseTimelineDraft {
     if (skinCareSetupPath == 'no_products') {
       final recFingerprint =
           skinCareRecommendationFingerprint ??
-          computeSkinCareRecommendationFingerprint(
+          computeSkinCareRecommendationFingerprintV1(
             countryCode: countryCode,
             currencyCode: currencyCode,
           );
@@ -3145,6 +3391,112 @@ class BaseTimelineDraft {
     }
 
     return 'Build skin care routine or skip.';
+  }
+
+  /// Frozen Step 7 completion receipt v1. This intentionally does not invoke
+  /// [validateSkinCareSetup], whose interactive product/UI rules may evolve.
+  String? validateDurableSkinCareRestoreV1(String uid) {
+    if (skinCareSkipped || skinCareSetupPath == 'skip') return null;
+    final path = skinCareSetupPath;
+    if (path != 'has_products' && path != 'no_products') {
+      return 'step_7_path_invalid';
+    }
+
+    final routineFingerprint = skinCareRoutineFingerprint?.trim() ?? '';
+    if (routineFingerprint.isEmpty ||
+        routineFingerprint != computeSkinCareRoutineFingerprintV1() ||
+        !_skinCareBlocksMatchFingerprint(routineFingerprint)) {
+      return 'step_7_routine_receipt_invalid';
+    }
+    final desired = _normalizeSkinCareDesiredApplicationsPerDay(
+      skinCareDesiredApplicationsPerDay,
+    );
+    if (_missingSkinCareRoutineMessage(desired) != null) {
+      return 'step_7_routine_coverage_invalid';
+    }
+    final routineBlocks = blocks.where((block) => block.section == 'skin_care');
+    if (routineBlocks.any(
+      (block) =>
+          !_durableBlockIsStructurallyValid(block) ||
+          (block.skincareProducts.isEmpty && block.skincareSteps.isEmpty),
+    )) {
+      return 'step_7_routine_block_invalid';
+    }
+
+    if (path == 'has_products') {
+      final typedProducts = skinCareProductNames?.trim().isNotEmpty == true;
+      final hasPhotoReference =
+          skinCareProductPhotoAssetId?.trim().isNotEmpty == true ||
+          skinCareProductPhotoR2Key?.trim().isNotEmpty == true;
+      if (hasPhotoReference &&
+          !_skinUploadFieldsAreCurrent(
+            uid: uid,
+            purpose: UploadedAssetPurpose.skinProducts,
+            assetId: skinCareProductPhotoAssetId,
+            r2Key: skinCareProductPhotoR2Key,
+            status: skinCareProductPhotoStatus,
+          )) {
+        return 'step_7_product_source_invalid';
+      }
+      if (!typedProducts && !hasPhotoReference) {
+        return 'step_7_products_missing';
+      }
+      if (skinCareReviewedProducts.isEmpty ||
+          skinCareReviewedProducts.any(
+            (product) => product.displayName.trim().isEmpty,
+          )) {
+        return 'step_7_reviewed_products_invalid';
+      }
+      return null;
+    }
+
+    if (!_skinUploadFieldsAreCurrent(
+      uid: uid,
+      purpose: UploadedAssetPurpose.skinFace,
+      assetId: skinCareFacePhotoAssetId,
+      r2Key: skinCareFacePhotoR2Key,
+      status: skinCareFacePhotoStatus,
+    )) {
+      return 'step_7_face_source_invalid';
+    }
+    if (skinCareSkinType?.trim().isEmpty != false ||
+        skinCareProblems.isEmpty ||
+        skinCareBudget?.trim().isEmpty != false) {
+      return 'step_7_skin_profile_invalid';
+    }
+    final recommendationFingerprint =
+        skinCareRecommendationFingerprint?.trim() ?? '';
+    if (recommendationFingerprint.isEmpty ||
+        recommendationFingerprint !=
+            computeSkinCareRecommendationFingerprintV1()) {
+      return 'step_7_recommendation_receipt_invalid';
+    }
+    if (skinCareSelectedProductNames.isEmpty ||
+        skinCareProductRecommendations.isEmpty) {
+      return 'step_7_selected_products_invalid';
+    }
+    return null;
+  }
+
+  bool _durableBlockIsStructurallyValid(
+    TimelineBlockDraft block, {
+    bool allowCrossMidnight = false,
+  }) {
+    if (block.title.trim().isEmpty || block.needsTimeConfirmation) return false;
+    if (block.startMinute < 0 ||
+        block.startMinute >= 24 * 60 ||
+        block.endMinute < 0 ||
+        block.endMinute > 24 * 60) {
+      return false;
+    }
+    if (!allowCrossMidnight && block.endMinute <= block.startMinute) {
+      return false;
+    }
+    if (block.repeatDays.isEmpty ||
+        block.repeatDays.any((day) => day < 1 || day > 7)) {
+      return false;
+    }
+    return true;
   }
 
   bool _skinUploadFieldsAreCurrent({
@@ -3403,7 +3755,15 @@ bool isLegacyGeneratedEatingPlan(BaseTimelineDraft base) {
       eatingBlocks.length < 21;
 }
 
+/// Interactive entry point for the current generated-plan format.
 String? validateGeneratedEatingWeeklyPlan(
+  BaseTimelineDraft base, {
+  NutritionTargets? targets,
+}) => validateGeneratedEatingWeeklyPlanV2(base, targets: targets);
+
+/// Frozen Gate 2 generated Eating plan contract v2. Breaking changes require
+/// a new plan version, version-specific validator, and explicit migration.
+String? validateGeneratedEatingWeeklyPlanV2(
   BaseTimelineDraft base, {
   NutritionTargets? targets,
 }) {

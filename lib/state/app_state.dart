@@ -1717,12 +1717,18 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
     var draft = transform == null ? previous : transform(previous);
     draft = draft.invalidateDownstreamDependencies(previous);
     final completed = _setStepValue(draft.stepCompleted, step, true);
+    final completionContracts = _setStepContractVersion(
+      draft.stepCompletionContractVersions,
+      step,
+      OnboardingStepId.fromIndex(step)?.durableCompletionContractVersion ?? 0,
+    );
     final dirty = _setStepValue(draft.stepDirty, step, false);
     final loading = _setStepValue(draft.stepLoading, step, false);
     draft = draft.copyWith(
       uid: uid.isEmpty ? draft.uid : uid,
       currentStep: step,
       stepCompleted: completed,
+      stepCompletionContractVersions: completionContracts,
       stepDirty: dirty,
       stepLoading: loading,
       createdAt: draft.createdAt ?? now,
@@ -1742,6 +1748,10 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
         uid: uid.isEmpty ? state.draft.uid : uid,
         currentStep: OnboardingDraft.lastStepIndex,
         stepCompleted: completed,
+        stepCompletionContractVersions: [
+          for (final stepId in currentOnboardingStepOrder)
+            stepId.durableCompletionContractVersion,
+        ],
         stepDirty: dirty,
         stepLoading: loading,
         finalPreview: preview,
@@ -1856,6 +1866,19 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
     if (step >= 0 && step < list.length) {
       list[step] = value;
     }
+    return list;
+  }
+
+  static List<int> _setStepContractVersion(
+    List<int> source,
+    int step,
+    int value,
+  ) {
+    final list = List<int>.generate(
+      OnboardingDraft.stepCount,
+      (index) => index < source.length ? source[index] : 0,
+    );
+    if (step >= 0 && step < list.length) list[step] = value;
     return list;
   }
 

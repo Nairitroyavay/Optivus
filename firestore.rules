@@ -1176,6 +1176,7 @@ service cloud.firestore {
         "timezoneId",
         "currentStep",
         "stepCompleted",
+        "stepCompletionContractVersions",
         "stepDirty",
         "stepLoading",
         "createdAt",
@@ -1203,14 +1204,14 @@ service cloud.firestore {
       return validOnboardingDraftKeys(data)
         && data.keys().hasAll([
           "uid", "schemaVersion", "source", "revision", "sourceFingerprint", "timezoneId",
-          "currentStep", "stepCompleted", "stepDirty", "stepLoading",
+          "currentStep", "stepCompleted", "stepCompletionContractVersions", "stepDirty", "stepLoading",
           "onboardingCompleted", "welcomeSaved", "patiencePledgeAccepted",
           "lifeRole", "bodyBasics", "baseTimeline", "badHabitsNotNow",
           "badHabits", "goodHabitsNotNow", "goodHabits", "identityGoals",
           "coachSetup", "notifications", "createdAt", "updatedAt"
         ])
         && data.uid == uid
-        && data.schemaVersion == 3
+        && data.schemaVersion == 4
         && data.source == "onboarding"
         && data.revision is int
         && data.revision >= 1
@@ -1225,6 +1226,9 @@ service cloud.firestore {
         && data.stepCompleted is list
         && data.stepCompleted.size() == 15
         && data.stepCompleted.toSet().hasOnly([true, false])
+        && data.stepCompletionContractVersions is list
+        && data.stepCompletionContractVersions.size() == 15
+        && data.stepCompletionContractVersions.toSet().hasOnly([1])
         && data.stepDirty is list
         && data.stepDirty.size() == 15
         && data.stepDirty.toSet().hasOnly([true, false])

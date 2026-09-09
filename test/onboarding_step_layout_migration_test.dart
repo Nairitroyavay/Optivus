@@ -5,6 +5,8 @@ import 'package:optivus/features/onboarding/onboarding_step_id.dart';
 import 'package:optivus/features/onboarding/onboarding_flow.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/skin_care_product_draft.dart';
+import 'package:optivus/services/onboarding_resume_validator.dart';
 
 void main() {
   group('semantic onboarding step registry', () {
@@ -382,6 +384,46 @@ void main() {
       },
     );
 
+    test(
+      'A7 legacy valid Skin Care routine migrates only from routine evidence',
+      () {
+        var base = const BaseTimelineDraft(
+          skinCareSetupPath: 'has_products',
+          skinCareProductNames: 'Gentle Cleanser',
+          skinCareDesiredApplicationsPerDay: 1,
+          skinCareReviewedProducts: [
+            SkinCareDetectedProduct(name: 'Gentle Cleanser'),
+          ],
+        );
+        final fingerprint = base.computeSkinCareRoutineFingerprintV1();
+        base = base.copyWith(
+          skinCareRoutineFingerprint: fingerprint,
+          blocks: [
+            TimelineBlockDraft(
+              id: 'legacy-skin-am',
+              section: 'skin_care',
+              title: 'AM routine',
+              startMinute: 480,
+              endMinute: 495,
+              repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+              source: 'ai_generated_skin_care_setup',
+              blockType: TimelineBlockDraft.softBlockKey,
+              skincareProducts: const ['Gentle Cleanser'],
+              skincareSteps: const ['Apply and rinse'],
+              provenanceSourceIds: ['skin-care-generation:$fingerprint'],
+            ),
+          ],
+        );
+        final draft = OnboardingDraft.fromMap({
+          'schemaVersion': 1,
+          'currentStep': 4,
+          'stepCompleted': [true, true, true, true, true],
+          'baseTimeline': base.toMap(),
+        });
+        expect(draft.stepCompleted[OnboardingStepId.skinCare.index], isTrue);
+      },
+    );
+
     test('B schema-v2 current 15-step data is never shifted', () {
       final draft = OnboardingDraft.fromMap({
         'schemaVersion': 2,
@@ -691,6 +733,50 @@ void main() {
       });
       expect(unknown.lifeRole.exerciseLevel, isNull);
       expect(unknown.baseTimeline.mealPlanningGoal, isNull);
+    });
+  });
+
+  group('versioned durable completion receipts', () {
+    test('schema 3 snapshot deterministically migrates to receipt v1', () {
+      final draft = OnboardingDraft.fromMap({
+        'schemaVersion': 3,
+        'stepCompleted': [true, false],
+      });
+      expect(draft.stepCompletionContractVersions, List.filled(15, 1));
+      expect(validateOnboardingResume(draft).resumeStep, 1);
+      expect(draft.toMap()['schemaVersion'], 4);
+    });
+
+    test(
+      'schema 4 completion without a receipt requires explicit migration',
+      () {
+        final draft = OnboardingDraft.fromMap({
+          'schemaVersion': 4,
+          'stepCompleted': [true, false],
+        });
+        final validation = validateOnboardingResume(draft);
+        expect(validation.resumeStep, 0);
+        expect(
+          validation.reason,
+          OnboardingResumeValidationReason.durableContractMigrationRequired,
+        );
+        expect(
+          validation.diagnosticCode,
+          'step_0_completion_contract_migration_required',
+        );
+      },
+    );
+
+    test('unknown newer receipt version is rejected with a typed reason', () {
+      final draft = OnboardingDraft.fromMap({
+        'schemaVersion': 4,
+        'stepCompleted': [true, false],
+        'stepCompletionContractVersions': [2, ...List.filled(14, 1)],
+      });
+      expect(
+        validateOnboardingResume(draft).diagnosticCode,
+        'step_0_completion_contract_unsupported',
+      );
     });
   });
 }

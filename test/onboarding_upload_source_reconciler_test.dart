@@ -74,7 +74,7 @@ void main() {
         : UploadedAssetPurpose.skinFace;
     for (final first in [true, false]) {
       test(
-        '$path ${first ? "first upload" : "replacement"} crash clears derived state and is idempotent',
+        '$path ${first ? "unacknowledged newer upload is ignored" : "missing acknowledged source is cleared"} and reconciliation is idempotent',
         () {
           final a = createAsset(id: 'A', purpose: purpose);
           final b = createAsset(id: 'B', purpose: purpose);
@@ -136,40 +136,52 @@ void main() {
             product
                 ? base.skinCareProductPhotoAssetId
                 : base.skinCareFacePhotoAssetId,
-            'B',
+            isNull,
           );
           expect(
             product
                 ? base.skinCareProductPhotoR2Key
                 : base.skinCareFacePhotoR2Key,
-            b.r2Key,
+            isNull,
           );
           expect(
             product
                 ? base.skinCareProductPhotoCreatedAt
                 : base.skinCareFacePhotoCreatedAt,
-            b.createdAt,
+            isNull,
           );
-          expect(base.skinCareReviewedProducts, isEmpty);
-          expect(base.skinCareSpecialCareNotes, isEmpty);
-          expect(base.skinCareSuggestedProducts, isEmpty);
-          expect(base.skinCareRoutineFingerprint, isNull);
-          expect(base.blocks, isEmpty);
+          expect(
+            base.skinCareReviewedProducts,
+            first && product ? isNotEmpty : isEmpty,
+          );
+          expect(base.skinCareSpecialCareNotes, first ? isNotEmpty : isEmpty);
+          expect(base.skinCareSuggestedProducts, first ? isNotEmpty : isEmpty);
+          expect(base.skinCareRoutineFingerprint, first ? 'A' : isNull);
+          expect(base.blocks, first ? isNotEmpty : isEmpty);
           expect(base.skinCareProductNames, 'Editable text');
           expect(
             result.reconciledDraft.stepCompleted[OnboardingStepId
                 .skinCare
                 .index],
-            isFalse,
+            first ? isTrue : isFalse,
           );
           expect(
             result.reconciledDraft.stepDirty[OnboardingStepId.skinCare.index],
-            isTrue,
+            first ? isFalse : isTrue,
           );
           if (!product) {
-            expect(base.skinCareProductRecommendations, isEmpty);
-            expect(base.skinCareSelectedProductNames, isEmpty);
-            expect(base.skinCareRecommendationFingerprint, isNull);
+            expect(
+              base.skinCareProductRecommendations,
+              first ? isNotEmpty : isEmpty,
+            );
+            expect(
+              base.skinCareSelectedProductNames,
+              first ? isNotEmpty : isEmpty,
+            );
+            expect(
+              base.skinCareRecommendationFingerprint,
+              first ? 'A' : isNull,
+            );
           }
           expect(
             OnboardingUploadSourceReconciler.reconcile(
@@ -212,13 +224,13 @@ void main() {
           draft: draft,
           restoredUploads: restored,
         );
-        expect(result.changed, modern);
+        expect(result.changed, isFalse);
         final base = result.reconciledDraft.baseTimeline;
         expect(
           product
               ? base.skinCareProductPhotoAssetId
               : base.skinCareFacePhotoAssetId,
-          modern ? 'B' : 'legacy',
+          'legacy',
         );
         expect(
           product
@@ -289,10 +301,19 @@ void main() {
           },
         ),
       );
-      expect(
-        result.reconciledDraft.baseTimeline.skinCareProductPhotoAssetId,
-        isNull,
-      );
+      if (corruption == 'id') {
+        expect(result.changed, isTrue);
+        expect(
+          result.reconciledDraft.baseTimeline.skinCareProductPhotoAssetId,
+          isNull,
+        );
+      } else {
+        expect(result.integrityFailure, isTrue);
+        expect(
+          result.reconciledDraft.baseTimeline.skinCareProductPhotoAssetId,
+          a.assetId,
+        );
+      }
     });
   }
   for (final status in [
@@ -607,11 +628,8 @@ void main() {
           ),
           isTrue,
         );
-        // Logical Class asset updated to classB
-        expect(
-          reconciled.baseTimeline.classLogicalAssetId,
-          equals(classB.assetId),
-        );
+        // Newer classB is not an acknowledged replacement.
+        expect(reconciled.baseTimeline.classLogicalAssetId, isNull);
         expect(
           reconciled.baseTimeline.workLogicalAssetId,
           equals(workW.assetId),
@@ -723,7 +741,7 @@ void main() {
     );
 
     test(
-      '7. swapped: logical Classes = old work W1, current physical work = W2 -> update to W2, invalidate Class AI',
+      '7. swapped: logical Classes = old work W1, newer W2 is not adopted and Class AI is invalidated',
       () {
         final workW1 = createAsset(
           id: 'work_W1',
@@ -772,10 +790,7 @@ void main() {
         );
 
         final reconciled = result.reconciledDraft;
-        expect(
-          reconciled.baseTimeline.classLogicalAssetId,
-          equals(workW2.assetId),
-        );
+        expect(reconciled.baseTimeline.classLogicalAssetId, isNull);
         expect(reconciled.baseTimeline.blocks, isEmpty);
       },
     );
@@ -1310,8 +1325,12 @@ void main() {
         ),
         restoredUploads: createRestoredUploads(classAsset: classA),
       );
-      expect(result.changed, isTrue);
-      expect(result.reasonCodes, contains('step4_class_source_stale'));
+      expect(result.changed, isFalse);
+      expect(result.integrityFailure, isTrue);
+      expect(
+        result.reasonCodes,
+        contains('step4_class_source_r2_key_mismatch'),
+      );
     });
 
     test('Work block with only one provenance token is stale', () {
@@ -1502,11 +1521,11 @@ void main() {
       );
       expect(
         result.reconciledDraft.baseTimeline.skinCareFacePhotoAssetId,
-        faceB.assetId,
+        isNull,
       );
       expect(
         result.reconciledDraft.baseTimeline.skinCareFacePhotoR2Key,
-        faceB.r2Key,
+        isNull,
       );
       expect(
         result.reconciledDraft.baseTimeline.skinCareProductRecommendations,
