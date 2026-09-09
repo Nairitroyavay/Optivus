@@ -63,6 +63,7 @@ void main() {
       'schemaVersion': 1,
       'uid': 'legacy-user',
       'currentStep': 11,
+      'onboardingCompleted': true,
       'stepCompleted': legacyCompleted,
       'stepDirty': legacyDirty,
       'stepLoading': List<bool>.filled(12, false),

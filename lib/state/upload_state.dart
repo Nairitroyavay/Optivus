@@ -169,17 +169,24 @@ class RestoredUploadsState {
   final String? uid;
   final bool isHydrating;
   final Map<UploadedAssetPurpose, RestoredUploadedAsset> assetsByPurpose;
+  final Map<String, RestoredUploadedAsset> assetsById;
   final String? errorMessage;
 
   const RestoredUploadsState({
     this.uid,
     this.isHydrating = false,
     this.assetsByPurpose = const {},
+    this.assetsById = const {},
     this.errorMessage,
   });
 
   RestoredUploadedAsset? forPurpose(UploadedAssetPurpose purpose) =>
       assetsByPurpose[purpose];
+
+  RestoredUploadedAsset? forAssetId(String? assetId) {
+    if (assetId == null || assetId.trim().isEmpty) return null;
+    return assetsById[assetId.trim()];
+  }
 }
 
 abstract interface class UploadedAssetPreviewResolver {
@@ -217,7 +224,11 @@ class RestoredUploadsController extends StateNotifier<RestoredUploadsState> {
        _previewResolver = previewResolver,
        super(const RestoredUploadsState());
 
-  Future<void> hydrate({required String uid, bool force = false}) {
+  Future<void> hydrate({
+    required String uid,
+    Set<String>? requiredAssetIds,
+    bool force = false,
+  }) {
     final normalizedUid = uid.trim();
     if (normalizedUid.isEmpty) {
       resetForSignedOut();
@@ -231,11 +242,15 @@ class RestoredUploadsController extends StateNotifier<RestoredUploadsState> {
     if (!force &&
         state.uid == normalizedUid &&
         !state.isHydrating &&
-        state.errorMessage == null) {
+        state.errorMessage == null &&
+        (requiredAssetIds == null ||
+            requiredAssetIds.every(
+              (id) => state.assetsById.containsKey(id.trim()),
+            ))) {
       return Future.value();
     }
 
-    final hydration = _hydrate(normalizedUid);
+    final hydration = _hydrate(normalizedUid, requiredAssetIds);
     _inFlightHydrationUid = normalizedUid;
     _inFlightHydration = hydration;
     hydration.whenComplete(() {
@@ -247,10 +262,18 @@ class RestoredUploadsController extends StateNotifier<RestoredUploadsState> {
     return hydration;
   }
 
-  Future<void> _hydrate(String normalizedUid) async {
+  Future<void> _hydrate(
+    String normalizedUid, [
+    Set<String>? requiredAssetIds,
+  ]) async {
     final sessionGeneration = ++_sessionGeneration;
     _previewGenerations.clear();
-    state = RestoredUploadsState(uid: normalizedUid, isHydrating: true);
+    state = RestoredUploadsState(
+      uid: normalizedUid,
+      isHydrating: true,
+      assetsByPurpose: state.assetsByPurpose,
+      assetsById: state.assetsById,
+    );
     try {
       final candidates = [
         ...await _assetRepository.fetchRecentAssets(
@@ -259,12 +282,44 @@ class RestoredUploadsController extends StateNotifier<RestoredUploadsState> {
           limit: 100,
         ),
       ];
+
+      if (requiredAssetIds != null && requiredAssetIds.isNotEmpty) {
+        final existingIds = candidates.map((a) => a.assetId).toSet();
+        for (final reqId in requiredAssetIds) {
+          final trimmed = reqId.trim();
+          if (trimmed.isNotEmpty && !existingIds.contains(trimmed)) {
+            final fetched = await _assetRepository.fetchAsset(
+              uid: normalizedUid,
+              assetId: trimmed,
+            );
+            if (fetched != null) {
+              candidates.add(fetched);
+              existingIds.add(trimmed);
+            }
+          }
+        }
+      }
+
       if (sessionGeneration != _sessionGeneration ||
           state.uid != normalizedUid) {
         return;
       }
 
       final byPurpose = <UploadedAssetPurpose, RestoredUploadedAsset>{};
+      final byId = <String, RestoredUploadedAsset>{};
+
+      for (final candidate in candidates) {
+        if (candidate.ownerUid == normalizedUid &&
+            candidate.status == UploadedAssetStatus.uploaded &&
+            uploadedAssetIsDurablyUploadedForSlot(
+              asset: candidate,
+              uid: normalizedUid,
+              purpose: candidate.purpose,
+            )) {
+          byId[candidate.assetId] = RestoredUploadedAsset(asset: candidate);
+        }
+      }
+
       for (final purpose in UploadedAssetPurpose.values) {
         final asset = resolveCurrentDurableUploadedAssetForPurpose(
           uid: normalizedUid,
@@ -273,12 +328,16 @@ class RestoredUploadsController extends StateNotifier<RestoredUploadsState> {
           candidates: candidates,
         );
         if (asset != null) {
-          byPurpose[purpose] = RestoredUploadedAsset(asset: asset);
+          final restored =
+              byId[asset.assetId] ?? RestoredUploadedAsset(asset: asset);
+          byPurpose[purpose] = restored;
+          byId[asset.assetId] = restored;
         }
       }
       state = RestoredUploadsState(
         uid: normalizedUid,
         assetsByPurpose: Map.unmodifiable(byPurpose),
+        assetsById: Map.unmodifiable(byId),
       );
       for (final purpose in byPurpose.keys) {
         final previewGeneration = _nextPreviewGeneration(purpose);
@@ -305,13 +364,17 @@ class RestoredUploadsController extends StateNotifier<RestoredUploadsState> {
     final uid = state.uid;
     if (uid == null || !_isValidUploadedAsset(asset, uid)) return;
     final previewGeneration = _nextPreviewGeneration(asset.purpose);
-    final next = Map<UploadedAssetPurpose, RestoredUploadedAsset>.from(
+    final nextPurpose = Map<UploadedAssetPurpose, RestoredUploadedAsset>.from(
       state.assetsByPurpose,
     );
-    next[asset.purpose] = RestoredUploadedAsset(asset: asset);
+    final nextId = Map<String, RestoredUploadedAsset>.from(state.assetsById);
+    final restored = RestoredUploadedAsset(asset: asset);
+    nextPurpose[asset.purpose] = restored;
+    nextId[asset.assetId] = restored;
     state = RestoredUploadsState(
       uid: uid,
-      assetsByPurpose: Map.unmodifiable(next),
+      assetsByPurpose: Map.unmodifiable(nextPurpose),
+      assetsById: Map.unmodifiable(nextId),
     );
     _resolvePreview(
       uid: uid,
@@ -327,12 +390,18 @@ class RestoredUploadsController extends StateNotifier<RestoredUploadsState> {
   }) {
     if (state.uid != uid) return;
     _nextPreviewGeneration(purpose);
-    final next = Map<UploadedAssetPurpose, RestoredUploadedAsset>.from(
+    final previous = state.assetsByPurpose[purpose];
+    final nextPurpose = Map<UploadedAssetPurpose, RestoredUploadedAsset>.from(
       state.assetsByPurpose,
     )..remove(purpose);
+    final nextId = Map<String, RestoredUploadedAsset>.from(state.assetsById);
+    if (previous != null) {
+      nextId.remove(previous.asset.assetId);
+    }
     state = RestoredUploadsState(
       uid: uid,
-      assetsByPurpose: Map.unmodifiable(next),
+      assetsByPurpose: Map.unmodifiable(nextPurpose),
+      assetsById: Map.unmodifiable(nextId),
     );
   }
 
@@ -412,14 +481,18 @@ class RestoredUploadsController extends StateNotifier<RestoredUploadsState> {
     final next = Map<UploadedAssetPurpose, RestoredUploadedAsset>.from(
       state.assetsByPurpose,
     );
-    next[purpose] = current.copyWith(
+    final updated = current.copyWith(
       previewStatus: previewStatus,
       previewUri: previewUri,
       clearPreviewUri: clearPreviewUri,
     );
+    next[purpose] = updated;
+    final nextId = Map<String, RestoredUploadedAsset>.from(state.assetsById);
+    nextId[current.asset.assetId] = updated;
     state = RestoredUploadsState(
       uid: state.uid,
       assetsByPurpose: Map.unmodifiable(next),
+      assetsById: Map.unmodifiable(nextId),
       errorMessage: state.errorMessage,
     );
   }

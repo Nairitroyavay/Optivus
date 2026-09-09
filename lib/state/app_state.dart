@@ -1680,8 +1680,11 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
   }
 
   void updateDraft(OnboardingDraft Function(OnboardingDraft draft) update) {
+    final previous = state.draft;
+    final candidate = update(previous);
+    final reconciled = candidate.invalidateDownstreamDependencies(previous);
     state = state.copyWith(
-      draft: update(state.draft),
+      draft: reconciled,
       // Keep a sync failure visible while the user continues editing the
       // in-memory draft. A retry (or successful acknowledgement) clears it.
       clearValidation: !state.stepSaveStatus.contains(SaveSyncStatus.failed),
@@ -1710,7 +1713,9 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
     OnboardingDraft Function(OnboardingDraft draft)? transform,
   }) {
     final now = DateTime.now();
-    var draft = transform == null ? state.draft : transform(state.draft);
+    final previous = state.draft;
+    var draft = transform == null ? previous : transform(previous);
+    draft = draft.invalidateDownstreamDependencies(previous);
     final completed = _setStepValue(draft.stepCompleted, step, true);
     final dirty = _setStepValue(draft.stepDirty, step, false);
     final loading = _setStepValue(draft.stepLoading, step, false);

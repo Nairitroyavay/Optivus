@@ -1268,6 +1268,44 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return;
       }
 
+      final missingReferencedIds = switch (result) {
+        ReconstructionIncomplete(:final draft) =>
+          draft.referencedUploadAssetIds
+              .where(
+                (id) =>
+                    _ref.read(restoredUploadsProvider).forAssetId(id) == null,
+              )
+              .toSet(),
+        ReconstructionFinishing(:final draft) =>
+          draft.referencedUploadAssetIds
+              .where(
+                (id) =>
+                    _ref.read(restoredUploadsProvider).forAssetId(id) == null,
+              )
+              .toSet(),
+        ReconstructionCompleted(:final draft) =>
+          draft.referencedUploadAssetIds
+              .where(
+                (id) =>
+                    _ref.read(restoredUploadsProvider).forAssetId(id) == null,
+              )
+              .toSet(),
+        _ => const <String>{},
+      };
+      if (missingReferencedIds.isNotEmpty) {
+        await _ref
+            .read(restoredUploadsProvider.notifier)
+            .hydrate(
+              uid: user.uid,
+              requiredAssetIds: missingReferencedIds,
+              force: true,
+            );
+        if (!_isCurrentRestore(restoreGeneration) ||
+            state.user?.uid != user.uid) {
+          return;
+        }
+      }
+
       final restoredUploads = _ref.read(restoredUploadsProvider);
       ReconstructionResult effectiveResult = result;
 
@@ -1323,9 +1361,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
             _ref.read(onboardingStateProvider.notifier).reset(user.uid);
           } else {
             final reconciledDraft = reconciliation.reconciledDraft;
-            final effectiveStep = validateOnboardingResume(
-              reconciledDraft,
-            ).resumeStep;
+            if (reconciliation.changed) {
+              await _ref
+                  .read(onboardingRepositoryProvider)
+                  .saveDraft(reconciledDraft);
+            }
+            final resumeValidation = validateOnboardingResume(reconciledDraft);
+            final effectiveStep = resumeValidation.resumeStep;
             final finalDraft = reconciledDraft.copyWith(
               currentStep: effectiveStep,
               stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
@@ -1339,6 +1381,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
               profile: profile,
               step: effectiveStep,
               draft: finalDraft,
+              diagnosticCode: resumeValidation.diagnosticCode,
+              diagnostics: {
+                'resumeStep': resumeValidation.resumeStep,
+                'validThroughStep': resumeValidation.validThroughStep,
+                'reason': resumeValidation.reason.name,
+                'diagnosticCode': resumeValidation.diagnosticCode,
+              },
             );
           }
 

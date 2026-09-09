@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -76,12 +77,16 @@ final class ReconstructionFresh extends ReconstructionResult {
 final class ReconstructionIncomplete extends ReconstructionResult {
   final int step;
   final OnboardingDraft draft;
+  final String diagnosticCode;
+  final Map<String, Object?> diagnostics;
 
   const ReconstructionIncomplete({
     required super.ownerUid,
     required super.profile,
     required this.step,
     required this.draft,
+    this.diagnosticCode = 'step_incomplete',
+    this.diagnostics = const {},
   });
 
   @override
@@ -488,11 +493,22 @@ ReconstructionResult classifyServerReconstruction({
   if (!hasReconstructionProgress(draft)) {
     return ReconstructionFresh(ownerUid: ownerUid, profile: profile);
   }
+  developer.log(
+    '[OnboardingRestore] uid=${_safeUid(ownerUid)} step=${resumeValidation.resumeStep} reason=${resumeValidation.reason.name} code=${resumeValidation.diagnosticCode}',
+    name: 'server_reconstructor',
+  );
   return ReconstructionIncomplete(
     ownerUid: ownerUid,
     profile: profile,
     step: resumeValidation.resumeStep,
     draft: draft,
+    diagnosticCode: resumeValidation.diagnosticCode,
+    diagnostics: {
+      'resumeStep': resumeValidation.resumeStep,
+      'validThroughStep': resumeValidation.validThroughStep,
+      'reason': resumeValidation.reason.name,
+      'diagnosticCode': resumeValidation.diagnosticCode,
+    },
   );
 }
 

@@ -1300,7 +1300,11 @@ class _FixedRestoredUploadsController extends RestoredUploadsController {
       );
 
   @override
-  Future<void> hydrate({required String uid, bool force = false}) async {
+  Future<void> hydrate({
+    required String uid,
+    Set<String>? requiredAssetIds,
+    bool force = false,
+  }) async {
     state = fixedState;
   }
 }

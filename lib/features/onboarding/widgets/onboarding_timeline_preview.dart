@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -21,19 +20,6 @@ class OnboardingDayChips extends StatelessWidget {
     this.accent = OptivusColors.roseAccent,
   });
 
-  // ignore: unused_field
-  static const _labels = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-  // ignore: unused_field
-  static const _fullDayNames = [
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
-    'Sunday',
-  ];
-
   @override
   Widget build(BuildContext context) {
     return TimelineDayChips(
@@ -41,80 +27,6 @@ class OnboardingDayChips extends StatelessWidget {
       onDayChanged: onChanged,
       accent: accent,
       padding: EdgeInsets.zero,
-    );
-  }
-}
-
-// ignore: unused_element
-class _OnboardingDayChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final Color accent;
-
-  const _OnboardingDayChip({
-    required this.label,
-    required this.selected,
-    required this.accent,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final size = selected ? 40.0 : 35.0;
-    return Center(
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: (selected ? accent : Colors.black).withValues(
-                alpha: selected ? 0.07 : 0.035,
-              ),
-              blurRadius: selected ? 5 : 7,
-              offset: Offset(0, selected ? 2 : 3),
-            ),
-            BoxShadow(
-              color: Colors.white.withValues(alpha: selected ? 0.60 : 0.70),
-              blurRadius: selected ? 6 : 10,
-              offset: const Offset(-2, -2),
-            ),
-          ],
-        ),
-        child: ClipOval(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: selected
-                    ? accent.withValues(alpha: 0.68)
-                    : Colors.white.withValues(alpha: 0.38),
-                border: Border.all(
-                  color: selected
-                      ? accent.withValues(alpha: 0.42)
-                      : Colors.white.withValues(alpha: 0.72),
-                  width: selected ? 1.8 : 1.2,
-                ),
-              ),
-              child: Center(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: selected ? 12 : 10,
-                    fontWeight: FontWeight.w900,
-                    color: selected
-                        ? Colors.white
-                        : OptivusColors.textSecondary,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

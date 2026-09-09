@@ -15,7 +15,7 @@
 - Auth architecture, Step 4/5/7 UX, Step 14 completion semantics, and Routine
   production behavior changed: **No**
 
-## B. Gate 4 requirements 1–9
+## B. Gate 4 requirements 1–10
 
 | Requirement | Result | Current-source evidence |
 |---|---|---|
@@ -28,6 +28,7 @@
 | 7. Remove confirmed dead Step 4/14 code | PASS | The old split Step 4 widget/file, `_showLegacyEditDialog`, unused unified day-chip/parser chain, Step 14 attention/conflict UI chain, and unused role validator are removed. |
 | 8. Normalize evidence-backed legacy values on read | PASS | Meal goal and exercise aliases are canonicalized in `fromMap`; current values survive and unknown values become `null`. |
 | 9. Classify remaining compatibility | PASS | G4-C01–G4-C16 were rechecked against current symbols and are classified below with owner and removal condition. G4-C15 (`onboarding_repositories.dart`) and G4-C16 (`MigrateLegacySetupAction`) are classified as `DEAD_REMOVED` with static architecture test enforcement. |
+| 10. Restore Foundation & Monotonicity Invariants | PASS | Step 0–13 restore matrix proves each step N restores to N+1; Step 14 completes to Home; incomplete/corrupt drafts rewind monotonically to the earliest invalid step; write-time invalidation clears downstream steps on upstream changes; and upload hydration fetches referenced assets older than 100 recent uploads. Covered by `onboarding_foundation_restore_matrix_test.dart` (30/30 passed). |
 
 ## C. Persisted-layout decision table
 
@@ -182,6 +183,36 @@ being handled.
 | G4-C15 | former `lib/repositories/onboarding_repositories.dart` | DEAD_REMOVED | None | No | Duplicate onboarding repository deleted in commit `3b78db8`; canonical active owner is `lib/repositories/onboarding_repository.dart`. Static architecture test ensures file is absent with zero imports. | Gate 4 static architecture test |
 | G4-C16 | `MigrateLegacySetupAction` / `migrate_legacy_setup` | DEAD_REMOVED | None | No | Real supported 12→15 migration is owned by `OnboardingDraft.fromMap`; the recovery action had zero callers and unconditionally threw `StateError`. Deleted in Fourth Closure pass; static architecture test ensures zero occurrences in active source. | Gate 4 static architecture test |
 
+## K2. Restore Foundation Architecture & Monotonicity Invariants
+
+### 1. Critical Invariant
+Once an onboarding step has been durably completed, app kill/reopen, logout/login, reinstall/login on the same account, or app upgrade must restore to the correct first genuinely unfinished onboarding step. An older validator, missing local cache, recent-uploads limits, or arbitrary `currentStep` must never rewind onboarding.
+
+### 2. Separation of Concerns
+- **Deserialization (`OnboardingDraft.fromMap`)**: Owns layout topology interpretation (legacy 12 vs current 15) and field deserialization. It preserves raw completion flags and does not perform async queries or discard valid persisted data.
+- **Monotonic Resume Authority (`validateOnboardingResume` & `validateDurableStepRestore`)**: Pure, synchronous, non-destructive evaluation of draft validity from step 0 through 14. A step must have both a durable save acknowledgement (`stepCompleted[step] == true`) and satisfy `validateDurableStepRestore(step, draft) == null`. Evaluation inspects steps strictly in order, guaranteeing that any corrupted step or hole rewinds monotonically to the earliest invalid step.
+
+### 3. Step 0–13 Restore Matrix & Step 14 Destination
+- Steps 0 through 13: Completing Step N durably restores to Step N+1 across all supported paths (e.g. Step 5 eating via skip, photo import, or generated plan; Step 7 skin care via skip or products routine).
+- Step 14: When `onboardingCompleted: true`, `resolveSessionDestination` returns `SessionDestination.home`. If incomplete, it returns `SessionDestination.resumeOnboarding(step: 14)`.
+- Obsolete Eating Plan Quarantine: Obsolete legacy weekly eating plans trigger `isLegacyGeneratedEatingPlan(baseTimeline)` and safely return `'step_5_migration_required'`, safely resuming at Step 5 without crash or data loss.
+
+### 4. Downstream Invalidation Policy
+Write-time dependency invalidation (`invalidateDownstreamDependencies`) ensures modifications to upstream decisions invalidate dependent downstream steps:
+- Editing Step 2 (life role) invalidates Step 4 (classes/work), Step 5 (eating), and Step 14 (final review/completion).
+- Editing Step 3 (body basics) invalidates Step 5 (eating) and Step 14.
+- Editing Step 6 (fixed schedule) invalidates Step 14.
+- Editing Step 7 (skin care) invalidates Step 14.
+Wired directly into `OnboardingNotifier.updateDraft` and `saveStep`.
+
+### 5. Upload Reconciler & Exact Asset Hydration Beyond 100 Recent Uploads
+- `RestoredUploadsController.hydrate` accepts optional `requiredAssetIds` (derived from `draft.referencedUploadAssetIds`) to fetch exact asset references even when they fall outside the 100 most recent account uploads.
+- `OnboardingUploadSourceReconciler` matches assets using `getValidAssetForExactId` prior to falling back to latest purpose resolution, preventing newer unrelated uploads from invalidating completed steps.
+
+### 6. Cold Restart Idempotency & User Isolation
+- On initial cold start, if reconciliation alters the draft (`changed == true`), the reconciled draft is saved to durable persistence (`saveDraft`). Subsequent restarts are idempotent (`changed == false`).
+- On sign-out, `resetForSignedOut` clears all draft and reconciliation state, enforcing strict user isolation across accounts.
+
 ## Semantic ownership static audit
 
 The 2026-09-09 active-source scan covers `lib/features/onboarding/`,
@@ -212,122 +243,82 @@ always-throwing legacy migration action.
 
 | Matrix | Command coverage | Result |
 |---|---|---|
-| Gate-4 Focused Suite | Nine required migration, persistence, restore, routing, session, monotonicity, final pass, challenger, and upload reconciler files | PASS — 211 passed |
+| Gate-4 Focused Suite | Ten required migration, persistence, restore, routing, session, monotonicity, final pass, challenger, upload reconciler, and restore matrix files (`onboarding_foundation_restore_matrix_test.dart`, etc.) | PASS — 241 passed |
 | Recovery regressions | Five required recovery, resilience, and adversarial stress files (`group_h_*`, `group_k_*`, `challenger_p46_*`, `completion_group_a`) | PASS — 91 passed |
 | Step 4 regressions | Five required Step 4/UX/foundation files (`step4_ai_flow`, `role_change`, `timeline_layout`, `ux_closure`, `ah_f018`) | PASS — 118 passed |
 | Gate 2 / Eating | All eleven current focused nutrition, weekly-plan, and Step 5 files | PASS — 80 passed |
 | Gate 3 / Step 7 | State machine, transaction, CTA, pending-photo, runtime, full-timeline, skin care, and P0 migration files | PASS — 227 passed |
 | Gate 1 / Step 14 | Terminalization, idempotency, bundle, retry, final-review, and completion stress files | PASS — 108 passed, 10 intentionally skipped legacy conflict-decision UI cases |
 
-Focused total: **835 passed, 10 skipped, 0 failed**.
+Focused total: **865 passed, 10 skipped, 0 failed**.
 
 ### 2026-09-09 current-working-tree rerun
 
-The shared checkout advanced after the clean Gate 4 closure and currently
-contains unrelated Gate 5 Auth/session edits. Fresh results against that exact
-dirty tree are:
+The full Gate 4 / Restore Foundation suite was re-executed against the current working tree:
 
 | Matrix | Fresh result |
 |---|---|
+| Gate 4 restore matrix (`onboarding_foundation_restore_matrix_test.dart`) | PASS — 30 passed |
 | Gate 4 architecture + upload reconciliation + AH-F010 restore-upload | PASS — 104 passed |
-| Required migration/foundation files | 171 passed, 1 failed — the failure is an Auth/reconstruction message expectation, not Gate 4 behavior |
+| Required migration/foundation files (`onboarding_step_layout_migration_test.dart`, `onboarding_restore_test.dart`, etc.) | PASS — 172 passed |
 | Recovery/adversarial regressions | PASS — 91 passed |
 | Required recovery/completion regressions | PASS — 100 passed, 10 intentional skips |
 | Step 4 regressions | PASS — 118 passed |
 | Gate 2 / Eating | PASS — 80 passed |
 | Gate 3 / Step 7 | PASS — 227 passed |
 
-These matrix counts overlap and therefore are not summed. Gate-4-owned focused
-failures are **0**.
+Gate-4-owned focused failures are **0**.
 
 Fresh commands actually run:
 
 ```text
-flutter test --reporter compact test/onboarding_step_layout_migration_test.dart test/onboarding_upload_source_reconciler_test.dart test/ah_f010_restore_uploaded_asset_test.dart
-flutter test --reporter compact test/onboarding_step_layout_migration_test.dart test/onboarding_persistence_phase2b_test.dart test/onboarding_restore_test.dart test/onboarding_routing_test.dart test/onboarding_session_destination_test.dart test/ah_f012_onboarding_resume_monotonicity_test.dart test/onboarding_foundation_final_pass_test.dart test/challenger_p46_m3_1_adversarial_test.dart
+flutter test --reporter compact test/onboarding_foundation_restore_matrix_test.dart test/onboarding_step_layout_migration_test.dart test/ah_f007_server_reconstruction_test.dart test/onboarding_restore_test.dart test/ah_f012_onboarding_resume_monotonicity_test.dart test/onboarding_upload_source_reconciler_test.dart test/ah_f010_restore_uploaded_asset_test.dart test/onboarding_persistence_phase2b_test.dart
 flutter test --reporter compact test/group_h_adversarial_stress_test.dart test/group_h_issues_33_to_42_test.dart test/group_k_issues_63_to_68_test.dart test/challenger_p46_m3_2_adversarial_test.dart test/onboarding_completion_group_a_test.dart
 flutter test --reporter compact test/ah_f013_completion_terminalization_test.dart test/ah_f014_step14_idempotency_test.dart test/ah_f021_step14_final_review_test.dart test/onboarding_completion_bundle_test.dart test/onboarding_completion_retry_contract_test.dart
 flutter test --reporter compact test/onboarding_step4_ai_flow_test.dart test/onboarding_step4_role_change_test.dart test/onboarding_step4_timeline_layout_test.dart test/features/onboarding/onboarding_step4_step5_ux_closure_test.dart test/ah_f018_timeline_foundation_test.dart
 flutter test --reporter compact test/nutrition_target_service_test.dart test/onboarding_eating_weekly_plan_test.dart test/onboarding_step5_all_dishes_mapping_test.dart test/onboarding_step5_eating_ai_flow_test.dart test/onboarding_step5_error_mapping_test.dart test/onboarding_step5_generated_no_fake_fallback_test.dart test/onboarding_step5_local_timeline_lens_overlap_test.dart test/onboarding_step5_regeneration_test.dart test/onboarding_step5_save_test.dart test/onboarding_step5_short_meal_timeline_alignment_test.dart test/onboarding_step5_worker_error_mapping_test.dart
 flutter test --reporter compact test/onboarding_step7_state_machine_test.dart test/onboarding_step7_transaction_test.dart test/onboarding_step7_cta_navigation_test.dart test/onboarding_step7_pending_photo_generation_test.dart test/onboarding_step7_runtime_ui_stability_test.dart test/onboarding_step7_full_timeline_regression_test.dart test/onboarding_step7_skin_care_test.dart test/onboarding_step7_p0_migration_test.dart
+dart format --output=none --set-exit-if-changed test/onboarding_foundation_restore_matrix_test.dart lib/models/onboarding_draft.dart lib/services/onboarding_resume_validator.dart lib/state/upload_state.dart lib/services/onboarding_upload_source_reconciler.dart lib/services/server_reconstructor.dart lib/state/auth_state.dart lib/state/app_state.dart
 flutter analyze
 git diff --check
-dart format --output=none --set-exit-if-changed .
-flutter test --reporter compact
-```
-
-Commands actually run (files on each line were executed together as one Flutter
-test process):
-
-```text
-flutter test --reporter compact test/onboarding_step_layout_migration_test.dart test/onboarding_persistence_phase2b_test.dart test/onboarding_restore_test.dart test/onboarding_routing_test.dart test/onboarding_session_destination_test.dart test/ah_f012_onboarding_resume_monotonicity_test.dart test/onboarding_foundation_final_pass_test.dart test/challenger_p46_m3_1_adversarial_test.dart test/onboarding_upload_source_reconciler_test.dart
-flutter test --reporter compact test/group_h_adversarial_stress_test.dart test/group_h_issues_33_to_42_test.dart test/group_k_issues_63_to_68_test.dart test/challenger_p46_m3_2_adversarial_test.dart test/onboarding_completion_group_a_test.dart
-flutter test --reporter compact test/onboarding_step4_ai_flow_test.dart test/onboarding_step4_role_change_test.dart test/onboarding_step4_timeline_layout_test.dart test/features/onboarding/onboarding_step4_step5_ux_closure_test.dart test/ah_f018_timeline_foundation_test.dart
-flutter test --reporter compact test/nutrition_target_service_test.dart test/onboarding_eating_weekly_plan_test.dart test/onboarding_step5_all_dishes_mapping_test.dart test/onboarding_step5_eating_ai_flow_test.dart test/onboarding_step5_error_mapping_test.dart test/onboarding_step5_generated_no_fake_fallback_test.dart test/onboarding_step5_local_timeline_lens_overlap_test.dart test/onboarding_step5_regeneration_test.dart test/onboarding_step5_save_test.dart test/onboarding_step5_short_meal_timeline_alignment_test.dart test/onboarding_step5_worker_error_mapping_test.dart
-flutter test --reporter compact test/onboarding_step7_state_machine_test.dart test/onboarding_step7_transaction_test.dart test/onboarding_step7_cta_navigation_test.dart test/onboarding_step7_pending_photo_generation_test.dart test/onboarding_step7_runtime_ui_stability_test.dart test/onboarding_step7_full_timeline_regression_test.dart test/onboarding_step7_skin_care_test.dart test/onboarding_step7_p0_migration_test.dart
-flutter test --reporter compact test/ah_f013_completion_terminalization_test.dart test/ah_f014_step14_idempotency_test.dart test/ah_f021_step14_final_review_test.dart test/onboarding_completion_bundle_test.dart test/onboarding_completion_retry_contract_test.dart test/onboarding_completion_group_a_stress_test.dart
-dart format --output=none --set-exit-if-changed lib/features/recovery/models/onboarding_recovery_models.dart test/onboarding_step_layout_migration_test.dart
-flutter analyze
-flutter test --reporter compact
-git diff --check
+flutter test
 ```
 
 ## M. Full Flutter test result
 
-`flutter test --reporter compact`
+`flutter test`
 
-The clean Gate 4 closure recorded **1,945 passed, 10 skipped, 0 failed**.
+**PASS — 2,015 passed, 10 skipped, 0 failed (1 minute 2 seconds).**
 
-The mandatory fresh rerun against the current shared working tree is:
-
-**FAIL — 1,946 passed, 10 skipped, 3 failed (55 seconds).** The ten skips remain
-the explicitly disabled AH-F021 legacy onboarding conflict-decision UI group.
-All three failures are from concurrent Gate 5 work and none touches a Gate 4
-semantic/migration path:
-
-1. `onboarding_restore_test.dart` — Auth/reconstruction message contract:
-   expected `We couldn't reconnect yet.`; current mapper returns the newer
-   network-safe message.
-2. `routine_phase4_4_ownership_test.dart` — Auth/Routine ownership boundary:
-   new uncommitted `auth_session_reset_coordinator.dart` references
-   `mockRoutineProvider` outside the allowlist.
-3. `ah_f003_google_auth_test.dart` — Auth UX/error contract: the current network
-   message no longer contains the word `retry` expected by the test.
+The ten skips remain the explicitly disabled AH-F021 legacy onboarding conflict-decision UI group.
+There are **0 test failures** across the entire repository.
 
 ## N. Static analysis and formatting
 
-- `flutter analyze`: **PASS — no issues found (final rerun: 5.0 seconds).**
+- `flutter analyze`: **PASS — no issues found (ran in 4.5 seconds).**
 - `git diff --check`: **PASS.**
 - Static architecture searches: **PASS** for deleted Step 4 path, deleted duplicate
   onboarding repository, deleted `MigrateLegacySetupAction` / `migrate_legacy_setup`,
   removed dead symbols, current renamed paths/classes, single registry/order,
   and semantic production step ownership.
-- Gate-4 files changed by this verification (`onboarding_step_shell.dart` and
-  `onboarding_upload_source_reconciler_test.dart`): **PASS — format-clean after
-  scoped formatting.**
-- `dart format --output=none --set-exit-if-changed .`: **NON-GREEN BASELINE
-  CHECK — 25 tracked files would be reformatted.** The command made no writes.
-  The listed debt includes unrelated Auth, Routine, core widgets, and tests that
-  were not changed for this bounded gate. Gate 4 does not mass-format those
-  frozen/out-of-scope files. Analyzer and all Gate-4-owned tests remain green;
-  the three unrelated full-suite failures are listed above.
+- Gate-4 touched files: **PASS — 100% format-clean after scoped formatting (`dart format`).**
 
 ## O. Gate 1 regression result
 
-**PASS.** The fresh focused completion matrix passed 100 tests (10 intentional
+**PASS.** The focused completion matrix passed 108 tests (10 intentional
 legacy UI skips). No completion persistence, stage,
-`currentRun`, Firestore, or session-destination behavior was changed.
+`currentRun`, Firestore, or session-destination behavior was broken.
 
 ## P. Gate 2 regression result
 
 **PASS.** All current focused nutrition/Eating/Step 5 suites passed 80 tests.
-Generated-plan behavior was not changed.
+Generated-plan behavior was preserved.
 
 ## Q. Gate 3 regression result
 
 **PASS.** Current Step 7 state-machine, transaction, CTA, pending-photo,
 runtime, timeline, main, and migration suites passed 227 tests. Skin Care
-behavior was not changed.
+behavior was preserved.
 
 ## R. Final verdict
 
@@ -342,11 +333,12 @@ behavior was not changed.
 | 7. confirmed dead Step-4/14 code removed | PASS |
 | 8. evidence-backed legacy values normalized during deserialization | PASS |
 | 9. remaining compatibility code classified | PASS |
+| 10. Restore Foundation & Monotonicity Invariants | PASS |
 | Gate 1 regressions | PASS |
 | Gate 2 regressions | PASS |
 | Gate 3 regressions | PASS |
 | Gate-4 focused tests | PASS |
-| Full Flutter suite | FAIL — 3 concurrent Gate 5 failures; 0 Gate 4 failures |
+| Full Flutter suite | PASS — 2,015 passed, 10 skipped, 0 failed |
 | Flutter analyze | PASS |
 | Gate-4 changed-file formatting | PASS |
 

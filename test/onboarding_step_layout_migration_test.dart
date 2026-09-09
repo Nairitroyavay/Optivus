@@ -210,17 +210,177 @@ void main() {
     List<bool> vector(int length, {bool value = false}) =>
         List<bool>.filled(length, value);
 
-    test('A full legacy vectors and current step 11 map to current 14', () {
-      final draft = OnboardingDraft.fromMap({
-        'schemaVersion': 1,
-        'currentStep': 11,
-        'stepCompleted': vector(12, value: true),
-        'stepDirty': vector(12),
-        'stepLoading': vector(12),
-      });
-      expect(draft.currentStep, OnboardingStepId.todayReady.index);
-      expect(draft.stepCompleted, vector(15, value: true));
-    });
+    test(
+      'A full legacy vectors without domain evidence decouple steps 5, 6, 7',
+      () {
+        final draft = OnboardingDraft.fromMap({
+          'schemaVersion': 1,
+          'currentStep': 11,
+          'stepCompleted': vector(12, value: true),
+          'stepDirty': vector(12),
+          'stepLoading': vector(12),
+        });
+        expect(draft.currentStep, OnboardingStepId.todayReady.index);
+        // Steps 0..4 and 8..14 map positional, but decoupled steps 5, 6, 7 require evidence
+        expect(draft.stepCompleted[0], isTrue);
+        expect(draft.stepCompleted[1], isTrue);
+        expect(draft.stepCompleted[2], isTrue);
+        expect(draft.stepCompleted[3], isTrue);
+        expect(draft.stepCompleted[4], isTrue);
+        expect(draft.stepCompleted[5], isFalse);
+        expect(draft.stepCompleted[6], isFalse);
+        expect(draft.stepCompleted[7], isFalse);
+        expect(draft.stepCompleted[8], isTrue);
+        expect(draft.stepCompleted[9], isTrue);
+        expect(draft.stepCompleted[10], isTrue);
+        expect(draft.stepCompleted[11], isTrue);
+        expect(draft.stepCompleted[12], isTrue);
+        expect(draft.stepCompleted[13], isTrue);
+      },
+    );
+
+    test(
+      'A2 full legacy vectors with domain evidence preserve steps 5, 6, 7 completion',
+      () {
+        final base = const BaseTimelineDraft(
+          eatingSetupPath: 'skip',
+          skinCareSkipped: true,
+          blocks: [
+            TimelineBlockDraft(
+              id: BaseTimelineDraft.fixedSleepId,
+              section: 'fixed',
+              title: 'Sleep',
+              startMinute: 1380,
+              endMinute: 420,
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+              blockType: TimelineBlockDraft.hardBlockKey,
+              crossesMidnight: true,
+            ),
+            TimelineBlockDraft(
+              id: BaseTimelineDraft.fixedBathId,
+              section: 'fixed',
+              title: 'Bath',
+              startMinute: 430,
+              endMinute: 460,
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+          ],
+        );
+        final draft = OnboardingDraft.fromMap({
+          'schemaVersion': 1,
+          'currentStep': 11,
+          'stepCompleted': vector(12, value: true),
+          'stepDirty': vector(12),
+          'stepLoading': vector(12),
+          'baseTimeline': base.toMap(),
+        });
+        expect(draft.currentStep, OnboardingStepId.todayReady.index);
+        expect(draft.stepCompleted, vector(15, value: true));
+      },
+    );
+
+    test(
+      'A3 legacy old Step 4 + only valid Eating evidence: only Eating migrates complete',
+      () {
+        final base = const BaseTimelineDraft(eatingSetupPath: 'skip');
+        final draft = OnboardingDraft.fromMap({
+          'schemaVersion': 1,
+          'currentStep': 4,
+          'stepCompleted': [true, true, true, true, true],
+          'baseTimeline': base.toMap(),
+        });
+        expect(draft.stepCompleted[OnboardingStepId.eating.index], isTrue);
+        expect(
+          draft.stepCompleted[OnboardingStepId.fixedSchedule.index],
+          isFalse,
+        );
+        expect(draft.stepCompleted[OnboardingStepId.skinCare.index], isFalse);
+      },
+    );
+
+    test(
+      'A4 legacy old Step 4 + valid Fixed evidence: Fixed completion is derived independently',
+      () {
+        final base = const BaseTimelineDraft(
+          blocks: [
+            TimelineBlockDraft(
+              id: BaseTimelineDraft.fixedSleepId,
+              section: 'fixed',
+              title: 'Sleep',
+              startMinute: 1380,
+              endMinute: 420,
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+              blockType: TimelineBlockDraft.hardBlockKey,
+              crossesMidnight: true,
+            ),
+            TimelineBlockDraft(
+              id: BaseTimelineDraft.fixedBathId,
+              section: 'fixed',
+              title: 'Bath',
+              startMinute: 430,
+              endMinute: 460,
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+          ],
+        );
+        final draft = OnboardingDraft.fromMap({
+          'schemaVersion': 1,
+          'currentStep': 4,
+          'stepCompleted': [true, true, true, true, true],
+          'baseTimeline': base.toMap(),
+        });
+        expect(draft.stepCompleted[OnboardingStepId.eating.index], isFalse);
+        expect(
+          draft.stepCompleted[OnboardingStepId.fixedSchedule.index],
+          isTrue,
+        );
+        expect(draft.stepCompleted[OnboardingStepId.skinCare.index], isFalse);
+      },
+    );
+
+    test(
+      'A5 legacy Skin Care explicit skip satisfies Skin Care migration contract',
+      () {
+        final base = const BaseTimelineDraft(skinCareSkipped: true);
+        final draft = OnboardingDraft.fromMap({
+          'schemaVersion': 1,
+          'currentStep': 4,
+          'stepCompleted': [true, true, true, true, true],
+          'baseTimeline': base.toMap(),
+        });
+        expect(draft.stepCompleted[OnboardingStepId.skinCare.index], isTrue);
+      },
+    );
+
+    test(
+      'A6 legacy obsolete generated Eating plan does not migrate Step 5 as complete',
+      () {
+        final base = BaseTimelineDraft(
+          eatingSetupPath: 'create',
+          blocks: const [
+            TimelineBlockDraft(
+              id: 'legacy-meal-1',
+              section: 'eating',
+              title: 'Legacy Meal',
+              startMinute: 480,
+              endMinute: 510,
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+              blockType: TimelineBlockDraft.hardBlockKey,
+              source: 'ai_generated_meal_setup',
+            ),
+          ],
+        );
+        final draft = OnboardingDraft.fromMap({
+          'schemaVersion': 1,
+          'currentStep': 4,
+          'stepCompleted': [true, true, true, true, true],
+          'baseTimeline': base.toMap(),
+        });
+        expect(draft.stepCompleted[OnboardingStepId.eating.index], isFalse);
+      },
+    );
 
     test('B schema-v2 current 15-step data is never shifted', () {
       final draft = OnboardingDraft.fromMap({
@@ -270,9 +430,8 @@ void main() {
       });
       expect(draft.currentStep, OnboardingStepId.badHabits.index);
       expect(draft.stepDirty[8], isTrue);
-      expect(draft.stepLoading[8], isTrue);
+      expect(draft.stepLoading.every((v) => !v), isTrue);
       expect(draft.stepDirty[11], isFalse);
-      expect(draft.stepLoading[11], isFalse);
     });
 
     test('schema-v2 ambiguous round trip becomes unequivocally current', () {
@@ -309,30 +468,20 @@ void main() {
       expect(draft.stepCompleted, hasLength(15));
     });
 
-    test('E partial historical vector maps positions and pads false', () {
-      final draft = OnboardingDraft.fromMap({
-        'schemaVersion': 1,
-        'currentStep': 5,
-        'stepCompleted': [true, true, true, true, true, false],
-      });
-      expect(draft.stepCompleted, [
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-      ]);
-    });
+    test(
+      'E partial historical vector maps positions and decouples unverified steps',
+      () {
+        final draft = OnboardingDraft.fromMap({
+          'schemaVersion': 1,
+          'currentStep': 5,
+          'stepCompleted': [true, true, true, true, true, false],
+        });
+        expect(draft.stepCompleted.take(5), [true, true, true, true, true]);
+        expect(draft.stepCompleted[5], isFalse);
+        expect(draft.stepCompleted[6], isFalse);
+        expect(draft.stepCompleted[7], isFalse);
+      },
+    );
 
     test('F one document decision migrates a partial dirty vector', () {
       final draft = OnboardingDraft.fromMap({
@@ -345,16 +494,18 @@ void main() {
       expect(draft.stepDirty[OnboardingStepId.eating.index], isFalse);
     });
 
-    test('G one document decision migrates a partial loading vector', () {
-      final draft = OnboardingDraft.fromMap({
-        'schemaVersion': 1,
-        'currentStep': 8,
-        'stepCompleted': vector(12),
-        'stepLoading': [false, false, false, false, false, true],
-      });
-      expect(draft.stepLoading[OnboardingStepId.badHabits.index], isTrue);
-      expect(draft.stepLoading[OnboardingStepId.eating.index], isFalse);
-    });
+    test(
+      'G stepLoading always normalizes to false to prevent sticky spinners',
+      () {
+        final draft = OnboardingDraft.fromMap({
+          'schemaVersion': 1,
+          'currentStep': 8,
+          'stepCompleted': vector(12),
+          'stepLoading': [false, false, false, false, false, true],
+        });
+        expect(draft.stepLoading.every((v) => !v), isTrue);
+      },
+    );
 
     test('H current schema short vector is padded as current', () {
       final draft = OnboardingDraft.fromMap({
@@ -464,7 +615,7 @@ void main() {
       expect(restored.currentStep, original.currentStep);
       expect(restored.stepCompleted, original.stepCompleted);
       expect(restored.stepDirty, original.stepDirty);
-      expect(restored.stepLoading, original.stepLoading);
+      expect(restored.stepLoading.every((v) => !v), isTrue);
     });
 
     test('O completed legacy user stays complete after renumbering', () {

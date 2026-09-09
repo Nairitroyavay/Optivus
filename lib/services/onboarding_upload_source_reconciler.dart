@@ -81,6 +81,21 @@ class OnboardingUploadSourceReconciler {
       return null;
     }
 
+    UploadedAsset? getValidAssetForExactId(String? assetId, String? r2Key) {
+      if (assetId == null || assetId.trim().isEmpty) return null;
+      final restored = restoredUploads.forAssetId(assetId.trim());
+      if (restored == null) return null;
+      final asset = restored.asset;
+      if (asset.ownerUid == ownerUid &&
+          asset.status == UploadedAssetStatus.uploaded &&
+          (r2Key == null ||
+              r2Key.trim().isEmpty ||
+              asset.r2Key == r2Key.trim())) {
+        return asset;
+      }
+      return null;
+    }
+
     final currentClassAsset = getValidDurableAsset(
       UploadedAssetPurpose.classTimetable,
     );
@@ -167,16 +182,22 @@ class OnboardingUploadSourceReconciler {
       final hasClassAiBlocks = currentBlocks.any(
         (b) => b.section == 'classes' && b.source == 'ai_import',
       );
-      final matchingClassAsset = [currentClassAsset, currentWorkAsset]
-          .whereType<UploadedAsset>()
-          .where(
-            (asset) => uploadedSourceIdentityMatches(
-              assetId: classLogicalId,
-              r2Key: classLogicalKey,
-              asset: asset,
-            ),
-          )
-          .firstOrNull;
+      final exactClassAsset = getValidAssetForExactId(
+        classLogicalId,
+        classLogicalKey,
+      );
+      final matchingClassAsset =
+          exactClassAsset ??
+          [currentClassAsset, currentWorkAsset]
+              .whereType<UploadedAsset>()
+              .where(
+                (asset) => uploadedSourceIdentityMatches(
+                  assetId: classLogicalId,
+                  r2Key: classLogicalKey,
+                  asset: asset,
+                ),
+              )
+              .firstOrNull;
       final classBlocksMatch =
           !hasClassAiBlocks ||
           currentBlocks
@@ -235,16 +256,22 @@ class OnboardingUploadSourceReconciler {
       final hasWorkAiBlocks = currentBlocks.any(
         (b) => b.section == 'job_work_business' && b.source == 'ai_import',
       );
-      final matchingWorkAsset = [currentWorkAsset, currentClassAsset]
-          .whereType<UploadedAsset>()
-          .where(
-            (asset) => uploadedSourceIdentityMatches(
-              assetId: workLogicalId,
-              r2Key: workLogicalKey,
-              asset: asset,
-            ),
-          )
-          .firstOrNull;
+      final exactWorkAsset = getValidAssetForExactId(
+        workLogicalId,
+        workLogicalKey,
+      );
+      final matchingWorkAsset =
+          exactWorkAsset ??
+          [currentWorkAsset, currentClassAsset]
+              .whereType<UploadedAsset>()
+              .where(
+                (asset) => uploadedSourceIdentityMatches(
+                  assetId: workLogicalId,
+                  r2Key: workLogicalKey,
+                  asset: asset,
+                ),
+              )
+              .firstOrNull;
       final workBlocksMatch =
           !hasWorkAiBlocks ||
           currentBlocks
@@ -309,14 +336,19 @@ class OnboardingUploadSourceReconciler {
         (b) => b.section == 'eating' && b.source == 'ai_import',
       );
 
-      final hasCurrentEatingAsset = currentEatingAsset != null;
+      final exactEatingAsset = getValidAssetForExactId(
+        eatingImport?.uploadedAssetId,
+        eatingImport?.uploadedAssetR2Key,
+      );
+      final effectiveEatingAsset = exactEatingAsset ?? currentEatingAsset;
+      final hasCurrentEatingAsset = effectiveEatingAsset != null;
       final importMatchesCurrentAsset =
           hasCurrentEatingAsset &&
           eatingImport != null &&
           uploadedSourceIdentityMatches(
             assetId: eatingImport.uploadedAssetId,
             r2Key: eatingImport.uploadedAssetR2Key,
-            asset: currentEatingAsset,
+            asset: effectiveEatingAsset,
           );
 
       bool allEatingBlocksMatchCurrentAsset = true;
@@ -328,8 +360,8 @@ class OnboardingUploadSourceReconciler {
             final provenance = block.provenanceSourceIds;
             if (!provenanceContainsExactUploadIdentity(
               provenance,
-              currentEatingAsset.assetId,
-              currentEatingAsset.r2Key,
+              effectiveEatingAsset.assetId,
+              effectiveEatingAsset.r2Key,
             )) {
               allEatingBlocksMatchCurrentAsset = false;
               break;
@@ -405,13 +437,20 @@ class OnboardingUploadSourceReconciler {
           productAssetId?.trim().isNotEmpty == true ||
           productR2Key?.trim().isNotEmpty == true;
 
-      if (hasPhotoUsed || currentSkinProductsAsset != null) {
+      final exactProductAsset = getValidAssetForExactId(
+        productAssetId,
+        productR2Key,
+      );
+      final effectiveProductAsset =
+          exactProductAsset ?? currentSkinProductsAsset;
+
+      if (hasPhotoUsed || effectiveProductAsset != null) {
         final matchesRestored =
-            currentSkinProductsAsset != null &&
+            effectiveProductAsset != null &&
             uploadedSourceIdentityMatches(
               assetId: productAssetId,
               r2Key: productR2Key,
-              asset: currentSkinProductsAsset,
+              asset: effectiveProductAsset,
             );
         if (!matchesRestored) {
           step7Affected = true;
@@ -439,13 +478,16 @@ class OnboardingUploadSourceReconciler {
           faceAssetId?.trim().isNotEmpty == true ||
           faceR2Key?.trim().isNotEmpty == true;
 
-      if (hasFacePhotoUsed || currentSkinFaceAsset != null) {
+      final exactFaceAsset = getValidAssetForExactId(faceAssetId, faceR2Key);
+      final effectiveFaceAsset = exactFaceAsset ?? currentSkinFaceAsset;
+
+      if (hasFacePhotoUsed || effectiveFaceAsset != null) {
         final matchesRestored =
-            currentSkinFaceAsset != null &&
+            effectiveFaceAsset != null &&
             uploadedSourceIdentityMatches(
               assetId: faceAssetId,
               r2Key: faceR2Key,
-              asset: currentSkinFaceAsset,
+              asset: effectiveFaceAsset,
             );
         if (!matchesRestored) {
           step7Affected = true;

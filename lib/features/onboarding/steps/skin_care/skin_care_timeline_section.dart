@@ -187,7 +187,6 @@ class _SkinCareTimelineSectionState
   }
 }
 
-// ignore: unused_element
 double _calculateRequiredSkinCareBlockHeight({
   required BuildContext context,
   required TimelineBlockDraft block,
@@ -321,7 +320,6 @@ List<String> _skinCareInstructionLines(TimelineBlockDraft block) {
       .toList(growable: false);
 }
 
-// ignore: unused_element
 class _SkinCareBlockCard extends StatelessWidget {
   final TimelineBlockDraft item;
   final Color baseColor;

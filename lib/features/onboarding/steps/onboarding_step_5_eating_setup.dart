@@ -1984,7 +1984,6 @@ void _showEatingBlockDetails(BuildContext context, TimelineBlockDraft block) {
   );
 }
 
-// ignore: unused_element
 class _EatingTimelineBlock extends StatelessWidget {
   final TimelineBlockDraft block;
   final VoidCallback onEditRequested;
