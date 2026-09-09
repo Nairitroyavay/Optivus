@@ -9,7 +9,7 @@
 - Current verification tree: base revision plus concurrent, uncommitted Gate 5
   Auth/session work; those unrelated edits were preserved
 - Scope: onboarding foundation/read compatibility and durable restore
-- Firestore shape or rules changed: **Yes** — updated to support schemaVersion 4 and stepCompletionContractVersions (map with 15 integer keys, values bounded to contract range 1..2)
+- Firestore shape or rules changed: **Yes** — updated to enforce schemaVersion == 4 and stepCompletionContractVersions (List of 15 ints, all values == 1 i.e. `toSet().hasOnly([1])`)
 - Worker changes: **None**
 - R2 changes: **None**
 - Auth architecture, Step 4/5/7 UX, Step 14 completion semantics, and Routine
@@ -387,3 +387,164 @@ owner-scoped and unchanged. G4-C15 and G4-C16 are permanently removed and
 statically protected. The repository formatting baseline is maintained; all test
 suites pass with 0 failures (2,042 passed, 10 skipped, 0 failed across the entire
 repository).
+
+## S. Final Closure Pass — 2026-09-09
+
+### FIRESTORE SCHEMA-V4 CONTRACT
+
+App write contract (from `lib/models/onboarding_draft.dart`):
+- `schemaVersion = 4` (static const)
+- `stepCompletionContractVersions`: `List<int>`, length 15, all values = 1
+
+Firestore rules contract (`firestore.rules`, function `validOnboardingDraft`):
+- `data.schemaVersion == 4` (line 1214)
+- `data.stepCompletionContractVersions is list` (line 1229)
+- `data.stepCompletionContractVersions.size() == 15` (line 1230)
+- `data.stepCompletionContractVersions.toSet().hasOnly([1])` (line 1231)
+- `data.stepCompleted is list && size() == 15` (lines 1226–1228)
+- `data.stepDirty is list && size() == 15` (lines 1232–1234)
+- `data.stepLoading is list && size() == 15` (lines 1235–1237)
+
+App contract and rules contract are **in exact parity**. No inconsistency.
+
+Note: `stepCompletionContractVersions` is a **list** (not a map). Only contract version **1** is the current supported durable version. Version 0 and version 2 are explicitly rejected at the Firestore rules level.
+
+### FIRESTORE RULE EMULATOR RESULT
+
+Date: 2026-09-09
+
+Command:
+```bash
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+npm run test:firestore
+```
+
+Result:
+- **Total: 142 passed, 0 failed**
+- Exit code: 0
+
+New edge cases added and verified in this pass (`enforces all schema-v4 stepCompletionContractVersions edge cases`):
+
+| Case | Result |
+|---|---|
+| valid schema-v4 draft | ALLOW |
+| schemaVersion = 3 | DENY |
+| schemaVersion = 2 | DENY |
+| missing stepCompletionContractVersions | DENY |
+| stepCompletionContractVersions length = 14 | DENY |
+| stepCompletionContractVersions length = 16 | DENY |
+| all versions = 0 | DENY |
+| one version = 0 | DENY |
+| one version = 2 (unsupported) | DENY |
+| wrong UID | DENY |
+| malformed stepCompleted length (14) | DENY |
+| malformed stepDirty length (16) | DENY |
+| malformed stepLoading length (14) | DENY |
+
+### FIREBASE PROJECT IDENTITY
+
+All project identity checks pass:
+
+| Source | Value | Match |
+|---|---|---|
+| `android/app/google-services.json` | `optivus-lifeos` (project_number: 783577835780) | ✓ |
+| `lib/config/firebase_options.dart` | `optivus-lifeos` (appId: `1:783577835780:android:e451817a3d87bbb34d8851`) | ✓ |
+| `firebase use` (CLI active project) | `optivus-lifeos` | ✓ |
+| `firebase projects:list` | `optivus-lifeos (current)` | ✓ |
+
+ANDROID PROJECT = DART PROJECT = FIREBASE DEPLOY TARGET = `optivus-lifeos`. **MATCH = YES**.
+
+### REMOTE FIRESTORE RULE DEPLOYMENT
+
+Command: `firebase deploy --only firestore:rules --project optivus-lifeos`
+Timestamp: 2026-09-09T14:43:28+05:30
+Exit code: 0
+Result: `✔ cloud.firestore: rules file firestore.rules compiled successfully`
+         `✔ firestore: released rules firestore.rules to cloud.firestore`
+         `✔ Deploy complete!`
+
+(Firebase CLI noted: `latest version of firestore.rules already up to date, skipping upload` — confirming the previously deployed rules are identical to the current source.)
+
+Rules URL: https://console.firebase.google.com/project/optivus-lifeos/firestore/rules
+
+### REAL SCHEMA-V4 FIRESTORE WRITE ACCEPTANCE
+
+Live `optivus-lifeos` project requires `request.auth.token.email_verified == true` for all onboarding draft writes. Anonymous/unauthenticated headless REST writes are blocked by design.
+
+Real schema-v4 write acceptance is verified via:
+1. Firestore emulator test suite with authenticated, email-verified test contexts (142 passing tests including schema-v4 contract cases).
+2. Client serialization contract verified in `test/work_package_c_remediation_test.dart` (Contract 4: `OnboardingDraft.toFirestoreMap()` includes `stepCompletionContractVersions`, `schemaVersion: 4`, all 15 required keys).
+3. `test/onboarding_persistence_phase2b_test.dart` (63 tests including Firestore persistence round-trips with schema v4 and receipts vector).
+
+Direct production write with a live user session requires the physical Android device. See PHYSICAL STEP 2/5/7 sections below.
+
+### FRESH-SESSION AUTOMATED RESTORE
+
+Suites run from current checkout (2026-09-09):
+
+| Suite | Passed |
+|---|---|
+| `onboarding_restore_test.dart` | Included in 252 total below |
+| `onboarding_foundation_restore_matrix_test.dart` | 30 |
+| `onboarding_step_layout_migration_test.dart` | 48 |
+| `ah_f012_onboarding_resume_monotonicity_test.dart` | 15 |
+| `ah_f007_server_reconstruction_test.dart` | 8 |
+| `onboarding_upload_source_reconciler_test.dart` | 36 |
+| `ah_f010_restore_uploaded_asset_test.dart` | 45 |
+| `onboarding_persistence_phase2b_test.dart` | 63 |
+| **Total** | **252 passed, 0 failed** |
+
+Fresh-session coverage confirmed running:
+- Steps 0–13 restore matrix (30 step-N→step-N+1 cases)
+- Step 5 skip, generated Eating, uploaded Eating → Step 6
+- Step 7 skip, has-products, build-for-me → Step 8
+- completed onboarding → Home
+- exact asset older than 150 uploads
+- deleted A + newer B → reopen affected step / never silently adopt B
+- explicit A→B replacement (authorized substitution)
+- temporary upload failure → reconnect
+- owner mismatch → integrity recovery
+- R2 key mismatch → integrity recovery
+- purpose mismatch → integrity recovery
+- missing completion contract → migration reason code
+- unsupported completion version → typed reason code
+- Account A → B isolation (zero state bleed)
+
+All cases pass.
+
+### PHYSICAL STEP 2 RESTORE
+
+**NOT RUN** — No physical Android device connected (`flutter devices` reports macOS desktop only; `adb` not found in PATH).
+
+Required result when device is available:
+- Complete Step 2 → reach Step 3 → force-kill → reopen → Step 3 ✓
+- logout → login same UID → Step 3 ✓
+
+### PHYSICAL STEP 5 RESTORE
+
+**NOT RUN** — No physical Android device connected.
+
+Required result when device is available:
+- Complete Step 5 → reach Step 6 → force-kill → reopen → Step 6 ✓
+- logout/login same UID → Step 6 ✓
+- uninstall → fresh install → login same UID → Step 6 ✓
+- photo/import Eating path → Step 6 ✓
+
+### PHYSICAL STEP 7 RESTORE
+
+**NOT RUN** — No physical Android device connected.
+
+Required result when device is available:
+- Complete Step 7 → reach Step 8 → force-kill → reopen → Step 8 ✓
+- logout/login same UID → Step 8 ✓
+- uninstall → fresh install → login same UID → Step 8 ✓
+- photo-backed (has-products or build-for-me) path ✓
+
+### PHYSICAL COMPLETED-ACCOUNT RESTORE
+
+**NOT RUN** — No physical Android device connected.
+
+Required result when device is available:
+- Complete Step 14 → Home → force-kill → reopen → Home ✓
+- logout/login → Home ✓
+- reinstall/login → Home ✓

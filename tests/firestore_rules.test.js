@@ -1413,6 +1413,69 @@ describe("Phase 4.6.4 canonical production contracts", () => {
     await assertFails(ref.set(missingTimezone));
   });
 
+  it("enforces all schema-v4 stepCompletionContractVersions edge cases", async () => {
+    const db = ownerDb();
+    const ref = db.collection("users").doc("user123").collection("onboarding").doc("draft");
+
+    // valid schema-v4 draft — must succeed
+    await assertSucceeds(ref.set(onboardingDraftData()));
+
+    // schemaVersion = 3 — must be denied (only 4 is allowed)
+    await assertFails(ref.set(onboardingDraftData("user123", { schemaVersion: 3 })));
+
+    // schemaVersion = 2 — must be denied
+    await assertFails(ref.set(onboardingDraftData("user123", { schemaVersion: 2 })));
+
+    // missing stepCompletionContractVersions — must be denied
+    const missingReceipts = onboardingDraftData();
+    delete missingReceipts.stepCompletionContractVersions;
+    await assertFails(ref.set(missingReceipts));
+
+    // stepCompletionContractVersions length = 14 (too short) — must be denied
+    await assertFails(ref.set(onboardingDraftData("user123", {
+      stepCompletionContractVersions: Array(14).fill(1),
+    })));
+
+    // stepCompletionContractVersions length = 16 (too long) — must be denied
+    await assertFails(ref.set(onboardingDraftData("user123", {
+      stepCompletionContractVersions: Array(16).fill(1),
+    })));
+
+    // all versions = 0 — must be denied
+    await assertFails(ref.set(onboardingDraftData("user123", {
+      stepCompletionContractVersions: Array(15).fill(0),
+    })));
+
+    // one version = 0 (contract version 0 is unsupported) — must be denied
+    await assertFails(ref.set(onboardingDraftData("user123", {
+      stepCompletionContractVersions: [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    })));
+
+    // one version = 2 (unsupported; only v1 is the current supported contract) — must be denied
+    await assertFails(ref.set(onboardingDraftData("user123", {
+      stepCompletionContractVersions: [2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    })));
+
+    // wrong UID on ref — must be denied
+    const wrongUidRef = ownerDb("other_user").collection("users").doc("user123").collection("onboarding").doc("draft");
+    await assertFails(wrongUidRef.set(onboardingDraftData("user123")));
+
+    // malformed stepCompleted length (14 instead of 15) — must be denied
+    await assertFails(ref.set(onboardingDraftData("user123", {
+      stepCompleted: Array(14).fill(false),
+    })));
+
+    // malformed stepDirty length (16 instead of 15) — must be denied
+    await assertFails(ref.set(onboardingDraftData("user123", {
+      stepDirty: Array(16).fill(false),
+    })));
+
+    // malformed stepLoading length (14 instead of 15) — must be denied
+    await assertFails(ref.set(onboardingDraftData("user123", {
+      stepLoading: Array(14).fill(false),
+    })));
+  });
+
   it("rejects source conversion while allowing content repair for onboarding Routine", async () => {
     const db = ownerDb();
     const ref = db.collection("users").doc("user123").collection("routineItems").doc("routine-item-1");
