@@ -1129,6 +1129,7 @@ service cloud.firestore {
         "coachStyle",
         "slipUpStyle",
         "currentSetupGeneration",
+        "setupLineageVersion",
         "lastResetOperationId"
       ]);
     }
@@ -1165,6 +1166,7 @@ service cloud.firestore {
         && (!data.keys().hasAny(["coachStyle"]) || (data.coachStyle is string && data.coachStyle.size() <= 50))
         && (!data.keys().hasAny(["slipUpStyle"]) || (data.slipUpStyle is string && data.slipUpStyle.size() <= 100))
         && (!data.keys().hasAny(["currentSetupGeneration"]) || (data.currentSetupGeneration is int && data.currentSetupGeneration >= 0))
+        && (!data.keys().hasAny(["setupLineageVersion"]) || (data.setupLineageVersion is int && data.setupLineageVersion >= 0))
         && (!data.keys().hasAny(["lastResetOperationId"]) || data.lastResetOperationId is string)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
@@ -1202,6 +1204,7 @@ service cloud.firestore {
         "notifications",
         "finalPreview",
         "setupGeneration",
+        "setupLineageVersion",
         "lastResetOperationId"
       ]);
     }
@@ -1263,6 +1266,7 @@ service cloud.firestore {
         && (!data.keys().hasAny(["slipUpHandling"]) || data.slipUpHandling is string)
         && (!data.keys().hasAny(["finalPreview"]) || data.finalPreview is map)
         && (!data.keys().hasAny(["setupGeneration"]) || (data.setupGeneration is int && data.setupGeneration >= 0))
+        && (!data.keys().hasAny(["setupLineageVersion"]) || (data.setupLineageVersion is int && data.setupLineageVersion >= 0))
         && (!data.keys().hasAny(["lastResetOperationId"]) || data.lastResetOperationId is string);
     }
 
@@ -1298,7 +1302,8 @@ service cloud.firestore {
         "conflictAcceptances",
         "expectedAcceptanceIds",
         "unscheduledRoutineSuggestions",
-        "setupGeneration"
+        "setupGeneration",
+        "setupLineageVersion"
       ]);
     }
 
@@ -1357,7 +1362,8 @@ service cloud.firestore {
         && data.createdAt is timestamp
         && data.updatedAt is timestamp
         && (!data.keys().hasAny(["moneyGoal"]) || data.moneyGoal is map)
-        && (!data.keys().hasAny(["setupGeneration"]) || (data.setupGeneration is int && data.setupGeneration >= 0));
+        && (!data.keys().hasAny(["setupGeneration"]) || (data.setupGeneration is int && data.setupGeneration >= 0))
+        && (!data.keys().hasAny(["setupLineageVersion"]) || (data.setupLineageVersion is int && data.setupLineageVersion >= 0));
     }
 
     function validOnboardingCompletionJob(data, jobId) {
@@ -1368,7 +1374,7 @@ service cloud.firestore {
         "expectedRoutineIds", "createdRoutineIds", "existingRoutineIds", "repairedRoutineIds", "failedRoutineIds",
         "expectedHistoryIds", "appliedHistoryIds", "existingHistoryIds", "repairedHistoryIds", "failedHistoryIds",
         "expectedHabitIds", "createdHabitIds", "existingHabitIds", "repairedHabitIds", "failedHabitIds",
-        "createdAt", "updatedAt", "completedAt", "schemaVersion", "setupGeneration"
+        "createdAt", "updatedAt", "completedAt", "schemaVersion", "setupGeneration", "setupLineageVersion"
       ])
       && data.keys().hasAll([
         "jobId", "ownerUid", "stage", "status", "stagesCompleted",
@@ -1408,6 +1414,7 @@ service cloud.firestore {
       && data.repairedHabitIds is list
       && data.failedHabitIds is list
       && (!data.keys().hasAny(["setupGeneration"]) || (data.setupGeneration is int && data.setupGeneration >= 0))
+      && (!data.keys().hasAny(["setupLineageVersion"]) || (data.setupLineageVersion is int && data.setupLineageVersion >= 0))
       && data.createdAt is timestamp
       && data.updatedAt is timestamp
       && (data.status == "completed"
@@ -1525,7 +1532,7 @@ service cloud.firestore {
         "expectedHistoryIds", "appliedHistoryIds", "existingHistoryIds", "repairedHistoryIds", "failedHistoryIds",
         "expectedHabitIds", "createdHabitIds", "existingHabitIds", "repairedHabitIds", "failedHabitIds",
         "expectedAcceptanceIds", "appliedAcceptanceIds", "existingAcceptanceIds", "repairedAcceptanceIds", "failedAcceptanceIds",
-        "createdAt", "updatedAt", "completedAt", "schemaVersion", "setupGeneration"
+        "createdAt", "updatedAt", "completedAt", "schemaVersion", "setupGeneration", "setupLineageVersion"
       ])
       && data.keys().hasAll([
         "jobId", "ownerUid", "stage", "status", "stagesCompleted", "sourceFingerprint",
@@ -1574,6 +1581,7 @@ service cloud.firestore {
       && data.repairedAcceptanceIds is list
       && data.failedAcceptanceIds is list
       && (!data.keys().hasAny(["setupGeneration"]) || (data.setupGeneration is int && data.setupGeneration >= 0))
+      && (!data.keys().hasAny(["setupLineageVersion"]) || (data.setupLineageVersion is int && data.setupLineageVersion >= 0))
       && data.createdAt is timestamp
       && data.updatedAt is timestamp
       && (data.status == "completed"
@@ -1667,7 +1675,7 @@ service cloud.firestore {
     function validOnboardingCurrentRun(data, uid) {
       return data.keys().hasOnly([
           "ownerUid", "currentRunId", "sourceFingerprint", "draftRevision",
-          "status", "updatedAt", "schemaVersion", "setupGeneration"
+          "status", "updatedAt", "schemaVersion", "setupGeneration", "setupLineageVersion"
         ])
         && data.keys().hasAll([
           "ownerUid", "currentRunId", "sourceFingerprint", "draftRevision",
@@ -1684,6 +1692,7 @@ service cloud.firestore {
         && data.draftRevision >= 1
         && data.status in ["active", "completed", "superseded"]
         && (!data.keys().hasAny(["setupGeneration"]) || (data.setupGeneration is int && data.setupGeneration >= 0))
+        && (!data.keys().hasAny(["setupLineageVersion"]) || (data.setupLineageVersion is int && data.setupLineageVersion >= 0))
         && data.updatedAt is timestamp
         && data.schemaVersion == 1;
     }
@@ -1697,7 +1706,8 @@ service cloud.firestore {
         && after.draftRevision == before.draftRevision
         && after.status == "superseded"
         && (before.status in ["active", "completed", "superseded"])
-        && (!before.keys().hasAny(["setupGeneration"]) || after.setupGeneration == before.setupGeneration);
+        && (!before.keys().hasAny(["setupGeneration"]) || after.setupGeneration >= before.setupGeneration)
+        && (!before.keys().hasAny(["setupLineageVersion"]) || after.setupLineageVersion >= before.setupLineageVersion);
     }
 
     function validOnboardingSupersededToFreshRun(before, after, uid) {
@@ -1804,7 +1814,12 @@ service cloud.firestore {
             || ("setupGeneration" in pointer
                 && pointer.setupGeneration == profile.currentSetupGeneration
                 && "setupGeneration" in run
-                && run.setupGeneration == profile.currentSetupGeneration));
+                && run.setupGeneration == profile.currentSetupGeneration))
+        && (!("setupLineageVersion" in profile)
+            || ("setupLineageVersion" in pointer
+                && pointer.setupLineageVersion == profile.setupLineageVersion
+                && "setupLineageVersion" in run
+                && run.setupLineageVersion == profile.setupLineageVersion));
     }
 
     function validConflictAcceptance(data, acceptanceId, uid) {
@@ -2395,7 +2410,9 @@ service cloud.firestore {
       allow update: if verifiedOwner(uid)
         && validUserProfile(request.resource.data, uid)
         && (!resource.data.keys().hasAny(["uid"]) || request.resource.data.uid == resource.data.uid)
-        && (!resource.data.keys().hasAny(["createdAt"]) || request.resource.data.createdAt == resource.data.createdAt);
+        && (!resource.data.keys().hasAny(["createdAt"]) || request.resource.data.createdAt == resource.data.createdAt)
+        && (!resource.data.keys().hasAny(["setupLineageVersion"]) || !request.resource.data.keys().hasAny(["setupLineageVersion"]) || request.resource.data.setupLineageVersion >= resource.data.setupLineageVersion)
+        && (!resource.data.keys().hasAny(["currentSetupGeneration"]) || !request.resource.data.keys().hasAny(["currentSetupGeneration"]) || request.resource.data.currentSetupGeneration >= resource.data.currentSetupGeneration);
       allow delete: if verifiedOwner(uid);
     }
   }

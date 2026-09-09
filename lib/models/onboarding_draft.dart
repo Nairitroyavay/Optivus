@@ -19,6 +19,7 @@ class OnboardingDraft {
   static const int _legacyStepCount = 12;
   static const int stepCount = 15;
   static const int lastStepIndex = stepCount - 1;
+  static const int currentSetupLineageVersion = 1;
 
   final String uid;
   final int storedSchemaVersion;
@@ -35,6 +36,7 @@ class OnboardingDraft {
   final String sourceFingerprint;
   final String timezoneId;
   final int setupGeneration;
+  final int setupLineageVersion;
   final String? lastResetOperationId;
 
   final bool welcomeSaved;
@@ -133,6 +135,7 @@ class OnboardingDraft {
     this.sourceFingerprint = '',
     this.timezoneId = 'UTC',
     this.setupGeneration = 0,
+    this.setupLineageVersion = currentSetupLineageVersion,
     this.lastResetOperationId,
     this.welcomeSaved = false,
     this.patiencePledgeAccepted = false,
@@ -150,6 +153,32 @@ class OnboardingDraft {
     this.notifications = const NotificationSetupDraft(),
     this.finalPreview,
   });
+
+  factory OnboardingDraft.freshForSetup({
+    required String uid,
+    int setupGeneration = 0,
+    int setupLineageVersion = currentSetupLineageVersion,
+    String? lastResetOperationId,
+    String? resetOperationId,
+    BaseTimelineDraft? baseTimeline,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    DateTime? now,
+  }) {
+    final timestamp = now ?? createdAt ?? DateTime.now().toUtc();
+    return OnboardingDraft(
+      uid: uid,
+      setupGeneration: setupGeneration,
+      setupLineageVersion: setupLineageVersion,
+      lastResetOperationId: lastResetOperationId ?? resetOperationId,
+      baseTimeline: baseTimeline ??
+          const BaseTimelineDraft().withRequiredFixedBlocks(),
+      createdAt: timestamp,
+      updatedAt: updatedAt ?? timestamp,
+      revision: 1,
+      currentStep: 0,
+    );
+  }
 
   factory OnboardingDraft.fromMap(Map<String, dynamic> map) {
     final persistedStepLayout = _detectPersistedStepLayout(map);
@@ -198,6 +227,8 @@ class OnboardingDraft {
       sourceFingerprint: map['sourceFingerprint'] as String? ?? '',
       timezoneId: map['timezoneId'] as String? ?? 'UTC',
       setupGeneration: (map['setupGeneration'] as num?)?.toInt() ?? 0,
+      setupLineageVersion:
+          (map['setupLineageVersion'] as num?)?.toInt() ?? 0,
       lastResetOperationId: map['lastResetOperationId'] as String?,
       welcomeSaved: map['welcomeSaved'] as bool? ?? false,
       patiencePledgeAccepted: map['patiencePledgeAccepted'] as bool? ?? false,
@@ -254,6 +285,7 @@ class OnboardingDraft {
       'revision': revision,
       'timezoneId': timezoneId,
       'setupGeneration': setupGeneration,
+      'setupLineageVersion': setupLineageVersion,
       if (lastResetOperationId != null)
         'lastResetOperationId': lastResetOperationId,
       'currentStep': currentStep,
@@ -312,6 +344,7 @@ class OnboardingDraft {
     String? sourceFingerprint,
     String? timezoneId,
     int? setupGeneration,
+    int? setupLineageVersion,
     String? lastResetOperationId,
     bool? welcomeSaved,
     bool? patiencePledgeAccepted,
@@ -333,6 +366,12 @@ class OnboardingDraft {
     bool clearFinalPreview = false,
     bool incrementRevision = true,
   }) {
+    final nextSetupGeneration = setupGeneration ?? this.setupGeneration;
+    final nextSetupLineageVersion =
+        setupLineageVersion ?? this.setupLineageVersion;
+    final generationOrLineageChanged =
+        nextSetupGeneration != this.setupGeneration ||
+        nextSetupLineageVersion != this.setupLineageVersion;
     return OnboardingDraft(
       uid: uid ?? this.uid,
       storedSchemaVersion: storedSchemaVersion ?? this.storedSchemaVersion,
@@ -360,9 +399,12 @@ class OnboardingDraft {
           revision ?? (incrementRevision ? this.revision + 1 : this.revision),
       sourceFingerprint:
           sourceFingerprint ??
-          (incrementRevision ? '' : this.sourceFingerprint),
+          ((incrementRevision || generationOrLineageChanged)
+              ? ''
+              : this.sourceFingerprint),
       timezoneId: timezoneId ?? this.timezoneId,
-      setupGeneration: setupGeneration ?? this.setupGeneration,
+      setupGeneration: nextSetupGeneration,
+      setupLineageVersion: nextSetupLineageVersion,
       lastResetOperationId: lastResetOperationId ?? this.lastResetOperationId,
       welcomeSaved: welcomeSaved ?? this.welcomeSaved,
       patiencePledgeAccepted:

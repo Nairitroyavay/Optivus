@@ -2520,6 +2520,102 @@ describe("Phase 4.6.4 canonical production contracts", () => {
       expect((await profileRef.get()).data().currentSetupGeneration).toBe(1);
     });
 
+    it("enforces setupLineageVersion monotonic fences and terminal consistency", async () => {
+      const db = ownerDb();
+      const profileRef = db.collection("users").doc("user123");
+      const pointerRef = db.collection("users").doc("user123").collection("onboarding").doc("currentRun");
+      const runRef = db.collection("users").doc("user123").collection("onboardingRuns").doc("run-001");
+
+      // 1. Initial setup at lineage 0
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const admin = context.firestore();
+        await admin.doc(profileRef.path).set(userData("user123", { setupLineageVersion: 0 }));
+        await admin.doc(pointerRef.path).set(currentRunData("user123", "run-001", {
+          status: "active",
+          setupLineageVersion: 0,
+        }));
+      });
+
+      // 2. Migration: owner can upgrade pointer to superseded with setupLineageVersion: 1
+      await assertSucceeds(pointerRef.set(currentRunData("user123", "run-001", {
+        status: "superseded",
+        setupLineageVersion: 1,
+        updatedAt: completedAt,
+      })));
+      expect((await pointerRef.get()).data().setupLineageVersion).toBe(1);
+
+      // 3. Monotonic profile update: upgrading setupLineageVersion 0 -> 1 succeeds
+      await assertSucceeds(profileRef.set(userData("user123", { setupLineageVersion: 1, updatedAt: completedAt })));
+      expect((await profileRef.get()).data().setupLineageVersion).toBe(1);
+
+      // 4. Monotonic profile update: regressing setupLineageVersion 1 -> 0 FAILS
+      await assertFails(profileRef.set(userData("user123", { setupLineageVersion: 0, updatedAt: completedAt })));
+
+      // 5. Terminalization fence: profile at lineage 1 rejects terminalization of run with lineage 0
+      const stagesBeforeFinal = {
+        validateInput: true, persistDraft: true, verifyDraft: true, persistBundle: true,
+        verifyBundle: true, reconcileRoutines: true, verifyRoutines: true, projectRoutineHistory: true,
+        verifyRoutineHistory: true, reconcileHabitSystems: true, verifyHabitSystems: true,
+        reloadControllers: true, verifyFrontendState: true,
+      };
+      const activeRunLineage0 = onboardingRunData("user123", "run-001", {
+        stage: "finalizeProfile",
+        status: "running",
+        setupLineageVersion: 0,
+        stagesCompleted: stagesBeforeFinal,
+      });
+      const completedRunLineage0 = {
+        ...activeRunLineage0,
+        stage: "completed",
+        status: "completed",
+        stagesCompleted: { ...stagesBeforeFinal, finalizeProfile: true },
+        updatedAt: completedAt,
+        completedAt,
+      };
+      const profileCompletedLineage1 = userData("user123", {
+        onboardingInputCompleted: true,
+        onboardingProjectionStatus: "completed",
+        onboardingCompleted: true,
+        setupLineageVersion: 1,
+        updatedAt: completedAt,
+      });
+      const pointerLineage0 = currentRunData("user123", "run-001", {
+        status: "completed",
+        setupLineageVersion: 0,
+        updatedAt: completedAt,
+      });
+
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const admin = context.firestore();
+        await admin.doc("users/user123/onboarding/draft").set(completedOnboardingDraftData("user123", { setupLineageVersion: 1 }));
+        await admin.doc(profileRef.path).set(userData("user123", { setupLineageVersion: 1 }));
+        await admin.doc(runRef.path).set(activeRunLineage0);
+        await admin.doc(pointerRef.path).set(currentRunData("user123", "run-001", { setupLineageVersion: 0 }));
+      });
+
+      const mismatchBatch = db.batch();
+      mismatchBatch.set(profileRef, profileCompletedLineage1);
+      mismatchBatch.set(runRef, completedRunLineage0);
+      mismatchBatch.set(pointerRef, pointerLineage0);
+      await assertFails(mismatchBatch.commit());
+
+      // 6. Matching lineage (lineage 1 for profile, run, pointer) SUCCEEDS
+      const activeRunLineage1 = { ...activeRunLineage0, setupLineageVersion: 1 };
+      const matchingRunLineage1 = { ...completedRunLineage0, setupLineageVersion: 1 };
+      const matchingPointerLineage1 = { ...pointerLineage0, setupLineageVersion: 1 };
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const admin = context.firestore();
+        await admin.doc(runRef.path).set(activeRunLineage1);
+        await admin.doc(pointerRef.path).set(currentRunData("user123", "run-001", { setupLineageVersion: 1 }));
+      });
+      const matchingBatch = db.batch();
+      matchingBatch.set(profileRef, profileCompletedLineage1);
+      matchingBatch.set(runRef, matchingRunLineage1);
+      matchingBatch.set(pointerRef, matchingPointerLineage1);
+      await assertSucceeds(matchingBatch.commit());
+      expect((await profileRef.get()).data().setupLineageVersion).toBe(1);
+    });
+
     it("allows canonical acceptance creation, owner read, and one-way invalidation", async () => {
       const db = ownerDb();
       const ref = db.collection("users").doc("user123").collection("conflictAcceptances").doc(acceptanceId);

@@ -12,6 +12,7 @@ import 'package:optivus/models/routine_item.dart';
 
 class OnboardingCompletionBundle {
   static const int schemaVersion = 2;
+  static const int currentSetupLineageVersion = 1;
 
   final String uid;
   final String runId;
@@ -35,6 +36,7 @@ class OnboardingCompletionBundle {
   final String sourceFingerprint;
   final int draftRevision;
   final int setupGeneration;
+  final int setupLineageVersion;
   final List<String> expectedRoutineIds;
   final List<String> expectedHistoryIds;
   final List<String> expectedHabitIds;
@@ -67,6 +69,7 @@ class OnboardingCompletionBundle {
     this.sourceFingerprint = '',
     this.draftRevision = 1,
     this.setupGeneration = 0,
+    this.setupLineageVersion = currentSetupLineageVersion,
     this.expectedRoutineIds = const [],
     this.expectedHistoryIds = const [],
     this.expectedHabitIds = const [],
@@ -85,6 +88,7 @@ class OnboardingCompletionBundle {
       'source': source,
       'draftRevision': draftRevision,
       'setupGeneration': setupGeneration,
+      'setupLineageVersion': setupLineageVersion,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
       'onboardingCompleted': true,
@@ -176,6 +180,8 @@ class OnboardingCompletionBundle {
       sourceFingerprint: map['sourceFingerprint'] as String? ?? '',
       draftRevision: (map['draftRevision'] as num?)?.toInt() ?? 1,
       setupGeneration: (map['setupGeneration'] as num?)?.toInt() ?? 0,
+      setupLineageVersion:
+          (map['setupLineageVersion'] as num?)?.toInt() ?? 0,
       createdAt: createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
       updatedAt:
           updatedAt ?? createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
@@ -228,12 +234,12 @@ class OnboardingCompletionBundle {
       generatedSourceIds: _bundleStringList(map['generatedSourceIds']),
       conflictAcceptances: _bundleReadList(
         map['conflictAcceptances'],
-        ConflictAcceptance.fromMap,
+        (item) => ConflictAcceptance.fromMap(_bundleMap(item)),
       ),
       expectedAcceptanceIds: _bundleStringList(map['expectedAcceptanceIds']),
       unscheduledRoutineSuggestions: _bundleReadList(
         map['unscheduledRoutineSuggestions'],
-        UnscheduledRoutineSuggestion.fromMap,
+        (item) => UnscheduledRoutineSuggestion.fromMap(_bundleMap(item)),
       ),
     );
   }
@@ -242,6 +248,7 @@ class OnboardingCompletionBundle {
     String? sourceFingerprint,
     int? draftRevision,
     int? setupGeneration,
+    int? setupLineageVersion,
     List<String>? expectedRoutineIds,
     List<String>? expectedHistoryIds,
     List<String>? expectedHabitIds,
@@ -274,6 +281,7 @@ class OnboardingCompletionBundle {
       sourceFingerprint: sourceFingerprint ?? this.sourceFingerprint,
       draftRevision: draftRevision ?? this.draftRevision,
       setupGeneration: setupGeneration ?? this.setupGeneration,
+      setupLineageVersion: setupLineageVersion ?? this.setupLineageVersion,
       expectedRoutineIds: expectedRoutineIds ?? this.expectedRoutineIds,
       expectedHistoryIds: expectedHistoryIds ?? this.expectedHistoryIds,
       expectedHabitIds: expectedHabitIds ?? this.expectedHabitIds,

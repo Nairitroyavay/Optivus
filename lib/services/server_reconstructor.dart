@@ -13,6 +13,7 @@ import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
 import 'package:optivus/services/onboarding_resume_validator.dart';
 import 'package:optivus/services/onboarding_run_identity.dart';
+import 'package:optivus/services/onboarding_setup_lineage_migration_coordinator.dart';
 
 enum ReconstructionLifecycle {
   fresh,
@@ -211,9 +212,14 @@ class RepositoryServerReconstructionSource
 /// It never reads Riverpod state, SharedPreferences, or route state.
 class ServerReconstructor {
   final ServerReconstructionSource source;
+  final OnboardingSetupLineageMigrationCoordinator? migrationCoordinator;
   final DateTime Function() clock;
 
-  const ServerReconstructor({required this.source, this.clock = DateTime.now});
+  const ServerReconstructor({
+    required this.source,
+    this.migrationCoordinator,
+    this.clock = DateTime.now,
+  });
 
   Future<ReconstructionResult> reconstruct({
     required String uid,
@@ -230,7 +236,7 @@ class ServerReconstructor {
     final stopwatch = Stopwatch()..start();
     debugPrint('[Reconstruction] started uid=${_safeUid(uid)}');
     try {
-      final snapshot = await source.load(uid, onProfileLoaded: onProfileLoaded);
+      var snapshot = await source.load(uid, onProfileLoaded: onProfileLoaded);
       var profile = snapshot.profile;
       if (profile == null) {
         final now = clock();
@@ -252,10 +258,17 @@ class ServerReconstructor {
           );
         }
         await source.createProfileShell(profile);
+      } else if (migrationCoordinator != null &&
+          migrationCoordinator!.shouldMigrate(snapshot)) {
+        debugPrint(
+          '[Reconstruction] legacy lineage detected for uid=${_safeUid(uid)}, migrating...',
+        );
+        snapshot = await migrationCoordinator!.migrate(snapshot, source: source);
+        profile = snapshot.profile;
       }
       final result = classifyServerReconstruction(
         ownerUid: uid,
-        profile: profile,
+        profile: profile!,
         draft: snapshot.draft,
         completionBundle: snapshot.completionBundle,
         currentRun: snapshot.currentRun,
@@ -331,16 +344,25 @@ ReconstructionResult classifyServerReconstruction({
     );
   }
   if (profile.schemaVersion > UserProfile.currentSchemaVersion ||
+      profile.setupLineageVersion > UserProfile.currentSetupLineageVersion ||
       (draft != null &&
-          draft.storedSchemaVersion > OnboardingDraft.schemaVersion) ||
+          (draft.storedSchemaVersion > OnboardingDraft.schemaVersion ||
+              draft.setupLineageVersion >
+                  OnboardingDraft.currentSetupLineageVersion)) ||
       (completionBundle != null &&
-          completionBundle.version >
-              OnboardingCompletionBundle.schemaVersion) ||
+          (completionBundle.version >
+                  OnboardingCompletionBundle.schemaVersion ||
+              completionBundle.setupLineageVersion >
+                  OnboardingCompletionBundle.currentSetupLineageVersion)) ||
       (currentRun.pointerSchemaVersion != null &&
           currentRun.pointerSchemaVersion! > 1) ||
+      currentRun.setupLineageVersion >
+          OnboardingCompletionJob.currentSetupLineageVersion ||
       (currentRun.job != null &&
-          currentRun.job!.schemaVersion >
-              OnboardingCompletionJob.currentSchemaVersion)) {
+          (currentRun.job!.schemaVersion >
+                  OnboardingCompletionJob.currentSchemaVersion ||
+              currentRun.job!.setupLineageVersion >
+                  OnboardingCompletionJob.currentSetupLineageVersion))) {
     return recovery(
       ReconstructionRecoveryReason.schemaUnsupported,
       'unsupported_schema',
@@ -348,8 +370,10 @@ ReconstructionResult classifyServerReconstruction({
   }
   final currentSetupGeneration = profile.currentSetupGeneration;
 
-  // 1. Lineage check for draft: if draft exists, it must belong to currentSetupGeneration.
-  if (draft != null && draft.setupGeneration != currentSetupGeneration) {
+  // 1. Lineage check for draft: if draft exists, it must belong to currentSetupGeneration and setupLineageVersion.
+  if (draft != null &&
+      (draft.setupGeneration != currentSetupGeneration ||
+          draft.setupLineageVersion != profile.setupLineageVersion)) {
     return recovery(
       ReconstructionRecoveryReason.durableStateConflict,
       'setup_lineage_corrupt',
@@ -357,26 +381,30 @@ ReconstructionResult classifyServerReconstruction({
   }
 
   // 2. Lineage check for currentRun:
-  // If run claims a future generation, durable state is corrupt.
+  // If run claims a future generation or future lineage version, durable state is corrupt.
   if (currentRun.hasPointer &&
-      currentRun.setupGeneration > currentSetupGeneration) {
+      (currentRun.setupGeneration > currentSetupGeneration ||
+          currentRun.setupLineageVersion > profile.setupLineageVersion)) {
     return recovery(
       ReconstructionRecoveryReason.durableStateConflict,
       'setup_lineage_corrupt',
     );
   }
 
-  // A run is superseded if its generation is older than the profile's setup generation,
+  // A run is superseded if its generation or lineage version is older than the profile's,
   // or if its pointer status was explicitly marked 'superseded'.
   final isRunSuperseded = currentRun.hasPointer &&
       (currentRun.setupGeneration < currentSetupGeneration ||
+          currentRun.setupLineageVersion < profile.setupLineageVersion ||
           currentRun.pointerStatus == 'superseded');
 
   if (isRunSuperseded) {
     developer.log(
       '[Reconstruction] completion_run_superseded '
       'runGeneration=${currentRun.setupGeneration} '
+      'runLineage=${currentRun.setupLineageVersion} '
       'currentSetupGeneration=$currentSetupGeneration '
+      'profileLineage=${profile.setupLineageVersion} '
       'pointerStatus=${currentRun.pointerStatus}',
       name: 'server_reconstructor',
     );
@@ -424,7 +452,8 @@ ReconstructionResult classifyServerReconstruction({
               : 'active'));
 
   if (job != null) {
-    if (job.setupGeneration != currentSetupGeneration) {
+    if (job.setupGeneration != currentSetupGeneration ||
+        job.setupLineageVersion != profile.setupLineageVersion) {
       return recovery(
         ReconstructionRecoveryReason.durableStateConflict,
         'setup_lineage_corrupt',
@@ -441,9 +470,10 @@ ReconstructionResult classifyServerReconstruction({
     }
   }
 
-  // Bundle lineage check: if bundle exists from older setup, it is superseded.
+  // Bundle lineage check: if bundle exists from older setup or older lineage, it is superseded.
   final isBundleSuperseded = completionBundle != null &&
-      completionBundle.setupGeneration < currentSetupGeneration;
+      (completionBundle.setupGeneration < currentSetupGeneration ||
+          completionBundle.setupLineageVersion < profile.setupLineageVersion);
   final effectiveBundle = isBundleSuperseded ? null : completionBundle;
 
   final finalDraft = draft != null && isReconstructionFinalDraft(draft);
@@ -454,7 +484,8 @@ ReconstructionResult classifyServerReconstruction({
       effectiveBundle.draftRevision == draft.revision &&
       effectiveBundle.effectiveSourceFingerprint ==
           draft.effectiveSourceFingerprint &&
-      effectiveBundle.setupGeneration == currentSetupGeneration;
+      effectiveBundle.setupGeneration == currentSetupGeneration &&
+      effectiveBundle.setupLineageVersion == profile.setupLineageVersion;
 
   if (profile.onboardingCompleted) {
     if (!finalDraft) {

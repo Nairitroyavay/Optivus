@@ -129,9 +129,13 @@ SessionDestination resolveReconstructionDestination(
     ReconstructionFinishing(:final runId) =>
       SessionDestination.finishOnboarding(runId: runId),
     ReconstructionCompleted() => const SessionDestination.home(),
-    ReconstructionRecovery(:final reason) => SessionDestination.needsAction(
-      'reconstruction_${reason.name}',
-    ),
+    ReconstructionRecovery(:final reason, :final diagnostics) =>
+      SessionDestination.needsAction(
+        diagnostics['code'] is String &&
+                (diagnostics['code'] as String).isNotEmpty
+            ? 'reconstruction_${reason.name}_${diagnostics['code']}'
+            : 'reconstruction_${reason.name}',
+      ),
   };
 }
 

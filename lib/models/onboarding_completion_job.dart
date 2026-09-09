@@ -85,6 +85,7 @@ class OnboardingCompletionFailureException implements Exception {
 
 class OnboardingCompletionJob {
   static const int currentSchemaVersion = 3;
+  static const int currentSetupLineageVersion = 1;
 
   final String jobId;
   final String ownerUid;
@@ -95,6 +96,7 @@ class OnboardingCompletionJob {
   final int draftRevision;
   final int retryCount;
   final int setupGeneration;
+  final int setupLineageVersion;
 
   // Kept in memory/read compatibility for legacy tests and documents. It is
   // sanitized and deliberately omitted from canonical Firestore writes.
@@ -144,6 +146,7 @@ class OnboardingCompletionJob {
     this.draftRevision = 1,
     this.retryCount = 0,
     this.setupGeneration = 0,
+    this.setupLineageVersion = currentSetupLineageVersion,
     this.lastError,
     this.lastFailureCode,
     this.lastFailureStage,
@@ -201,6 +204,7 @@ class OnboardingCompletionJob {
     int? draftRevision,
     int? retryCount,
     int? setupGeneration,
+    int? setupLineageVersion,
     String? lastError,
     bool clearLastError = false,
     String? lastFailureCode,
@@ -248,6 +252,7 @@ class OnboardingCompletionJob {
       draftRevision: draftRevision ?? this.draftRevision,
       retryCount: retryCount ?? this.retryCount,
       setupGeneration: setupGeneration ?? this.setupGeneration,
+      setupLineageVersion: setupLineageVersion ?? this.setupLineageVersion,
       lastError: clearLastError ? null : (lastError ?? this.lastError),
       lastFailureCode: clearLastFailure
           ? null
@@ -312,6 +317,7 @@ class OnboardingCompletionJob {
       'draftRevision': draftRevision,
       'retryCount': retryCount,
       'setupGeneration': setupGeneration,
+      'setupLineageVersion': setupLineageVersion,
       if (lastFailureCode != null) 'failureCode': lastFailureCode,
       if (lastFailureStage != null) 'failureStage': lastFailureStage,
       if (retryable != null) 'retryable': retryable,
@@ -380,6 +386,8 @@ class OnboardingCompletionJob {
       draftRevision: (map['draftRevision'] as num?)?.toInt() ?? 1,
       retryCount: (map['retryCount'] as num?)?.toInt() ?? 0,
       setupGeneration: (map['setupGeneration'] as num?)?.toInt() ?? 0,
+      setupLineageVersion:
+          (map['setupLineageVersion'] as num?)?.toInt() ?? 0,
       lastError: map['lastError'] as String?,
       lastFailureCode:
           map['failureCode'] as String? ?? map['lastFailureCode'] as String?,

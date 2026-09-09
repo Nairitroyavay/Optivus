@@ -106,14 +106,16 @@ class OnboardingSetupResetCoordinator {
         if (pointerData != null) {
           final supersededPointer = Map<String, dynamic>.from(pointerData)
             ..['status'] = 'superseded'
+            ..['setupLineageVersion'] = UserProfile.currentSetupLineageVersion
             ..['updatedAt'] = Timestamp.fromDate(now);
           tx.set(pointerRef, supersededPointer);
         }
 
         // 2. Write fresh schema v4 draft for the new setup generation.
-        final newDraft = OnboardingDraft(
+        final newDraft = OnboardingDraft.freshForSetup(
           uid: cleanUid,
           setupGeneration: nextGeneration,
+          setupLineageVersion: UserProfile.currentSetupLineageVersion,
           lastResetOperationId: operationId,
           createdAt: now,
           updatedAt: now,
@@ -124,6 +126,7 @@ class OnboardingSetupResetCoordinator {
         final updatedProfile = currentProfile.copyWith(
           uid: cleanUid,
           currentSetupGeneration: nextGeneration,
+          setupLineageVersion: UserProfile.currentSetupLineageVersion,
           lastResetOperationId: operationId,
           onboardingInputCompleted: false,
           onboardingProjectionStatus: 'pending',
@@ -168,9 +171,10 @@ class OnboardingSetupResetCoordinator {
 
     jobService?.markCurrentRunSupersededInMemory(cleanUid);
 
-    final newDraft = OnboardingDraft(
+    final newDraft = OnboardingDraft.freshForSetup(
       uid: cleanUid,
       setupGeneration: nextGeneration,
+      setupLineageVersion: UserProfile.currentSetupLineageVersion,
       lastResetOperationId: operationId,
       createdAt: now,
       updatedAt: now,
@@ -180,6 +184,7 @@ class OnboardingSetupResetCoordinator {
     final updatedProfile = existingProfile.copyWith(
       uid: cleanUid,
       currentSetupGeneration: nextGeneration,
+      setupLineageVersion: UserProfile.currentSetupLineageVersion,
       lastResetOperationId: operationId,
       onboardingInputCompleted: false,
       onboardingProjectionStatus: 'pending',

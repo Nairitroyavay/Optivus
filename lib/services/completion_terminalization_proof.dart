@@ -12,6 +12,7 @@ class CompletionTerminalizationState {
   final String? sourceFingerprint;
   final int? draftRevision;
   final int? setupGeneration;
+  final int? setupLineageVersion;
   final OnboardingCompletionJob? job;
 
   const CompletionTerminalizationState({
@@ -23,6 +24,7 @@ class CompletionTerminalizationState {
     this.sourceFingerprint,
     this.draftRevision,
     this.setupGeneration,
+    this.setupLineageVersion,
     this.job,
   });
 }
@@ -143,10 +145,15 @@ class CompletionTerminalizationProof {
     if (bundle.sourceFingerprint != draft.effectiveSourceFingerprint ||
         bundle.draftRevision != draft.revision ||
         bundle.setupGeneration != draft.setupGeneration ||
+        bundle.setupLineageVersion != draft.setupLineageVersion ||
         job.sourceFingerprint != draft.effectiveSourceFingerprint ||
         job.draftRevision != draft.revision ||
         job.setupGeneration != draft.setupGeneration ||
-        profile.currentSetupGeneration != draft.setupGeneration) {
+        job.setupLineageVersion != draft.setupLineageVersion ||
+        profile.currentSetupGeneration != draft.setupGeneration ||
+        profile.setupLineageVersion != draft.setupLineageVersion ||
+        (currentRun.setupLineageVersion != null &&
+            currentRun.setupLineageVersion != draft.setupLineageVersion)) {
       return const CompletionTerminalizationProof.notEligible(
         CompletionTerminalizationReason.invalidCompletionBundle,
       );

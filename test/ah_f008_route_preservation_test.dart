@@ -24,6 +24,7 @@ import 'package:optivus/repositories/routine_transaction_repository.dart';
 import 'package:optivus/repositories/habit_systems_repository.dart';
 import 'package:optivus/repositories/fake_habit_systems_repository.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
+import 'package:optivus/services/onboarding_setup_lineage_migration_coordinator.dart';
 import 'package:optivus/services/server_reconstructor.dart';
 import 'package:optivus/services/session_destination_resolver.dart';
 import 'package:optivus/state/app_state.dart';
@@ -919,6 +920,9 @@ class _CountingServerReconstructor implements ServerReconstructor {
 
   @override
   ServerReconstructionSource get source => throw UnimplementedError();
+
+  @override
+  OnboardingSetupLineageMigrationCoordinator? get migrationCoordinator => null;
 
   @override
   Future<ReconstructionResult> reconstruct({

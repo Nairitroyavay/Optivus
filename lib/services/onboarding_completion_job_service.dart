@@ -59,6 +59,7 @@ class OnboardingCurrentRunSnapshot {
   final String? sourceFingerprint;
   final int? draftRevision;
   final int setupGeneration;
+  final int setupLineageVersion;
   final CurrentRunPointerOrigin pointerOrigin;
   final OnboardingCompletionJob? job;
 
@@ -71,6 +72,8 @@ class OnboardingCurrentRunSnapshot {
     this.sourceFingerprint,
     this.draftRevision,
     this.setupGeneration = 0,
+    this.setupLineageVersion =
+        OnboardingCompletionJob.currentSetupLineageVersion,
     this.pointerOrigin = CurrentRunPointerOrigin.canonicalPointer,
     this.job,
   });
@@ -84,6 +87,7 @@ class OnboardingCurrentRunSnapshot {
       sourceFingerprint = null,
       draftRevision = null,
       setupGeneration = 0,
+      setupLineageVersion = 0,
       pointerOrigin = CurrentRunPointerOrigin.none,
       job = null;
 
@@ -97,6 +101,7 @@ class OnboardingCurrentRunSnapshot {
       sourceFingerprint: sourceFingerprint,
       draftRevision: draftRevision,
       setupGeneration: setupGeneration,
+      setupLineageVersion: setupLineageVersion,
       job: job,
     );
   }
@@ -257,6 +262,7 @@ class OnboardingCompletionJobService {
           runId: runId,
           draftRevision: finalDraft.revision,
           setupGeneration: finalDraft.setupGeneration,
+          setupLineageVersion: finalDraft.setupLineageVersion,
           now: now,
         );
         if (job.status == OnboardingJobStatus.fatalFailure) {
@@ -1264,6 +1270,7 @@ class OnboardingCompletionJobService {
     required String runId,
     required int draftRevision,
     required int setupGeneration,
+    int setupLineageVersion = OnboardingCompletionJob.currentSetupLineageVersion,
     required DateTime now,
   }) async {
     final existing = await _loadJobStatus(uid, runId);
@@ -1277,6 +1284,7 @@ class OnboardingCompletionJobService {
         sourceFingerprint: sourceFingerprint,
         draftRevision: draftRevision,
         setupGeneration: setupGeneration,
+        setupLineageVersion: setupLineageVersion,
         retryCount: 0,
         createdAt: now,
         updatedAt: now,
@@ -1293,7 +1301,8 @@ class OnboardingCompletionJobService {
     }
     if (existing.sourceFingerprint != sourceFingerprint ||
         existing.draftRevision != draftRevision ||
-        existing.setupGeneration != setupGeneration) {
+        existing.setupGeneration != setupGeneration ||
+        existing.setupLineageVersion != setupLineageVersion) {
       throw StateError('Onboarding run identity collision.');
     }
     return existing.copyWith(updatedAt: now);
@@ -1356,6 +1365,8 @@ class OnboardingCompletionJobService {
           draftRevision: (pointerData?['draftRevision'] as num?)?.toInt(),
           setupGeneration:
               (pointerData?['setupGeneration'] as num?)?.toInt() ?? 0,
+          setupLineageVersion:
+              (pointerData?['setupLineageVersion'] as num?)?.toInt() ?? 0,
           pointerOrigin: CurrentRunPointerOrigin.canonicalPointer,
           job: await _loadJobStatus(uid, runId),
         );
@@ -1370,6 +1381,8 @@ class OnboardingCompletionJobService {
           draftRevision: (pointerData['draftRevision'] as num?)?.toInt(),
           setupGeneration:
               (pointerData['setupGeneration'] as num?)?.toInt() ?? 0,
+          setupLineageVersion:
+              (pointerData['setupLineageVersion'] as num?)?.toInt() ?? 0,
           pointerOrigin: CurrentRunPointerOrigin.canonicalPointer,
         );
       }
@@ -1394,6 +1407,7 @@ class OnboardingCompletionJobService {
         sourceFingerprint: legacyJob.sourceFingerprint,
         draftRevision: legacyJob.draftRevision,
         setupGeneration: 0,
+        setupLineageVersion: legacyJob.setupLineageVersion,
         pointerOrigin: CurrentRunPointerOrigin.legacyFixedJob,
         job: legacyJob,
       );
@@ -1410,6 +1424,7 @@ class OnboardingCompletionJobService {
       sourceFingerprint: memJob?.sourceFingerprint,
       draftRevision: memJob?.draftRevision,
       setupGeneration: memJob?.setupGeneration ?? 0,
+      setupLineageVersion: memJob?.setupLineageVersion ?? OnboardingCompletionJob.currentSetupLineageVersion,
       pointerOrigin: CurrentRunPointerOrigin.canonicalPointer,
       job: memJob,
     );
@@ -1510,7 +1525,8 @@ class OnboardingCompletionJobService {
     final pointerStatus = _memoryStore.currentRunStatuses[candidate.uid];
     final prior = _memoryStore.jobs['${candidate.uid}:$currentRunId'];
     if (pointerStatus == 'superseded' ||
-        candidate.setupGeneration > (prior?.setupGeneration ?? 0)) {
+        candidate.setupGeneration > (prior?.setupGeneration ?? 0) ||
+        candidate.setupLineageVersion > (prior?.setupLineageVersion ?? 0)) {
       return;
     }
     final priorFailed =
@@ -1547,6 +1563,7 @@ class OnboardingCompletionJobService {
       'sourceFingerprint': job.sourceFingerprint,
       'draftRevision': job.draftRevision,
       'setupGeneration': job.setupGeneration,
+      'setupLineageVersion': job.setupLineageVersion,
       'status': status,
       'updatedAt': Timestamp.fromDate(job.updatedAt),
       'schemaVersion': 1,

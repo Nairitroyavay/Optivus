@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class UserProfile {
   static const int currentSchemaVersion = 1;
+  static const int currentSetupLineageVersion = 1;
 
   final String uid;
   final String email;
@@ -18,6 +19,7 @@ class UserProfile {
   final String onboardingProjectionStatus;
   final int onboardingStep;
   final int currentSetupGeneration;
+  final int setupLineageVersion;
   final String? lastResetOperationId;
 
   bool get onboardingCompleted =>
@@ -63,6 +65,7 @@ class UserProfile {
     bool onboardingCompleted = false,
     this.onboardingStep = 0,
     this.currentSetupGeneration = 0,
+    this.setupLineageVersion = currentSetupLineageVersion,
     this.lastResetOperationId,
     this.lifeRole = '',
     this.workingExtra,
@@ -102,6 +105,7 @@ class UserProfile {
       onboardingCompleted: false,
       onboardingStep: 0,
       currentSetupGeneration: 0,
+      setupLineageVersion: currentSetupLineageVersion,
       lastResetOperationId: null,
     );
   }
@@ -120,6 +124,7 @@ class UserProfile {
       'onboardingCompleted': onboardingCompleted,
       'onboardingStep': onboardingStep,
       'currentSetupGeneration': currentSetupGeneration,
+      'setupLineageVersion': setupLineageVersion,
       if (lastResetOperationId != null)
         'lastResetOperationId': lastResetOperationId,
       'lifeRole': lifeRole,
@@ -156,6 +161,7 @@ class UserProfile {
       'onboardingCompleted': onboardingCompleted,
       'onboardingStep': onboardingStep,
       'currentSetupGeneration': currentSetupGeneration,
+      'setupLineageVersion': setupLineageVersion,
       if (lastResetOperationId != null)
         'lastResetOperationId': lastResetOperationId,
       'lifeRole': lifeRole,
@@ -197,6 +203,8 @@ class UserProfile {
       onboardingStep: map['onboardingStep'] as int? ?? 0,
       currentSetupGeneration:
           (map['currentSetupGeneration'] as num?)?.toInt() ?? 0,
+      setupLineageVersion:
+          (map['setupLineageVersion'] as num?)?.toInt() ?? 0,
       lastResetOperationId: map['lastResetOperationId'] as String?,
       lifeRole: map['lifeRole'] as String? ?? '',
       workingExtra: map['workingExtra'] as String?,
@@ -235,6 +243,7 @@ class UserProfile {
     bool? onboardingCompleted,
     int? onboardingStep,
     int? currentSetupGeneration,
+    int? setupLineageVersion,
     String? lastResetOperationId,
     String? lifeRole,
     String? workingExtra,
@@ -276,6 +285,7 @@ class UserProfile {
       onboardingStep: onboardingStep ?? this.onboardingStep,
       currentSetupGeneration:
           currentSetupGeneration ?? this.currentSetupGeneration,
+      setupLineageVersion: setupLineageVersion ?? this.setupLineageVersion,
       lastResetOperationId: lastResetOperationId ?? this.lastResetOperationId,
       lifeRole: lifeRole ?? this.lifeRole,
       workingExtra: workingExtra ?? this.workingExtra,

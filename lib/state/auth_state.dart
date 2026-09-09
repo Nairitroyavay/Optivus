@@ -34,6 +34,7 @@ import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/state/auth_generation.dart';
 import 'package:optivus/state/auth_flow_status.dart';
 import 'package:optivus/services/onboarding_resume_validator.dart';
+import 'package:optivus/services/onboarding_setup_lineage_migration_coordinator.dart';
 import 'package:optivus/services/onboarding_upload_source_reconciler.dart';
 import 'package:optivus/services/session_destination_resolver.dart';
 import 'package:optivus/services/server_reconstructor.dart';
@@ -56,6 +57,8 @@ final serverReconstructorProvider = Provider<ServerReconstructor>((ref) {
       onboardingRepository: ref.watch(onboardingRepositoryProvider),
       completionJobService: ref.watch(onboardingCompletionJobServiceProvider),
     ),
+    migrationCoordinator:
+        ref.watch(onboardingSetupLineageMigrationCoordinatorProvider),
   );
 });
 
@@ -887,7 +890,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final coordinator = _ref.read(onboardingSetupResetCoordinatorProvider);
     final result = await coordinator.resetSetup(uid: user.uid);
     _ref.read(userProfileProvider.notifier).updateProfile(result.profile);
-    _ref.read(onboardingStateProvider.notifier).reset(user.uid);
+    _ref.read(onboardingStateProvider.notifier).loadSeedData(result.draft);
     state = state.copyWith(
       user: user,
       status: AuthFlowStatus.signedInOnboardingIncomplete,
@@ -1310,8 +1313,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
           _ref
               .read(onboardingStateProvider.notifier)
               .loadSeedData(
-                OnboardingDraft(
+                OnboardingDraft.freshForSetup(
                   uid: user.uid,
+                  setupGeneration: result.profile.currentSetupGeneration,
+                  setupLineageVersion: result.profile.setupLineageVersion,
                   baseTimeline: const BaseTimelineDraft()
                       .withRequiredFixedBlocks(),
                   createdAt: now,
@@ -1526,13 +1531,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       )) {
         final missingCompletedState =
             diagnostics['code'] == 'completed_profile_without_final_draft';
+        final diagnosticCode = diagnostics['code'] as String?;
         state = state.copyWith(
           error: ReconstructionErrorMapper.fromRecoveryReason(reason).copyWith(
             publicMessage: missingCompletedState
                 ? 'Setup recovery is required because both draft and completion snapshot are missing.'
                 : 'Setup recovery is required because durable onboarding state is inconsistent.',
           ),
-          startupReasonCode: 'reconstruction_${reason.name}',
+          startupReasonCode: diagnosticCode != null && diagnosticCode.isNotEmpty
+              ? 'reconstruction_${reason.name}_$diagnosticCode'
+              : 'reconstruction_${reason.name}',
         );
       }
     } on ReconstructionBootstrapException {

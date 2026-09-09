@@ -31,6 +31,6 @@ Future<void> prepareProfileSetupRerun(WidgetRef ref) async {
     final coordinator = ref.read(onboardingSetupResetCoordinatorProvider);
     final result = await coordinator.resetSetup(uid: uid);
     ref.read(userProfileProvider.notifier).updateProfile(result.profile);
-    ref.read(onboardingStateProvider.notifier).reset(uid);
+    ref.read(onboardingStateProvider.notifier).loadSeedData(result.draft);
   }
 }

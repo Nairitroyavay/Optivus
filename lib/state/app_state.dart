@@ -119,21 +119,16 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
     final projectionStatus =
         patch['onboardingProjectionStatus'] as String? ??
         (patch['onboardingCompleted'] == true ? 'completed' : 'pending');
-    state = UserProfile(
+    state = state.copyWith(
       uid: patch['uid'] as String? ?? state.uid,
-      email: state.email,
-      displayName: state.displayName,
-      createdAt: state.createdAt,
-      updatedAt:
-          DateTime.tryParse(patch['updatedAt'] as String? ?? '') ??
-          DateTime.now(),
+      onboardingCompleted: patch['onboardingCompleted'] as bool? ?? true,
       onboardingInputCompleted: inputCompleted,
       onboardingProjectionStatus: projectionStatus,
       onboardingStep:
           (patch['onboardingStep'] as num?)?.toInt() ?? state.onboardingStep,
       lifeRole: patch['lifeRole'] as String? ?? state.lifeRole,
-      workingExtra: patch['workingExtra'] as String?,
-      businessMode: patch['businessMode'] as String?,
+      workingExtra: patch['workingExtra'] as String? ?? state.workingExtra,
+      businessMode: patch['businessMode'] as String? ?? state.businessMode,
       exerciseLevel: patch['exerciseLevel'] as String? ?? state.exerciseLevel,
       waterIntake: patch['waterIntake'] as String? ?? state.waterIntake,
       stressLevel: patch['stressLevel'] as String? ?? state.stressLevel,
@@ -153,6 +148,9 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
       coachName: patch['coachName'] as String? ?? state.coachName,
       coachStyle: patch['coachStyle'] as String? ?? state.coachStyle,
       slipUpStyle: patch['slipUpStyle'] as String? ?? state.slipUpStyle,
+      updatedAt:
+          DateTime.tryParse(patch['updatedAt'] as String? ?? '') ??
+          DateTime.now(),
     );
   }
 }
