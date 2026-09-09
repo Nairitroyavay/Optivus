@@ -12,17 +12,17 @@ Coach preferences, notification preferences, and reviewed AI-import data.
 
 Auth and Onboarding pages 0-14 are a frozen source/code baseline. The
 Pre-Routine stabilization gate passed on 2026-09-09 (`PASS — READY FOR ROUTINE PHASE`),
-and **Gate 7 — Routine Entry Gate / Routine Production Foundation** has been
-completed and verified (`GATE 7 PASSED`).
+and **Gate 7 — Routine Entry Gate / Routine Production Foundation** implementation is
+complete (`GATE 7 IMPLEMENTATION COMPLETE — EXTERNAL ACCEPTANCE PENDING`).
 
-Routine feature development is unblocked. `routineNotifierProvider` is the sole
-canonical owner for Routine templates and dated occurrences across fake and Firebase
-modes; `mockRoutineProvider` is completely eradicated from `lib/`; `habitSystemsNotifierProvider`
-owns Habit Systems; legacy `habitRepositoryProvider` is formally retired.
-CI automation (`.github/workflows/ci.yml`) is checked in with pinned toolchains.
-Gates 1–6 have user-confirmed physical acceptance on iPhone hardware in fake/local mode.
-Live Firebase persistence is supported on Android (`optivus-lifeos`); physical acceptance
-on an Android device is pending hardware attachment.
+Routine product expansion remains blocked pending external acceptance on physical Android
+hardware (TD-002 / TD-011). `routineNotifierProvider` is the sole canonical owner for Routine
+templates and dated occurrences across fake and Firebase modes; `mockRoutineProvider` is
+completely eradicated from `lib/`; `habitSystemsNotifierProvider` owns Habit Systems; legacy
+`habitRepositoryProvider` is formally retired. CI automation (`.github/workflows/ci.yml`) is
+checked in with pinned toolchains. Gates 1–6 have user-confirmed physical acceptance on iPhone
+hardware in fake/local mode. Live Firebase persistence is supported on Android (`optivus-lifeos`);
+physical acceptance on an Android device is pending hardware attachment.
 
 Important warnings:
 
@@ -50,10 +50,10 @@ and TD-036, before preparing any release build.
 Automated and physical verification snapshot as of 2026-09-09:
 
 - `flutter analyze`: PASS, 0 issues found.
-- Gate 7 Routine Production Foundation tests: PASS, 10 tests across static architecture and domain foundation.
-- Routine full test suite: PASS, 26 tests (100%).
+- Gate 7 Routine Production Foundation tests: PASS, 12 tests across static architecture (4) and domain foundation (8).
+- Routine full test suite: PASS, 168 tests (100%).
 - Pre-Routine stabilization matrix (Gates 1-6): PASS.
-- Full `flutter test`: PASS, 2,098 tests (10 skipped, 0 failed).
+- Full `flutter test`: PASS, 2,100 tests (10 skipped, 0 failed).
 - Firestore rules emulator (`npm run test:firestore`): PASS, 144 Jest tests.
 - Worker typecheck + request tests: PASS, 121 tests total across all 5 Workers (R2 Upload 19, Routine Import 13, Nutrition 12, Skin Care 66, Coach 11).
 - CI workflow: `.github/workflows/ci.yml` checked in with static analysis, Flutter test suites, Firestore security rules, and Worker test suites.

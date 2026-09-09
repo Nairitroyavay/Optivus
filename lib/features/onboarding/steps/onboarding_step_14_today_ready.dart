@@ -6,10 +6,7 @@ import 'package:optivus/core/errors/completion_error_mapper.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/presentation/step14_presentation_models.dart';
 import 'package:optivus/features/onboarding/onboarding_step_id.dart';
-import 'package:optivus/features/onboarding/timeline/adapters/fixed_timeline_adapter.dart';
-import 'package:optivus/features/onboarding/timeline/models/timeline_entry.dart';
-import 'package:optivus/features/onboarding/timeline/models/timeline_style.dart';
-import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
+import 'package:optivus/features/onboarding/timeline/widgets/step14_final_timeline.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_completion_job.dart';
@@ -18,6 +15,9 @@ import 'package:optivus/services/onboarding_completion_job_service.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
+
+int step14InitialTimelineDay([DateTime? now]) =>
+    (now ?? DateTime.now()).weekday;
 
 /// Step 14 Final Review & Completion Screen.
 class OnboardingTodayReadyStep extends ConsumerStatefulWidget {
@@ -43,7 +43,7 @@ class OnboardingTodayReadyStepState
 
   Step14PresentationMode _presentationMode = Step14PresentationMode.review;
   bool _viewingFullTimeline = false;
-  int _timelineSelectedDay = 1;
+  int _timelineSelectedDay = step14InitialTimelineDay();
   RecoverableError? _recoverableError;
   OnboardingCompletionJob? _failureJob;
   OnboardingCurrentRunSnapshot? _failureSnapshot;
@@ -625,51 +625,11 @@ class OnboardingTodayReadyStepState
 
   // ── Full Timeline View (AH-F018) ────────────────────────────────────────────
   Widget _buildFullTimelineView(OnboardingCompletionBundle bundle) {
-    final entries = <TimelineEntry>[];
-    for (final block in bundle.baseTimelineBlocks) {
-      if (block.section == 'fixed' &&
-          (block.crossesMidnight || block.startMinute >= block.endMinute)) {
-        entries.addAll(
-          const FixedTimelineAdapter()
-              .toEntries(block)
-              .map((entry) => entry.copyWith(isEditable: false)),
-        );
-        continue;
-      }
-      final category = switch (block.section) {
-        'classes' => TimelineCategory.classes,
-        'job_work_business' => TimelineCategory.work,
-        'eating' => TimelineCategory.meal,
-        'fixed' => TimelineCategory.fixed,
-        'skin_care' => TimelineCategory.skinCare,
-        _ => TimelineCategory.other,
-      };
-      entries.add(
-        TimelineEntry(
-          id: block.id,
-          sourceId: block.id,
-          startMinute: block.startMinute,
-          endMinute: block.endMinute,
-          repeatDays: block.repeatDays,
-          title: block.title,
-          subtitle: block.location,
-          category: category,
-          isEditable: false,
-        ),
-      );
-    }
-
-    return FullScreenTimelineScaffold(
+    return Step14FinalTimeline(
       key: const ValueKey('onboarding-step14-shared-preview'),
-      entries: entries,
+      bundle: bundle,
       selectedDay: _timelineSelectedDay,
       onDayChanged: (day) => setState(() => _timelineSelectedDay = day),
-      title: 'Today timeline preview',
-      subtitle: 'Review only — edit items from their setup step.',
-      mode: TimelineMode.previewReadOnly,
-      accent: OptivusColors.aquaAccent,
-      styleBuilder: (entry) =>
-          TimelineEntryStyle.defaultForCategory(entry.category),
     );
   }
 

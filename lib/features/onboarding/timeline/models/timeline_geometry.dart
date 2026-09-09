@@ -74,6 +74,10 @@ class TimelineGeometryConfig {
   }
 }
 
+enum TimelineVisibleRangePolicy { legacy, contentAdaptive }
+
+enum TimelineStretchPolicy { legacy, constraintBased }
+
 /// A segment of the timeline that has been stretched vertically to fit content.
 @immutable
 class TimelineStretchedSegment {
@@ -114,14 +118,30 @@ class TimelineScale {
 
   /// Calculates minute of day for a given Y position.
   int minuteForY(double y) {
-    return ((y - topPadding) / pixelsPerMinute).round() + startMinute;
+    if (y <= topPadding) return startMinute;
+    var low = startMinute.toDouble();
+    var high = endMinute.toDouble();
+    for (var i = 0; i < 48; i++) {
+      final mid = (low + high) / 2;
+      if (_yForMinuteDouble(mid) < y) {
+        low = mid;
+      } else {
+        high = mid;
+      }
+    }
+    return ((low + high) / 2).round().clamp(startMinute, endMinute);
   }
 
   /// Exact pixel height for a minute range.
   double heightForRange(int start, int end) {
-    final diff = end - start;
-    return (diff < 0 ? 0 : diff) * pixelsPerMinute;
+    if (end <= start) return 0;
+    return yForMinute(end) - yForMinute(start);
   }
+
+  double _yForMinuteDouble(double minute) =>
+      (minute - startMinute) * pixelsPerMinute +
+      _stretchAtMinute(minute) +
+      topPadding;
 
   double _stretchAtMinute(double minute) {
     double stretch = 0.0;

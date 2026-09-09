@@ -27,12 +27,11 @@ their loaded occurrence records, loading/refresh state, mutations, and retry
 state. It loads and writes through `RoutineRepository`,
 `RoutineHistoryRepository`, and `RoutineTransactionRepository`.
 
-`mockRoutineProvider` is strictly banned from `lib/features/routine/` (enforced
-by static architectural test `test/gate7_static_architecture_test.dart` and
-`test/routine_architecture_test.dart`). It remains only on the test/dev
-allowlist for isolated preview resets. Firebase mode does not put onboarding or
-import output into it. The onboarding completion bundle is a bootstrap snapshot;
-it is not a live Routine store.
+`mockRoutineProvider` and `MockRoutineNotifier` have been completely removed from
+`lib/` (verified by `test/gate7_static_architecture_test.dart` asserting zero
+occurrences across all of `lib/`). `routineNotifierProvider` is the sole canonical
+state owner across both fake and Firebase modes. The onboarding completion bundle is
+a bootstrap snapshot; it is not a live Routine store.
 
 The authenticated Firebase UID is passed explicitly to repository methods and
 retained by `RoutineNotifier.loadForOwner`. Firebase Routine writes never
@@ -221,10 +220,9 @@ from `completed` to `skipped`), `undoToPlannedAllowed` is `false` and undo is no
 
 ### Provider Ownership
 
-In Firebase production mode, `routineNotifierProvider` is the sole authoritative
-owner of the Routine state (templates, occurrences, loading, refresh, mutations,
-and offline retry). `mockRoutineProvider` is strictly excluded from production
-use and is only permitted in `OptivusBackendMode.fake` or test environments.
+`routineNotifierProvider` is the sole authoritative owner of Routine state
+(templates, occurrences, loading, refresh, mutations, and offline retry) across both
+fake and Firebase modes. `mockRoutineProvider` is completely eradicated from `lib/`.
 
 ### Projection ID
 
@@ -435,8 +433,7 @@ Completed Firebase restoration is:
 3. require the matching completed receipt;
 4. load canonical templates and occurrences into
    `routineNotifierProvider`;
-5. hydrate still-local non-Routine features from their bootstrap snapshot; and
-6. leave `mockRoutineProvider` empty.
+5. hydrate still-local non-Routine features from their bootstrap snapshot.
 
 Automatic sign-in repair no longer reapplies accepted Routine imports.
 Explicit missing-import recovery remains available from the review flow; this

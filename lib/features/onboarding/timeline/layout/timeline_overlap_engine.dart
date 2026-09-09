@@ -17,6 +17,9 @@ class TimelineOverlapEngine {
     TimelineGeometryConfig config = const TimelineGeometryConfig(),
     int? customStartMinute,
     int? customEndMinute,
+    TimelineVisibleRangePolicy visibleRangePolicy =
+        TimelineVisibleRangePolicy.legacy,
+    TimelineStretchPolicy stretchPolicy = TimelineStretchPolicy.legacy,
   }) {
     // 1. Filter entries active on the selected day
     final dayEntries = entries
@@ -33,6 +36,7 @@ class TimelineOverlapEngine {
       config,
       customStartMinute,
       customEndMinute,
+      visibleRangePolicy,
     );
 
     // 4. Calculate stretched segments for entries with custom minHeight
@@ -52,7 +56,12 @@ class TimelineOverlapEngine {
         }
       }
     }
-    final mergedStretches = _mergeSegments(rawStretches);
+    final mergedStretches = stretchPolicy == TimelineStretchPolicy.legacy
+        ? _mergeSegments(rawStretches)
+        : solveStretchConstraints(
+            sortedEntries,
+            pixelsPerMinute: config.pixelsPerMinute,
+          );
 
     // 5. Create coordinate scale
     final scale = TimelineScale(
@@ -163,6 +172,7 @@ class TimelineOverlapEngine {
     TimelineGeometryConfig config,
     int? customStart,
     int? customEnd,
+    TimelineVisibleRangePolicy policy,
   ) {
     if (customStart != null && customEnd != null) {
       return (customStart, customEnd);
@@ -174,6 +184,23 @@ class TimelineOverlapEngine {
 
     final minStart = entries.map((e) => e.startMinute).reduce(math.min);
     final maxEnd = entries.map((e) => e.endMinute).reduce(math.max);
+
+    if (policy == TimelineVisibleRangePolicy.contentAdaptive) {
+      var start = (((minStart - 30).clamp(0, 1440)) ~/ 30) * 30;
+      var end = (((((maxEnd + 30).clamp(0, 1440)) + 29) ~/ 30) * 30)
+          .clamp(0, 1440)
+          .toInt();
+      if (end - start < 180) {
+        final missing = 180 - (end - start);
+        final before = math.min(start, (missing / 2).floor());
+        start -= before;
+        end = math.min(1440, end + missing - before);
+        if (end - start < 180) {
+          start = math.max(0, end - 180);
+        }
+      }
+      return (start, end);
+    }
 
     final startHour = math.max(
       0,
@@ -289,5 +316,61 @@ class TimelineOverlapEngine {
     }
     merged.add(current);
     return merged;
+  }
+
+  /// Solves minimum-height constraints by adding only each current deficiency.
+  static List<TimelineStretchedSegment> solveStretchConstraints(
+    List<TimelineEntry> entries, {
+    required double pixelsPerMinute,
+    double epsilon = 0.01,
+  }) {
+    final constraints =
+        entries
+            .where(
+              (entry) =>
+                  entry.minHeight > 0 && entry.endMinute > entry.startMinute,
+            )
+            .toList()
+          ..sort(_compareEntries);
+    final segments = <TimelineStretchedSegment>[];
+
+    double stretchAt(int minute) {
+      var result = 0.0;
+      for (final segment in segments) {
+        if (minute <= segment.startMinute) continue;
+        if (minute >= segment.endMinute) {
+          result += segment.extraStretch;
+        } else {
+          result +=
+              (minute - segment.startMinute) /
+              (segment.endMinute - segment.startMinute) *
+              segment.extraStretch;
+        }
+      }
+      return result;
+    }
+
+    for (var pass = 0; pass < math.max(1, constraints.length * 2); pass++) {
+      var changed = false;
+      for (final entry in constraints) {
+        final current =
+            (entry.endMinute - entry.startMinute) * pixelsPerMinute +
+            stretchAt(entry.endMinute) -
+            stretchAt(entry.startMinute);
+        final deficiency = entry.minHeight - current;
+        if (deficiency > epsilon) {
+          segments.add(
+            TimelineStretchedSegment(
+              startMinute: entry.startMinute,
+              endMinute: entry.endMinute,
+              extraStretch: deficiency,
+            ),
+          );
+          changed = true;
+        }
+      }
+      if (!changed) break;
+    }
+    return List.unmodifiable(segments);
   }
 }

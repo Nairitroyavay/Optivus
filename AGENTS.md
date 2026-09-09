@@ -4,9 +4,9 @@ This file is the canonical repository instruction source for coding agents.
 
 # Current engineering phase
 
-**CURRENT PHASE: PHASE 4 — ROUTINE PRODUCTION DEVELOPMENT (GATE 7 COMPLETED)**
+**CURRENT PHASE: PHASE 4 — ROUTINE PRODUCTION FOUNDATION (GATE 7 IMPLEMENTATION COMPLETE — EXTERNAL ACCEPTANCE PENDING)**
 
-The Pre-Routine stabilization gate passed on 2026-09-09 (`PASS — READY FOR ROUTINE PHASE`), and Gate 7 (Routine Entry Gate / Routine Production Foundation) has passed (`GATE 7 PASSED`). Routine feature development is now unblocked.
+The Pre-Routine stabilization gate passed on 2026-09-09 (`PASS — READY FOR ROUTINE PHASE`). Gate 7 (Routine Entry Gate / Routine Production Foundation) implementation is complete and verified via automated suites (2,100 Flutter tests, 144 Firestore tests). External Firebase acceptance on a physical Android device is pending (TD-002 / TD-011). Routine product expansion remains blocked until physical acceptance passes.
 
 Current baseline:
 
@@ -14,7 +14,7 @@ Current baseline:
 * ONBOARDING 0–14: FROZEN EXCEPT VERIFIED REGRESSION / PRODUCT DEFECT FIXES
 * ONBOARDING STEP 7: FROZEN / REGRESSION FIXES ONLY
 * STEP 4/5 STEP7-STYLE UX: FROZEN
-* ROUTINE PRODUCTION DEVELOPMENT: UNBLOCKED (GATE 7 FOUNDATION COMPLETE)
+* ROUTINE PRODUCTION DEVELOPMENT: BLOCKED BY PENDING PHYSICAL ANDROID FIREBASE ACCEPTANCE (TD-002 / TD-011)
 * ARCHITECTURAL CLEANUP / MODERNIZATION: FROZEN UNLESS REQUIRED BY A VERIFIED DEFECT
 
 This is a stabilization phase, not an authorization to redesign Auth or Onboarding.
