@@ -1,0 +1,1092 @@
+TOTAL PROVIDERS: 116
+
+[001] appNavigationProvider
+      Path: lib/app/app_navigation_controller.dart:24
+      Call: StateNotifierProvider<AppNavigationController, int>(
+      Decl:
+        final appNavigationProvider =
+            StateNotifierProvider<AppNavigationController, int>((ref) {
+              return AppNavigationController();
+
+[002] optivusBackendModeProvider
+      Path: lib/config/backend_config.dart:91
+      Call: Provider<OptivusBackendMode>(
+      Decl:
+        final optivusBackendModeProvider = Provider<OptivusBackendMode>((ref) {
+          return OptivusBackendConfig.mode;
+
+[003] optivusDebugBuildProvider
+      Path: lib/config/backend_config.dart:97
+      Call: Provider<bool>(
+      Decl:
+        final optivusDebugBuildProvider = Provider<bool>((ref) => kDebugMode);
+
+[004] fakeBackendPolicyProvider
+      Path: lib/config/backend_config.dart:99
+      Call: Provider<FakeBackendPolicy>(
+      Decl:
+        final fakeBackendPolicyProvider = Provider<FakeBackendPolicy>((ref) {
+          return FakeBackendPolicy(
+            isDebugBuild: ref.watch(optivusDebugBuildProvider),
+            backendMode: ref.watch(optivusBackendModeProvider),
+          );
+
+[005] fakeDataAllowedProvider
+      Path: lib/config/backend_config.dart:106
+      Call: Provider<bool>(
+      Decl:
+        final fakeDataAllowedProvider = Provider<bool>((ref) {
+          final policy = ref.watch(fakeBackendPolicyProvider);
+
+[006] routerNotifierProvider
+      Path: lib/core/router/app_router.dart:33
+      Call: Provider(
+      Decl:
+        final routerNotifierProvider = Provider((ref) => RouterNotifier(ref));
+
+[007] routerProvider
+      Path: lib/core/router/app_router.dart:70
+      Call: Provider<GoRouter>(
+      Decl:
+        final routerProvider = Provider<GoRouter>((ref) {
+          final notifier = ref.watch(routerNotifierProvider);
+
+[008] toastQueueProvider
+      Path: lib/core/utils/liquid_toast_manager.dart:92
+      Call: StateNotifierProvider<ToastQueueNotifier, ToastQueueState>(
+      Decl:
+        final toastQueueProvider =
+            StateNotifierProvider<ToastQueueNotifier, ToastQueueState>(
+              (ref) => ToastQueueNotifier(),
+            );
+
+[009] coachDetailViewRequestProvider
+      Path: lib/features/coach/providers/coach_navigation_provider.dart:11
+      Call: StateProvider<CoachDetailView>(
+      Decl:
+        final coachDetailViewRequestProvider = StateProvider<CoachDetailView>(
+          (ref) => CoachDetailView.none,
+        );
+
+[010] goalsDetailViewRequestProvider
+      Path: lib/features/goals/providers/goals_navigation_provider.dart:21
+      Call: StateProvider<GoalsDetailTarget>(
+      Decl:
+        final goalsDetailViewRequestProvider = StateProvider<GoalsDetailTarget>(
+          (ref) => GoalsDetailTarget.none,
+        );
+
+[011] homeDashboardProvider
+      Path: lib/features/home/providers/home_dashboard_provider.dart:127
+      Call: StateNotifierProvider<HomeDashboardNotifier, HomeDashboardState>(
+      Decl:
+        final homeDashboardProvider =
+            StateNotifierProvider<HomeDashboardNotifier, HomeDashboardState>((ref) {
+              return HomeDashboardNotifier(
+                fakeDataAllowed: ref.watch(fakeDataAllowedProvider),
+              );
+
+[012] homeMindNoteProvider
+      Path: lib/features/home/providers/home_mind_note_provider.dart:56
+      Call: StateNotifierProvider<HomeMindNoteNotifier, List<HomeMindNote>>(
+      Decl:
+        final homeMindNoteProvider =
+            StateNotifierProvider<HomeMindNoteNotifier, List<HomeMindNote>>((ref) {
+              return HomeMindNoteNotifier(
+                fakeDataAllowed: ref.watch(fakeDataAllowedProvider),
+              );
+
+[013] homeDetailViewRequestProvider
+      Path: lib/features/home/providers/home_navigation_provider.dart:14
+      Call: StateProvider<HomeDetailTarget>(
+      Decl:
+        final homeDetailViewRequestProvider = StateProvider<HomeDetailTarget>(
+          (ref) => const HomeDetailTarget.none(),
+        );
+
+[014] onboardingClassTimelineProvider
+      Path: lib/features/onboarding/steps/onboarding_step_4_schedule_models.dart:10
+      Call: StateProvider.autoDispose<List<ClassRoutineBlock>>(
+      Decl:
+        final onboardingClassTimelineProvider =
+            StateProvider.autoDispose<List<ClassRoutineBlock>>((ref) => []);
+
+[015] onboardingWorkTimelineProvider
+      Path: lib/features/onboarding/steps/onboarding_step_4_schedule_models.dart:12
+      Call: StateProvider.autoDispose<List<ClassRoutineBlock>>(
+      Decl:
+        final onboardingWorkTimelineProvider =
+            StateProvider.autoDispose<List<ClassRoutineBlock>>((ref) => []);
+
+[016] step7ActionBridgeProvider
+      Path: lib/features/onboarding/steps/skin_care/skin_care_action_bridge.dart:87
+      Call: StateNotifierProvider<Step7ActionBridgeNotifier, Step7ActionBridgeState>(
+      Decl:
+        final step7ActionBridgeProvider =
+            StateNotifierProvider<Step7ActionBridgeNotifier, Step7ActionBridgeState>(
+              (ref) => Step7ActionBridgeNotifier(ref),
+            );
+
+[017] onboardingStep7PrimaryActionProvider
+      Path: lib/features/onboarding/steps/skin_care/skin_care_action_bridge.dart:93
+      Call: StateProvider<OnboardingStep7PrimaryAction?>(
+      Decl:
+        final onboardingStep7PrimaryActionProvider =
+            StateProvider<OnboardingStep7PrimaryAction?>((ref) => null);
+
+[018] skinCareFlowControllerProvider
+      Path: lib/features/onboarding/steps/skin_care/skin_care_flow_controller.dart:683
+      Call: StateNotifierProvider<SkinCareFlowController, SkinCareFlowStateHolder>(
+      Decl:
+        final skinCareFlowControllerProvider =
+            StateNotifierProvider<SkinCareFlowController, SkinCareFlowStateHolder>((
+              ref,
+            ) {
+              final controller = SkinCareFlowController(ref);
+
+[019] profileDetailViewRequestProvider
+      Path: lib/features/profile/providers/profile_navigation_provider.dart:40
+      Call: StateProvider<ProfileDetailTarget>(
+      Decl:
+        final profileDetailViewRequestProvider = StateProvider<ProfileDetailTarget>(
+          (ref) => ProfileDetailTarget.none,
+        );
+
+[020] profileSettingsProvider
+      Path: lib/features/profile/providers/profile_settings_provider.dart:318
+      Call: StateNotifierProvider<ProfileSettingsNotifier, ProfileSettingsState>(
+      Decl:
+        final profileSettingsProvider =
+            StateNotifierProvider<ProfileSettingsNotifier, ProfileSettingsState>((ref) {
+              return ProfileSettingsNotifier(
+                ref,
+                ref.watch(profileRepositoryProvider),
+                ref.watch(appPreferencesRepositoryProvider),
+              );
+
+[021] diagnosticBundleServiceProvider
+      Path: lib/features/recovery/services/diagnostic_bundle_service.dart:118
+      Call: Provider(
+      Decl:
+        final diagnosticBundleServiceProvider = Provider(
+          (ref) => const DiagnosticBundleService(),
+        );
+
+[022] recoveryCacheManagerProvider
+      Path: lib/features/recovery/services/recovery_cache_manager.dart:41
+      Call: Provider(
+      Decl:
+        final recoveryCacheManagerProvider = Provider(
+          (ref) => const RecoveryCacheManager(),
+        );
+
+[023] recoveryRetryControllerProvider
+      Path: lib/features/recovery/services/recovery_retry_controller.dart:98
+      Call: StateNotifierProvider<RecoveryRetryController, RecoveryRetryState>(
+      Decl:
+        final recoveryRetryControllerProvider =
+            StateNotifierProvider<RecoveryRetryController, RecoveryRetryState>(
+              (ref) => RecoveryRetryController(),
+            );
+
+[024] habitSystemsNotifierProvider
+      Path: lib/features/routine/controllers/habit_systems_controller.dart:719
+      Call: StateNotifierProvider<HabitSystemsNotifier, HabitSystemsState>(
+      Decl:
+        final habitSystemsNotifierProvider =
+            StateNotifierProvider<HabitSystemsNotifier, HabitSystemsState>((ref) {
+              final repo = ref.watch(habitSystemsRepositoryProvider);
+
+[025] routineDetailViewRequestProvider
+      Path: lib/features/routine/providers/routine_navigation_provider.dart:28
+      Call: StateProvider<RoutineDetailTarget>(
+      Decl:
+        final routineDetailViewRequestProvider = StateProvider<RoutineDetailTarget>(
+          (ref) => RoutineDetailTarget.none,
+        );
+
+[026] trackerSessionLinksProvider
+      Path: lib/features/routine/routine_state.dart:334
+      Call: StateNotifierProvider< RoutineTrackerLinksNotifier, List<TrackerSessionLink> >(
+      Decl:
+        final trackerSessionLinksProvider =
+            StateNotifierProvider<
+              RoutineTrackerLinksNotifier,
+              List<TrackerSessionLink>
+            >((ref) {
+              return RoutineTrackerLinksNotifier();
+
+[027] routineNotifierProvider
+      Path: lib/features/routine/routine_state.dart:2643
+      Call: StateNotifierProvider<RoutineNotifier, RoutineState>(
+      Decl:
+        final routineNotifierProvider =
+            StateNotifierProvider<RoutineNotifier, RoutineState>((ref) {
+              return RoutineNotifier(
+                ref.watch(routineRepositoryProvider),
+                ref.watch(routineHistoryRepositoryProvider),
+                ref.watch(routineTransactionRepositoryProvider),
+                ref,
+              );
+
+[028] selectedDayRoutineItemsProvider
+      Path: lib/features/routine/routine_state.dart:2653
+      Call: Provider<List<RoutineItem>>(
+      Decl:
+        final selectedDayRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
+          final state = ref.watch(routineNotifierProvider);
+
+[029] filteredRoutineItemsProvider
+      Path: lib/features/routine/routine_state.dart:2678
+      Call: Provider<List<RoutineItem>>(
+      Decl:
+        final filteredRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
+          final items = ref.watch(selectedDayRoutineItemsProvider);
+
+[030] todayRoutineItemsProvider
+      Path: lib/features/routine/routine_state.dart:2685
+      Call: Provider<List<RoutineItem>>(
+      Decl:
+        final todayRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
+          final state = ref.watch(routineNotifierProvider);
+
+[031] currentRoutineItemProvider
+      Path: lib/features/routine/routine_state.dart:2694
+      Call: Provider<RoutineItem?>(
+      Decl:
+        final currentRoutineItemProvider = Provider<RoutineItem?>((ref) {
+          final now = DateTime.now();
+
+[032] nextRoutineItemProvider
+      Path: lib/features/routine/routine_state.dart:2708
+      Call: Provider<RoutineItem?>(
+      Decl:
+        final nextRoutineItemProvider = Provider<RoutineItem?>((ref) {
+          final now = DateTime.now();
+
+[033] routineCompletionSummaryProvider
+      Path: lib/features/routine/routine_state.dart:2725
+      Call: Provider<RoutineCompletionSummary>(
+      Decl:
+        final routineCompletionSummaryProvider = Provider<RoutineCompletionSummary>((
+          ref,
+        ) {
+          final items = ref.watch(todayRoutineItemsProvider);
+
+[034] routineConflictSummaryProvider
+      Path: lib/features/routine/routine_state.dart:2750
+      Call: Provider<RoutineConflictSummary>(
+      Decl:
+        final routineConflictSummaryProvider = Provider<RoutineConflictSummary>((ref) {
+          final conflicts = ref.watch(
+            routineNotifierProvider.select((state) => state.conflicts),
+          );
+
+[035] aiRoutineSuggestionsEnabledProvider
+      Path: lib/features/routine/routine_state.dart:2814
+      Call: StateProvider<bool>(
+      Decl:
+        final aiRoutineSuggestionsEnabledProvider = StateProvider<bool>((ref) => true);
+
+[036] conflictResolverEnabledProvider
+      Path: lib/features/routine/routine_state.dart:2815
+      Call: StateProvider<bool>(
+      Decl:
+        final conflictResolverEnabledProvider = StateProvider<bool>((ref) => true);
+
+[037] routineNotificationsEnabledProvider
+      Path: lib/features/routine/routine_state.dart:2816
+      Call: StateProvider<bool>(
+      Decl:
+        final routineNotificationsEnabledProvider = StateProvider<bool>((ref) => true);
+
+[038] fitnessCenterProvider
+      Path: lib/features/tracker/fitness/providers/fitness_provider.dart:396
+      Call: StateNotifierProvider<FitnessCenterNotifier, FitnessCenterState>(
+      Decl:
+        final fitnessCenterProvider =
+            StateNotifierProvider<FitnessCenterNotifier, FitnessCenterState>((ref) {
+              return FitnessCenterNotifier(
+                ref,
+                fakeDataAllowed: ref.watch(fakeDataAllowedProvider),
+              );
+
+[039] hydrationTodayTotalProvider
+      Path: lib/features/tracker/hydration/hydration_provider.dart:4
+      Call: Provider<int>(
+      Decl:
+        final hydrationTodayTotalProvider = Provider<int>((ref) {
+          final logs = ref.watch(mockTrackerProvider).hydrationLogs;
+
+[040] hydrationGoalMlProvider
+      Path: lib/features/tracker/hydration/hydration_provider.dart:9
+      Call: Provider<int>(
+      Decl:
+        final hydrationGoalMlProvider = Provider<int>((ref) => 2500);
+
+[041] trackerDetailViewRequestProvider
+      Path: lib/features/tracker/providers/tracker_navigation_provider.dart:41
+      Call: StateProvider<TrackerDetailTarget>(
+      Decl:
+        final trackerDetailViewRequestProvider = StateProvider<TrackerDetailTarget>(
+          (ref) => TrackerDetailTarget.none,
+        );
+
+[042] trackerSettingsProvider
+      Path: lib/features/tracker/providers/tracker_settings_provider.dart:103
+      Call: StateNotifierProvider<TrackerSettingsNotifier, TrackerSettingsState>(
+      Decl:
+        final trackerSettingsProvider =
+            StateNotifierProvider<TrackerSettingsNotifier, TrackerSettingsState>((ref) {
+              return TrackerSettingsNotifier();
+
+[043] onboardingUploadInteractionProvider
+      Path: lib/features/uploads/providers/onboarding_upload_interaction_provider.dart:58
+      Call: StateNotifierProvider<UploadInteractionController, UploadInteractionMap>(
+      Decl:
+        final onboardingUploadInteractionProvider =
+            StateNotifierProvider<UploadInteractionController, UploadInteractionMap>((
+              ref,
+            ) {
+              final controller = UploadInteractionController(
+                shellConfig: onboardingUploadShellConfig,
+                assetRepository: ref.watch(uploadedAssetRepositoryProvider),
+                authRepository: ref.watch(authRepositoryProvider),
+                imagePrepareService: ref.watch(imagePrepareServiceProvider),
+                r2UploadClient: ref.watch(r2UploadClientProvider),
+                permissionService: ref.watch(uploadPermissionServiceProvider),
+                restoredController: ref.watch(restoredUploadsProvider.notifier),
+              );
+
+[044] uploadPermissionServiceProvider
+      Path: lib/features/uploads/services/upload_permission_service.dart:75
+      Call: Provider<UploadPermissionService>(
+      Decl:
+        final uploadPermissionServiceProvider = Provider<UploadPermissionService>((ref) {
+          return const DefaultUploadPermissionService();
+
+[045] appPreferencesRepositoryProvider
+      Path: lib/repositories/app_preferences_repository.dart:69
+      Call: Provider<AppPreferencesRepository>(
+      Decl:
+        final appPreferencesRepositoryProvider = Provider<AppPreferencesRepository>((
+          ref,
+        ) {
+          return ref
+              .watch(fakeBackendPolicyProvider)
+              .selectBackend(
+                firebase: FirestoreAppPreferencesRepository.new,
+                fake: FakeAppPreferencesRepository.new,
+              );
+
+[046] coachSessionRepositoryProvider
+      Path: lib/repositories/coach_session_repository.dart:70
+      Call: Provider<CoachSessionRepository>(
+      Decl:
+        final coachSessionRepositoryProvider = Provider<CoachSessionRepository>((ref) {
+          return ref
+              .watch(fakeBackendPolicyProvider)
+              .selectBackend(
+                firebase: UnavailableFirebaseCoachRepository.new,
+                fake: FakeCoachSessionRepository.new,
+              );
+
+[047] coachAiRepositoryProvider
+      Path: lib/repositories/coach_session_repository.dart:79
+      Call: Provider<CoachAiRepository>(
+      Decl:
+        final coachAiRepositoryProvider = Provider<CoachAiRepository>((ref) {
+          return ref
+              .watch(fakeBackendPolicyProvider)
+              .selectBackend(
+                firebase: UnavailableFirebaseCoachRepository.new,
+                fake: FakeCoachAiRepository.new,
+              );
+
+[048] conflictAcceptanceRepositoryProvider
+      Path: lib/repositories/conflict_acceptance_repository.dart:84
+      Call: Provider<ConflictAcceptanceRepository>(
+      Decl:
+        final conflictAcceptanceRepositoryProvider =
+            Provider<ConflictAcceptanceRepository>((ref) {
+              return ref
+                  .watch(fakeBackendPolicyProvider)
+                  .selectBackend(
+                    firebase: () {
+                      final routineRepository = ref.watch(routineRepositoryProvider);
+
+[049] goalRepositoryProvider
+      Path: lib/repositories/goal_repository.dart:78
+      Call: Provider<GoalRepository>(
+      Decl:
+        final goalRepositoryProvider = Provider<GoalRepository>((ref) {
+          return ref
+              .watch(fakeBackendPolicyProvider)
+              .selectBackend(
+                firebase: UnavailableFirebaseGoalRepository.new,
+                fake: FakeGoalRepository.new,
+              );
+
+[050] habitRepositoryProvider
+      Path: lib/repositories/habit_repository.dart:55
+      Call: Provider<HabitRepository>(
+      Decl:
+        final habitRepositoryProvider = Provider<HabitRepository>((ref) {
+          return ref
+              .watch(fakeBackendPolicyProvider)
+              .selectBackend(
+                firebase: UnavailableFirebaseHabitRepository.new,
+                fake: FakeHabitRepository.new,
+              );
+
+[051] habitSystemsRepositoryProvider
+      Path: lib/repositories/habit_systems_repository.dart:44
+      Call: Provider<HabitSystemsRepository>(
+      Decl:
+        final habitSystemsRepositoryProvider = Provider<HabitSystemsRepository>((ref) {
+          return ref
+              .watch(fakeBackendPolicyProvider)
+              .selectBackend(
+                firebase: FirestoreHabitSystemsRepository.new,
+                fake: FakeHabitSystemsRepository.new,
+              );
+
+[052] homeDashboardRepositoryProvider
+      Path: lib/repositories/home_repository.dart:63
+      Call: Provider<HomeDashboardRepository>(
+      Decl:
+        final homeDashboardRepositoryProvider = Provider<HomeDashboardRepository>((
+          ref,
+        ) {
+          return ref
+              .watch(fakeBackendPolicyProvider)
+              .selectBackend(
+                firebase: UnavailableFirebaseHomeRepository.new,
+                fake: FakeHomeDashboardRepository.new,
+              );
+
+[053] mindNoteRepositoryProvider
+      Path: lib/repositories/home_repository.dart:74
+      Call: Provider<MindNoteRepository>(
+      Decl:
+        final mindNoteRepositoryProvider = Provider<MindNoteRepository>((ref) {
+          return ref
+              .watch(fakeBackendPolicyProvider)
+              .selectBackend(
+                firebase: UnavailableFirebaseHomeRepository.new,
+                fake: FakeMindNoteRepository.new,
+              );
+
+[054] notificationPreferencesRepositoryProvider
+      Path: lib/repositories/notification_preferences_repository.dart:39
+      Call: Provider<NotificationPreferencesRepository>(
+      Decl:
+        final notificationPreferencesRepositoryProvider =
+            Provider<NotificationPreferencesRepository>((ref) {
+              return ref
+                  .watch(fakeBackendPolicyProvider)
+                  .selectBackend(
+                    firebase: UnavailableFirebaseNotificationPreferencesRepository.new,
+                    fake: FakeNotificationPreferencesRepository.new,
+                  );
+
+[055] onboardingRepositoryProvider
+      Path: lib/repositories/onboarding_repository.dart:1248
+      Call: Provider<OnboardingRepository>(
+      Decl:
+        final onboardingRepositoryProvider = Provider<OnboardingRepository>((ref) {
+          final OnboardingRepository repository = ref
+              .watch(fakeBackendPolicyProvider)
+              .selectBackend(
+                firebase: FirestoreOnboardingRepository.new,
+                fake: () => FakeOnboardingRepository(
+                  routineDatabase: ref.watch(fakeRoutineDatabaseProvider),
+                ),
+              );
+
+[056] profileRepositoryProvider
+      Path: lib/repositories/profile_repository.dart:268
+      Call: Provider<ProfileRepository>(
+      Decl:
+        final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
+          return ref
+              .watch(fakeBackendPolicyProvider)
+              .selectBackend(
+                firebase: FirestoreProfileRepository.new,
+                fake: FakeProfileRepository.new,
+              );
+
+[057] permissionStatusRepositoryProvider
+      Path: lib/repositories/profile_repository.dart:277
+      Call: Provider<PermissionStatusRepository>(
+      Decl:
+        final permissionStatusRepositoryProvider = Provider<PermissionStatusRepository>(
+          (ref) {
+            return ref
+                .watch(fakeBackendPolicyProvider)
+                .selectBackend(
+                  firebase: UnavailableFirebaseProfileSupportRepository.new,
+                  fake: FakePermissionStatusRepository.new,
+                );
+
+[058] connectedServicesRepositoryProvider
+      Path: lib/repositories/profile_repository.dart:288
+      Call: Provider<ConnectedServicesRepository>(
+      Decl:
+        final connectedServicesRepositoryProvider =
+            Provider<ConnectedServicesRepository>((ref) {
+              return ref
+                  .watch(fakeBackendPolicyProvider)
+                  .selectBackend(
+                    firebase: UnavailableFirebaseProfileSupportRepository.new,
+                    fake: FakeConnectedServicesRepository.new,
+                  );
+
+[059] dataControlRepositoryProvider
+      Path: lib/repositories/profile_repository.dart:298
+      Call: Provider<DataControlRepository>(
+      Decl:
+        final dataControlRepositoryProvider = Provider<DataControlRepository>((ref) {
+          return ref
+              .watch(fakeBackendPolicyProvider)
+              .selectBackend(
+                firebase: UnavailableFirebaseProfileSupportRepository.new,
+                fake: FakeDataControlRepository.new,
+              );
+
+[060] regionSettingsRepositoryProvider
+      Path: lib/repositories/region_settings_repository.dart:52
+      Call: Provider<RegionSettingsRepository>(
+      Decl:
+        final regionSettingsRepositoryProvider = Provider<RegionSettingsRepository>((
+          ref,
+        ) {
+          return ref
+              .watch(fakeBackendPolicyProvider)
+              .selectBackend(
+                firebase: FirestoreRegionSettingsRepository.new,
+                fake: FakeRegionSettingsRepository.new,
+              );
+
+[061] routineHistoryRepositoryProvider
+      Path: lib/repositories/routine_history_repository.dart:392
+      Call: Provider<RoutineHistoryRepository>(
+      Decl:
+        final routineHistoryRepositoryProvider = Provider<RoutineHistoryRepository>((
+          ref,
+        ) {
+          return ref
+              .watch(fakeBackendPolicyProvider)
+              .selectBackend(
+                firebase: FirestoreRoutineHistoryRepository.new,
+                fake: FakeRoutineHistoryRepository.new,
+              );
+
+[062] routineImportReviewRepositoryProvider
+      Path: lib/repositories/routine_import_review_repository.dart:114
+      Call: Provider<RoutineImportReviewRepository>(
+      Decl:
+        final routineImportReviewRepositoryProvider =
+            Provider<RoutineImportReviewRepository>((ref) {
+              return ref
+                  .watch(fakeBackendPolicyProvider)
+                  .selectBackend(
+                    firebase: FirestoreRoutineImportReviewRepository.new,
+                    fake: FakeRoutineImportReviewRepository.new,
+                  );
+
+[063] fakeRoutineDatabaseProvider
+      Path: lib/repositories/routine_repository.dart:309
+      Call: Provider<FakeRoutineDatabase>(
+      Decl:
+        final fakeRoutineDatabaseProvider = Provider<FakeRoutineDatabase>((ref) {
+          return FakeRoutineDatabase();
+
+[064] routineRepositoryProvider
+      Path: lib/repositories/routine_repository.dart:313
+      Call: Provider<RoutineRepository>(
+      Decl:
+        final routineRepositoryProvider = Provider<RoutineRepository>((ref) {
+          return ref
+              .watch(fakeBackendPolicyProvider)
+              .selectBackend(
+                firebase: FirestoreRoutineRepository.new,
+                fake: () => FakeRoutineRepository(
+                  database: ref.watch(fakeRoutineDatabaseProvider),
+                ),
+              );
+
+[065] routineTransactionRepositoryProvider
+      Path: lib/repositories/routine_transaction_repository.dart:624
+      Call: Provider<RoutineTransactionRepository>(
+      Decl:
+        final routineTransactionRepositoryProvider =
+            Provider<RoutineTransactionRepository>((ref) {
+              return ref
+                  .watch(fakeBackendPolicyProvider)
+                  .selectBackend(
+                    firebase: FirestoreRoutineTransactionRepository.new,
+                    fake: () => FakeRoutineTransactionRepository(
+                      routineRepository: ref.watch(routineRepositoryProvider),
+                      historyRepository: ref.watch(routineHistoryRepositoryProvider),
+                    ),
+                  );
+
+[066] trackerRepositoryProvider
+      Path: lib/repositories/tracker_repository.dart:219
+      Call: Provider<TrackerRepository>(
+      Decl:
+        final trackerRepositoryProvider = Provider<TrackerRepository>((ref) {
+          return _selectTrackerBackend(ref, fake: FakeTrackerRepository.new);
+
+[067] trackerHistoryRepositoryProvider
+      Path: lib/repositories/tracker_repository.dart:223
+      Call: Provider<TrackerHistoryRepository>(
+      Decl:
+        final trackerHistoryRepositoryProvider = Provider<TrackerHistoryRepository>((
+          ref,
+        ) {
+          return _selectTrackerBackend(ref, fake: FakeTrackerHistoryRepository.new);
+
+[068] focusRepositoryProvider
+      Path: lib/repositories/tracker_repository.dart:229
+      Call: Provider<FocusRepository>(
+      Decl:
+        final focusRepositoryProvider = Provider<FocusRepository>((ref) {
+          return _selectTrackerBackend(ref, fake: FakeFocusRepository.new);
+
+[069] badHabitRepositoryProvider
+      Path: lib/repositories/tracker_repository.dart:233
+      Call: Provider<BadHabitRepository>(
+      Decl:
+        final badHabitRepositoryProvider = Provider<BadHabitRepository>((ref) {
+          return _selectTrackerBackend(ref, fake: FakeBadHabitRepository.new);
+
+[070] sleepRepositoryProvider
+      Path: lib/repositories/tracker_repository.dart:237
+      Call: Provider<SleepRepository>(
+      Decl:
+        final sleepRepositoryProvider = Provider<SleepRepository>((ref) {
+          return _selectTrackerBackend(ref, fake: FakeSleepRepository.new);
+
+[071] nutritionRepositoryProvider
+      Path: lib/repositories/tracker_repository.dart:241
+      Call: Provider<NutritionRepository>(
+      Decl:
+        final nutritionRepositoryProvider = Provider<NutritionRepository>((ref) {
+          return _selectTrackerBackend(ref, fake: FakeNutritionRepository.new);
+
+[072] fitnessRepositoryProvider
+      Path: lib/repositories/tracker_repository.dart:245
+      Call: Provider<FitnessRepository>(
+      Decl:
+        final fitnessRepositoryProvider = Provider<FitnessRepository>((ref) {
+          return _selectTrackerBackend(ref, fake: FakeFitnessRepository.new);
+
+[073] moneyRepositoryProvider
+      Path: lib/repositories/tracker_repository.dart:249
+      Call: Provider<MoneyRepository>(
+      Decl:
+        final moneyRepositoryProvider = Provider<MoneyRepository>((ref) {
+          return _selectTrackerBackend(ref, fake: FakeMoneyRepository.new);
+
+[074] uploadedAssetRepositoryProvider
+      Path: lib/repositories/uploaded_asset_repository.dart:140
+      Call: Provider<UploadedAssetRepository>(
+      Decl:
+        final uploadedAssetRepositoryProvider = Provider<UploadedAssetRepository>((
+          ref,
+        ) {
+          return ref
+              .watch(fakeBackendPolicyProvider)
+              .selectBackend(
+                firebase: FirestoreUploadedAssetRepository.new,
+                fake: FakeUploadedAssetRepository.new,
+              );
+
+[075] userProfileRepositoryProvider
+      Path: lib/repositories/user_profile_repository.dart:45
+      Call: Provider<UserProfileRepository>(
+      Decl:
+        final userProfileRepositoryProvider = Provider<UserProfileRepository>((ref) {
+          return ref
+              .watch(fakeBackendPolicyProvider)
+              .selectBackend(
+                firebase: UnavailableFirebaseUserProfileRepository.new,
+                fake: FakeUserProfileRepository.new,
+              );
+
+[076] authSessionResetCoordinatorProvider
+      Path: lib/services/auth_session_reset_coordinator.dart:103
+      Call: Provider(
+      Decl:
+        final authSessionResetCoordinatorProvider = Provider(
+          AuthSessionResetCoordinator.new,
+        );
+
+[077] coachAiClientProvider
+      Path: lib/services/coach_ai_client.dart:7
+      Call: Provider<CoachAiClient>(
+      Decl:
+        final coachAiClientProvider = Provider<CoachAiClient>((ref) {
+          if (OptivusAiWorkersConfig.useWorker) {
+            return WorkerCoachAiClient();
+
+[078] deviceCountryServiceProvider
+      Path: lib/services/device_country_service.dart:81
+      Call: Provider<DeviceCountryService>(
+      Decl:
+        final deviceCountryServiceProvider = Provider<DeviceCountryService>(
+          (_) => const GeolocatorDeviceCountryService(),
+        );
+
+[079] notificationIntentServiceProvider
+      Path: lib/services/native/notification_intent_service.dart:45
+      Call: Provider<NotificationIntentService>(
+      Decl:
+        final notificationIntentServiceProvider = Provider<NotificationIntentService>((
+          ref,
+        ) {
+          return const NotificationIntentService();
+
+[080] nutritionAiClientModeProvider
+      Path: lib/services/nutrition_ai_client.dart:40
+      Call: Provider<NutritionAiClientMode>(
+      Decl:
+        final nutritionAiClientModeProvider = Provider<NutritionAiClientMode>((ref) {
+          if (OptivusAiWorkersConfig.mode == OptivusAiWorkerMode.disabled) {
+            return NutritionAiClientMode.disabled;
+
+[081] nutritionAiClientProvider
+      Path: lib/services/nutrition_ai_client.dart:50
+      Call: Provider<NutritionAiClient>(
+      Decl:
+        final nutritionAiClientProvider = Provider<NutritionAiClient>((ref) {
+          final mode = ref.watch(nutritionAiClientModeProvider);
+
+[082] onboardingCompletionJobServiceProvider
+      Path: lib/services/onboarding_completion_job_service.dart:1684
+      Call: Provider<OnboardingCompletionJobService>(
+      Decl:
+        final onboardingCompletionJobServiceProvider =
+            Provider<OnboardingCompletionJobService>((ref) {
+              final firebaseMode = !ref.watch(fakeDataAllowedProvider);
+
+[083] onboardingCompletionJobProvider
+      Path: lib/services/onboarding_completion_job_service.dart:1704
+      Call: FutureProvider.family<OnboardingCompletionJob?, String>(
+      Decl:
+        final onboardingCompletionJobProvider =
+            FutureProvider.family<OnboardingCompletionJob?, String>((ref, uid) {
+              return ref
+                  .watch(onboardingCompletionJobServiceProvider)
+                  .loadCurrentJob(uid);
+
+[084] activeOnboardingCompletionJobProvider
+      Path: lib/services/onboarding_completion_job_service.dart:1711
+      Call: ChangeNotifierProvider<ValueNotifier<OnboardingCompletionJob?>>(
+      Decl:
+        final activeOnboardingCompletionJobProvider =
+            ChangeNotifierProvider<ValueNotifier<OnboardingCompletionJob?>>((ref) {
+              return ref
+                  .watch(onboardingCompletionJobServiceProvider)
+                  .activeJobNotifier;
+
+[085] routineImportAiClientModeProvider
+      Path: lib/services/routine_import_ai_client.dart:485
+      Call: Provider<RoutineImportAiClientMode>(
+      Decl:
+        final routineImportAiClientModeProvider = Provider<RoutineImportAiClientMode>((
+          ref,
+        ) {
+          if (OptivusRoutineImportAiConfig.mode == OptivusRoutineImportAiMode.worker) {
+            if (OptivusRoutineImportAiConfig.workerBaseUrl.trim().isEmpty) {
+              return RoutineImportAiClientMode.missingConfig;
+
+[086] routineImportAiClientProvider
+      Path: lib/services/routine_import_ai_client.dart:504
+      Call: Provider<RoutineImportAiClient>(
+      Decl:
+        final routineImportAiClientProvider = Provider<RoutineImportAiClient>((ref) {
+          final mode = ref.watch(routineImportAiClientModeProvider);
+
+[087] skinCareAiClientProvider
+      Path: lib/services/skin_care_ai_client.dart:13
+      Call: Provider<SkinCareAiClient>(
+      Decl:
+        final skinCareAiClientProvider = Provider<SkinCareAiClient>((ref) {
+          if (OptivusAiWorkersConfig.useWorker &&
+              OptivusAiWorkersConfig.skinCareWorkerUrl.trim().isNotEmpty) {
+            return WorkerSkinCareAiClient();
+
+[088] userProfileProvider
+      Path: lib/state/app_state.dart:160
+      Call: StateNotifierProvider<UserProfileNotifier, UserProfile>(
+      Decl:
+        final userProfileProvider =
+            StateNotifierProvider<UserProfileNotifier, UserProfile>((ref) {
+              return UserProfileNotifier();
+
+[089] mockRoutineProvider
+      Path: lib/state/app_state.dart:323
+      Call: StateNotifierProvider<MockRoutineNotifier, List<RoutineItem>>(
+      Decl:
+        final mockRoutineProvider =
+            StateNotifierProvider<MockRoutineNotifier, List<RoutineItem>>((ref) {
+              return MockRoutineNotifier(
+                fakeDataAllowed: ref.watch(fakeDataAllowedProvider),
+              );
+
+[090] mockTrackerProvider
+      Path: lib/state/app_state.dart:996
+      Call: StateNotifierProvider<MockTrackerNotifier, MockTrackerState>(
+      Decl:
+        final mockTrackerProvider =
+            StateNotifierProvider<MockTrackerNotifier, MockTrackerState>((ref) {
+              return MockTrackerNotifier(
+                fakeDataAllowed: ref.watch(fakeDataAllowedProvider),
+              );
+
+[091] mockGoalProvider
+      Path: lib/state/app_state.dart:1113
+      Call: StateNotifierProvider<MockGoalNotifier, List<GoalModel>>(
+      Decl:
+        final mockGoalProvider =
+            StateNotifierProvider<MockGoalNotifier, List<GoalModel>>((ref) {
+              return MockGoalNotifier(
+                fakeDataAllowed: ref.watch(fakeDataAllowedProvider),
+              );
+
+[092] mockMindNoteProvider
+      Path: lib/state/app_state.dart:1176
+      Call: StateNotifierProvider<MockMindNoteNotifier, List<MindNote>>(
+      Decl:
+        final mockMindNoteProvider =
+            StateNotifierProvider<MockMindNoteNotifier, List<MindNote>>((ref) {
+              return MockMindNoteNotifier(
+                fakeDataAllowed: ref.watch(fakeDataAllowedProvider),
+              );
+
+[093] mockCoachProvider
+      Path: lib/state/app_state.dart:1376
+      Call: StateNotifierProvider<MockCoachNotifier, List<CoachSession>>(
+      Decl:
+        final mockCoachProvider =
+            StateNotifierProvider<MockCoachNotifier, List<CoachSession>>((ref) {
+              return MockCoachNotifier(
+                fakeDataAllowed: ref.watch(fakeDataAllowedProvider),
+              );
+
+[094] mockCoachPreferencesProvider
+      Path: lib/state/app_state.dart:1397
+      Call: StateNotifierProvider<MockCoachPreferencesNotifier, CoachPreferences>(
+      Decl:
+        final mockCoachPreferencesProvider =
+            StateNotifierProvider<MockCoachPreferencesNotifier, CoachPreferences>((
+              ref,
+            ) {
+              return MockCoachPreferencesNotifier();
+
+[095] mockNotificationPreferencesProvider
+      Path: lib/state/app_state.dart:1457
+      Call: StateNotifierProvider< MockNotificationPreferencesNotifier, NotificationPreferences >(
+      Decl:
+        final mockNotificationPreferencesProvider =
+            StateNotifierProvider<
+              MockNotificationPreferencesNotifier,
+              NotificationPreferences
+            >((ref) {
+              return MockNotificationPreferencesNotifier();
+
+[096] mockPermissionProvider
+      Path: lib/state/app_state.dart:1513
+      Call: StateNotifierProvider<MockPermissionNotifier, PermissionStatus>(
+      Decl:
+        final mockPermissionProvider =
+            StateNotifierProvider<MockPermissionNotifier, PermissionStatus>((ref) {
+              return MockPermissionNotifier();
+
+[097] onboardingStateProvider
+      Path: lib/state/app_state.dart:1871
+      Call: StateNotifierProvider<OnboardingNotifier, OnboardingState>(
+      Decl:
+        final onboardingStateProvider =
+            StateNotifierProvider<OnboardingNotifier, OnboardingState>((ref) {
+              return OnboardingNotifier();
+
+[098] onboardingDraftProvider
+      Path: lib/state/app_state.dart:1876
+      Call: Provider<OnboardingDraft>(
+      Decl:
+        final onboardingDraftProvider = Provider<OnboardingDraft>((ref) {
+          return ref.watch(onboardingStateProvider.select((state) => state.draft));
+
+[099] authGenerationProvider
+      Path: lib/state/auth_generation.dart:8
+      Call: StateProvider<int>(
+      Decl:
+        final authGenerationProvider = StateProvider<int>((ref) => 0);
+
+[100] authRepositoryProvider
+      Path: lib/state/auth_state.dart:42
+      Call: Provider<AuthRepository>(
+      Decl:
+        final authRepositoryProvider = Provider<AuthRepository>((ref) {
+          return ref
+              .watch(fakeBackendPolicyProvider)
+              .selectBackend(
+                firebase: FirebaseAuthRepository.new,
+                fake: FakeAuthRepository.new,
+              );
+
+[101] serverReconstructorProvider
+      Path: lib/state/auth_state.dart:51
+      Call: Provider<ServerReconstructor>(
+      Decl:
+        final serverReconstructorProvider = Provider<ServerReconstructor>((ref) {
+          return ServerReconstructor(
+            source: RepositoryServerReconstructionSource(
+              profileRepository: ref.watch(profileRepositoryProvider),
+              onboardingRepository: ref.watch(onboardingRepositoryProvider),
+              completionJobService: ref.watch(onboardingCompletionJobServiceProvider),
+            ),
+          );
+
+[102] reconstructionRetryPolicyProvider
+      Path: lib/state/auth_state.dart:78
+      Call: Provider<ReconstructionRetryPolicy>(
+      Decl:
+        final reconstructionRetryPolicyProvider = Provider<ReconstructionRetryPolicy>(
+          (ref) => const ReconstructionRetryPolicy(),
+        );
+
+[103] authProvider
+      Path: lib/state/auth_state.dart:1815
+      Call: StateNotifierProvider<AuthNotifier, AuthState>(
+      Decl:
+        final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
+          final repository = ref.watch(authRepositoryProvider);
+
+[104] currentRoutineItemsProvider
+      Path: lib/state/profile_frontend_state.dart:9
+      Call: Provider<List<RoutineItem>>(
+      Decl:
+        final currentRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
+          return ref.watch(routineNotifierProvider).items;
+
+[105] currentGoalsProvider
+      Path: lib/state/profile_frontend_state.dart:13
+      Call: Provider<List<GoalModel>>(
+      Decl:
+        final currentGoalsProvider = Provider<List<GoalModel>>((ref) {
+          return ref.watch(mockGoalProvider);
+
+[106] currentCoachPreferencesProvider
+      Path: lib/state/profile_frontend_state.dart:17
+      Call: Provider<CoachPreferences>(
+      Decl:
+        final currentCoachPreferencesProvider = Provider<CoachPreferences>((ref) {
+          return ref.watch(mockCoachPreferencesProvider);
+
+[107] regionSettingsProvider
+      Path: lib/state/region_settings_provider.dart:90
+      Call: StateNotifierProvider<RegionSettingsNotifier, RegionSettings>(
+      Decl:
+        final regionSettingsProvider =
+            StateNotifierProvider<RegionSettingsNotifier, RegionSettings>((ref) {
+              return RegionSettingsNotifier(
+                ref.watch(regionSettingsRepositoryProvider),
+                ref.watch(deviceCountryServiceProvider),
+              );
+
+[108] routineImportAiControllerProvider
+      Path: lib/state/routine_import_ai_state.dart:234
+      Call: StateNotifierProvider<RoutineImportAiController, RoutineImportAiState>(
+      Decl:
+        final routineImportAiControllerProvider =
+            StateNotifierProvider<RoutineImportAiController, RoutineImportAiState>((
+              ref,
+            ) {
+              final client = ref.watch(routineImportAiClientProvider);
+
+[109] imagePrepareServiceProvider
+      Path: lib/state/upload_state.dart:896
+      Call: Provider<ImagePrepareService>(
+      Decl:
+        final imagePrepareServiceProvider = Provider<ImagePrepareService>((ref) {
+          return ImagePrepareService();
+
+[110] r2UploadClientProvider
+      Path: lib/state/upload_state.dart:900
+      Call: Provider<R2UploadClient>(
+      Decl:
+        final r2UploadClientProvider = Provider<R2UploadClient>((ref) {
+          if (OptivusUploadConfig.useR2 && OptivusUploadConfig.hasWorkerUrl) {
+            return RealR2UploadClient();
+
+[111] uploadedAssetPreviewResolverProvider
+      Path: lib/state/upload_state.dart:910
+      Call: Provider<UploadedAssetPreviewResolver>(
+      Decl:
+        final uploadedAssetPreviewResolverProvider =
+            Provider<UploadedAssetPreviewResolver>(
+              (ref) => const UnavailableUploadedAssetPreviewResolver(),
+            );
+
+[112] restoredUploadsProvider
+      Path: lib/state/upload_state.dart:915
+      Call: StateNotifierProvider<RestoredUploadsController, RestoredUploadsState>(
+      Decl:
+        final restoredUploadsProvider =
+            StateNotifierProvider<RestoredUploadsController, RestoredUploadsState>((
+              ref,
+            ) {
+              return RestoredUploadsController(
+                assetRepository: ref.watch(uploadedAssetRepositoryProvider),
+                previewResolver: ref.watch(uploadedAssetPreviewResolverProvider),
+              );
+
+[113] uploadControllerProvider
+      Path: lib/state/upload_state.dart:925
+      Call: StateNotifierProvider<UploadController, UploadState>(
+      Decl:
+        final uploadControllerProvider =
+            StateNotifierProvider<UploadController, UploadState>((ref) {
+              return UploadController(
+                assetRepository: ref.watch(uploadedAssetRepositoryProvider),
+                authRepository: ref.watch(authRepositoryProvider),
+                imagePrepareService: ref.watch(imagePrepareServiceProvider),
+                r2UploadClient: ref.watch(r2UploadClientProvider),
+              );
+
+[114] verificationLifecyclePolicyProvider
+      Path: lib/state/verification_lifecycle_state.dart:115
+      Call: Provider(
+      Decl:
+        final verificationLifecyclePolicyProvider = Provider(
+          (ref) => const VerificationLifecyclePolicy(),
+        );
+
+[115] verificationClockProvider
+      Path: lib/state/verification_lifecycle_state.dart:119
+      Call: Provider<DateTime Function()>(
+      Decl:
+        final verificationClockProvider = Provider<DateTime Function()>(
+          (ref) => DateTime.now,
+        );
+
+[116] verificationLifecycleProvider
+      Path: lib/state/verification_lifecycle_state.dart:123
+      Call: StateNotifierProvider.autoDispose< VerificationLifecycleController, VerificationLifecycleState >(
+      Decl:
+        final verificationLifecycleProvider =
+            StateNotifierProvider.autoDispose<
+              VerificationLifecycleController,
+              VerificationLifecycleState
+            >((ref) {
+              return VerificationLifecycleController(
+                ref,
+                policy: ref.watch(verificationLifecyclePolicyProvider),
+                now: ref.watch(verificationClockProvider),
+              );
+

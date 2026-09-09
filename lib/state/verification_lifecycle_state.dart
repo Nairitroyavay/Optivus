@@ -7,14 +7,6 @@ import 'package:optivus/core/errors/diagnostic_codes.dart';
 import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/state/auth_state.dart';
 
-enum VerificationMessageKind {
-  network,
-  rateLimited,
-  sessionExpired,
-  firebaseFailure,
-  success,
-}
-
 class VerificationLifecycleState {
   final bool foreground;
   final bool checking;
@@ -25,8 +17,8 @@ class VerificationLifecycleState {
   final int resendSecondsRemaining;
   final int verificationThrottleStreak;
   final int resendThrottleStreak;
-  final String? message;
-  final VerificationMessageKind? messageKind;
+  final RecoverableError? error;
+  final String? successMessage;
 
   const VerificationLifecycleState({
     this.foreground = false,
@@ -38,8 +30,8 @@ class VerificationLifecycleState {
     this.resendSecondsRemaining = 0,
     this.verificationThrottleStreak = 0,
     this.resendThrottleStreak = 0,
-    this.message,
-    this.messageKind,
+    this.error,
+    this.successMessage,
   });
 
   VerificationLifecycleState copyWith({
@@ -52,11 +44,12 @@ class VerificationLifecycleState {
     int? resendSecondsRemaining,
     int? verificationThrottleStreak,
     int? resendThrottleStreak,
-    String? message,
-    VerificationMessageKind? messageKind,
+    RecoverableError? error,
+    String? successMessage,
     bool clearDeadline = false,
     bool clearVerificationDeadline = false,
-    bool clearMessage = false,
+    bool clearError = false,
+    bool clearSuccessMessage = false,
   }) {
     return VerificationLifecycleState(
       foreground: foreground ?? this.foreground,
@@ -76,12 +69,10 @@ class VerificationLifecycleState {
       verificationThrottleStreak:
           verificationThrottleStreak ?? this.verificationThrottleStreak,
       resendThrottleStreak: resendThrottleStreak ?? this.resendThrottleStreak,
-      message: clearMessage && message == null
+      error: clearError && error == null ? null : (error ?? this.error),
+      successMessage: clearSuccessMessage && successMessage == null
           ? null
-          : (message ?? this.message),
-      messageKind: clearMessage && messageKind == null
-          ? null
-          : (messageKind ?? this.messageKind),
+          : (successMessage ?? this.successMessage),
     );
   }
 }
@@ -292,7 +283,11 @@ class VerificationLifecycleController
     if (uid == null) return;
     final stopwatch = Stopwatch()..start();
     _log('event=check_started reason=$reason epoch=$epoch attempt=$_pollIndex');
-    state = state.copyWith(checking: true, clearMessage: manual);
+    state = state.copyWith(
+      checking: true,
+      clearError: manual,
+      clearSuccessMessage: manual,
+    );
     try {
       await _ref.read(authProvider.notifier).checkEmailVerification();
       if (!_canApply(uid)) return;
@@ -314,7 +309,7 @@ class VerificationLifecycleController
         checking: false,
         verificationThrottleStreak: 0,
         clearVerificationDeadline: true,
-        clearMessage: true,
+        clearError: true,
       );
       _scheduleNextPoll();
     } catch (error) {
@@ -326,9 +321,8 @@ class VerificationLifecycleController
       if (mapped.category == RecoverableErrorCategory.network) {
         state = state.copyWith(
           checking: false,
-          message:
-              'Couldn\'t check verification. Check your connection and try again.',
-          messageKind: VerificationMessageKind.network,
+          error: mapped,
+          clearSuccessMessage: true,
           verificationThrottleStreak: 0,
         );
         _scheduleNextPoll();
@@ -338,11 +332,10 @@ class VerificationLifecycleController
         final delay = _throttleDelay(streak);
         state = state.copyWith(
           checking: false,
+          error: mapped,
+          clearSuccessMessage: true,
           verificationThrottleStreak: streak,
           nextVerificationCheckAllowedAt: _now().add(delay),
-          message:
-              'Too many attempts. Please wait a little before trying again.',
-          messageKind: VerificationMessageKind.rateLimited,
         );
         _scheduleNextPoll(delay: delay);
       } else if (mapped.diagnosticCode ==
@@ -352,8 +345,8 @@ class VerificationLifecycleController
       } else {
         state = state.copyWith(
           checking: false,
-          message: mapped.publicMessage,
-          messageKind: VerificationMessageKind.firebaseFailure,
+          error: mapped,
+          clearSuccessMessage: true,
           verificationThrottleStreak: 0,
         );
         _scheduleNextPoll();
@@ -383,7 +376,11 @@ class VerificationLifecycleController
   Future<void> _performResend() async {
     final uid = _expectedUid;
     if (uid == null) return;
-    state = state.copyWith(resendInFlight: true, clearMessage: true);
+    state = state.copyWith(
+      resendInFlight: true,
+      clearError: true,
+      clearSuccessMessage: true,
+    );
     try {
       await _ref.read(authProvider.notifier).resendEmailVerification();
       if (!_canApply(uid)) return;
@@ -393,8 +390,9 @@ class VerificationLifecycleController
         nextResendAllowedAt: deadline,
         resendSecondsRemaining: _remainingSeconds(deadline),
         resendThrottleStreak: 0,
-        message: 'Sent again. Check Spam or Promotions if it doesn\'t arrive.',
-        messageKind: VerificationMessageKind.success,
+        successMessage:
+            'Sent again. Check Spam or Promotions if it doesn\'t arrive.',
+        clearError: true,
       );
       _startCountdownIfNeeded();
       _pollIndex = 0;
@@ -410,26 +408,19 @@ class VerificationLifecycleController
           resendThrottleStreak: streak,
           nextResendAllowedAt: deadline,
           resendSecondsRemaining: _remainingSeconds(deadline),
-          message:
-              'Too many attempts. Please wait a little before trying again.',
-          messageKind: VerificationMessageKind.rateLimited,
+          error: mapped,
+          clearSuccessMessage: true,
         );
         _startCountdownIfNeeded();
       } else if (mapped.diagnosticCode ==
               DiagnosticCodes.verifyEmailSessionExpired ||
           mapped.retryAction == RecoverableRetryAction.reauthenticate) {
         _stopForExpiredSession(mapped);
-      } else if (mapped.category == RecoverableErrorCategory.network) {
-        state = state.copyWith(
-          resendInFlight: false,
-          message: mapped.publicMessage,
-          messageKind: VerificationMessageKind.network,
-        );
       } else {
         state = state.copyWith(
           resendInFlight: false,
-          message: mapped.publicMessage,
-          messageKind: VerificationMessageKind.firebaseFailure,
+          error: mapped,
+          clearSuccessMessage: true,
         );
       }
     } finally {
@@ -439,16 +430,22 @@ class VerificationLifecycleController
     }
   }
 
-  void clearMessage() {
-    if (!_disposed) state = state.copyWith(clearMessage: true);
+  void clearError() {
+    if (!_disposed) state = state.copyWith(clearError: true);
   }
 
-  void showAccountError(String message) {
+  void clearSuccessMessage() {
+    if (!_disposed) state = state.copyWith(clearSuccessMessage: true);
+  }
+
+  void clearMessage() {
+    clearError();
+    clearSuccessMessage();
+  }
+
+  void showAccountError(RecoverableError error) {
     if (!_disposed) {
-      state = state.copyWith(
-        message: message,
-        messageKind: VerificationMessageKind.firebaseFailure,
-      );
+      state = state.copyWith(error: error, clearSuccessMessage: true);
     }
   }
 
@@ -553,8 +550,8 @@ class VerificationLifecycleController
         checking: false,
         resendInFlight: false,
         verificationConfirmed: true,
-        message: 'Email verified',
-        messageKind: VerificationMessageKind.success,
+        successMessage: 'Email verified',
+        clearError: true,
       );
     }
   }
@@ -571,8 +568,8 @@ class VerificationLifecycleController
       state = state.copyWith(
         checking: false,
         resendInFlight: false,
-        message: error.publicMessage,
-        messageKind: VerificationMessageKind.sessionExpired,
+        error: error,
+        clearSuccessMessage: true,
         verificationThrottleStreak: 0,
         clearVerificationDeadline: true,
       );

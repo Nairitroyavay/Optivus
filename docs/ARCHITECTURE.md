@@ -412,7 +412,7 @@ The migration contract is:
    second source of truth.
 6. No feature may have two undocumented canonical state owners.
 7. Session changes must dispose, key, or invalidate every user-scoped owner,
-   as required by TD-039.
+   as required by TD-039 (closed in Gate 5 via `AuthSessionResetCoordinator`).
 
 ### 10.3 Shared versus feature-specific decision test
 
@@ -463,7 +463,7 @@ inside one feature do not make a file globally shared.
 | Feature-oriented repository contracts in the global repository directory | `routine_repository.dart`, `tracker_repository.dart`, `goal_repository.dart`, `coach_session_repository.dart`, and `home_repository.dart` are globally located while each is primarily area-owned. | Ownership decision/move, if warranted, in Routine 4, Goals 5, Tracker 6, Coach 7, Home/Mind 8 | Consumer audit proves whether each contract is feature-only or genuinely shared; any move updates providers/tests atomically and leaves one import direction. |
 | Feature-oriented services in the global service directory | `coach_ai_client.dart` is Coach-owned; Routine-import services are shared by Onboarding bootstrap and Routine review but their long-term owner is not yet classified. | Coach Phase 7; Routine import classification in Phase 4 | Services sit with the owning feature or have a documented cross-feature/platform contract; widgets do not call HTTP/Workers directly. |
 | Cross-feature private imports | Home imports Tracker money widgets/flows; Routine money cards import Tracker flows; Tracker setup screens import Profile models/providers; several areas import another area's navigation provider. | Replace domain/UI coupling during Routine 4, Tracker 6, Home 8, and Profile/quality phases; retain only explicit navigation contracts | No feature mutates another feature through private UI/state; shared commands/models or owner navigation APIs replace the coupling; dependency tests/review confirm no circular path. |
-| User-scoped providers survive the explicit logout reset | Feature-local Routine, Home, and Fitness owners are outside `_resetUserScopedMockState()`. | Each owner's durable phase, final gate Phase 11 (TD-039) | Sign-out and account-switch tests show empty/new-user state across all six areas. |
+| User-scoped providers survive the explicit logout reset | Resolved in Gate 5: `AuthSessionResetCoordinator` invalidates and resets feature-local Routine, Home, Fitness, Profile, Onboarding, Tracker, Upload, and Region state on logout and account switch. | Gate 5 (TD-039 resolved) | Verified automated tests (`test/gate5_auth_session_isolation_test.dart`) prove synchronous privacy boundary and zero cross-user state leakage across all six areas. |
 
 No files in this inventory are moved by Phase 0. A later move is justified only
 when the assigned feature phase can migrate behavior, persistence, session

@@ -4,9 +4,9 @@
 
 - Repository: `Optivus`
 - Branch: `main`
-- Base revision verified: `3449428` (`gate 5`)
+- Base revision verified: `7bffa84` (`gate 5`)
 - Verification date: 2026-09-09
-- Current source tree: `Optivus-main (23)(1)`
+- Working tree status: Tracked modifications confined to Gate 5 closure (`lib/`, `test/`, `docs/`)
 - Scope: Gate 5 Auth cleanup, session reset ownership, structured error verification, architecture test alignment, and documentation truth
 - Firestore shape or rules changed: **No**
 - Worker changes: **None**
@@ -15,18 +15,19 @@
 
 ---
 
-## B. Gate 5 requirements 1–8 matrix
+## B. Gate 5 requirements 1–9 matrix
 
 | Requirement | Status | Verification Evidence |
 |---|---|---|
-| 1. Freeze completed `mockUserProfileProvider` rename | PASS | 0 active production usages of `mockUserProfileProvider` in `lib/`. Canonical provider is `userProfileProvider`. |
-| 2. Freeze completed `mockOnboardingProvider` rename | PASS | 0 active production usages of `mockOnboardingProvider` in `lib/`. Canonical provider is `onboardingStateProvider`. |
-| 3. Consolidate session destination policy | PASS | `SessionDestinationResolver` owns the canonical session destination state machine. `optivusAuthRedirect` in `app_router.dart` consumes `AuthState.sessionDestination`. |
-| 4. Remove unused router profile dependency | PASS | `RouterNotifier` observes only `authProvider`. Direct dependency on `userProfileProvider` was eliminated, preventing double-hop routing flashes. |
-| 5. Retire active `backendRestoreFailed` | PASS | 0 occurrences in repository. Failed restorations publish typed `ServerReconstructionResult` with `RecoverableError` and route to `/loading` or `/onboarding/needs-action`. |
-| 6. Unify structured errors | PASS | Brittle test assertions relying on obsolete English strings (`onboarding_restore_test.dart`, `ah_f003_google_auth_test.dart`, `verify_email_redesign_test.dart`) updated to assert semantic `RecoverableError` properties. |
-| 7. Centralize UID/session reset | PASS | `AuthNotifier` delegates hydration resets to `AuthSessionResetCoordinator.prepareForAuthoritativeHydration()`. `routine_phase4_4_ownership_test.dart` allowlist updated with strict reset-only check. |
-| 8. Strengthen account-switch isolation tests | PASS | `test/gate5_auth_session_isolation_test.dart` covers full 25+ provider inventory, synchronous privacy boundary, and verifies that late Account A async completion does not mutate Account B state. |
+| 1. Freeze completed `mockUserProfileProvider` rename (R1) | PASS | 0 active production usages of `mockUserProfileProvider` in `lib/`. Canonical provider is `userProfileProvider`. Enforced by `test/gate5_static_architecture_test.dart`. |
+| 2. Freeze completed `mockOnboardingProvider` rename (R1) | PASS | 0 active production usages of `mockOnboardingProvider` in `lib/`. Canonical provider is `onboardingStateProvider`. Enforced by `test/gate5_static_architecture_test.dart`. |
+| 3. Consolidate session destination policy (R2) | PASS | `SessionDestinationResolver` owns the canonical session destination state machine. `optivusAuthRedirect` in `app_router.dart` consumes `AuthState.sessionDestination`. Enforced by `test/gate5_static_architecture_test.dart`. |
+| 4. Remove unused router profile dependency (R1, R2) | PASS | `RouterNotifier` observes only `authProvider`. Direct dependency on `userProfileProvider` was eliminated, preventing double-hop routing flashes. Enforced by `test/gate5_static_architecture_test.dart`. |
+| 5. Retire active `backendRestoreFailed` (R1) | PASS | 0 active production usages in `lib/`. (Historical audit logs/docs reference the retired symbol). Failed restorations publish typed `ServerReconstructionResult` with `RecoverableError` and route to `/loading` or `/onboarding/needs-action`. Enforced by `test/gate5_static_architecture_test.dart`. |
+| 6. Unify structured errors (R3) | PASS | `VerificationLifecycleState` refactored: deleted parallel `VerificationMessageKind` taxonomy; replaced with typed `RecoverableError? error; String? successMessage;`; typed `showAccountError(RecoverableError)`; removed hardcoded logout error override in `VerifyEmailScreen` (now reads `ref.read(authProvider).error`); brittle test assertions converted to semantic `RecoverableError` properties. |
+| 7. Centralize UID/session reset & inventory (R4 / TD-039) | PASS | `AuthSessionResetCoordinator` serves as the centralized synchronous privacy boundary on `null → A`, `A → B`, and `logout` (`resetIdentityBoundary`), invalidating and resetting Routine, Habits, Home, Mind, Fitness, Profile, Tracker, Upload, and Region state (25+ providers). TD-039 marked Closed in Gate 5. |
+| 8. Strengthen account-switch & async isolation tests (R5) | PASS | `test/gate5_auth_session_isolation_test.dart` covers synchronous privacy boundary across all user-scoped providers; real reconstruction async race tests (Tests A, B, C, D) using controlled `ServerReconstructionSource` verify pipeline-level isolation under concurrent and late completions. |
+| 9. Enforce static architectural invariants (R6) | PASS | `test/gate5_static_architecture_test.dart` permanently guards against mock provider leakage, `backendRestoreFailed`, router dependencies, parallel failure taxonomies, untyped error APIs, hardcoded logout overrides, coordinator delegation, and exhaustive session provider inventory coverage (7/7 passed). |
 
 ---
 
@@ -104,7 +105,7 @@ class RouterNotifier extends ChangeNotifier {
 
 ## F. Backend restore architecture and verification
 
-- `backendRestoreFailed` has been completely retired.
+- `backendRestoreFailed` has been retired from active production source (0 active occurrences in `lib/`; historical audit logs and docs reference the retired symbol).
 - `AuthNotifier` models server restoration explicitly through `ServerReconstructionResult` and `RecoverableError`.
 - Operation generation counters (`_authOperationGeneration`, `_backendRestoreGeneration`) guard asynchronous operations against stale returns.
 - Route preservation: same-session token refreshes and same-UID reloads preserve the active route without flashing `/loading` or re-running full hydration (`test/ah_f008_route_preservation_test.dart`).
@@ -113,18 +114,62 @@ class RouterNotifier extends ChangeNotifier {
 
 ## G. Structured error mapping matrix
 
-All authentication and reconstruction errors map to `RecoverableError` via `AuthErrorMapper.map()` in `lib/core/errors/auth_error_mapper.dart`.
+All authentication and reconstruction errors map to `RecoverableError` via `AuthErrorMapper` (`lib/core/errors/auth_error_mapper.dart`) and `ReconstructionErrorMapper` (`lib/core/errors/reconstruction_error_mapper.dart`).
+
+### Canonical Enum Authorities
+
+In `lib/core/errors/recoverable_error.dart`, errors are classified strictly under:
+
+1. **`RecoverableErrorCategory` (12 categories)**:
+   `validation`, `network`, `authentication`, `permission`, `upload`, `aiTimeout`, `aiQuota`, `aiMalformedResponse`, `cloudPersistence`, `conflict`, `recoveryRequired`, `completionRetry`.
+   *(Note: Nonexistent legacy categories `rateLimit` and `backend` are prohibited; rate limits are categorized under `authentication`, and backend failures under `network`, `authentication`, or `recoveryRequired`).*
+
+2. **`RecoverableRetryAction` (11 retry actions)**:
+   `none`, `retry`, `retryUpload`, `retryGeneration`, `retrySave`, `reauthenticate`, `openSettings`, `chooseAnother`, `returnToStep`, `resumeCompletion`, `restartRecovery`.
+   *(Note: Nonexistent legacy action `waitAndRetry` is prohibited; non-retryable rate limits use `none` with cooldown/throttle metadata).*
 
 ### Semantic Field Guarantees
 
-| Exception Type | Diagnostic Code | Category | Retry Action | Retry Safe |
-|---|---|---|---|---|
-| `network-request-failed` | `AUTH_NETWORK_ERROR` | `network` | `retry` | `true` |
-| `user-not-found` | `AUTH_USER_NOT_FOUND` | `authentication` | `reauthenticate` | `false` |
-| `wrong-password` | `AUTH_WRONG_PASSWORD` | `authentication` | `reauthenticate` | `false` |
-| `email-already-in-use` | `AUTH_EMAIL_ALREADY_IN_USE` | `validation` | `none` | `false` |
-| `too-many-requests` | `AUTH_TOO_MANY_REQUESTS` | `rateLimit` | `waitAndRetry` | `true` |
-| Server reconstruction failure | `AUTH_RECONSTRUCTION_FAILED` | `backend` | `retry` | `true` |
+| Exception / Condition | Diagnostic Code | Category | Retry Action | Retry Safe | Source Authority |
+|---|---|---|---|---|---|
+| `network-request-failed` | `DiagnosticCodes.networkUnavailable` (`NETWORK_UNAVAILABLE`) | `network` | `retry` | `true` | `AuthErrorMapper.map()` |
+| `user-not-found` | `DiagnosticCodes.authInvalidCredentials` (`AUTH_INVALID_CREDENTIALS`) | `authentication` | `retry` | `true` | `AuthErrorMapper.map()` |
+| `wrong-password` | `DiagnosticCodes.authInvalidCredentials` (`AUTH_INVALID_CREDENTIALS`) | `authentication` | `retry` | `true` | `AuthErrorMapper.map()` |
+| `email-already-in-use` | `DiagnosticCodes.authEmailInUse` (`AUTH_EMAIL_IN_USE`) | `authentication` | `reauthenticate` | `false` | `AuthErrorMapper.map()` |
+| `too-many-requests` | `DiagnosticCodes.authRateLimited` (`AUTH_RATE_LIMITED`) | `authentication` | `none` | `false` | `AuthErrorMapper.map()` |
+| Verify Email rate limited | `DiagnosticCodes.verifyEmailRateLimited` (`VERIFY_EMAIL_RATE_LIMITED`) | `authentication` | `none` | `false` | `AuthErrorMapper.mapVerifyEmailError()` |
+| Verify Email session expired | `DiagnosticCodes.verifyEmailSessionExpired` (`VERIFY_EMAIL_SESSION_EXPIRED`) | `authentication` | `reauthenticate` | `false` | `AuthErrorMapper.mapVerifyEmailError()` |
+| Server reconstruction: network / timeout / unavailable | `DiagnosticCodes.networkUnavailable` (`NETWORK_UNAVAILABLE`) | `network` | `retry` | `true` | `ReconstructionErrorMapper.fromBootstrapException()` |
+| Server reconstruction: auth / permission denied | `DiagnosticCodes.authSessionExpired` (`AUTH_SESSION_EXPIRED`) | `authentication` | `reauthenticate` | `false` | `ReconstructionErrorMapper.fromBootstrapException()` |
+| Server reconstruction: recovery required | `DiagnosticCodes.recovery*` (`RECOVERY_*`) | `recoveryRequired` | `restartRecovery` | `false` | `ReconstructionErrorMapper.fromRecoveryReason()` |
+
+### Verify Email Error Unification (R3)
+
+1. **Elimination of Parallel Failure Taxonomy**:
+   - Completely deleted `enum VerificationMessageKind` from `lib/state/verification_lifecycle_state.dart`.
+   - Removed `final String? message;` and `final VerificationMessageKind? messageKind;` from `VerificationLifecycleState`.
+   - Replaced state fields with canonical typed failure and user notification contracts:
+     ```dart
+     final RecoverableError? error;
+     final String? successMessage;
+     ```
+   - Updated `copyWith` with independent `bool clearError = false` and `bool clearSuccessMessage = false` flags.
+   - Added controller methods `clearError()`, `clearSuccessMessage()`, and updated `clearMessage()`.
+
+2. **Typed Presentation API**:
+   - Replaced untyped `showAccountError(String message)` with typed `void showAccountError(RecoverableError error)` on `VerificationLifecycleController`.
+   - Controller catch blocks map failures through `AuthErrorMapper.mapVerifyEmailError(error, isResend: ...)`.
+
+3. **Elimination of Hardcoded Logout Error Override**:
+   - In `lib/views/screens/verify_email_screen.dart`, `_logout()` previously caught exceptions and called `controller.showAccountError('Couldn\'t sign out. Please try again.')`, ignoring the typed `RecoverableError` stored in `AuthState.error` by `AuthNotifier.logout()`.
+   - Replaced with canonical pattern:
+     ```dart
+     final authError = ref.read(authProvider).error;
+     if (authError != null) {
+       controller.showAccountError(authError);
+     }
+     ```
+   - In `build()`, presentation messages are derived directly from `lifecycle.error ?? (deliveryFailed ? auth.error : null)` and rendered via `activeError?.publicMessage`.
 
 ### Brittle Assertion Fixes Applied
 
@@ -135,8 +180,8 @@ All authentication and reconstruction errors map to `RecoverableError` via `Auth
    - Prior: Checked `errorMessage.contains('retry')`.
    - Current: Verifies `error.retryAction == RecoverableRetryAction.retry` and `error.retrySafe == true`.
 3. `test/verify_email_redesign_test.dart`:
-   - Prior: Expected ASCII single quote `'Couldn't check verification...'`.
-   - Current: Aligned with `AuthErrorMapper.mapVerifyEmailError` unicode typographic apostrophe `'Couldn’t check verification. Please try again.'`.
+   - Prior: Asserted against legacy `VerificationMessageKind` and hardcoded string `'Couldn't sign out. Please try again.'`.
+   - Current: Verifies typed `lifecycle.error?.diagnosticCode`, `lifecycle.error?.category`, `lifecycle.error?.publicMessage`, and canonical logout error `'We couldn’t sign you out. You are still signed in. Please try again.'`.
 
 ---
 
@@ -160,12 +205,22 @@ All authentication and reconstruction errors map to `RecoverableError` via `Auth
 
 ---
 
-## I. Architecture test alignment (Phase 4.4)
+## I. Architecture test alignment (Phase 4.4 & R6)
 
+### 1. Routine Ownership Invariants (`test/routine_phase4_4_ownership_test.dart`)
 `test/routine_phase4_4_ownership_test.dart` enforces strict architectural boundaries:
 - Added `'lib/services/auth_session_reset_coordinator.dart'` to the authorized file allowlist.
 - Added strict static assertion verifying that the coordinator only accesses `mockRoutineProvider.notifier.resetForSignedOut()` and is strictly prohibited from watching (`ref.watch`) or reading (`ref.read`) the routine state.
 - Test result: **5/5 tests passed**.
+
+### 2. Static Architecture Enforcement (`test/gate5_static_architecture_test.dart`) (R6)
+`test/gate5_static_architecture_test.dart` permanently guards against architectural regressions across `lib/` and `test/`:
+- **R1 Symbols**: Verifies 0 occurrences of `mockUserProfileProvider`, `mockOnboardingProvider`, and `backendRestoreFailed` across `lib/`.
+- **R2 Routing**: Verifies `RouterNotifier` depends exclusively on `authProvider` with zero listeners on profile/onboarding/completion/reconstruction providers, and `optivusAuthRedirect` consumes `authState.sessionDestination`.
+- **R3 Error Authority**: Verifies 0 occurrences of `VerificationMessageKind`, `messageKind`, untyped `showAccountError(String`, or hardcoded logout error override `'Couldn\'t sign out. Please try again.'` across `lib/`. Verifies typed `error` and `successMessage` fields on `VerificationLifecycleState` and typed `showAccountError(RecoverableError)`.
+- **R4 Reset Delegation**: Verifies `AuthNotifier` identity reset delegates strictly through `AuthSessionResetCoordinator.resetIdentityBoundary()`.
+- **R4 / TD-039 Session Inventory**: Verifies that all 40 providers referenced by `AuthSessionResetCoordinator` have valid documented classifications (`USER_SCOPED_RESET`, `USER_SCOPED_UID_KEYED`, `USER_SCOPED_AUTO_DISPOSE`, `USER_SCOPED_GENERATION_FENCED`, `SESSION_UI_RESET`, `REPOSITORY_UID_SCOPED`, `NOT_USER_SCOPED`).
+- Test result: **7/7 tests passed**.
 
 ---
 
@@ -207,7 +262,10 @@ flutter test --reporter compact \
   test/onboarding_session_destination_test.dart \
   test/verify_email_redesign_test.dart \
   test/workstream_d_auth_async_isolation_test.dart \
-  test/routine_phase4_4_ownership_test.dart
+  test/routine_phase4_4_ownership_test.dart \
+  test/gate5_static_architecture_test.dart \
+  test/gate5_auth_reconstruction_race_test.dart \
+  test/gate5_adversarial_error_unification_test.dart
 ```
 
 | Test Suite | Tests Passed | Tests Failed | Tests Skipped |
@@ -225,7 +283,10 @@ flutter test --reporter compact \
 | `verify_email_redesign_test.dart` | 33 | 0 | 0 |
 | `workstream_d_auth_async_isolation_test.dart` | 7 | 0 | 0 |
 | `routine_phase4_4_ownership_test.dart` | 5 | 0 | 0 |
-| **Total Gate 5 Focused** | **241** | **0** | **0** |
+| `gate5_static_architecture_test.dart` | 7 | 0 | 0 |
+| `gate5_auth_reconstruction_race_test.dart` | 8 | 0 | 0 |
+| `gate5_adversarial_error_unification_test.dart` | 9 | 0 | 0 |
+| **Total Gate 5 Focused** | **265** | **0** | **0** |
 
 ---
 
@@ -237,7 +298,7 @@ flutter test --reporter compact
 ```
 
 Result:
-**1,956 passed, 10 skipped, 0 failed (58 seconds)**
+**1,980 passed, 10 skipped, 0 failed (1 minute 7 seconds)**
 
 The 10 skipped tests are the intentionally disabled AH-F021 legacy onboarding conflict-decision UI cases (`test/ah_f021_step14_final_review_test.dart`). Zero test failures exist across the entire Optivus codebase.
 
@@ -259,15 +320,15 @@ The 10 skipped tests are the intentionally disabled AH-F021 legacy onboarding co
    **PASS — 0 whitespace errors, 0 conflict markers**.
 
 3. **`dart format --output=none --set-exit-if-changed`**:
-   Checked against all modified files:
-   - `lib/services/auth_session_reset_coordinator.dart`
-   - `lib/state/auth_state.dart`
-   - `test/ah_f003_google_auth_test.dart`
-   - `test/gate5_auth_session_isolation_test.dart`
-   - `test/onboarding_restore_test.dart`
-   - `test/routine_phase4_4_ownership_test.dart`
-   - `test/verify_email_redesign_test.dart`
-   **PASS — 0 files changed, 100% format-compliant**.
+   - Checked against all Gate-5 changed Dart files:
+     - `lib/state/verification_lifecycle_state.dart`
+     - `lib/views/screens/verify_email_screen.dart`
+     - `test/verify_email_redesign_test.dart`
+     - `test/gate5_adversarial_error_unification_test.dart`
+     - `test/gate5_auth_reconstruction_race_test.dart`
+     - `test/gate5_static_architecture_test.dart`
+   - **PASS — 6 files format-clean, 0 changes needed**.
+   - Repository-wide format audit (`dart format --output=none --set-exit-if-changed .`) identified 24 pre-existing unchanged files with formatting debt, preserved without mass-formatting per scope freeze.
 
 ---
 
@@ -275,10 +336,10 @@ The 10 skipped tests are the intentionally disabled AH-F021 legacy onboarding co
 
 | Gate | Scope | Representative Test Files | Result |
 |---|---|---|---|
-| **Gate 1** | Onboarding Completion / Step 14 | `onboarding_completion_bundle_test.dart`, `onboarding_completion_group_a_test.dart`, `onboarding_completion_retry_contract_test.dart`, `ah_f013_completion_terminalization_test.dart`, `ah_f014_step14_idempotency_test.dart` | **PASS** (100 passed, 10 skipped) |
-| **Gate 2** | Step 4 Timeline / Overlaps / Role | `onboarding_step4_timeline_layout_test.dart`, `onboarding_step4_ai_flow_test.dart`, `onboarding_step4_role_change_test.dart`, `ah_f015_durable_overlap_acceptance_test.dart`, `ah_f018_timeline_foundation_test.dart` | **PASS** (118 passed) |
-| **Gate 3** | Step 7 Skin Care | `onboarding_step7_skin_care_test.dart`, `onboarding_step7_cta_navigation_test.dart`, `onboarding_step7_state_machine_test.dart`, `onboarding_step7_transaction_test.dart`, `onboarding_step7_runtime_ui_stability_test.dart`, `onboarding_step7_p0_migration_test.dart` | **PASS** (227 passed) |
-| **Gate 4** | Onboarding Foundation / Step 5 Eating / Nutrition targets | `onboarding_step_layout_migration_test.dart`, `onboarding_persistence_phase2b_test.dart`, `ah_f012_onboarding_resume_monotonicity_test.dart`, `onboarding_step5_eating_ai_flow_test.dart`, `onboarding_eating_weekly_plan_test.dart`, `nutrition_target_service_test.dart` | **PASS** (180+ passed) |
+| **Gate 1** | Completion / Step 14 stabilization | `onboarding_completion_bundle_test.dart`, `onboarding_completion_retry_contract_test.dart`, `ah_f013_completion_terminalization_test.dart`, `ah_f014_step14_idempotency_test.dart`, `ah_f021_step14_final_review_test.dart` | **PASS** (100 passed, 10 skipped) |
+| **Gate 2** | Eating / nutrition generation stabilization | `nutrition_target_service_test.dart`, `onboarding_eating_weekly_plan_test.dart`, `onboarding_step5_eating_ai_flow_test.dart`, `onboarding_step5_regeneration_test.dart`, `onboarding_step5_generated_no_fake_fallback_test.dart`, `onboarding_step5_save_test.dart` | **PASS** (66 passed) |
+| **Gate 3** | Skin Care stabilization | `onboarding_step7_skin_care_test.dart`, `onboarding_step7_transaction_test.dart`, `onboarding_step7_state_machine_test.dart`, `onboarding_step7_cta_navigation_test.dart`, `onboarding_step7_full_timeline_regression_test.dart`, `onboarding_step7_pending_photo_generation_test.dart`, `onboarding_step7_runtime_ui_stability_test.dart` | **PASS** (223 passed) |
+| **Gate 4** | Onboarding foundation repair | `onboarding_step_layout_migration_test.dart`, `onboarding_persistence_phase2b_test.dart`, `onboarding_restore_test.dart`, `onboarding_routing_test.dart`, `onboarding_session_destination_test.dart`, `ah_f012_onboarding_resume_monotonicity_test.dart`, `onboarding_foundation_final_pass_test.dart` | **PASS** (153 passed) |
 
 Zero regressions across all previously closed gates.
 
@@ -287,8 +348,11 @@ Zero regressions across all previously closed gates.
 ## O. Technical debt register updates
 
 - **TD-039 (Auth/session reset boundary gap)**:
-  - Status: **CLOSED**.
-  - All user-scoped and session-scoped in-memory state across 25+ providers is now synchronously invalidated via `AuthSessionResetCoordinator.resetIdentityBoundary()`. Verified by `test/gate5_auth_session_isolation_test.dart`.
+  - Status: **CLOSED in Gate 5**.
+  - `AuthSessionResetCoordinator` acts as the centralized synchronous privacy boundary on `null → A`, `A → B`, and `logout` (`resetIdentityBoundary`), invalidating and resetting Routine, Habits, Home, Mind, Fitness, Profile, Tracker, Upload, and Region state (25+ providers).
+  - Real reconstruction async race tests (Tests A, B, C, D) using controlled `ServerReconstructionSource` verify pipeline-level isolation under concurrent and late completions (`test/gate5_auth_reconstruction_race_test.dart`).
+  - Synchronous boundary and generation fencing prevent Account A data from persisting or mutating Account B state under all race conditions.
+  - Reconciled across `docs/TECHNICAL_DEBT.md` (moved to Section 5 Resolved Debt), `docs/ARCHITECTURE.md` (Section 10.5 row 7 updated), and `docs/verification/GATE_5_AUTH_CLEANUP_REPORT.md`.
 - **TD-040 (Brittle error string assertions in test suite)**:
   - Status: **CLOSED**.
   - Obsolete string expectations in `onboarding_restore_test.dart`, `ah_f003_google_auth_test.dart`, and `verify_email_redesign_test.dart` were converted to structured `RecoverableError` semantic properties.
@@ -306,14 +370,15 @@ Zero regressions across all previously closed gates.
 | 2. Rename live `mockOnboardingProvider` | 0 active occurrences in `lib/` | PASS |
 | 3. Consolidate session destination policy | `SessionDestinationResolver` canonical authority | PASS |
 | 4. Remove unused router profile dependency | `RouterNotifier` observes only `authProvider` | PASS |
-| 5. Retire active `backendRestoreFailed` | 0 active occurrences | PASS |
-| 6. Unify structured errors | Semantic `RecoverableError` fields in tests | PASS |
-| 7. Centralize UID/session reset | `AuthSessionResetCoordinator` owns hydration resets | PASS |
-| 8. Account-switch isolation tests | Comprehensive 25+ provider matrix & late async tests | PASS |
-| Gate 5 focused test suite | 241 passed, 0 failed | PASS |
-| Full Flutter test suite | 1,956 passed, 0 failed (10 skipped) | PASS |
+| 5. Retire active `backendRestoreFailed` | 0 active occurrences in `lib/` | PASS |
+| 6. Unify structured errors (R3) | VerificationLifecycleState typed error refactor & semantic tests | PASS |
+| 7. Centralize UID/session reset (R4 / TD-039) | `AuthSessionResetCoordinator` synchronous privacy boundary | PASS |
+| 8. Account-switch isolation tests (R5) | 25+ provider matrix & real reconstruction race tests (Tests A–D) | PASS |
+| 9. Static architecture enforcement test (R6) | `test/gate5_static_architecture_test.dart` passes all 7 invariants | PASS |
+| Gate 5 focused test suite | 265 passed, 0 failed | PASS |
+| Full Flutter test suite | 1,980 passed, 0 failed (10 skipped) | PASS |
 | Static analysis | `flutter analyze`: 0 issues | PASS |
-| Code formatting | `dart format`: all modified files format-clean | PASS |
+| Code formatting | `dart format`: all Gate-5 changed files format-clean (0 changes); repo-wide baseline audited | PASS |
 | Git whitespace check | `git diff --check`: clean | PASS |
 | Cross-gate regressions (Gates 1–4) | All gates verified | PASS |
 

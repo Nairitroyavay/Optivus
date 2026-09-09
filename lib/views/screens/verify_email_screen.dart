@@ -55,12 +55,16 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen>
   Future<void> _logout() async {
     if (ref.read(authProvider).isLoading) return;
     final controller = ref.read(verificationLifecycleProvider.notifier)
-      ..clearMessage();
+      ..clearError()
+      ..clearSuccessMessage();
     try {
       await ref.read(authProvider.notifier).logout();
     } catch (_) {
       if (mounted) {
-        controller.showAccountError('Couldn\'t sign out. Please try again.');
+        final authError = ref.read(authProvider).error;
+        if (authError != null) {
+          controller.showAccountError(authError);
+        }
       }
     }
   }
@@ -87,11 +91,13 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen>
         ? 'Email address unavailable'
         : email;
     final actionsEnabled = !auth.isLoading && !lifecycle.resendInFlight;
-    final isError =
-        lifecycle.messageKind != null &&
-        lifecycle.messageKind != VerificationMessageKind.success;
     final deliveryFailed =
         auth.verificationEmailSendStatus == VerificationEmailSendStatus.failed;
+    final activeError = lifecycle.error ?? (deliveryFailed ? auth.error : null);
+    final messageError = activeError?.publicMessage;
+    final successMessage = activeError == null
+        ? lifecycle.successMessage
+        : null;
     final titleCopy = switch (auth.verificationEmailSendStatus) {
       VerificationEmailSendStatus.sent => 'We sent you a verification link',
       VerificationEmailSendStatus.failed =>
@@ -99,11 +105,6 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen>
       VerificationEmailSendStatus.pending =>
         'Sending your verification link...',
     };
-    final messageError = isError
-        ? lifecycle.message
-        : deliveryFailed
-        ? auth.errorMessage
-        : null;
 
     return PopScope(
       // The auth router owns this destination. System Back stays here; the
@@ -169,7 +170,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen>
                               const SizedBox(height: 10),
                               _StableMessageRegion(
                                 error: messageError,
-                                success: isError ? null : lifecycle.message,
+                                success: successMessage,
                               ),
                               const SizedBox(height: 14),
                               _ResendAction(

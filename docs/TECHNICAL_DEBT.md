@@ -81,7 +81,6 @@ owned by the product blueprint and the
 | **TD-036** | Upload/release configuration | Development upload defaults to a fake client that reports success while discarding bytes; remote R2 durability is unverified. | Updated 2026-07-23: the same runtime guard rejects fake/disabled upload and missing/unsafe R2 Worker URL in staging/production/release; configuration and existing upload-failure tests pass. No staging upload, durable-byte, cleanup, restart, or cross-device check ran. | Staging R2 could still be misbound or lose/orphan private bytes until authenticated end-to-end evidence exists. | P0 | Phase 9 | Release builds reject fake upload mode; unavailable mode reports failure; R2 success is verified by durable bytes/metadata; missing/invalid config and restart/restore tests pass. | In progress |
 | **TD-037** | Home/Mind | Two Mind Note model/provider paths coexist. | `HomeMindNote`/`homeMindNoteProvider` coexist with `MindNote`/`mockMindNoteProvider` and `MindNoteRepository`. | Sharing, deletion, or persistence can affect one copy while another is displayed. | P1 | Phase 8 | One Mind Note model/controller/repository owns active records; all Home/Notebook/Coach/delete paths use it; share/revoke/delete/restore tests operate on the same ID. | Open |
 | **TD-038** | Tracker/Fitness | Fitness records are split between `fitnessCenterProvider` and `mockTrackerProvider`. | `FitnessCenterState.mock()` owns recent activities; completion copies an activity into `mockTrackerProvider`. | Duplicate/inconsistent Fitness sessions and history. | P0 | Phase 6 | One canonical Fitness controller/repository owns sessions; summaries are derived; completion carries a stable ID; duplicate-delivery, history, and restore tests pass. | Open |
-| **TD-039** | Authentication/session isolation | Signed-out reset still does not invalidate every feature-local owner. | Updated 2026-07-23: Routine now resets on sign-out and before Firebase account restore, and repositories receive the authenticated UID explicitly. Home and Fitness still lack equivalent final verification. | Another account in the same process could see stale non-Routine feature state. | P0 | Phase 11 | Every user-scoped provider is keyed, disposed, or invalidated on auth UID change; logout/login-as-another-user tests prove no prior-account state remains in all six areas. | In progress |
 | **TD-040** | Design system | Many active screens bypass canonical color/type/spacing/radius/motion tokens. | Representative feature files contain raw values; `OptivusTypography` has few/no external consumers; Phase 0 added radius/motion sources without call-site migration. | Low-risk visual drift and repeated styling decisions. | P3 | Phase 12 | Touched-file migration completes; retained exceptions state a reason; representative static audit finds no unexplained raw design values in active shared/area primitives. | Open |
 | **TD-041** | UI reliability | Loading, empty, error, retry, disabled, and progress states are implemented inconsistently. | Canonical `LiquidEmptyState`, `LiquidLoadingState`, and `LiquidErrorState` have limited/no consumers while feature screens use bespoke patterns. | Recovery and accessibility differ; duplicate actions or hidden failures can escape review. | P2 | Phase 12 | Every durable feature has tested canonical loading/empty/recoverable/blocking-error/retry/disabled/progress behavior or a documented owner-specific extension. | Open |
 | **TD-044** | Phase 3 verification | The complete Onboarding journey is not verified on a physical Android device against the current 15-page flow. | Updated 2026-09-05: `flutter analyze` passes, the final Step 4/5 focused matrix passes 408 tests, and the full Flutter suite passes 1,733 tests. No safe staging backend/APK/device manual journey was verified in this closure, so no Live promotion is claimed. | Device-only layout, lifecycle, picker, or navigation failures can block the critical setup journey. | P1 | Phase 3 | On a supported physical Android device, complete and record the 15-page flow with safe configured services; verify back/forward, keyboard/scroll, interruption restore, upload/AI unavailable behavior, final completion, and app entry without crash/overflow; record device/build/mode and results. | Open |
@@ -91,11 +90,11 @@ owned by the product blueprint and the
 
 | Priority | Open items |
 | --- | ---: |
-| P0 | 10 |
+| P0 | 9 |
 | P1 | 23 |
 | P2 | 8 |
 | P3 | 1 |
-| **Total** | **42** |
+| **Total** | **41** |
 
 | Primary target phase | Open items |
 | --- | ---: |
@@ -107,15 +106,16 @@ owned by the product blueprint and the
 | Phase 8 | 2 |
 | Phase 9 | 4 |
 | Phase 10 | 4 |
-| Phase 11 | 9 |
+| Phase 11 | 8 |
 | Phase 12 | 7 |
-| **Total** | **42** |
+| **Total** | **41** |
 
 ## 5. Resolved debt
 
 | ID | Area | Problem | Evidence | Risk | Priority | Target phase | Acceptance condition | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **TD-006** | Developer experience | README was the Flutter starter template and lacked real project environment/testing guidance. | Resolved 2026-07-22: `README.md` now documents product/platform status, structure, prerequisites, safe setup, fake/Firebase/Worker/R2 modes, every compile-time definition, tests, secrets, authoritative documents, warnings, and limitations. Link/heading/required-section checks passed. | New developers could configure the wrong backend/modes or miss required verification. | P2 | Phase 0 | README documents prerequisites, Flutter/Firebase setup, all backend/upload/AI modes, safe local run commands, analyzer/tests/Worker checks, architecture links, and secret-handling rules. | Resolved |
+| **TD-039** | Authentication/session isolation | Signed-out reset still does not invalidate every feature-local owner. | Closed in Gate 5 (2026-09-09): `AuthSessionResetCoordinator` acts as the centralized synchronous privacy boundary on `null → A`, `A → B`, and `logout` (`resetIdentityBoundary`), invalidating and resetting Routine, Habits, Home, Mind, Fitness, Profile, Tracker, Upload, and Region state. Real reconstruction async race tests (Tests A, B, C, D) using controlled `ServerReconstructionSource` verify pipeline-level isolation under concurrent and late completions. | Another account in the same process could see stale non-Routine feature state. | P0 | Gate 5 (was Phase 11) | Every user-scoped provider is keyed, disposed, or invalidated on auth UID change; logout/login-as-another-user tests prove no prior-account state remains in all six areas. | Closed |
 | **TD-042** | Documentation | Legacy handoff documents contained stale or contradictory implementation claims. | Resolved 2026-07-22: the Auth/Onboarding, frontend-ready, and final-cleanup handoffs are explicitly dated/superseded and link to current authority; `pre_home_contract.md` is labeled subordinate Phase 3 input; README/blueprint index current contracts; relative links/anchors passed. | Developers could implement against superseded architecture or report incorrect product status. | P2 | Phase 0 | Every legacy handoff is updated, clearly archived/superseded with a date/link, or removed through an authorized change; README/blueprint point only to authoritative current contracts; link/status checks pass. | Resolved |
 | **TD-043** | Phase 3 testing | The full Flutter suite had one stale Onboarding Eating assertion. | Resolved 2026-07-22 and reverified 2026-09-05: the current test asserts the approved Eating timeline/review contract, and the full `flutter test` suite passes 1,733 tests after the Step 4/5 closure updates. | The suite could not act as a clean release signal, and restoring obsolete UI solely for a test could have regressed the current design. | P1 | Phase 3 | Update the test to assert the approved current Eating timeline contract, or restore the key only if the UI contract requires it; the isolated test and full `flutter test` suite pass with no unrelated behavior change. | Resolved |
 

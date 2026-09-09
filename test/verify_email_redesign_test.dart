@@ -777,7 +777,9 @@ void main() {
       expect(repo.currentUser, same(_defaultUser));
       expect(find.text('Verify your email'), findsOneWidget);
       expect(
-        find.text('Couldn\'t sign out. Please try again.'),
+        find.text(
+          'We couldn\'t sign you out. You are still signed in. Please try again.',
+        ),
         findsOneWidget,
       );
       expect(find.textContaining('raw-signout'), findsNothing);
@@ -1091,11 +1093,11 @@ void main() {
 
     await controller.resend();
     expect(
-      container.read(verificationLifecycleProvider).messageKind,
-      VerificationMessageKind.network,
+      container.read(verificationLifecycleProvider).error?.category,
+      RecoverableErrorCategory.network,
     );
     expect(
-      container.read(verificationLifecycleProvider).message,
+      container.read(verificationLifecycleProvider).error?.publicMessage,
       contains('connection'),
     );
 
@@ -1106,7 +1108,10 @@ void main() {
       final lifecycle = container.read(verificationLifecycleProvider);
       expect(lifecycle.resendThrottleStreak, index + 1);
       expect(lifecycle.resendSecondsRemaining, expected[index]);
-      expect(lifecycle.messageKind, VerificationMessageKind.rateLimited);
+      expect(
+        lifecycle.error?.diagnosticCode,
+        DiagnosticCodes.verifyEmailRateLimited,
+      );
       clock.advance(Duration(seconds: expected[index]));
       await tester.pump(const Duration(seconds: 1));
     }
@@ -1116,6 +1121,11 @@ void main() {
     final recovered = container.read(verificationLifecycleProvider);
     expect(recovered.resendThrottleStreak, 0);
     expect(recovered.resendSecondsRemaining, 60);
+    expect(recovered.error, isNull);
+    expect(
+      recovered.successMessage,
+      'Sent again. Check Spam or Promotions if it doesn\'t arrive.',
+    );
   });
 
   testWidgets('check errors distinguish network, rate limit, and unknown', (
@@ -1128,15 +1138,18 @@ void main() {
     await tester.pumpWidget(_buildScreen(repo: repo, now: clock.call));
     await tester.pump();
     var lifecycle = _container(tester).read(verificationLifecycleProvider);
-    expect(lifecycle.messageKind, VerificationMessageKind.network);
-    expect(lifecycle.message, contains('connection'));
+    expect(lifecycle.error?.category, RecoverableErrorCategory.network);
+    expect(lifecycle.error?.publicMessage, contains('connection'));
 
     repo.reloadError = AuthErrorMapper.map(Exception('too-many-requests'));
     await _container(
       tester,
     ).read(verificationLifecycleProvider.notifier).checkNow(manual: true);
     lifecycle = _container(tester).read(verificationLifecycleProvider);
-    expect(lifecycle.messageKind, VerificationMessageKind.rateLimited);
+    expect(
+      lifecycle.error?.diagnosticCode,
+      DiagnosticCodes.verifyEmailRateLimited,
+    );
     expect(lifecycle.verificationThrottleStreak, 1);
 
     clock.advance(const Duration(seconds: 120));
@@ -1145,8 +1158,8 @@ void main() {
       tester,
     ).read(verificationLifecycleProvider.notifier).checkNow(manual: true);
     lifecycle = _container(tester).read(verificationLifecycleProvider);
-    expect(lifecycle.messageKind, VerificationMessageKind.firebaseFailure);
-    expect(lifecycle.message, isNot(contains('secret')));
+    expect(lifecycle.error?.category, RecoverableErrorCategory.authentication);
+    expect(lifecycle.error?.publicMessage, isNot(contains('secret')));
   });
 
   testWidgets('expired verification session stops automatic polling', (
@@ -1162,8 +1175,14 @@ void main() {
 
     final container = _container(tester);
     final lifecycle = container.read(verificationLifecycleProvider);
-    expect(lifecycle.messageKind, VerificationMessageKind.sessionExpired);
-    expect(lifecycle.message?.toLowerCase(), contains('sign in again'));
+    expect(
+      lifecycle.error?.diagnosticCode,
+      DiagnosticCodes.verifyEmailSessionExpired,
+    );
+    expect(
+      lifecycle.error?.publicMessage.toLowerCase(),
+      contains('sign in again'),
+    );
     final reloadsAfterExpiry = repo.reloadCount;
 
     await tester.pump(const Duration(seconds: 2));
