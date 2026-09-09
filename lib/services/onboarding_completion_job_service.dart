@@ -42,6 +42,12 @@ class OnboardingCompletionMemoryStore {
 
 /// Read-only view of the durable `currentRun` pointer and its referenced job.
 ///
+enum CurrentRunPointerOrigin {
+  none,
+  canonicalPointer,
+  legacyFixedJob,
+}
+
 /// Keeping pointer existence separate from [job] lets session reconstruction
 /// distinguish "no completion run" from a dangling/corrupt reference.
 class OnboardingCurrentRunSnapshot {
@@ -52,6 +58,8 @@ class OnboardingCurrentRunSnapshot {
   final String? pointerStatus;
   final String? sourceFingerprint;
   final int? draftRevision;
+  final int setupGeneration;
+  final CurrentRunPointerOrigin pointerOrigin;
   final OnboardingCompletionJob? job;
 
   const OnboardingCurrentRunSnapshot({
@@ -62,6 +70,8 @@ class OnboardingCurrentRunSnapshot {
     this.pointerStatus,
     this.sourceFingerprint,
     this.draftRevision,
+    this.setupGeneration = 0,
+    this.pointerOrigin = CurrentRunPointerOrigin.canonicalPointer,
     this.job,
   });
 
@@ -73,6 +83,8 @@ class OnboardingCurrentRunSnapshot {
       pointerStatus = null,
       sourceFingerprint = null,
       draftRevision = null,
+      setupGeneration = 0,
+      pointerOrigin = CurrentRunPointerOrigin.none,
       job = null;
 
   CompletionTerminalizationState toTerminalizationState() {
@@ -84,6 +96,7 @@ class OnboardingCurrentRunSnapshot {
       pointerStatus: pointerStatus,
       sourceFingerprint: sourceFingerprint,
       draftRevision: draftRevision,
+      setupGeneration: setupGeneration,
       job: job,
     );
   }
@@ -119,6 +132,21 @@ class OnboardingCompletionJobService {
     }
     _inFlight.clear();
     activeJobNotifier.value = null;
+  }
+
+  void invalidateInFlightOperations(String uid) {
+    _operationGenerationByOwner[uid] =
+        (_operationGenerationByOwner[uid] ?? 0) + 1;
+    _inFlight.removeWhere((key, _) => key.startsWith('$uid:'));
+    if (activeJobNotifier.value?.ownerUid == uid) {
+      activeJobNotifier.value = null;
+    }
+  }
+
+  void markCurrentRunSupersededInMemory(String uid) {
+    if (_memoryStore.currentRunIds.containsKey(uid)) {
+      _memoryStore.currentRunStatuses[uid] = 'superseded';
+    }
   }
 
   void cancelOwner(String uid) {
@@ -228,6 +256,7 @@ class OnboardingCompletionJobService {
           sourceFingerprint: sourceFingerprint,
           runId: runId,
           draftRevision: finalDraft.revision,
+          setupGeneration: finalDraft.setupGeneration,
           now: now,
         );
         if (job.status == OnboardingJobStatus.fatalFailure) {
@@ -1043,6 +1072,9 @@ class OnboardingCompletionJobService {
           pointerStatus: pointerData['status'] as String?,
           sourceFingerprint: pointerData['sourceFingerprint'] as String?,
           draftRevision: (pointerData['draftRevision'] as num?)?.toInt(),
+          setupGeneration:
+              (pointerData['setupGeneration'] as num?)?.toInt() ?? 0,
+          pointerOrigin: CurrentRunPointerOrigin.canonicalPointer,
           job: persistedJob,
         );
         final proof = CompletionTerminalizationProof.evaluate(
@@ -1231,6 +1263,7 @@ class OnboardingCompletionJobService {
     required String sourceFingerprint,
     required String runId,
     required int draftRevision,
+    required int setupGeneration,
     required DateTime now,
   }) async {
     final existing = await _loadJobStatus(uid, runId);
@@ -1243,6 +1276,7 @@ class OnboardingCompletionJobService {
         stagesCompleted: const {},
         sourceFingerprint: sourceFingerprint,
         draftRevision: draftRevision,
+        setupGeneration: setupGeneration,
         retryCount: 0,
         createdAt: now,
         updatedAt: now,
@@ -1258,7 +1292,8 @@ class OnboardingCompletionJobService {
       throw StateError('Unsupported onboarding completion job schema version.');
     }
     if (existing.sourceFingerprint != sourceFingerprint ||
-        existing.draftRevision != draftRevision) {
+        existing.draftRevision != draftRevision ||
+        existing.setupGeneration != setupGeneration) {
       throw StateError('Onboarding run identity collision.');
     }
     return existing.copyWith(updatedAt: now);
@@ -1319,6 +1354,9 @@ class OnboardingCompletionJobService {
           pointerStatus: pointerData?['status'] as String?,
           sourceFingerprint: pointerData?['sourceFingerprint'] as String?,
           draftRevision: (pointerData?['draftRevision'] as num?)?.toInt(),
+          setupGeneration:
+              (pointerData?['setupGeneration'] as num?)?.toInt() ?? 0,
+          pointerOrigin: CurrentRunPointerOrigin.canonicalPointer,
           job: await _loadJobStatus(uid, runId),
         );
       }
@@ -1330,6 +1368,9 @@ class OnboardingCompletionJobService {
           pointerStatus: pointerData['status'] as String?,
           sourceFingerprint: pointerData['sourceFingerprint'] as String?,
           draftRevision: (pointerData['draftRevision'] as num?)?.toInt(),
+          setupGeneration:
+              (pointerData['setupGeneration'] as num?)?.toInt() ?? 0,
+          pointerOrigin: CurrentRunPointerOrigin.canonicalPointer,
         );
       }
       // Read-only compatibility for a legacy fixed job. A new attempt always
@@ -1352,20 +1393,25 @@ class OnboardingCompletionJobService {
             : 'active',
         sourceFingerprint: legacyJob.sourceFingerprint,
         draftRevision: legacyJob.draftRevision,
+        setupGeneration: 0,
+        pointerOrigin: CurrentRunPointerOrigin.legacyFixedJob,
         job: legacyJob,
       );
     }
     final runId = _memoryStore.currentRunIds[uid];
     if (runId == null) return const OnboardingCurrentRunSnapshot.none();
+    final memJob = _memoryStore.jobs['$uid:$runId'];
     return OnboardingCurrentRunSnapshot(
       hasPointer: true,
       runId: runId,
       ownerUid: uid,
       pointerSchemaVersion: 1,
       pointerStatus: _memoryStore.currentRunStatuses[uid] ?? 'active',
-      sourceFingerprint: _memoryStore.jobs['$uid:$runId']?.sourceFingerprint,
-      draftRevision: _memoryStore.jobs['$uid:$runId']?.draftRevision,
-      job: _memoryStore.jobs['$uid:$runId'],
+      sourceFingerprint: memJob?.sourceFingerprint,
+      draftRevision: memJob?.draftRevision,
+      setupGeneration: memJob?.setupGeneration ?? 0,
+      pointerOrigin: CurrentRunPointerOrigin.canonicalPointer,
+      job: memJob,
     );
   }
 
@@ -1463,6 +1509,10 @@ class OnboardingCompletionJobService {
 
     final pointerStatus = _memoryStore.currentRunStatuses[candidate.uid];
     final prior = _memoryStore.jobs['${candidate.uid}:$currentRunId'];
+    if (pointerStatus == 'superseded' ||
+        candidate.setupGeneration > (prior?.setupGeneration ?? 0)) {
+      return;
+    }
     final priorFailed =
         prior?.status == OnboardingJobStatus.retryableFailure ||
         prior?.status == OnboardingJobStatus.fatalFailure;
@@ -1496,6 +1546,7 @@ class OnboardingCompletionJobService {
       'currentRunId': job.jobId,
       'sourceFingerprint': job.sourceFingerprint,
       'draftRevision': job.draftRevision,
+      'setupGeneration': job.setupGeneration,
       'status': status,
       'updatedAt': Timestamp.fromDate(job.updatedAt),
       'schemaVersion': 1,

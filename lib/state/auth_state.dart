@@ -16,6 +16,7 @@ import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
+import 'package:optivus/services/onboarding_setup_reset_coordinator.dart';
 
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/mock_seed_data.dart';
@@ -883,20 +884,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> markOnboardingIncomplete(AuthUser user) async {
     if (user.uid.trim().isEmpty) return;
-    final profile = _ref
-        .read(userProfileProvider)
-        .copyWith(
-          uid: user.uid,
-          onboardingInputCompleted: false,
-          onboardingProjectionStatus: 'pending',
-          onboardingCompleted: false,
-          onboardingStep: 0,
-          updatedAt: DateTime.now(),
-        );
-    _ref.read(userProfileProvider.notifier).updateProfile(profile);
-    if (_useFirebaseBackend && !_needsEmailVerification(user)) {
-      await _ref.read(profileRepositoryProvider).saveUserProfile(profile);
-    }
+    final coordinator = _ref.read(onboardingSetupResetCoordinatorProvider);
+    final result = await coordinator.resetSetup(uid: user.uid);
+    _ref.read(userProfileProvider.notifier).updateProfile(result.profile);
+    _ref.read(onboardingStateProvider.notifier).reset(user.uid);
     state = state.copyWith(
       user: user,
       status: AuthFlowStatus.signedInOnboardingIncomplete,

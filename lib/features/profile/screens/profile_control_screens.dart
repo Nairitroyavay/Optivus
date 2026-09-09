@@ -2045,32 +2045,57 @@ void _showSetupReview(
 void _showResetSetupDialog(BuildContext context, WidgetRef ref) {
   showDialog<void>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      title: const Text('Re-run setup?'),
-      content: const Text(
-        'Future setup will be rebuilt from onboarding. Past routine, goal, tracker, coach, and money history stays intact. Generated systems may refresh after setup. This resets the frontend setup draft and sends you to onboarding.',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            prepareProfileSetupRerun(ref);
-            Navigator.of(dialogContext).pop();
-            if (context.mounted) context.go('/onboarding');
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: OptivusColors.danger,
-            foregroundColor: Colors.white,
+    builder: (dialogContext) {
+      var isResetting = false;
+      return StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: const Text('Re-run setup?'),
+          content: const Text(
+            'Future setup will be rebuilt from onboarding. Past routine, goal, tracker, coach, and money history stays intact. Generated systems may refresh after setup. This resets the frontend setup draft and sends you to onboarding.',
           ),
-          child: const Text('Re-run setup'),
+          actions: [
+            TextButton(
+              onPressed: isResetting ? null : () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: isResetting
+                  ? null
+                  : () async {
+                      setState(() => isResetting = true);
+                      try {
+                        await prepareProfileSetupRerun(ref);
+                        if (dialogContext.mounted) {
+                          Navigator.of(dialogContext).pop();
+                        }
+                        if (context.mounted) context.go('/onboarding');
+                      } catch (e) {
+                        if (dialogContext.mounted) {
+                          setState(() => isResetting = false);
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: OptivusColors.danger,
+                foregroundColor: Colors.white,
+              ),
+              child: isResetting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text('Re-run setup'),
+            ),
+          ],
         ),
-      ],
-    ),
+      );
+    },
   );
 }
 

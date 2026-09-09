@@ -11,6 +11,7 @@ class CompletionTerminalizationState {
   final String? pointerStatus;
   final String? sourceFingerprint;
   final int? draftRevision;
+  final int? setupGeneration;
   final OnboardingCompletionJob? job;
 
   const CompletionTerminalizationState({
@@ -21,6 +22,7 @@ class CompletionTerminalizationState {
     this.pointerStatus,
     this.sourceFingerprint,
     this.draftRevision,
+    this.setupGeneration,
     this.job,
   });
 }
@@ -119,7 +121,9 @@ class CompletionTerminalizationProof {
       );
     }
     if (currentRun.sourceFingerprint != job.sourceFingerprint ||
-        currentRun.draftRevision != job.draftRevision) {
+        currentRun.draftRevision != job.draftRevision ||
+        (currentRun.setupGeneration != null &&
+            currentRun.setupGeneration != job.setupGeneration)) {
       return const CompletionTerminalizationProof.recoveryRequired(
         CompletionTerminalizationReason.currentRunMismatch,
       );
@@ -138,8 +142,11 @@ class CompletionTerminalizationProof {
     }
     if (bundle.sourceFingerprint != draft.effectiveSourceFingerprint ||
         bundle.draftRevision != draft.revision ||
+        bundle.setupGeneration != draft.setupGeneration ||
         job.sourceFingerprint != draft.effectiveSourceFingerprint ||
-        job.draftRevision != draft.revision) {
+        job.draftRevision != draft.revision ||
+        job.setupGeneration != draft.setupGeneration ||
+        profile.currentSetupGeneration != draft.setupGeneration) {
       return const CompletionTerminalizationProof.notEligible(
         CompletionTerminalizationReason.invalidCompletionBundle,
       );

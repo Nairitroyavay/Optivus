@@ -346,55 +346,115 @@ ReconstructionResult classifyServerReconstruction({
       'unsupported_schema',
     );
   }
-  if (currentRun.hasPointer &&
-      (currentRun.runId == null || currentRun.runId!.trim().isEmpty)) {
-    return recovery(
-      ReconstructionRecoveryReason.missingCurrentRun,
-      'current_run_id_missing',
-    );
-  }
-  if (currentRun.hasPointer && currentRun.job == null) {
-    return recovery(
-      ReconstructionRecoveryReason.danglingRunReference,
-      'current_run_dangling',
-    );
-  }
-  if (currentRun.hasPointer &&
-      currentRun.pointerStatus != null &&
-      currentRun.pointerStatus != 'active' &&
-      currentRun.pointerStatus != 'completed') {
+  final currentSetupGeneration = profile.currentSetupGeneration;
+
+  // 1. Lineage check for draft: if draft exists, it must belong to currentSetupGeneration.
+  if (draft != null && draft.setupGeneration != currentSetupGeneration) {
     return recovery(
       ReconstructionRecoveryReason.durableStateConflict,
-      'current_run_status_invalid',
-    );
-  }
-  final job = currentRun.job;
-  final effectivePointerStatus =
-      currentRun.pointerStatus ??
-      (job?.status == OnboardingJobStatus.completed &&
-              job?.stage == OnboardingCompletionStage.completed
-          ? 'completed'
-          : 'active');
-  if (job != null &&
-      (job.jobId != currentRun.runId ||
-          (draft != null &&
-              (job.draftRevision != draft.revision ||
-                  job.sourceFingerprint !=
-                      draft.effectiveSourceFingerprint)))) {
-    return recovery(
-      ReconstructionRecoveryReason.durableStateConflict,
-      'completion_run_input_mismatch',
+      'setup_lineage_corrupt',
     );
   }
 
+  // 2. Lineage check for currentRun:
+  // If run claims a future generation, durable state is corrupt.
+  if (currentRun.hasPointer &&
+      currentRun.setupGeneration > currentSetupGeneration) {
+    return recovery(
+      ReconstructionRecoveryReason.durableStateConflict,
+      'setup_lineage_corrupt',
+    );
+  }
+
+  // A run is superseded if its generation is older than the profile's setup generation,
+  // or if its pointer status was explicitly marked 'superseded'.
+  final isRunSuperseded = currentRun.hasPointer &&
+      (currentRun.setupGeneration < currentSetupGeneration ||
+          currentRun.pointerStatus == 'superseded');
+
+  if (isRunSuperseded) {
+    developer.log(
+      '[Reconstruction] completion_run_superseded '
+      'runGeneration=${currentRun.setupGeneration} '
+      'currentSetupGeneration=$currentSetupGeneration '
+      'pointerStatus=${currentRun.pointerStatus}',
+      name: 'server_reconstructor',
+    );
+  }
+
+  // A completed profile cannot have a superseded run.
+  if (profile.onboardingCompleted && isRunSuperseded) {
+    return recovery(
+      ReconstructionRecoveryReason.durableStateConflict,
+      'completed_profile_with_superseded_run',
+    );
+  }
+
+  // For an active, same-lineage run, validate pointer status and run consistency.
+  if (currentRun.hasPointer && !isRunSuperseded) {
+    if (currentRun.runId == null || currentRun.runId!.trim().isEmpty) {
+      return recovery(
+        ReconstructionRecoveryReason.missingCurrentRun,
+        'current_run_id_missing',
+      );
+    }
+    if (currentRun.job == null) {
+      return recovery(
+        ReconstructionRecoveryReason.danglingRunReference,
+        'current_run_dangling',
+      );
+    }
+    if (currentRun.pointerStatus != null &&
+        currentRun.pointerStatus != 'active' &&
+        currentRun.pointerStatus != 'completed') {
+      return recovery(
+        ReconstructionRecoveryReason.durableStateConflict,
+        'current_run_status_invalid',
+      );
+    }
+  }
+
+  final job = isRunSuperseded ? null : currentRun.job;
+  final effectivePointerStatus = isRunSuperseded
+      ? null
+      : (currentRun.pointerStatus ??
+          (job?.status == OnboardingJobStatus.completed &&
+                  job?.stage == OnboardingCompletionStage.completed
+              ? 'completed'
+              : 'active'));
+
+  if (job != null) {
+    if (job.setupGeneration != currentSetupGeneration) {
+      return recovery(
+        ReconstructionRecoveryReason.durableStateConflict,
+        'setup_lineage_corrupt',
+      );
+    }
+    if (job.jobId != currentRun.runId ||
+        (draft != null &&
+            (job.draftRevision != draft.revision ||
+                job.sourceFingerprint != draft.effectiveSourceFingerprint))) {
+      return recovery(
+        ReconstructionRecoveryReason.durableStateConflict,
+        'completion_run_input_mismatch',
+      );
+    }
+  }
+
+  // Bundle lineage check: if bundle exists from older setup, it is superseded.
+  final isBundleSuperseded = completionBundle != null &&
+      completionBundle.setupGeneration < currentSetupGeneration;
+  final effectiveBundle = isBundleSuperseded ? null : completionBundle;
+
   final finalDraft = draft != null && isReconstructionFinalDraft(draft);
   final validBundle =
-      completionBundle != null &&
+      effectiveBundle != null &&
       draft != null &&
-      completionBundle.version <= OnboardingCompletionBundle.schemaVersion &&
-      completionBundle.draftRevision == draft.revision &&
-      completionBundle.effectiveSourceFingerprint ==
-          draft.effectiveSourceFingerprint;
+      effectiveBundle.version <= OnboardingCompletionBundle.schemaVersion &&
+      effectiveBundle.draftRevision == draft.revision &&
+      effectiveBundle.effectiveSourceFingerprint ==
+          draft.effectiveSourceFingerprint &&
+      effectiveBundle.setupGeneration == currentSetupGeneration;
 
   if (profile.onboardingCompleted) {
     if (!finalDraft) {
@@ -425,14 +485,14 @@ ReconstructionResult classifyServerReconstruction({
         runId: currentRun.runId!,
         draft: draft,
         completionJob: job,
-        completionBundle: completionBundle,
+        completionBundle: effectiveBundle,
       );
     }
     return ReconstructionCompleted(
       ownerUid: ownerUid,
       profile: profile,
       draft: draft,
-      completionBundle: completionBundle,
+      completionBundle: effectiveBundle,
       completionJob: job,
     );
   }
@@ -445,9 +505,9 @@ ReconstructionResult classifyServerReconstruction({
   }
   if (finalDraft) {
     final runId =
-        currentRun.runId ??
-        (completionBundle?.runId.trim().isNotEmpty == true
-            ? completionBundle!.runId
+        (isRunSuperseded ? null : currentRun.runId) ??
+        (effectiveBundle?.runId.trim().isNotEmpty == true
+            ? effectiveBundle!.runId
             : stableOnboardingRunId(
                 ownerUid: ownerUid,
                 sourceFingerprint: draft.effectiveSourceFingerprint,
@@ -459,7 +519,7 @@ ReconstructionResult classifyServerReconstruction({
       runId: runId,
       draft: draft,
       completionJob: job,
-      completionBundle: completionBundle,
+      completionBundle: effectiveBundle,
     );
   }
 
@@ -470,7 +530,7 @@ ReconstructionResult classifyServerReconstruction({
     );
   }
   if (draft == null) {
-    if (completionBundle != null || currentRun.hasPointer) {
+    if (effectiveBundle != null || (currentRun.hasPointer && !isRunSuperseded)) {
       return recovery(
         ReconstructionRecoveryReason.durableStateConflict,
         'completion_state_without_draft',

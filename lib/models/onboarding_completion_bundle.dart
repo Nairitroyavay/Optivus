@@ -34,6 +34,7 @@ class OnboardingCompletionBundle {
   final List<String> duplicateSystemKeysMerged;
   final String sourceFingerprint;
   final int draftRevision;
+  final int setupGeneration;
   final List<String> expectedRoutineIds;
   final List<String> expectedHistoryIds;
   final List<String> expectedHabitIds;
@@ -65,6 +66,7 @@ class OnboardingCompletionBundle {
     required this.duplicateSystemKeysMerged,
     this.sourceFingerprint = '',
     this.draftRevision = 1,
+    this.setupGeneration = 0,
     this.expectedRoutineIds = const [],
     this.expectedHistoryIds = const [],
     this.expectedHabitIds = const [],
@@ -82,6 +84,7 @@ class OnboardingCompletionBundle {
       'schemaVersion': version,
       'source': source,
       'draftRevision': draftRevision,
+      'setupGeneration': setupGeneration,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
       'onboardingCompleted': true,
@@ -172,6 +175,7 @@ class OnboardingCompletionBundle {
       source: map['source'] as String? ?? OnboardingDraft.sourceOnboarding,
       sourceFingerprint: map['sourceFingerprint'] as String? ?? '',
       draftRevision: (map['draftRevision'] as num?)?.toInt() ?? 1,
+      setupGeneration: (map['setupGeneration'] as num?)?.toInt() ?? 0,
       createdAt: createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
       updatedAt:
           updatedAt ?? createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
@@ -237,6 +241,7 @@ class OnboardingCompletionBundle {
   OnboardingCompletionBundle copyWithContractMetadata({
     String? sourceFingerprint,
     int? draftRevision,
+    int? setupGeneration,
     List<String>? expectedRoutineIds,
     List<String>? expectedHistoryIds,
     List<String>? expectedHabitIds,
@@ -268,6 +273,7 @@ class OnboardingCompletionBundle {
       duplicateSystemKeysMerged: duplicateSystemKeysMerged,
       sourceFingerprint: sourceFingerprint ?? this.sourceFingerprint,
       draftRevision: draftRevision ?? this.draftRevision,
+      setupGeneration: setupGeneration ?? this.setupGeneration,
       expectedRoutineIds: expectedRoutineIds ?? this.expectedRoutineIds,
       expectedHistoryIds: expectedHistoryIds ?? this.expectedHistoryIds,
       expectedHabitIds: expectedHabitIds ?? this.expectedHabitIds,

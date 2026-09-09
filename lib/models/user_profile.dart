@@ -17,6 +17,8 @@ class UserProfile {
   final bool onboardingInputCompleted;
   final String onboardingProjectionStatus;
   final int onboardingStep;
+  final int currentSetupGeneration;
+  final String? lastResetOperationId;
 
   bool get onboardingCompleted =>
       onboardingInputCompleted && onboardingProjectionStatus == 'completed';
@@ -60,6 +62,8 @@ class UserProfile {
     String? onboardingProjectionStatus,
     bool onboardingCompleted = false,
     this.onboardingStep = 0,
+    this.currentSetupGeneration = 0,
+    this.lastResetOperationId,
     this.lifeRole = '',
     this.workingExtra,
     this.businessMode,
@@ -97,6 +101,8 @@ class UserProfile {
       onboardingProjectionStatus: 'none',
       onboardingCompleted: false,
       onboardingStep: 0,
+      currentSetupGeneration: 0,
+      lastResetOperationId: null,
     );
   }
 
@@ -113,6 +119,9 @@ class UserProfile {
       'onboardingProjectionStatus': onboardingProjectionStatus,
       'onboardingCompleted': onboardingCompleted,
       'onboardingStep': onboardingStep,
+      'currentSetupGeneration': currentSetupGeneration,
+      if (lastResetOperationId != null)
+        'lastResetOperationId': lastResetOperationId,
       'lifeRole': lifeRole,
       if (workingExtra != null) 'workingExtra': workingExtra,
       if (businessMode != null) 'businessMode': businessMode,
@@ -146,6 +155,9 @@ class UserProfile {
       'onboardingProjectionStatus': onboardingProjectionStatus,
       'onboardingCompleted': onboardingCompleted,
       'onboardingStep': onboardingStep,
+      'currentSetupGeneration': currentSetupGeneration,
+      if (lastResetOperationId != null)
+        'lastResetOperationId': lastResetOperationId,
       'lifeRole': lifeRole,
       if (workingExtra != null) 'workingExtra': workingExtra,
       if (businessMode != null) 'businessMode': businessMode,
@@ -183,6 +195,9 @@ class UserProfile {
           (legacyCompleted ? 'completed' : 'none'),
       onboardingCompleted: legacyCompleted,
       onboardingStep: map['onboardingStep'] as int? ?? 0,
+      currentSetupGeneration:
+          (map['currentSetupGeneration'] as num?)?.toInt() ?? 0,
+      lastResetOperationId: map['lastResetOperationId'] as String?,
       lifeRole: map['lifeRole'] as String? ?? '',
       workingExtra: map['workingExtra'] as String?,
       businessMode: map['businessMode'] as String?,
@@ -219,6 +234,8 @@ class UserProfile {
     String? onboardingProjectionStatus,
     bool? onboardingCompleted,
     int? onboardingStep,
+    int? currentSetupGeneration,
+    String? lastResetOperationId,
     String? lifeRole,
     String? workingExtra,
     String? businessMode,
@@ -257,6 +274,9 @@ class UserProfile {
       onboardingInputCompleted: nextInputCompleted,
       onboardingProjectionStatus: nextProjectionStatus,
       onboardingStep: onboardingStep ?? this.onboardingStep,
+      currentSetupGeneration:
+          currentSetupGeneration ?? this.currentSetupGeneration,
+      lastResetOperationId: lastResetOperationId ?? this.lastResetOperationId,
       lifeRole: lifeRole ?? this.lifeRole,
       workingExtra: workingExtra ?? this.workingExtra,
       businessMode: businessMode ?? this.businessMode,

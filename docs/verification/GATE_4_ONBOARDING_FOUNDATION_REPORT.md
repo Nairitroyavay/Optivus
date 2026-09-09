@@ -548,3 +548,58 @@ Required result when device is available:
 - Complete Step 14 → Home → force-kill → reopen → Home ✓
 - logout/login → Home ✓
 - reinstall/login → Home ✓
+
+---
+
+## G. Physical Device Defect Resolution: `completion_run_input_mismatch`
+
+### 1. Defect Description & Root Cause
+Physical Android testing exposed a Gate 4 restore failure:
+```text
+[Reconstruction] classified ... lifecycle=recovery
+[OnboardingRestore] {code: completion_run_input_mismatch}
+```
+**Root Cause**:
+When a user completed onboarding and later tapped "Re-run Setup" / "Start Over", `markOnboardingIncomplete()` marked `onboardingCompleted = false` on `UserProfile`, but left `/users/{uid}/onboarding/currentRun` pointing to the previous completion run.
+On cold restart after completing Steps 0–2, `classifyServerReconstruction` evaluated `job.draftRevision != draft.revision` against the old completion run (from setup 0) before checking incomplete draft resumption. Because the new draft was at revision 1–3 and the old job was at revision 15, `classifyServerReconstruction` aborted into `Recovery` with diagnostic code `completion_run_input_mismatch` instead of resuming at Step 3.
+
+### 2. Architecture & Lineage Contract Fix
+Instead of deleting Firestore data or ignoring mismatches, a durable setup lineage identity was established:
+- **`setupGeneration` / `currentSetupGeneration` (int, default 0)**:
+  - Stored consistently across `UserProfile` (`currentSetupGeneration`), `OnboardingDraft` (`setupGeneration`), `OnboardingCompletionJob` (`setupGeneration`), `OnboardingCompletionBundle` (`setupGeneration`), and `OnboardingCurrentRunSnapshot` (`setupGeneration`).
+  - Added `lastResetOperationId` (String?) to `UserProfile` and `OnboardingDraft` to ensure atomic, idempotent reset operations.
+- **Firestore Security Rules**:
+  - `validUserProfileKeys` and `validUserProfile`: includes `currentSetupGeneration` and optional `lastResetOperationId`.
+  - `validOnboardingDraftKeys` and `validOnboardingDraft`: includes `setupGeneration` and optional `lastResetOperationId`.
+  - `validOnboardingCompletionBundleKeys` and `validOnboardingCompletionBundle`: includes `setupGeneration`.
+  - `validOnboardingCompletionJob` and `validOnboardingRun`: includes `setupGeneration`.
+  - `validOnboardingCurrentRun`: allows `setupGeneration` and valid statuses `["active", "completed", "superseded"]`.
+  - Added transitions: `validOnboardingCurrentRunSupersededTransition` and `validOnboardingSupersededToFreshRun` without deleting the currentRun pointer document (`allow delete: false` preserved).
+  - Terminal state lineage fencing: requires `pointer.setupGeneration == profile.currentSetupGeneration && run.setupGeneration == profile.currentSetupGeneration`.
+- **Atomic Reset Coordinator (`OnboardingSetupResetCoordinator`)**:
+  - Atomically runs Firestore transaction:
+    1. Marks existing `currentRun` pointer status as `'superseded'`.
+    2. Writes clean schema-v4 draft with `setupGeneration = nextGeneration`.
+    3. Updates `UserProfile` with `currentSetupGeneration = nextGeneration`, `onboardingCompleted = false`, `onboardingProjectionStatus = 'pending'`, `onboardingStep = 0`.
+  - Prevents stale completion workers from committing writes to a newer setup generation.
+- **Server Reconstructor Classification (`classifyServerReconstruction`)**:
+  - Deterministic 3-way lineage comparison:
+    1. `draft.setupGeneration != currentSetupGeneration` $\rightarrow$ Recovery(`setup_lineage_corrupt`).
+    2. `currentRun.setupGeneration > currentSetupGeneration` $\rightarrow$ Recovery(`setup_lineage_corrupt`).
+    3. `currentRun.setupGeneration < currentSetupGeneration` or `pointerStatus == 'superseded'` $\rightarrow$ marked `isRunSuperseded = true` and ignored for incomplete draft resumption.
+    4. `profile.onboardingCompleted && isRunSuperseded` $\rightarrow$ Recovery(`completed_profile_with_superseded_run`).
+    5. Same-lineage runs (`currentRun.setupGeneration == currentSetupGeneration`) $\rightarrow$ strict `completion_run_input_mismatch` and `completion_run_fatal` checks strictly preserved.
+- **UI Synchronization**:
+  - `ProfileControlScreens` `_showResetSetupDialog` shows loading indicator and awaits durable server reset before navigating to `/onboarding`.
+
+### 3. Automated Verification Results
+- **Lineage Regression Suite**: `test/onboarding_setup_lineage_regression_test.dart` (17/17 passed):
+  - Physical Android regression at Steps 3, 6, and 8 resumes onboarding without recovery.
+  - Complete 12-state lineage matrix.
+  - Step-14 completion writer lineage fencing.
+  - Atomic reset coordinator idempotency and state updates.
+- **Firestore Security Rules**: `tests/firestore_rules.test.js` (143/143 passed in emulator).
+- **Onboarding Restore Matrix**: `test/onboarding_restore_test.dart` (30/30 passed).
+- **Remediation & Serialization**: `test/work_package_c_remediation_test.dart` (20/20 passed).
+- **Static Analysis**: `flutter analyze` — No issues found!
+- **Whitespace Integrity**: `git diff --check` — Clean.

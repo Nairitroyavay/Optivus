@@ -94,6 +94,7 @@ class OnboardingCompletionJob {
   final String sourceFingerprint;
   final int draftRevision;
   final int retryCount;
+  final int setupGeneration;
 
   // Kept in memory/read compatibility for legacy tests and documents. It is
   // sanitized and deliberately omitted from canonical Firestore writes.
@@ -142,6 +143,7 @@ class OnboardingCompletionJob {
     this.sourceFingerprint = '',
     this.draftRevision = 1,
     this.retryCount = 0,
+    this.setupGeneration = 0,
     this.lastError,
     this.lastFailureCode,
     this.lastFailureStage,
@@ -198,6 +200,7 @@ class OnboardingCompletionJob {
     String? sourceFingerprint,
     int? draftRevision,
     int? retryCount,
+    int? setupGeneration,
     String? lastError,
     bool clearLastError = false,
     String? lastFailureCode,
@@ -244,6 +247,7 @@ class OnboardingCompletionJob {
       sourceFingerprint: sourceFingerprint ?? this.sourceFingerprint,
       draftRevision: draftRevision ?? this.draftRevision,
       retryCount: retryCount ?? this.retryCount,
+      setupGeneration: setupGeneration ?? this.setupGeneration,
       lastError: clearLastError ? null : (lastError ?? this.lastError),
       lastFailureCode: clearLastFailure
           ? null
@@ -307,6 +311,7 @@ class OnboardingCompletionJob {
       'sourceFingerprint': sourceFingerprint,
       'draftRevision': draftRevision,
       'retryCount': retryCount,
+      'setupGeneration': setupGeneration,
       if (lastFailureCode != null) 'failureCode': lastFailureCode,
       if (lastFailureStage != null) 'failureStage': lastFailureStage,
       if (retryable != null) 'retryable': retryable,
@@ -374,6 +379,7 @@ class OnboardingCompletionJob {
       sourceFingerprint: map['sourceFingerprint'] as String? ?? '',
       draftRevision: (map['draftRevision'] as num?)?.toInt() ?? 1,
       retryCount: (map['retryCount'] as num?)?.toInt() ?? 0,
+      setupGeneration: (map['setupGeneration'] as num?)?.toInt() ?? 0,
       lastError: map['lastError'] as String?,
       lastFailureCode:
           map['failureCode'] as String? ?? map['lastFailureCode'] as String?,

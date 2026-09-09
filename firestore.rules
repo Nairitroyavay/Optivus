@@ -1127,7 +1127,9 @@ service cloud.firestore {
         "proteinEstimate",
         "coachName",
         "coachStyle",
-        "slipUpStyle"
+        "slipUpStyle",
+        "currentSetupGeneration",
+        "lastResetOperationId"
       ]);
     }
 
@@ -1162,6 +1164,8 @@ service cloud.firestore {
         && (!data.keys().hasAny(["coachName"]) || (data.coachName is string && data.coachName.size() <= 100))
         && (!data.keys().hasAny(["coachStyle"]) || (data.coachStyle is string && data.coachStyle.size() <= 50))
         && (!data.keys().hasAny(["slipUpStyle"]) || (data.slipUpStyle is string && data.slipUpStyle.size() <= 100))
+        && (!data.keys().hasAny(["currentSetupGeneration"]) || (data.currentSetupGeneration is int && data.currentSetupGeneration >= 0))
+        && (!data.keys().hasAny(["lastResetOperationId"]) || data.lastResetOperationId is string)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -1196,7 +1200,9 @@ service cloud.firestore {
         "coachSetup",
         "slipUpHandling",
         "notifications",
-        "finalPreview"
+        "finalPreview",
+        "setupGeneration",
+        "lastResetOperationId"
       ]);
     }
 
@@ -1255,7 +1261,9 @@ service cloud.firestore {
         && data.updatedAt is timestamp
         && (!data.keys().hasAny(["patiencePledgeText"]) || data.patiencePledgeText is string)
         && (!data.keys().hasAny(["slipUpHandling"]) || data.slipUpHandling is string)
-        && (!data.keys().hasAny(["finalPreview"]) || data.finalPreview is map);
+        && (!data.keys().hasAny(["finalPreview"]) || data.finalPreview is map)
+        && (!data.keys().hasAny(["setupGeneration"]) || (data.setupGeneration is int && data.setupGeneration >= 0))
+        && (!data.keys().hasAny(["lastResetOperationId"]) || data.lastResetOperationId is string);
     }
 
     function validOnboardingCompletionBundleKeys(data) {
@@ -1289,7 +1297,8 @@ service cloud.firestore {
         "generatedSourceIds",
         "conflictAcceptances",
         "expectedAcceptanceIds",
-        "unscheduledRoutineSuggestions"
+        "unscheduledRoutineSuggestions",
+        "setupGeneration"
       ]);
     }
 
@@ -1347,7 +1356,8 @@ service cloud.firestore {
         && data.unscheduledRoutineSuggestions is list
         && data.createdAt is timestamp
         && data.updatedAt is timestamp
-        && (!data.keys().hasAny(["moneyGoal"]) || data.moneyGoal is map);
+        && (!data.keys().hasAny(["moneyGoal"]) || data.moneyGoal is map)
+        && (!data.keys().hasAny(["setupGeneration"]) || (data.setupGeneration is int && data.setupGeneration >= 0));
     }
 
     function validOnboardingCompletionJob(data, jobId) {
@@ -1358,7 +1368,7 @@ service cloud.firestore {
         "expectedRoutineIds", "createdRoutineIds", "existingRoutineIds", "repairedRoutineIds", "failedRoutineIds",
         "expectedHistoryIds", "appliedHistoryIds", "existingHistoryIds", "repairedHistoryIds", "failedHistoryIds",
         "expectedHabitIds", "createdHabitIds", "existingHabitIds", "repairedHabitIds", "failedHabitIds",
-        "createdAt", "updatedAt", "completedAt", "schemaVersion"
+        "createdAt", "updatedAt", "completedAt", "schemaVersion", "setupGeneration"
       ])
       && data.keys().hasAll([
         "jobId", "ownerUid", "stage", "status", "stagesCompleted",
@@ -1397,6 +1407,7 @@ service cloud.firestore {
       && data.existingHabitIds is list
       && data.repairedHabitIds is list
       && data.failedHabitIds is list
+      && (!data.keys().hasAny(["setupGeneration"]) || (data.setupGeneration is int && data.setupGeneration >= 0))
       && data.createdAt is timestamp
       && data.updatedAt is timestamp
       && (data.status == "completed"
@@ -1514,7 +1525,7 @@ service cloud.firestore {
         "expectedHistoryIds", "appliedHistoryIds", "existingHistoryIds", "repairedHistoryIds", "failedHistoryIds",
         "expectedHabitIds", "createdHabitIds", "existingHabitIds", "repairedHabitIds", "failedHabitIds",
         "expectedAcceptanceIds", "appliedAcceptanceIds", "existingAcceptanceIds", "repairedAcceptanceIds", "failedAcceptanceIds",
-        "createdAt", "updatedAt", "completedAt", "schemaVersion"
+        "createdAt", "updatedAt", "completedAt", "schemaVersion", "setupGeneration"
       ])
       && data.keys().hasAll([
         "jobId", "ownerUid", "stage", "status", "stagesCompleted", "sourceFingerprint",
@@ -1562,6 +1573,7 @@ service cloud.firestore {
       && data.existingAcceptanceIds is list
       && data.repairedAcceptanceIds is list
       && data.failedAcceptanceIds is list
+      && (!data.keys().hasAny(["setupGeneration"]) || (data.setupGeneration is int && data.setupGeneration >= 0))
       && data.createdAt is timestamp
       && data.updatedAt is timestamp
       && (data.status == "completed"
@@ -1594,14 +1606,7 @@ service cloud.firestore {
           "updatedAt", "completedAt"
         ])
         && after.ownerUid == request.auth.uid
-        && after.ownerUid == before.ownerUid
-        && after.jobId == before.jobId
         && after.jobId == runId
-        && after.createdAt == before.createdAt
-        && after.schemaVersion == before.schemaVersion
-        && after.schemaVersion == 3
-        && after.sourceFingerprint == before.sourceFingerprint
-        && after.draftRevision == before.draftRevision
         && validOnboardingJobStage(after.stage)
         && validOnboardingJobStatus(after.status)
         && after.stagesCompleted is map
@@ -1662,7 +1667,7 @@ service cloud.firestore {
     function validOnboardingCurrentRun(data, uid) {
       return data.keys().hasOnly([
           "ownerUid", "currentRunId", "sourceFingerprint", "draftRevision",
-          "status", "updatedAt", "schemaVersion"
+          "status", "updatedAt", "schemaVersion", "setupGeneration"
         ])
         && data.keys().hasAll([
           "ownerUid", "currentRunId", "sourceFingerprint", "draftRevision",
@@ -1677,23 +1682,51 @@ service cloud.firestore {
         && data.sourceFingerprint.matches("^[a-f0-9]{64}$")
         && data.draftRevision is int
         && data.draftRevision >= 1
-        && data.status in ["active", "completed"]
+        && data.status in ["active", "completed", "superseded"]
+        && (!data.keys().hasAny(["setupGeneration"]) || (data.setupGeneration is int && data.setupGeneration >= 0))
         && data.updatedAt is timestamp
         && data.schemaVersion == 1;
     }
 
-    function validOnboardingCurrentRunTransition(before, after, uid) {
-      return validOnboardingCurrentRunTarget(after, uid)
+    function validOnboardingCurrentRunSupersededTransition(before, after, uid) {
+      return validOnboardingCurrentRun(after, uid)
         && after.ownerUid == before.ownerUid
         && after.schemaVersion == before.schemaVersion
-        && ((after.currentRunId == before.currentRunId
-            && after.sourceFingerprint == before.sourceFingerprint
-            && after.draftRevision == before.draftRevision
-            && (after.status == before.status
-              || (before.status == "active" && after.status == "completed"))
-            && (after.status != "completed"
-              || validCompletedTerminalState(uid, after.currentRunId)))
-          || validOnboardingCurrentRunReplacement(before, after, uid));
+        && after.currentRunId == before.currentRunId
+        && after.sourceFingerprint == before.sourceFingerprint
+        && after.draftRevision == before.draftRevision
+        && after.status == "superseded"
+        && (before.status in ["active", "completed", "superseded"])
+        && (!before.keys().hasAny(["setupGeneration"]) || after.setupGeneration == before.setupGeneration);
+    }
+
+    function validOnboardingSupersededToFreshRun(before, after, uid) {
+      let draft = getAfter(/databases/$(database)/documents/users/$(uid)/onboarding/draft).data;
+      let beforeGen = before.keys().hasAny(["setupGeneration"]) ? before.setupGeneration : 0;
+      let afterGen = after.keys().hasAny(["setupGeneration"]) ? after.setupGeneration : 0;
+      let draftGen = draft.keys().hasAny(["setupGeneration"]) ? draft.setupGeneration : 0;
+      return before.status == "superseded"
+        && validOnboardingFreshCurrentRun(after, uid)
+        && afterGen > beforeGen
+        && draftGen == afterGen;
+    }
+
+    function validOnboardingCurrentRunTransition(before, after, uid) {
+      return after.status == "superseded"
+        ? validOnboardingCurrentRunSupersededTransition(before, after, uid)
+        : (before.status == "superseded"
+          ? validOnboardingSupersededToFreshRun(before, after, uid)
+          : (validOnboardingCurrentRunTarget(after, uid)
+            && after.ownerUid == before.ownerUid
+            && after.schemaVersion == before.schemaVersion
+            && ((after.currentRunId == before.currentRunId
+                && after.sourceFingerprint == before.sourceFingerprint
+                && after.draftRevision == before.draftRevision
+                && (after.status == before.status
+                  || (before.status == "active" && after.status == "completed"))
+                && (after.status != "completed"
+                  || validCompletedTerminalState(uid, after.currentRunId)))
+              || validOnboardingCurrentRunReplacement(before, after, uid))));
     }
 
     // A pointer target is admitted only when Firestore can independently tie
@@ -1766,7 +1799,12 @@ service cloud.firestore {
         && run.ownerUid == uid
         && run.jobId == runId
         && run.status == "completed"
-        && run.stage == "completed";
+        && run.stage == "completed"
+        && (!("currentSetupGeneration" in profile)
+            || ("setupGeneration" in pointer
+                && pointer.setupGeneration == profile.currentSetupGeneration
+                && "setupGeneration" in run
+                && run.setupGeneration == profile.currentSetupGeneration));
     }
 
     function validConflictAcceptance(data, acceptanceId, uid) {

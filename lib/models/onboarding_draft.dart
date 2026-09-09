@@ -34,6 +34,8 @@ class OnboardingDraft {
   final int revision;
   final String sourceFingerprint;
   final String timezoneId;
+  final int setupGeneration;
+  final String? lastResetOperationId;
 
   final bool welcomeSaved;
   final bool patiencePledgeAccepted;
@@ -130,6 +132,8 @@ class OnboardingDraft {
     this.revision = 1,
     this.sourceFingerprint = '',
     this.timezoneId = 'UTC',
+    this.setupGeneration = 0,
+    this.lastResetOperationId,
     this.welcomeSaved = false,
     this.patiencePledgeAccepted = false,
     this.patiencePledgeText,
@@ -193,6 +197,8 @@ class OnboardingDraft {
       revision: (map['revision'] as num?)?.toInt() ?? 1,
       sourceFingerprint: map['sourceFingerprint'] as String? ?? '',
       timezoneId: map['timezoneId'] as String? ?? 'UTC',
+      setupGeneration: (map['setupGeneration'] as num?)?.toInt() ?? 0,
+      lastResetOperationId: map['lastResetOperationId'] as String?,
       welcomeSaved: map['welcomeSaved'] as bool? ?? false,
       patiencePledgeAccepted: map['patiencePledgeAccepted'] as bool? ?? false,
       patiencePledgeText: map['patiencePledgeText'] as String?,
@@ -247,6 +253,9 @@ class OnboardingDraft {
       'source': sourceOnboarding,
       'revision': revision,
       'timezoneId': timezoneId,
+      'setupGeneration': setupGeneration,
+      if (lastResetOperationId != null)
+        'lastResetOperationId': lastResetOperationId,
       'currentStep': currentStep,
       'stepCompleted': stepCompleted,
       'stepCompletionContractVersions': stepCompletionContractVersions,
@@ -302,6 +311,8 @@ class OnboardingDraft {
     int? revision,
     String? sourceFingerprint,
     String? timezoneId,
+    int? setupGeneration,
+    String? lastResetOperationId,
     bool? welcomeSaved,
     bool? patiencePledgeAccepted,
     String? patiencePledgeText,
@@ -351,6 +362,8 @@ class OnboardingDraft {
           sourceFingerprint ??
           (incrementRevision ? '' : this.sourceFingerprint),
       timezoneId: timezoneId ?? this.timezoneId,
+      setupGeneration: setupGeneration ?? this.setupGeneration,
+      lastResetOperationId: lastResetOperationId ?? this.lastResetOperationId,
       welcomeSaved: welcomeSaved ?? this.welcomeSaved,
       patiencePledgeAccepted:
           patiencePledgeAccepted ?? this.patiencePledgeAccepted,
@@ -5311,7 +5324,8 @@ String _fingerprintDraftMap(Map<String, dynamic> map) {
   final identity = Map<String, dynamic>.from(map)
     ..remove('sourceFingerprint')
     ..remove('createdAt')
-    ..remove('updatedAt');
+    ..remove('updatedAt')
+    ..remove('lastResetOperationId');
   return sha256.convert(utf8.encode(jsonEncode(identity))).toString();
 }
 

@@ -1136,11 +1136,15 @@ Future<_FreshSessionResult> _freshAuthSession({
   required _SerializedOnboardingRepository onboardingRepository,
   required ProfileRepository profileRepository,
   required UploadedAssetRepository uploadRepository,
+  OnboardingCompletionJobService? jobService,
+  OnboardingCurrentRunSnapshot? currentRunSnapshot,
 }) async {
   final authRepository = _ControllableAuthRepository();
   final source = _PersistentRepositoryReconstructionSource(
     profiles: profileRepository,
     onboarding: onboardingRepository,
+    jobService: jobService,
+    currentRunOverride: currentRunSnapshot,
   );
   final overrides =
       _firebaseOverrides(
@@ -1535,10 +1539,14 @@ class _PersistentRepositoryReconstructionSource
     implements ServerReconstructionSource {
   final ProfileRepository profiles;
   final OnboardingRepository onboarding;
+  final OnboardingCompletionJobService? jobService;
+  final OnboardingCurrentRunSnapshot? currentRunOverride;
 
   const _PersistentRepositoryReconstructionSource({
     required this.profiles,
     required this.onboarding,
+    this.jobService,
+    this.currentRunOverride,
   });
 
   @override
@@ -1548,11 +1556,14 @@ class _PersistentRepositoryReconstructionSource
   }) async {
     final profile = await profiles.fetchUserProfile(uid);
     onProfileLoaded?.call(profile);
+    final currentRun = currentRunOverride ??
+        (await jobService?.loadCurrentRunSnapshot(uid)) ??
+        const OnboardingCurrentRunSnapshot.none();
     return ServerReconstructionSnapshot(
       profile: profile,
       draft: await onboarding.fetchDraft(uid),
       completionBundle: await onboarding.fetchCompletionBundle(uid),
-      currentRun: const OnboardingCurrentRunSnapshot.none(),
+      currentRun: currentRun,
     );
   }
 

@@ -303,6 +303,7 @@ class OnboardingCompletionService {
       duplicateSystemKeysMerged: preview.duplicateSystemKeysSkipped,
       sourceFingerprint: draft.effectiveSourceFingerprint,
       draftRevision: draft.revision,
+      setupGeneration: draft.setupGeneration,
       unscheduledRoutineSuggestions: schedule.unscheduledSuggestions,
     );
     final routinePlan = RoutineOnboardingProjection.build(initialBundle);

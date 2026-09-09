@@ -2424,6 +2424,102 @@ describe("Phase 4.6.4 canonical production contracts", () => {
       await assertFails(crossRef.set(currentRunData()));
     });
 
+    it("allows transitioning currentRun to superseded and enforces lineage fencing on terminalization", async () => {
+      const db = ownerDb();
+      const pointerRef = db.doc("users/user123/onboarding/currentRun");
+      const profileRef = db.doc("users/user123");
+      const runRef = db.doc("users/user123/onboardingRuns/run-001");
+
+      // Setup initial active pointer
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const admin = context.firestore();
+        await admin.doc(pointerRef.path).set(currentRunData("user123", "run-001", {
+          status: "active",
+          setupGeneration: 0,
+        }));
+      });
+
+      // 1. Owner can transition pointer from active to superseded with same run details
+      await assertSucceeds(pointerRef.set(currentRunData("user123", "run-001", {
+        status: "superseded",
+        setupGeneration: 0,
+        updatedAt: completedAt,
+      })));
+      expect((await pointerRef.get()).data().status).toBe("superseded");
+
+      // 2. Setting pointer to superseded again is idempotent
+      await assertSucceeds(pointerRef.set(currentRunData("user123", "run-001", {
+        status: "superseded",
+        setupGeneration: 0,
+        updatedAt: completedAt,
+      })));
+
+      // 3. Lineage fence test: profile at generation 1 rejects terminalization of run from generation 0
+      const stagesBeforeFinal = {
+        validateInput: true, persistDraft: true, verifyDraft: true, persistBundle: true,
+        verifyBundle: true, reconcileRoutines: true, verifyRoutines: true, projectRoutineHistory: true,
+        verifyRoutineHistory: true, reconcileHabitSystems: true, verifyHabitSystems: true,
+        reloadControllers: true, verifyFrontendState: true,
+      };
+      const activeRunGen0 = onboardingRunData("user123", "run-001", {
+        stage: "finalizeProfile",
+        status: "running",
+        setupGeneration: 0,
+        stagesCompleted: stagesBeforeFinal,
+      });
+      const completedRunGen0 = {
+        ...activeRunGen0,
+        stage: "completed",
+        status: "completed",
+        stagesCompleted: { ...stagesBeforeFinal, finalizeProfile: true },
+        updatedAt: completedAt,
+        completedAt,
+      };
+      const profileGen1 = userData("user123", {
+        onboardingInputCompleted: true,
+        onboardingProjectionStatus: "completed",
+        onboardingCompleted: true,
+        currentSetupGeneration: 1,
+        updatedAt: completedAt,
+      });
+      const pointerGen0 = currentRunData("user123", "run-001", {
+        status: "completed",
+        setupGeneration: 0,
+        updatedAt: completedAt,
+      });
+
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const admin = context.firestore();
+        await admin.doc("users/user123/onboarding/draft").set(completedOnboardingDraftData());
+        await admin.doc(profileRef.path).set(userData("user123", { currentSetupGeneration: 1 }));
+        await admin.doc(runRef.path).set(activeRunGen0);
+        await admin.doc(pointerRef.path).set(currentRunData("user123", "run-001", { setupGeneration: 0 }));
+      });
+
+      // Mismatched generations (run=0, pointer=0, profile=1) MUST FAIL at terminal boundary
+      const fenceViolationBatch = db.batch();
+      fenceViolationBatch.set(profileRef, profileGen1);
+      fenceViolationBatch.set(runRef, completedRunGen0);
+      fenceViolationBatch.set(pointerRef, pointerGen0);
+      await assertFails(fenceViolationBatch.commit());
+
+      // Matching generations (run=1, pointer=1, profile=1) MUST SUCCEED
+      const activeRunGen1 = { ...activeRunGen0, setupGeneration: 1 };
+      const matchingRunGen1 = { ...completedRunGen0, setupGeneration: 1 };
+      const matchingPointerGen1 = { ...pointerGen0, setupGeneration: 1 };
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const admin = context.firestore();
+        await admin.doc(runRef.path).set(activeRunGen1);
+        await admin.doc(pointerRef.path).set(currentRunData("user123", "run-001", { setupGeneration: 1 }));
+      });
+      const matchingBatch = db.batch();
+      matchingBatch.set(profileRef, profileGen1);
+      matchingBatch.set(runRef, matchingRunGen1);
+      matchingBatch.set(pointerRef, matchingPointerGen1);
+      await assertSucceeds(matchingBatch.commit());
+      expect((await profileRef.get()).data().currentSetupGeneration).toBe(1);
+    });
+
     it("allows canonical acceptance creation, owner read, and one-way invalidation", async () => {
       const db = ownerDb();
       const ref = db.collection("users").doc("user123").collection("conflictAcceptances").doc(acceptanceId);

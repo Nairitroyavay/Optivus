@@ -3,6 +3,7 @@ import 'package:optivus/models/coach_models.dart';
 import 'package:optivus/models/goal_models.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/services/onboarding_setup_reset_coordinator.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 
@@ -18,20 +19,18 @@ final currentCoachPreferencesProvider = Provider<CoachPreferences>((ref) {
   return ref.watch(mockCoachPreferencesProvider);
 });
 
-void prepareProfileSetupRerun(WidgetRef ref) {
+Future<void> prepareProfileSetupRerun(WidgetRef ref) async {
   final auth = ref.read(authProvider);
   final user = auth.user;
   final profile = ref.read(userProfileProvider);
   final uid = user?.uid ?? profile.uid;
 
-  ref.read(onboardingStateProvider.notifier).reset(uid);
-  ref
-      .read(userProfileProvider.notifier)
-      .updateProfile(
-        profile.copyWith(onboardingCompleted: false, onboardingStep: 0),
-      );
-
   if (user != null) {
-    ref.read(authProvider.notifier).markOnboardingIncomplete(user);
+    await ref.read(authProvider.notifier).markOnboardingIncomplete(user);
+  } else if (uid.trim().isNotEmpty) {
+    final coordinator = ref.read(onboardingSetupResetCoordinatorProvider);
+    final result = await coordinator.resetSetup(uid: uid);
+    ref.read(userProfileProvider.notifier).updateProfile(result.profile);
+    ref.read(onboardingStateProvider.notifier).reset(uid);
   }
 }
