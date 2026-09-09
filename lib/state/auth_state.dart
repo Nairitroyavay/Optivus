@@ -1187,8 +1187,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return;
     }
 
-    _ref.read(routineNotifierProvider.notifier).resetForSignedOut();
-    _ref.read(habitSystemsNotifierProvider.notifier).resetForSignedOut();
+    _ref
+        .read(authSessionResetCoordinatorProvider)
+        .prepareForAuthoritativeHydration();
     await _reconstructAndHydrate(user, restoreGeneration);
   }
 

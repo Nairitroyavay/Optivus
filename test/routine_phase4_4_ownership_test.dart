@@ -43,6 +43,7 @@ void main() {
     final allowlist = {
       'lib/state/app_state.dart',
       'lib/state/auth_state.dart',
+      'lib/services/auth_session_reset_coordinator.dart',
       'lib/services/onboarding_frontend_hydration_service.dart',
       'lib/services/routine_import_applied_restore_service.dart',
       'lib/features/routine/managers/base_timeline/screens/routine_import_review_screen.dart',
@@ -63,6 +64,21 @@ void main() {
       violatingFiles,
       isEmpty,
       reason: 'mockRoutineProvider used outside allowlist',
+    );
+
+    // AuthSessionResetCoordinator is reset-only and cannot become Routine authority
+    final coordinatorContent = File(
+      'lib/services/auth_session_reset_coordinator.dart',
+    ).readAsStringSync();
+    expect(coordinatorContent, contains('mockRoutineProvider.notifier'));
+    expect(coordinatorContent, contains('resetForSignedOut()'));
+    expect(
+      coordinatorContent,
+      isNot(contains('ref.watch(mockRoutineProvider)')),
+    );
+    expect(
+      coordinatorContent,
+      isNot(contains('ref.read(mockRoutineProvider)')),
     );
   });
 

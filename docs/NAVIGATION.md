@@ -58,35 +58,38 @@ control.
 
 ## 3. Redirect priority
 
-The global redirect runs in this exact order:
+The global redirect is driven exclusively by canonical `AuthState.sessionDestination`
+resolved by `SessionDestinationResolver` and evaluated in `optivusAuthRedirect`:
 
-1. **Unresolved auth/backend/onboarding restoration:** when `AuthState.isLoading`
-   or `needsAction` is true, every path is held at `/loading`. A
-   failure remains there with a retry action. This check intentionally occurs
-   before treating a temporarily null user as signed out, preventing a Welcome,
-   Onboarding, or App flash while identity/setup truth is unknown.
-2. **Signed out:** only `/`, `/login`, and `/signup` are allowed. Every other
-   path, including deep links, redirects to `/`.
-3. **Signed in but email unverified:** only `/verify-email` is allowed. This
-   precedes onboarding and shell checks.
-4. **Leaving Verify Email after verification:** a complete user goes to
-   `/app?tab=0`; an incomplete user goes to `/onboarding`.
-5. **Verified but onboarding incomplete:** if either
-   `userProfileProvider.onboardingCompleted` is false or the auth status is
-   `signedInOnboardingIncomplete`, `/onboarding` is enforced.
-6. **Verified and onboarding complete:** public auth routes, `/loading`, and
-   `/onboarding` redirect to `/app?tab=0`; the shell and protected detail routes
-   are allowed.
+1. **Resolving (`SessionDestinationKind.resolving`):** startup and backend/profile
+   reconstruction are in flight. Public auth routes (`/`, `/login`, `/signup`)
+   remain accessible while user is null to avoid flashing; all other paths are
+   held at `/loading`.
+2. **Signed out (`SessionDestinationKind.signedOut`):** only `/`, `/login`, and
+   `/signup` are allowed. Every other path, including deep links, redirects to `/`.
+3. **Signed in but email unverified (`SessionDestinationKind.verifyEmail`):**
+   redirects to `/verify-email`.
+4. **Onboarding in progress (`SessionDestinationKind.freshOnboarding` / `resumeOnboarding`):**
+   redirects to `/onboarding`.
+5. **Onboarding finishing (`SessionDestinationKind.finishOnboarding`):**
+   redirects to `/onboarding/finishing`.
+6. **Onboarding reconnect retryable failure (`SessionDestinationKind.reconnect`):**
+   redirects to `/onboarding/reconnect`.
+7. **Onboarding blocking action required (`SessionDestinationKind.needsAction`):**
+   redirects to `/onboarding/needs-action` (not `/loading`).
+8. **Home (`SessionDestinationKind.home`):** public auth routes, `/loading`,
+   `/onboarding*`, and `/verify-email` redirect to `/app?tab=0`; the shell and
+   protected detail routes are allowed.
 
-This matches the intended security order with one important implementation
-detail: unresolved startup/restoration is checked first because authentication
-itself may not yet be known. `RouterNotifier` refreshes the router when either
-`authProvider` or `userProfileProvider` changes.
+`RouterNotifier` observes only `authProvider`. The router no longer directly
+observes `userProfileProvider`, preventing double-hop redirections and race
+conditions during session transitions.
 
-The focused contract tests in `test/onboarding_routing_test.dart` assert the
-visible destination for signed-out, unverified, restoring, incomplete,
-complete, logout, and protected-deep-link cases. The real asynchronous draft
-restore remains covered in `test/onboarding_restore_test.dart`.
+The focused contract tests in `test/onboarding_routing_test.dart` and
+`test/gate5_auth_session_isolation_test.dart` assert the visible destination for
+signed-out, unverified, restoring, incomplete, complete, logout, and
+protected-deep-link cases. The real asynchronous draft restore remains covered
+in `test/onboarding_restore_test.dart`.
 
 ## 4. Tab navigation
 
@@ -155,17 +158,15 @@ The Profile logout confirmation is one of these dialogs.
   and blocks any retained protected location.
 - **Repository action:** `AuthNotifier.logout()` calls the selected
   `AuthRepository.signOut()`.
-- **Explicit frontend reset:** mock user profile, onboarding draft,
-  `profileSettingsProvider`, region defaults, mock Routine, Tracker, Goals,
-  Mind Notes, Coach sessions/preferences, notification preferences, and
-  permission state are reset.
-- **Known reset gap:** feature-local/global providers outside that explicit list
-  (for example the separate Routine controller, Home providers, and Fitness
-  provider) are not explicitly invalidated by `_resetSignedOutState()`. This is
-  transitional ownership/security debt; later durable feature migrations must
-  add logout/session-boundary tests before removing the corresponding entry
-  ([TD-039](TECHNICAL_DEBT.md#4-active-debt-register)) from the technical-debt
-  register.
+- **Synchronous frontend reset:** `AuthNotifier.logout()` delegates directly to
+  `AuthSessionResetCoordinator.resetIdentityBoundary()` to synchronously clear
+  all user/session-scoped in-memory state across all feature domains (profile,
+  onboarding draft, timeline models, upload controllers, home dashboard/notes,
+  routine controller/projections, habit systems, tracker sessions/settings,
+  fitness, coach, goals, notification preferences, permissions, liquid toasts,
+  recovery retry, and navigation detail request states). The previous reset gap
+  is fully closed by the centralized reset coordinator and verified by
+  `test/gate5_auth_session_isolation_test.dart`.
 
 ### Account deletion
 

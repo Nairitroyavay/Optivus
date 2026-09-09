@@ -90,6 +90,14 @@ class AuthSessionResetCoordinator {
     _ref.read(mockNotificationPreferencesProvider.notifier).resetForSignedOut();
     _ref.read(mockPermissionProvider.notifier).resetForSignedOut();
   }
+
+  /// Clears canonical projection state before authoritative backend hydration.
+  /// Used during same-owner reconstruction so incoming backend records do not
+  /// merge with stale in-memory projections.
+  void prepareForAuthoritativeHydration() {
+    _ref.read(routineNotifierProvider.notifier).resetForSignedOut();
+    _ref.read(habitSystemsNotifierProvider.notifier).resetForSignedOut();
+  }
 }
 
 final authSessionResetCoordinatorProvider = Provider(

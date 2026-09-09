@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/app/optivus_app.dart';
 import 'package:optivus/config/backend_config.dart';
+import 'package:optivus/core/errors/diagnostic_codes.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/features/onboarding/onboarding_flow.dart';
 import 'package:optivus/models/coach_models.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
@@ -358,10 +360,15 @@ void main() {
         container.read(authProvider).status,
         AuthFlowStatus.reconnectRequired,
       );
-      expect(
-        container.read(authProvider).errorMessage,
-        "We couldn't reconnect yet.",
-      );
+      final error = container.read(authProvider).error;
+      expect(error, isNotNull);
+      expect(error!.category, RecoverableErrorCategory.network);
+      expect(error.diagnosticCode, DiagnosticCodes.networkUnavailable);
+      expect(error.retryAction, RecoverableRetryAction.retry);
+      expect(error.retrySafe, isTrue);
+      expect(error.isBlocking, isTrue);
+      expect(error.publicMessage, isNotEmpty);
+      expect(error.publicMessage, isNot(contains('Exception')));
       expect(container.read(onboardingStateProvider).draft.currentStep, 4);
 
       await container.read(authProvider.notifier).retryBackendRestore();

@@ -681,7 +681,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(
-      find.text('Couldn\'t check verification. Please try again.'),
+      find.text('Couldn’t check verification. Please try again.'),
       findsOneWidget,
     );
     expect(find.textContaining('firebase'), findsNothing);

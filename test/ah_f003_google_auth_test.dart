@@ -196,12 +196,16 @@ void main() {
           container.read(authProvider.notifier).signInWithGoogle(),
           throwsA(isA<RecoverableError>()),
         );
-        expect(container.read(authProvider).isLoading, isFalse);
-        expect(
-          container.read(authProvider).error?.category,
-          RecoverableErrorCategory.network,
-        );
-        expect(container.read(authProvider).errorMessage, contains('retry'));
+        final authState = container.read(authProvider);
+        expect(authState.isLoading, isFalse);
+        final error = authState.error;
+        expect(error, isNotNull);
+        expect(error!.category, RecoverableErrorCategory.network);
+        expect(error.retryAction, RecoverableRetryAction.retry);
+        expect(error.retrySafe, isTrue);
+        expect(error.diagnosticCode, DiagnosticCodes.networkUnavailable);
+        expect(error.publicMessage, isNotEmpty);
+        expect(error.publicMessage, isNot(contains('network-request-failed')));
 
         shouldFail = false;
         expect(

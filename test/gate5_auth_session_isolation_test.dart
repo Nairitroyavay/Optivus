@@ -25,12 +25,18 @@ import 'package:optivus/features/tracker/fitness/providers/fitness_provider.dart
 import 'package:optivus/features/tracker/providers/tracker_navigation_provider.dart';
 import 'package:optivus/features/tracker/providers/tracker_settings_provider.dart';
 import 'package:optivus/features/uploads/providers/onboarding_upload_interaction_provider.dart';
+import 'package:optivus/features/routine/controllers/habit_systems_controller.dart';
 import 'package:optivus/models/coach_models.dart';
+import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/permission_status.dart';
 import 'package:optivus/models/region_settings.dart';
+import 'package:optivus/models/tracker_session_link.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/auth_repository.dart';
+import 'package:optivus/repositories/onboarding_repository.dart';
+import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/services/auth_session_reset_coordinator.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
 import 'package:optivus/services/session_destination_resolver.dart';
@@ -401,6 +407,83 @@ void main() {
     expect(container.read(authProvider).user?.email, 'refreshed-a@example.com');
     expect(container.read(authGenerationProvider), generationA);
   });
+
+  test('late Account A async completion does not mutate Account B', () async {
+    final repository = FakeAuthRepository();
+    final onboardingRepo = FakeOnboardingRepository();
+    final profileRepo = FakeProfileRepository();
+    final container = ProviderContainer(
+      overrides: [
+        optivusBackendModeProvider.overrideWithValue(OptivusBackendMode.fake),
+        authRepositoryProvider.overrideWithValue(repository),
+        onboardingRepositoryProvider.overrideWithValue(onboardingRepo),
+        profileRepositoryProvider.overrideWithValue(profileRepo),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    container.read(authProvider);
+    repository.emitUserForTesting(_userA);
+    await pumpEventQueue(times: 20);
+
+    final genA = container.read(authGenerationProvider);
+
+    // Save initial Account B state in repositories
+    final initialBDraft = OnboardingDraft(uid: _userB.uid, currentStep: 2);
+    await onboardingRepo.saveDraft(initialBDraft);
+    final initialBProfile = UserProfile.empty(
+      uid: _userB.uid,
+    ).copyWith(displayName: 'User B Real');
+    await profileRepo.saveUserProfile(initialBProfile);
+
+    // Account switch A -> B occurs
+    repository.emitUserForTesting(_userB);
+    await pumpEventQueue(times: 20);
+
+    final genB = container.read(authGenerationProvider);
+    expect(genB, greaterThan(genA));
+    expect(container.read(authProvider).user?.uid, _userB.uid);
+    expect(container.read(userProfileProvider).uid, _userB.uid);
+
+    // Now simulate late Account A completion arriving into repos
+    await onboardingRepo.saveDraft(
+      OnboardingDraft(uid: _userA.uid, currentStep: 8),
+    );
+    await profileRepo.saveUserProfile(
+      UserProfile.empty(uid: _userA.uid).copyWith(displayName: 'Late User A'),
+    );
+    await pumpEventQueue(times: 20);
+
+    // B state is not mutated by late A data
+    expect(container.read(authProvider).user?.uid, _userB.uid);
+    expect(container.read(userProfileProvider).uid, _userB.uid);
+    expect(
+      container.read(userProfileProvider).displayName,
+      isNot('Late User A'),
+    );
+    expect(container.read(onboardingStateProvider).draft.uid, _userB.uid);
+    expect(container.read(onboardingStateProvider).draft.currentStep, isNot(8));
+    expect(
+      container
+          .read(routineNotifierProvider)
+          .items
+          .any((i) => i.userId == _userA.uid),
+      isFalse,
+    );
+    expect(
+      container
+          .read(habitSystemsNotifierProvider)
+          .systems
+          .any((s) => s.ownerUid == _userA.uid),
+      isFalse,
+    );
+    expect(container.read(uploadControllerProvider).uid, isNot(_userA.uid));
+    expect(container.read(restoredUploadsProvider).uid, isNot(_userA.uid));
+    expect(
+      container.read(authProvider).sessionDestination.kind,
+      isNot(SessionDestinationKind.signedOut),
+    );
+  });
 }
 
 ProviderContainer _gate5Container(FakeAuthRepository repository) {
@@ -473,6 +556,24 @@ Future<void> _seedAccountAState(ProviderContainer container) async {
       .read(recoveryRetryControllerProvider.notifier)
       .recordAttemptAndStartCooldown();
   container.read(toastQueueProvider.notifier).showToast('Private A toast');
+  container
+      .read(trackerSessionLinksProvider.notifier)
+      .upsert(
+        const TrackerSessionLink(
+          routineTaskId: 'task-a',
+          trackerType: 'workout',
+        ),
+      );
+  container.read(mockMindNoteProvider.notifier).loadSeedData();
+  container
+      .read(mockNotificationPreferencesProvider.notifier)
+      .updatePreferences(NotificationPreferences(morningStart: true));
+  container
+      .read(mockPermissionProvider.notifier)
+      .toggleNotificationPermission();
+  container.read(aiRoutineSuggestionsEnabledProvider.notifier).state = false;
+  container.read(conflictResolverEnabledProvider.notifier).state = false;
+  container.read(routineNotificationsEnabledProvider.notifier).state = false;
 }
 
 void _expectUserStateCleared(ProviderContainer container) {
@@ -519,6 +620,19 @@ void _expectUserStateCleared(ProviderContainer container) {
   );
   expect(container.read(recoveryRetryControllerProvider).attemptCount, 0);
   expect(container.read(toastQueueProvider).current, isNull);
+  expect(container.read(trackerSessionLinksProvider), isEmpty);
+  expect(container.read(mockMindNoteProvider), isEmpty);
+  expect(
+    container.read(mockNotificationPreferencesProvider).morningStart,
+    isFalse,
+  );
+  expect(
+    container.read(mockPermissionProvider).notifications,
+    PermissionConnectionState.notConnected,
+  );
+  expect(container.read(aiRoutineSuggestionsEnabledProvider), isTrue);
+  expect(container.read(conflictResolverEnabledProvider), isTrue);
+  expect(container.read(routineNotificationsEnabledProvider), isTrue);
 }
 
 void _expectAccountAStatePresent(ProviderContainer container) {
@@ -573,4 +687,17 @@ void _expectAccountAStatePresent(ProviderContainer container) {
     container.read(toastQueueProvider).current?.message,
     'Private A toast',
   );
+  expect(container.read(trackerSessionLinksProvider), isNotEmpty);
+  expect(container.read(mockMindNoteProvider), isNotEmpty);
+  expect(
+    container.read(mockNotificationPreferencesProvider).morningStart,
+    isTrue,
+  );
+  expect(
+    container.read(mockPermissionProvider).notifications,
+    PermissionConnectionState.mockConnected,
+  );
+  expect(container.read(aiRoutineSuggestionsEnabledProvider), isFalse);
+  expect(container.read(conflictResolverEnabledProvider), isFalse);
+  expect(container.read(routineNotificationsEnabledProvider), isFalse);
 }
