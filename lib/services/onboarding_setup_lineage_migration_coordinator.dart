@@ -102,11 +102,26 @@ class OnboardingSetupLineageMigrationCoordinator {
         final curProfile = profileData != null
             ? UserProfile.fromFirestoreMap(profileData)
             : profile;
+        final curDraft = draftData == null
+            ? null
+            : OnboardingDraft.fromMap(draftData);
 
-        // Idempotency check: if profile already migrated to current lineage, skip.
+        // The profile alone is not migration proof: supported legacy accounts
+        // can have a modern profile beside a draft that still needs migration.
+        // Recheck both documents from the transaction, including completion
+        // that may have happened since the reconstruction snapshot was read.
+        if (curProfile.onboardingCompleted ||
+            (curDraft != null && isReconstructionFinalDraft(curDraft))) {
+          return;
+        }
         if (curProfile.setupLineageVersion >=
                 UserProfile.currentSetupLineageVersion &&
-            curProfile.currentSetupGeneration >= targetGeneration) {
+            curProfile.currentSetupGeneration >= targetGeneration &&
+            (curDraft == null ||
+                (curDraft.setupLineageVersion >=
+                        OnboardingDraft.currentSetupLineageVersion &&
+                    curDraft.setupGeneration ==
+                        curProfile.currentSetupGeneration))) {
           return;
         }
 
@@ -120,8 +135,7 @@ class OnboardingSetupLineageMigrationCoordinator {
         }
 
         // 2. Migrate draft: preserve all step answers, photos, and progress.
-        if (draftData != null) {
-          final curDraft = OnboardingDraft.fromMap(draftData);
+        if (curDraft != null) {
           final migratedDraft = curDraft.copyWith(
             setupGeneration: targetGeneration,
             setupLineageVersion: OnboardingDraft.currentSetupLineageVersion,

@@ -28,6 +28,8 @@ import 'package:optivus/services/background_sync_wake_lock_manager.dart';
 import 'package:optivus/services/completion_terminalization_proof.dart';
 
 typedef Reader = T Function<T>(ProviderListenable<T> provider);
+typedef OnboardingCompletionStageFaultInjector =
+    void Function(OnboardingCompletionStage stage);
 
 /// Injectable persistence used by non-Firestore environments.
 ///
@@ -42,11 +44,7 @@ class OnboardingCompletionMemoryStore {
 
 /// Read-only view of the durable `currentRun` pointer and its referenced job.
 ///
-enum CurrentRunPointerOrigin {
-  none,
-  canonicalPointer,
-  legacyFixedJob,
-}
+enum CurrentRunPointerOrigin { none, canonicalPointer, legacyFixedJob }
 
 /// Keeping pointer existence separate from [job] lets session reconstruction
 /// distinguish "no completion run" from a dangling/corrupt reference.
@@ -117,6 +115,7 @@ class OnboardingCompletionJobService {
   final bool requirePersistentJobs;
   final bool requireFrontendHydration;
   final bool requireRoutineVerification;
+  final OnboardingCompletionStageFaultInjector? stageFaultInjector;
   final OnboardingCompletionMemoryStore _memoryStore;
 
   final Map<String, Future<OnboardingCompletionJob>> _inFlight = {};
@@ -172,6 +171,7 @@ class OnboardingCompletionJobService {
     this.requirePersistentJobs = false,
     this.requireFrontendHydration = false,
     this.requireRoutineVerification = false,
+    this.stageFaultInjector,
     OnboardingCompletionMemoryStore? memoryStore,
     SystemWakeLock? wakeLock,
   }) : _memoryStore = memoryStore ?? OnboardingCompletionMemoryStore(),
@@ -349,10 +349,19 @@ class OnboardingCompletionJobService {
           }
         }
 
+        Future<OnboardingCompletionJob> beginAttemptedStage(
+          OnboardingCompletionJob current,
+          OnboardingCompletionStage stage,
+        ) async {
+          final begun = await _beginStage(current, stage);
+          stageFaultInjector?.call(stage);
+          return begun;
+        }
+
         try {
           checkSession();
           if (!job.isStageCompleted(OnboardingCompletionStage.validateInput)) {
-            job = await _beginStage(
+            job = await beginAttemptedStage(
               job,
               OnboardingCompletionStage.validateInput,
             );
@@ -365,7 +374,7 @@ class OnboardingCompletionJobService {
 
           checkSession();
           if (!job.isStageCompleted(OnboardingCompletionStage.persistDraft)) {
-            job = await _beginStage(
+            job = await beginAttemptedStage(
               job,
               OnboardingCompletionStage.persistDraft,
             );
@@ -380,7 +389,10 @@ class OnboardingCompletionJobService {
 
           checkSession();
           if (!job.isStageCompleted(OnboardingCompletionStage.verifyDraft)) {
-            job = await _beginStage(job, OnboardingCompletionStage.verifyDraft);
+            job = await beginAttemptedStage(
+              job,
+              OnboardingCompletionStage.verifyDraft,
+            );
             final readbackDraft = await onboardingRepository.fetchDraft(uid);
             _verifyFinalDraft(readbackDraft, finalDraft);
             job = await _markStageCompleted(
@@ -391,7 +403,7 @@ class OnboardingCompletionJobService {
 
           checkSession();
           if (!job.isStageCompleted(OnboardingCompletionStage.persistBundle)) {
-            job = await _beginStage(
+            job = await beginAttemptedStage(
               job,
               OnboardingCompletionStage.persistBundle,
             );
@@ -404,7 +416,7 @@ class OnboardingCompletionJobService {
 
           checkSession();
           if (!job.isStageCompleted(OnboardingCompletionStage.verifyBundle)) {
-            job = await _beginStage(
+            job = await beginAttemptedStage(
               job,
               OnboardingCompletionStage.verifyBundle,
             );
@@ -422,7 +434,7 @@ class OnboardingCompletionJobService {
           if (!job.isStageCompleted(
             OnboardingCompletionStage.reconcileRoutines,
           )) {
-            job = await _beginStage(
+            job = await beginAttemptedStage(
               job,
               OnboardingCompletionStage.reconcileRoutines,
             );
@@ -490,7 +502,7 @@ class OnboardingCompletionJobService {
             final requiresLegacyRoutineReadback =
                 job.stage.index >=
                 OnboardingCompletionStage.verifyRoutines.index;
-            job = await _beginStage(
+            job = await beginAttemptedStage(
               job,
               OnboardingCompletionStage.verifyRoutines,
             );
@@ -530,7 +542,7 @@ class OnboardingCompletionJobService {
           if (!job.isStageCompleted(
             OnboardingCompletionStage.projectRoutineHistory,
           )) {
-            job = await _beginStage(
+            job = await beginAttemptedStage(
               job,
               OnboardingCompletionStage.projectRoutineHistory,
             );
@@ -565,7 +577,7 @@ class OnboardingCompletionJobService {
           if (!job.isStageCompleted(
             OnboardingCompletionStage.verifyRoutineHistory,
           )) {
-            job = await _beginStage(
+            job = await beginAttemptedStage(
               job,
               OnboardingCompletionStage.verifyRoutineHistory,
             );
@@ -590,7 +602,7 @@ class OnboardingCompletionJobService {
           if (!job.isStageCompleted(
             OnboardingCompletionStage.reconcileHabitSystems,
           )) {
-            job = await _beginStage(
+            job = await beginAttemptedStage(
               job,
               OnboardingCompletionStage.reconcileHabitSystems,
             );
@@ -621,7 +633,7 @@ class OnboardingCompletionJobService {
           if (!job.isStageCompleted(
             OnboardingCompletionStage.verifyHabitSystems,
           )) {
-            job = await _beginStage(
+            job = await beginAttemptedStage(
               job,
               OnboardingCompletionStage.verifyHabitSystems,
             );
@@ -643,7 +655,7 @@ class OnboardingCompletionJobService {
           if (!job.isStageCompleted(
             OnboardingCompletionStage.reloadControllers,
           )) {
-            job = await _beginStage(
+            job = await beginAttemptedStage(
               job,
               OnboardingCompletionStage.reloadControllers,
             );
@@ -655,13 +667,22 @@ class OnboardingCompletionJobService {
               job,
               OnboardingCompletionStage.reloadControllers,
             );
+          } else if (reader != null) {
+            // This checkpoint proves that a prior process reloaded its local
+            // controllers. A fresh process has new in-memory state, so it must
+            // rehydrate again before verifyFrontendState even though the
+            // durable completion job already contains the checkpoint.
+            await const OnboardingFrontendHydrationService().reloadControllers(
+              read: reader,
+              bundle: bundle,
+            );
           }
 
           checkSession();
           if (!job.isStageCompleted(
             OnboardingCompletionStage.verifyFrontendState,
           )) {
-            job = await _beginStage(
+            job = await beginAttemptedStage(
               job,
               OnboardingCompletionStage.verifyFrontendState,
             );
@@ -682,7 +703,7 @@ class OnboardingCompletionJobService {
           if (!job.isStageCompleted(
             OnboardingCompletionStage.finalizeProfile,
           )) {
-            job = await _beginStage(
+            job = await beginAttemptedStage(
               job,
               OnboardingCompletionStage.finalizeProfile,
             );
@@ -700,6 +721,7 @@ class OnboardingCompletionJobService {
             reader: reader,
           );
           job = job.copyWith(stage: OnboardingCompletionStage.completed);
+          stageFaultInjector?.call(OnboardingCompletionStage.completed);
           return await _terminalizeCompletion(
             uid: uid,
             expectedRunId: runId,
@@ -1270,7 +1292,8 @@ class OnboardingCompletionJobService {
     required String runId,
     required int draftRevision,
     required int setupGeneration,
-    int setupLineageVersion = OnboardingCompletionJob.currentSetupLineageVersion,
+    int setupLineageVersion =
+        OnboardingCompletionJob.currentSetupLineageVersion,
     required DateTime now,
   }) async {
     final existing = await _loadJobStatus(uid, runId);
@@ -1424,7 +1447,9 @@ class OnboardingCompletionJobService {
       sourceFingerprint: memJob?.sourceFingerprint,
       draftRevision: memJob?.draftRevision,
       setupGeneration: memJob?.setupGeneration ?? 0,
-      setupLineageVersion: memJob?.setupLineageVersion ?? OnboardingCompletionJob.currentSetupLineageVersion,
+      setupLineageVersion:
+          memJob?.setupLineageVersion ??
+          OnboardingCompletionJob.currentSetupLineageVersion,
       pointerOrigin: CurrentRunPointerOrigin.canonicalPointer,
       job: memJob,
     );

@@ -17,6 +17,7 @@ import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/region_settings.dart';
+import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/app_preferences_repository.dart';
 import 'package:optivus/repositories/auth_repository.dart';
@@ -99,6 +100,19 @@ class _TestConflictAcceptanceRepository
 
   @override
   Future<void> upsert(String uid, ConflictAcceptance acceptance) async {}
+}
+
+class _FailOnceRoutineRepository extends FakeRoutineRepository {
+  bool failNextLoad = true;
+
+  @override
+  Future<List<RoutineItem>> fetchRoutineItems(String uid) async {
+    if (failNextLoad) {
+      failNextLoad = false;
+      throw StateError('controlled local hydration failure');
+    }
+    return super.fetchRoutineItems(uid);
+  }
 }
 
 class _TestAuthNotifier extends AuthNotifier {
@@ -913,6 +927,56 @@ void main() {
         );
         expect(container.read(onboardingStateProvider).draft.uid, _userA.uid);
         expect(container.read(onboardingStateProvider).draft.currentStep, 4);
+      },
+    );
+
+    test(
+      'Gate 6 server-complete local hydration failure reconnects then reaches Home',
+      () async {
+        final source = CompleterServerReconstructionSource();
+        final authRepo = FakeAuthRepository();
+        final routines = _FailOnceRoutineRepository();
+        final container = _buildReconstructionContainer(
+          source: source,
+          authRepository: authRepo,
+          routineRepository: routines,
+        );
+        addTearDown(container.dispose);
+
+        authRepo.emitUserForTesting(_userA);
+        await source.waitForPendingLoad(_userA.uid);
+        source
+            .completerFor(_userA.uid)
+            .complete(
+              _completedSnapshot(uid: _userA.uid, displayName: 'Completed A'),
+            );
+        await pumpEventQueue(times: 30);
+
+        final failed = container.read(authProvider);
+        expect(failed.status, AuthFlowStatus.reconnectRequired);
+        expect(failed.startupReasonCode, 'completed_frontend_restore_failed');
+        expect(container.read(userProfileProvider).onboardingCompleted, isTrue);
+        expect(
+          container.read(onboardingStateProvider).draft.onboardingCompleted,
+          isTrue,
+        );
+        expect(
+          failed.sessionDestination.kind,
+          SessionDestinationKind.reconnect,
+        );
+
+        await container.read(authProvider.notifier).retryBackendRestore();
+        await pumpEventQueue(times: 30);
+
+        final recovered = container.read(authProvider);
+        expect(recovered.status, AuthFlowStatus.signedInOnboardingComplete);
+        expect(recovered.sessionDestination.kind, SessionDestinationKind.home);
+        expect(container.read(userProfileProvider).onboardingCompleted, isTrue);
+        expect(
+          container.read(onboardingStateProvider).draft.onboardingCompleted,
+          isTrue,
+        );
+        expect(source.loadCalls, [_userA.uid, _userA.uid]);
       },
     );
   });

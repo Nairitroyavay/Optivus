@@ -646,6 +646,82 @@ void main() {
       },
     );
   });
+
+  group('Gate 6 executable completion-stage fault matrix', () {
+    for (final stage in OnboardingCompletionStage.values) {
+      test(
+        '${stage.name} failure preserves its prior checkpoint and retries',
+        () async {
+          var injected = false;
+          final harness = _ColdRestartHarness(
+            'gate6-stage-${stage.name}',
+            stageFaultInjector: (attemptedStage) {
+              if (!injected && attemptedStage == stage) {
+                injected = true;
+                throw OnboardingCompletionFailureException(
+                  OnboardingCompletionFailure(
+                    code: 'GATE6_${stage.name.toUpperCase()}_INTERRUPTED',
+                    stage: stage,
+                    retryable: true,
+                    publicMessageKey: 'error_completion_interrupted',
+                    diagnosticCategory: 'transient_failure',
+                    failedEntityIds: const [],
+                    occurredAt: DateTime.utc(2026, 9, 9),
+                  ),
+                );
+              }
+            },
+          );
+
+          await expectLater(
+            harness.runWithFreshProcess,
+            throwsA(isA<OnboardingCompletionFailureException>()),
+          );
+          final failed = (await harness.snapshotFromFreshProcess()).job!;
+          final priorStage = stage == OnboardingCompletionStage.validateInput
+              ? OnboardingCompletionStage.validateInput
+              : OnboardingCompletionStage.values[stage.index - 1];
+          expect(failed.status, OnboardingJobStatus.retryableFailure);
+          expect(failed.stage, priorStage);
+          expect(failed.lastFailureStage, stage.name);
+          expect(failed.retryable, isTrue);
+          expect(
+            failed.lastFailureCode,
+            'GATE6_${stage.name.toUpperCase()}_INTERRUPTED',
+          );
+          expect(
+            failed.isStageCompleted(stage),
+            isFalse,
+            reason: 'an attempted stage must not become a durable success',
+          );
+
+          await harness.completeFromFreshProcess();
+          final completed = (await harness.snapshotFromFreshProcess()).job!;
+          expect(completed.status, OnboardingJobStatus.completed);
+          expect(completed.stage, OnboardingCompletionStage.completed);
+          expect(completed.lastFailureCode, isNull);
+          expect(await harness.fingerprint(), cleanFingerprint);
+          expect(
+            harness.projectedRoutineIds.toSet(),
+            hasLength(cleanFingerprint.routineIds.length),
+          );
+          expect(
+            (await harness.history.fetchHistory(
+              harness.uid,
+            )).map((e) => e.id).toSet(),
+            hasLength(cleanFingerprint.historyIds.length),
+          );
+          expect(
+            (await harness.habits.fetchHabitSystems(
+              harness.uid,
+            )).map((e) => e.systemId).toSet(),
+            hasLength(cleanFingerprint.habitSystemIds.length),
+          );
+          harness.dispose();
+        },
+      );
+    }
+  });
 }
 
 class CompletionDurableFingerprint {
@@ -723,8 +799,9 @@ class _ColdRestartHarness {
   final OnboardingCompletionMemoryStore jobs =
       OnboardingCompletionMemoryStore();
   final List<ProviderContainer> _containers = [];
+  final OnboardingCompletionStageFaultInjector? stageFaultInjector;
 
-  _ColdRestartHarness(this.scenario);
+  _ColdRestartHarness(this.scenario, {this.stageFaultInjector});
 
   RoutineProjectionReceipt? get receipt =>
       routineDatabase.receiptsByUid[uid]?[plan.projectionId];
@@ -775,6 +852,7 @@ class _ColdRestartHarness {
         routineRepository: routines,
         memoryStore: jobs,
         requireRoutineVerification: true,
+        stageFaultInjector: stageFaultInjector,
       ),
     );
   }
