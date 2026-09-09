@@ -162,8 +162,8 @@ void main() {
             await tester.pumpWidget(
               ProviderScope(
                 overrides: [
-                  mockOnboardingProvider.overrideWith((_) {
-                    final notifier = MockOnboardingNotifier();
+                  onboardingStateProvider.overrideWith((_) {
+                    final notifier = OnboardingNotifier();
                     notifier.loadSeedData(
                       const OnboardingDraft(uid: 'layout_test_owner'),
                     );

@@ -57,7 +57,7 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
 
   Future<void> _ensureCompletedAccountRoutinesLoaded() async {
     if (!mounted || _initialRoutineLoadRequested) return;
-    final profile = ref.read(mockUserProfileProvider);
+    final profile = ref.read(userProfileProvider);
     final routineState = ref.read(routineNotifierProvider);
     if (!profile.onboardingCompleted ||
         profile.uid.trim().isEmpty ||

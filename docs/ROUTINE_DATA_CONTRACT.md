@@ -30,7 +30,7 @@ completion bundle is a bootstrap snapshot; it is not a live Routine store.
 
 The authenticated Firebase UID is passed explicitly to repository methods and
 retained by `RoutineNotifier.loadForOwner`. Firebase Routine writes never
-derive identity from `mockUserProfileProvider`.
+derive identity from `userProfileProvider`.
 
 `habitSystemsRepositoryProvider` is the owner boundary for Routine Habit
 Systems. Firebase mode selects `FirestoreHabitSystemsRepository`, while fake

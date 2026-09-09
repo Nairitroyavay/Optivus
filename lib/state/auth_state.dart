@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
-import 'package:optivus/core/utils/auth_error_mapper.dart';
-import 'package:optivus/features/profile/providers/profile_settings_provider.dart';
-import 'package:optivus/features/uploads/providers/onboarding_upload_interaction_provider.dart';
+import 'package:optivus/core/errors/auth_error_mapper.dart';
+import 'package:optivus/core/errors/completion_error_mapper.dart';
+import 'package:optivus/core/errors/diagnostic_codes.dart';
+import 'package:optivus/core/errors/reconstruction_error_mapper.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/features/routine/controllers/habit_systems_controller.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/repositories/auth_repository.dart';
@@ -22,29 +24,20 @@ import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/models/onboarding_completion_job.dart';
 import 'package:optivus/state/region_settings_provider.dart';
-import 'package:optivus/core/utils/liquid_toast_manager.dart';
 import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
-import 'package:optivus/features/recovery/services/recovery_retry_controller.dart';
-import 'package:optivus/app/app_navigation_controller.dart';
-import 'package:optivus/features/coach/providers/coach_navigation_provider.dart';
-import 'package:optivus/features/goals/providers/goals_navigation_provider.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
-import 'package:optivus/features/home/providers/home_mind_note_provider.dart';
-import 'package:optivus/features/home/providers/home_navigation_provider.dart';
-import 'package:optivus/features/profile/providers/profile_navigation_provider.dart';
-import 'package:optivus/features/routine/providers/routine_navigation_provider.dart';
 import 'package:optivus/features/tracker/fitness/providers/fitness_provider.dart';
-import 'package:optivus/features/tracker/providers/tracker_navigation_provider.dart';
-import 'package:optivus/features/tracker/providers/tracker_settings_provider.dart';
 import 'package:optivus/services/onboarding_account_migration_service.dart';
-import 'package:optivus/state/routine_import_ai_state.dart';
+import 'package:optivus/services/auth_session_reset_coordinator.dart';
 import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/state/auth_generation.dart';
+import 'package:optivus/state/auth_flow_status.dart';
 import 'package:optivus/services/onboarding_resume_validator.dart';
 import 'package:optivus/services/onboarding_upload_source_reconciler.dart';
 import 'package:optivus/services/session_destination_resolver.dart';
 import 'package:optivus/services/server_reconstructor.dart';
+
+export 'package:optivus/state/auth_flow_status.dart' show AuthFlowStatus;
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return ref
@@ -64,22 +57,6 @@ final serverReconstructorProvider = Provider<ServerReconstructor>((ref) {
     ),
   );
 });
-
-enum AuthFlowStatus {
-  loading,
-  loadingBackendUser,
-  restoringOnboarding,
-  signedOut,
-  signedInEmailUnverified,
-  signedInOnboardingIncomplete,
-  finishingOnboarding,
-  signedInOnboardingComplete,
-  reconnectRequired,
-  needsAction,
-  error,
-  @Deprecated('Use reconnectRequired or needsAction.')
-  backendRestoreFailed,
-}
 
 enum VerificationEmailSendStatus { pending, sent, failed }
 
@@ -113,12 +90,40 @@ String _maskedUid(String uid) {
   return '${uid.substring(0, 3)}...${uid.substring(uid.length - 3)}';
 }
 
+RecoverableError _sessionNetworkError(
+  String message, {
+  String diagnosticCode = DiagnosticCodes.networkUnavailable,
+}) {
+  return RecoverableError(
+    category: RecoverableErrorCategory.network,
+    publicMessage: message,
+    severity: RecoverableErrorSeverity.error,
+    isBlocking: true,
+    retryAction: RecoverableRetryAction.retry,
+    retrySafe: true,
+    diagnosticCode: diagnosticCode,
+  );
+}
+
+RecoverableError _sessionRecoveryError(
+  String message, {
+  String diagnosticCode = DiagnosticCodes.recoveryDurableStateConflict,
+}) {
+  return RecoverableError(
+    category: RecoverableErrorCategory.recoveryRequired,
+    publicMessage: message,
+    severity: RecoverableErrorSeverity.critical,
+    isBlocking: true,
+    retryAction: RecoverableRetryAction.restartRecovery,
+    retrySafe: false,
+    diagnosticCode: diagnosticCode,
+  );
+}
+
 class AuthState {
   final AuthUser? user;
   final AuthFlowStatus status;
-  final String? errorMessage;
-  final AuthFailureReason? failureReason;
-  final OnboardingFailureReason? onboardingFailureReason;
+  final RecoverableError? error;
   final List<OnboardingRecoveryAction> recoveryActions;
   final DateTime? lastVerificationEmailSent;
   final VerificationEmailSendStatus verificationEmailSendStatus;
@@ -130,9 +135,7 @@ class AuthState {
   const AuthState({
     this.user,
     this.status = AuthFlowStatus.signedOut,
-    this.errorMessage,
-    this.failureReason,
-    this.onboardingFailureReason,
+    this.error,
     this.recoveryActions = const [],
     this.lastVerificationEmailSent,
     this.verificationEmailSendStatus = VerificationEmailSendStatus.pending,
@@ -162,59 +165,25 @@ class AuthState {
   bool get hasError =>
       status == AuthFlowStatus.error ||
       status == AuthFlowStatus.reconnectRequired ||
-      status == AuthFlowStatus.needsAction ||
-      status == AuthFlowStatus.backendRestoreFailed;
-  bool get backendRestoreFailed =>
-      status == AuthFlowStatus.backendRestoreFailed;
+      status == AuthFlowStatus.needsAction;
+  bool get needsAction => status == AuthFlowStatus.needsAction;
+  String? get errorMessage => error?.publicMessage;
 
   SessionDestination get sessionDestination {
-    final reconstructed = reconstructionResult;
-    if (reconstructed != null &&
-        reconstructed.ownerUid == user?.uid &&
-        (status == AuthFlowStatus.signedInOnboardingIncomplete ||
-            status == AuthFlowStatus.finishingOnboarding ||
-            status == AuthFlowStatus.signedInOnboardingComplete ||
-            status == AuthFlowStatus.needsAction ||
-            status == AuthFlowStatus.backendRestoreFailed)) {
-      return resolveReconstructionDestination(reconstructed);
-    }
-    return switch (status) {
-      AuthFlowStatus.loading ||
-      AuthFlowStatus.loadingBackendUser ||
-      AuthFlowStatus.restoringOnboarding =>
-        const SessionDestination.resolving(),
-      AuthFlowStatus.signedOut => const SessionDestination.signedOut(),
-      AuthFlowStatus.signedInEmailUnverified =>
-        const SessionDestination.verifyEmail(),
-      AuthFlowStatus.signedInOnboardingIncomplete =>
-        resumeStep == null
-            ? const SessionDestination.freshOnboarding()
-            : SessionDestination.resumeOnboarding(resumeStep!),
-      AuthFlowStatus.finishingOnboarding => SessionDestination.finishOnboarding(
-        runId: completionRunId,
-      ),
-      AuthFlowStatus.signedInOnboardingComplete =>
-        const SessionDestination.home(),
-      AuthFlowStatus.reconnectRequired => SessionDestination.reconnect(
-        reasonCode: startupReasonCode,
-      ),
-      AuthFlowStatus.needsAction ||
-      AuthFlowStatus.backendRestoreFailed => SessionDestination.needsAction(
-        startupReasonCode ?? 'setup_requires_attention',
-      ),
-      AuthFlowStatus.error =>
-        user == null
-            ? const SessionDestination.signedOut()
-            : const SessionDestination.needsAction('authenticated_error'),
-    };
+    return resolveAuthSessionDestination(
+      status: status,
+      userUid: user?.uid,
+      resumeStep: resumeStep,
+      completionRunId: completionRunId,
+      startupReasonCode: startupReasonCode,
+      reconstructionResult: reconstructionResult,
+    );
   }
 
   AuthState copyWith({
     AuthUser? user,
     AuthFlowStatus? status,
-    String? errorMessage,
-    AuthFailureReason? failureReason,
-    OnboardingFailureReason? onboardingFailureReason,
+    RecoverableError? error,
     List<OnboardingRecoveryAction>? recoveryActions,
     DateTime? lastVerificationEmailSent,
     VerificationEmailSendStatus? verificationEmailSendStatus,
@@ -231,15 +200,7 @@ class AuthState {
     return AuthState(
       user: clearUser ? null : (user ?? this.user),
       status: status ?? this.status,
-      errorMessage: clearError && errorMessage == null
-          ? null
-          : (errorMessage ?? this.errorMessage),
-      failureReason: clearError && failureReason == null
-          ? null
-          : (failureReason ?? this.failureReason),
-      onboardingFailureReason: clearError && onboardingFailureReason == null
-          ? null
-          : (onboardingFailureReason ?? this.onboardingFailureReason),
+      error: clearError && error == null ? null : (error ?? this.error),
       recoveryActions: clearError && recoveryActions == null
           ? const []
           : (recoveryActions ?? this.recoveryActions),
@@ -369,12 +330,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _loadBackendWithTimeout(user);
     } catch (error) {
       if (!_isCurrentAuthOperation(operation)) rethrow;
-      final mapped = mapAuthError(error);
+      final mapped = AuthErrorMapper.map(error);
       state = state.copyWith(
         user: previousUser,
         status: AuthFlowStatus.error,
-        errorMessage: mapped.message,
-        failureReason: mapped.reason,
+        error: mapped,
       );
       rethrow;
     } finally {
@@ -382,7 +342,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = state.copyWith(
           status: statusFor(
             state.user,
-            _ref.read(mockUserProfileProvider).onboardingCompleted,
+            _ref.read(userProfileProvider).onboardingCompleted,
           ),
         );
       }
@@ -408,7 +368,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           clearUser: previousUser == null,
           status: statusFor(
             previousUser,
-            _ref.read(mockUserProfileProvider).onboardingCompleted,
+            _ref.read(userProfileProvider).onboardingCompleted,
           ),
           clearError: true,
         );
@@ -421,13 +381,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return true;
     } catch (error) {
       if (!_isCurrentAuthOperation(operation)) return false;
-      final mapped = mapAuthError(error);
+      final mapped = AuthErrorMapper.map(error);
       state = state.copyWith(
         user: previousUser,
         clearUser: previousUser == null,
         status: AuthFlowStatus.error,
-        errorMessage: mapped.message,
-        failureReason: mapped.reason,
+        error: mapped,
       );
       rethrow;
     } finally {
@@ -436,7 +395,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = state.copyWith(
           status: statusFor(
             state.user,
-            _ref.read(mockUserProfileProvider).onboardingCompleted,
+            _ref.read(userProfileProvider).onboardingCompleted,
           ),
         );
       }
@@ -505,16 +464,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
           );
         } catch (error) {
           if (!_isCurrentAuthOperation(operation)) rethrow;
-          final mapped = mapAuthError(error);
+          final mapped = AuthErrorMapper.map(error);
           _logEmailVerificationDebug(
-            '[EmailVerification] stage=initial_send_failed code=${mapped.reason.name}',
+            '[EmailVerification] stage=initial_send_failed code=${mapped.diagnosticCode}',
           );
           state = state.copyWith(
             user: user,
             status: AuthFlowStatus.signedInEmailUnverified,
-            errorMessage:
-                'We couldn\'t send the verification email. Please resend it.',
-            failureReason: mapped.reason,
+            error: mapped.copyWith(
+              publicMessage:
+                  'We couldn\'t send the verification email. Please resend it.',
+            ),
             verificationEmailSendStatus: VerificationEmailSendStatus.failed,
           );
           return;
@@ -525,15 +485,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _loadBackendWithTimeout(user);
     } catch (error) {
       if (!_isCurrentAuthOperation(operation)) rethrow;
-      final mapped = mapAuthError(error);
+      final mapped = AuthErrorMapper.map(error);
       final activeUser = createdUser ?? previousUser;
       state = state.copyWith(
         user: activeUser,
         status: activeUser != null && _needsEmailVerification(activeUser)
             ? AuthFlowStatus.signedInEmailUnverified
             : AuthFlowStatus.error,
-        errorMessage: mapped.message,
-        failureReason: mapped.reason,
+        error: mapped,
       );
       rethrow;
     } finally {
@@ -544,7 +503,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = state.copyWith(
           status: statusFor(
             state.user,
-            _ref.read(mockUserProfileProvider).onboardingCompleted,
+            _ref.read(userProfileProvider).onboardingCompleted,
           ),
         );
       }
@@ -560,12 +519,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _loadBackendWithTimeout(user);
     } catch (error) {
       if (!_isCurrentAuthOperation(operation)) rethrow;
-      final mapped = mapAuthError(error);
-      state = state.copyWith(
-        status: AuthFlowStatus.error,
-        errorMessage: mapped.message,
-        failureReason: mapped.reason,
-      );
+      final mapped = AuthErrorMapper.map(error);
+      state = state.copyWith(status: AuthFlowStatus.error, error: mapped);
       rethrow;
     }
   }
@@ -614,13 +569,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
           );
         } catch (error) {
           if (!_isCurrentAuthOperation(operation)) rethrow;
-          final mapped = mapAuthError(error);
+          final mapped = AuthErrorMapper.map(error);
           state = state.copyWith(
             user: user,
             status: AuthFlowStatus.signedInEmailUnverified,
-            errorMessage:
-                'We couldn\'t send the verification email. Please resend it.',
-            failureReason: mapped.reason,
+            error: mapped.copyWith(
+              publicMessage:
+                  'We couldn\'t send the verification email. Please resend it.',
+            ),
             verificationEmailSendStatus: VerificationEmailSendStatus.failed,
           );
           return;
@@ -632,7 +588,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _loadBackendWithTimeout(user, isAnonymousLink: true);
     } catch (error) {
       if (!_isCurrentAuthOperation(operation)) rethrow;
-      final mapped = mapAuthError(error);
+      final mapped = AuthErrorMapper.map(error);
       state = state.copyWith(
         user: oldUser,
         status: oldUser != null && oldUser.isAnonymous
@@ -640,8 +596,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
                   ? AuthFlowStatus.signedInOnboardingIncomplete
                   : AuthFlowStatus.signedInEmailUnverified)
             : AuthFlowStatus.error,
-        errorMessage: mapped.message,
-        failureReason: mapped.reason,
+        error: mapped,
       );
       rethrow;
     }
@@ -652,11 +607,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await _repository.signOut();
     } catch (error) {
-      final mapped = mapAuthError(error);
+      final mapped = AuthErrorMapper.map(error);
       state = state.copyWith(
-        errorMessage:
-            'We couldn\'t sign you out. You are still signed in. Please try again.',
-        failureReason: mapped.reason,
+        error: mapped.copyWith(
+          publicMessage:
+              'We couldn\'t sign you out. You are still signed in. Please try again.',
+        ),
       );
       rethrow;
     }
@@ -680,11 +636,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
     } catch (error) {
       if (!mounted || state.user?.uid != targetUid) return;
-      final mapped = mapAuthError(error);
+      final mapped = AuthErrorMapper.map(error);
       state = state.copyWith(
         status: AuthFlowStatus.signedInEmailUnverified,
-        errorMessage: mapped.message,
-        failureReason: mapped.reason,
+        error: mapped,
       );
       rethrow;
     }
@@ -747,11 +702,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _loadBackendWithTimeout(user);
     } catch (error) {
       if (!_isCurrentAuthOperation(operation)) rethrow;
-      final mapped = mapAuthError(error);
+      final mapped = AuthErrorMapper.map(error);
       state = state.copyWith(
         status: AuthFlowStatus.signedInEmailUnverified,
-        errorMessage: mapped.message,
-        failureReason: mapped.reason,
+        error: mapped,
       );
       rethrow;
     } finally {
@@ -763,12 +717,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await _repository.sendPasswordResetEmail(email);
     } catch (error) {
-      final mapped = mapAuthError(error);
-      state = state.copyWith(
-        status: AuthFlowStatus.error,
-        errorMessage: mapped.message,
-        failureReason: mapped.reason,
-      );
+      final mapped = AuthErrorMapper.map(error);
+      state = state.copyWith(status: AuthFlowStatus.error, error: mapped);
       rethrow;
     }
   }
@@ -808,7 +758,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         profile.onboardingProjectionStatus != 'completed') {
       throw StateError('Canonical onboarding completion is not verified.');
     }
-    _ref.read(mockUserProfileProvider.notifier).updateProfile(profile);
+    _ref.read(userProfileProvider.notifier).updateProfile(profile);
     state = state.copyWith(
       user: user,
       status: AuthFlowStatus.signedInOnboardingComplete,
@@ -843,7 +793,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       if (!isActiveOwner()) return;
       if (draft == null || !isDurablyFinalOnboardingDraft(draft)) {
-        final profile = _ref.read(mockUserProfileProvider);
+        final profile = _ref.read(userProfileProvider);
         final destination = resolveOnboardingSessionDestination(
           ownerUid: ownerUid,
           profile: profile,
@@ -882,13 +832,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
         throw StateError('Completion job stopped before verification.');
       }
       await acceptCanonicalOnboardingCompletion(user);
-    } on TimeoutException {
+    } on TimeoutException catch (error) {
       if (!isActiveOwner()) return;
       state = state.copyWith(
         user: user,
         status: AuthFlowStatus.reconnectRequired,
-        errorMessage: "We couldn't reconnect yet.",
-        onboardingFailureReason: OnboardingFailureReason.networkTimeout,
+        error: CompletionErrorMapper.map(error: error),
         recoveryActions: const [RetryNetworkAction(), SignOutAction()],
         startupReasonCode: 'completion_timeout',
         clearStartupDestination: true,
@@ -912,12 +861,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         status: fatal
             ? AuthFlowStatus.needsAction
             : AuthFlowStatus.reconnectRequired,
-        errorMessage: fatal
-            ? "We couldn't finish loading your setup."
-            : "We couldn't reconnect yet.",
-        onboardingFailureReason: fatal
-            ? OnboardingFailureReason.unhandledException
-            : OnboardingFailureReason.networkTimeout,
+        error: CompletionErrorMapper.map(
+          job: job,
+          error: error,
+          isContradiction: fatal,
+        ),
         recoveryActions: fatal
             ? const [
                 RetryNetworkAction(),
@@ -936,7 +884,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> markOnboardingIncomplete(AuthUser user) async {
     if (user.uid.trim().isEmpty) return;
     final profile = _ref
-        .read(mockUserProfileProvider)
+        .read(userProfileProvider)
         .copyWith(
           uid: user.uid,
           onboardingInputCompleted: false,
@@ -945,7 +893,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           onboardingStep: 0,
           updatedAt: DateTime.now(),
         );
-    _ref.read(mockUserProfileProvider.notifier).updateProfile(profile);
+    _ref.read(userProfileProvider.notifier).updateProfile(profile);
     if (_useFirebaseBackend && !_needsEmailVerification(user)) {
       await _ref.read(profileRepositoryProvider).saveUserProfile(profile);
     }
@@ -1038,12 +986,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _loadBackendWithTimeout(user);
     } catch (e) {
       if (!mounted) return;
-      final mapped = mapAuthError(e);
+      final mapped = AuthErrorMapper.map(e);
       state = state.copyWith(
         user: user,
         status: AuthFlowStatus.reconnectRequired,
-        errorMessage: mapped.message,
-        failureReason: mapped.reason,
+        error: mapped,
         startupReasonCode: 'startup_request_failed',
         clearStartupDestination: true,
       );
@@ -1170,8 +1117,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(
       user: user,
       status: AuthFlowStatus.reconnectRequired,
-      errorMessage: "We couldn't reconnect yet.",
-      onboardingFailureReason: OnboardingFailureReason.networkTimeout,
+      error: bootstrap == null
+          ? AuthErrorMapper.map(error)
+          : ReconstructionErrorMapper.fromBootstrapException(bootstrap),
       recoveryActions: const [RetryNetworkAction(), SignOutAction()],
       startupReasonCode: bootstrap == null
           ? 'startup_timeout'
@@ -1214,8 +1162,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (!mounted || !_isCurrentRestore(restoreGeneration)) return;
       _ref.read(homeDashboardProvider.notifier).setOwnerUid(user.uid);
       _ref.read(fitnessCenterProvider.notifier).setOwnerUid(user.uid);
-      final profile = _ref.read(mockUserProfileProvider);
-      final draft = _ref.read(mockOnboardingProvider).draft;
+      final profile = _ref.read(userProfileProvider);
+      final draft = _ref.read(onboardingStateProvider).draft;
       final destination = resolveOnboardingSessionDestination(
         ownerUid: user.uid,
         profile: profile,
@@ -1223,7 +1171,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       if (destination.kind == SessionDestinationKind.resumeOnboarding) {
         _ref
-            .read(mockOnboardingProvider.notifier)
+            .read(onboardingStateProvider.notifier)
             .loadSeedData(
               draft.copyWith(
                 currentStep: destination.resumeStep,
@@ -1249,20 +1197,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     SessionDestination destination, {
     ReconstructionResult? reconstructionResult,
   }) {
-    final status = switch (destination.kind) {
-      SessionDestinationKind.freshOnboarding ||
-      SessionDestinationKind.resumeOnboarding =>
-        AuthFlowStatus.signedInOnboardingIncomplete,
-      SessionDestinationKind.finishOnboarding =>
-        AuthFlowStatus.finishingOnboarding,
-      SessionDestinationKind.home => AuthFlowStatus.signedInOnboardingComplete,
-      SessionDestinationKind.reconnect => AuthFlowStatus.reconnectRequired,
-      SessionDestinationKind.needsAction => AuthFlowStatus.needsAction,
-      SessionDestinationKind.verifyEmail =>
-        AuthFlowStatus.signedInEmailUnverified,
-      SessionDestinationKind.signedOut => AuthFlowStatus.signedOut,
-      SessionDestinationKind.resolving => AuthFlowStatus.restoringOnboarding,
-    };
+    final status = authFlowStatusForDestination(destination);
     state = state.copyWith(
       user: user,
       status: status,
@@ -1271,9 +1206,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
           : null,
       completionRunId: destination.runId,
       startupReasonCode: destination.reasonCode,
-      onboardingFailureReason:
-          destination.kind == SessionDestinationKind.needsAction
-          ? OnboardingFailureReason.unhandledException
+      error: destination.kind == SessionDestinationKind.needsAction
+          ? _sessionRecoveryError(
+              'Your saved setup needs recovery before continuing.',
+            )
           : null,
       recoveryActions: destination.kind == SessionDestinationKind.needsAction
           ? const [
@@ -1336,13 +1272,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       // Nothing user-visible is hydrated until the complete durable snapshot
       // has been decoded, classified, and reconciled against restored assets.
-      _ref.read(mockUserProfileProvider.notifier).loadSeedData(result.profile);
+      _ref.read(userProfileProvider.notifier).loadSeedData(result.profile);
 
       switch (result) {
         case ReconstructionFresh():
           final now = DateTime.now();
           _ref
-              .read(mockOnboardingProvider.notifier)
+              .read(onboardingStateProvider.notifier)
               .loadSeedData(
                 OnboardingDraft(
                   uid: user.uid,
@@ -1368,8 +1304,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
               state = state.copyWith(
                 user: user,
                 status: AuthFlowStatus.reconnectRequired,
-                errorMessage: 'Uploaded photos could not be restored yet.',
-                onboardingFailureReason: OnboardingFailureReason.networkTimeout,
+                error: _sessionNetworkError(
+                  'Uploaded photos could not be restored yet.',
+                ),
                 recoveryActions: const [RetryNetworkAction(), SignOutAction()],
                 startupReasonCode: 'restored_uploads_failed',
                 clearStartupDestination: true,
@@ -1382,7 +1319,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
               profile: profile,
               reasonCodes: reconciliation.reasonCodes,
             );
-            _ref.read(mockOnboardingProvider.notifier).reset(user.uid);
+            _ref.read(onboardingStateProvider.notifier).reset(user.uid);
           } else {
             final reconciledDraft = reconciliation.reconciledDraft;
             final effectiveStep = validateOnboardingResume(
@@ -1393,7 +1330,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
               stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
               incrementRevision: false,
             );
-            _ref.read(mockOnboardingProvider.notifier).loadSeedData(finalDraft);
+            _ref
+                .read(onboardingStateProvider.notifier)
+                .loadSeedData(finalDraft);
             effectiveResult = ReconstructionIncomplete(
               ownerUid: ownerUid,
               profile: profile,
@@ -1417,8 +1356,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
               state = state.copyWith(
                 user: user,
                 status: AuthFlowStatus.reconnectRequired,
-                errorMessage: 'Uploaded photos could not be restored yet.',
-                onboardingFailureReason: OnboardingFailureReason.networkTimeout,
+                error: _sessionNetworkError(
+                  'Uploaded photos could not be restored yet.',
+                ),
                 recoveryActions: const [RetryNetworkAction(), SignOutAction()],
                 startupReasonCode: 'restored_uploads_failed',
                 clearStartupDestination: true,
@@ -1438,7 +1378,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
                     'upload_source_integrity_failure',
               },
             );
-            _ref.read(mockOnboardingProvider.notifier).reset(user.uid);
+            _ref.read(onboardingStateProvider.notifier).reset(user.uid);
           } else if (reconciliation.changed) {
             effectiveResult = ReconstructionRecovery(
               ownerUid: ownerUid,
@@ -1448,10 +1388,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
                 'code': 'finishing_draft_upload_source_mismatch',
               },
             );
-            _ref.read(mockOnboardingProvider.notifier).reset(user.uid);
+            _ref.read(onboardingStateProvider.notifier).reset(user.uid);
           } else {
             _ref
-                .read(mockOnboardingProvider.notifier)
+                .read(onboardingStateProvider.notifier)
                 .loadSeedData(
                   draft.copyWith(
                     currentStep: OnboardingDraft.lastStepIndex,
@@ -1466,7 +1406,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
         case ReconstructionCompleted(:final draft, :final completionBundle):
           _ref
-              .read(mockOnboardingProvider.notifier)
+              .read(onboardingStateProvider.notifier)
               .loadSeedData(
                 draft.copyWith(
                   stepLoading: List<bool>.filled(
@@ -1495,8 +1435,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
             state = state.copyWith(
               user: user,
               status: AuthFlowStatus.reconnectRequired,
-              errorMessage: "We couldn't restore your completed setup yet.",
-              onboardingFailureReason: OnboardingFailureReason.networkTimeout,
+              error: _sessionNetworkError(
+                "We couldn't restore your completed setup yet.",
+              ),
               recoveryActions: const [RetryNetworkAction(), SignOutAction()],
               startupReasonCode: 'completed_frontend_restore_failed',
               clearStartupDestination: true,
@@ -1510,7 +1451,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           }
 
         case ReconstructionRecovery():
-          _ref.read(mockOnboardingProvider.notifier).reset(user.uid);
+          _ref.read(onboardingStateProvider.notifier).reset(user.uid);
       }
 
       _ref.read(homeDashboardProvider.notifier).setOwnerUid(user.uid);
@@ -1527,12 +1468,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         final missingCompletedState =
             diagnostics['code'] == 'completed_profile_without_final_draft';
         state = state.copyWith(
-          errorMessage: missingCompletedState
-              ? 'Setup recovery is required because both draft and completion snapshot are missing.'
-              : 'Setup recovery is required because durable onboarding state is inconsistent.',
-          onboardingFailureReason: missingCompletedState
-              ? OnboardingFailureReason.missingDraftAndBundle
-              : OnboardingFailureReason.unhandledException,
+          error: ReconstructionErrorMapper.fromRecoveryReason(reason).copyWith(
+            publicMessage: missingCompletedState
+                ? 'Setup recovery is required because both draft and completion snapshot are missing.'
+                : 'Setup recovery is required because durable onboarding state is inconsistent.',
+          ),
           startupReasonCode: 'reconstruction_${reason.name}',
         );
       }
@@ -1635,9 +1575,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (error) {
       // Profile metadata is optional. Its failure never changes the completed
       // verification-email result or the current auth destination.
-      final mapped = mapAuthError(error);
+      final mapped = AuthErrorMapper.map(error);
       _logEmailVerificationDebug(
-        '[EmailVerification] stage=display_name_update_failure code=${mapped.reason.name}',
+        '[EmailVerification] stage=display_name_update_failure code=${mapped.diagnosticCode}',
       );
     }
   }
@@ -1667,7 +1607,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final now = DateTime.now();
     final completed = List<bool>.filled(OnboardingDraft.stepCount, true);
     _ref
-        .read(mockUserProfileProvider.notifier)
+        .read(userProfileProvider.notifier)
         .loadSeedData(
           MockSeedData.defaultUserProfile.copyWith(
             uid: user.uid,
@@ -1679,7 +1619,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           ),
         );
     _ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .loadSeedData(
           OnboardingDraft(
             uid: user.uid,
@@ -1714,14 +1654,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   void _resetNormalUserState(AuthUser user) {
     _ref
-        .read(mockUserProfileProvider.notifier)
+        .read(userProfileProvider.notifier)
         .resetEmpty(
           uid: user.uid,
           email: user.email ?? '',
           displayName: user.displayName ?? '',
         );
-    _ref.read(mockOnboardingProvider.notifier).reset(user.uid);
-    _resetUserScopedMockState();
+    _ref.read(onboardingStateProvider.notifier).reset(user.uid);
+    _ref
+        .read(authSessionResetCoordinatorProvider)
+        .resetFeatureStateForHydration();
   }
 
   Future<void> _loadFakeUserState(AuthUser user, [int? restoreGen]) async {
@@ -1751,7 +1693,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
             onboardingStep: OnboardingDraft.lastStepIndex,
             updatedAt: DateTime.now(),
           );
-      _ref.read(mockUserProfileProvider.notifier).loadSeedData(profile);
+      _ref.read(userProfileProvider.notifier).loadSeedData(profile);
     } else {
       final profile =
           UserProfile.empty(
@@ -1763,11 +1705,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
             onboardingStep: savedDraft.currentStep,
             updatedAt: DateTime.now(),
           );
-      _ref.read(mockUserProfileProvider.notifier).loadSeedData(profile);
+      _ref.read(userProfileProvider.notifier).loadSeedData(profile);
     }
 
     _ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .loadSeedData(
           savedDraft.copyWith(
             uid: user.uid,
@@ -1775,7 +1717,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
             incrementRevision: false,
           ),
         );
-    _resetUserScopedMockState();
+    _ref
+        .read(authSessionResetCoordinatorProvider)
+        .resetFeatureStateForHydration();
     final bundle = await _ref
         .read(onboardingRepositoryProvider)
         .fetchCompletionBundle(user.uid);
@@ -1795,48 +1739,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   void _resetSignedOutState({String? preserveOnboardingUid}) {
-    _ref.read(authGenerationProvider.notifier).state++;
-    _ref.invalidate(onboardingCompletionJobServiceProvider);
-    _ref.invalidate(onboardingCompletionJobProvider);
-    _ref.read(recoveryRetryControllerProvider.notifier).resetForSignedOut();
-    _ref.read(routineNotifierProvider.notifier).resetForSignedOut();
-    _ref.read(trackerSessionLinksProvider.notifier).resetForSignedOut();
-    _ref.read(habitSystemsNotifierProvider.notifier).resetForSignedOut();
-    _ref.read(mockUserProfileProvider.notifier).resetForSignedOut();
-    if (preserveOnboardingUid == null ||
-        _ref.read(mockOnboardingProvider).draft.uid != preserveOnboardingUid) {
-      _ref.read(mockOnboardingProvider.notifier).resetForSignedOut();
-    }
-    _ref.invalidate(onboardingClassTimelineProvider);
-    _ref.invalidate(onboardingWorkTimelineProvider);
-    _ref.read(profileSettingsProvider.notifier).resetForSignedOut();
-    _ref.read(homeDashboardProvider.notifier).resetForSignedOut();
-    _ref.read(homeMindNoteProvider.notifier).resetForSignedOut();
-    _ref.read(fitnessCenterProvider.notifier).resetForSignedOut();
-    _ref.read(trackerSettingsProvider.notifier).resetForSignedOut();
-    _ref.read(routineImportAiControllerProvider.notifier).resetForSignedOut();
-    _ref.read(uploadControllerProvider.notifier).resetForSignedOut();
-    _ref.invalidate(onboardingUploadInteractionProvider);
-    _ref.read(restoredUploadsProvider.notifier).resetForSignedOut();
-    _ref.read(aiRoutineSuggestionsEnabledProvider.notifier).state = true;
-    _ref.read(conflictResolverEnabledProvider.notifier).state = true;
-    _ref.read(routineNotificationsEnabledProvider.notifier).state = true;
-    _ref.read(appNavigationProvider.notifier).resetForSignedOut();
-    _ref.read(toastQueueProvider.notifier).resetForSignedOut();
-    _ref.read(homeDetailViewRequestProvider.notifier).state =
-        const HomeDetailTarget.none();
-    _ref.read(trackerDetailViewRequestProvider.notifier).state =
-        TrackerDetailTarget.none;
-    _ref.read(profileDetailViewRequestProvider.notifier).state =
-        ProfileDetailTarget.none;
-    _ref.read(routineDetailViewRequestProvider.notifier).state =
-        RoutineDetailTarget.none;
-    _ref.read(coachDetailViewRequestProvider.notifier).state =
-        CoachDetailView.none;
-    _ref.read(goalsDetailViewRequestProvider.notifier).state =
-        GoalsDetailTarget.none;
-    _ref.read(regionSettingsProvider.notifier).resetForSignedOut();
-    _resetUserScopedMockState();
+    _ref
+        .read(authSessionResetCoordinatorProvider)
+        .resetIdentityBoundary(preserveOnboardingUid: preserveOnboardingUid);
   }
 
   /// The single in-process privacy boundary for null -> A and A -> B.
@@ -1880,29 +1785,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (mounted &&
           state.user?.uid == actionUid &&
           _ref.read(authGenerationProvider) == capturedAuthGeneration) {
-        final mapped = mapAuthError(e);
         state = state.copyWith(
           user: currentUser,
-          status: AuthFlowStatus.backendRestoreFailed,
-          errorMessage: mapped.message,
-          onboardingFailureReason: OnboardingFailureReason.projectionFailed,
+          status: AuthFlowStatus.needsAction,
+          error: _sessionRecoveryError(
+            'That recovery action could not be completed safely.',
+          ),
           recoveryActions: const [ResetSetupSafelyAction()],
         );
       }
     }
-  }
-
-  void _resetUserScopedMockState() {
-    _ref.read(routineNotifierProvider.notifier).resetForSignedOut();
-    _ref.read(mockRoutineProvider.notifier).resetForSignedOut();
-    _ref.read(mockTrackerProvider.notifier).resetForSignedOut();
-    _ref.read(mockGoalProvider.notifier).resetForSignedOut();
-    _ref.read(mockMindNoteProvider.notifier).resetForSignedOut();
-    _ref.read(homeMindNoteProvider.notifier).resetForSignedOut();
-    _ref.read(mockCoachProvider.notifier).resetForSignedOut();
-    _ref.read(mockCoachPreferencesProvider.notifier).resetForSignedOut();
-    _ref.read(mockNotificationPreferencesProvider.notifier).resetForSignedOut();
-    _ref.read(mockPermissionProvider.notifier).resetForSignedOut();
   }
 }
 

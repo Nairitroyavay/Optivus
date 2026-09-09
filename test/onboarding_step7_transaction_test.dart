@@ -133,16 +133,16 @@ void main() {
         ),
       );
 
-      final notifier = MockOnboardingNotifier()..loadSeedData(draft);
+      final notifier = OnboardingNotifier()..loadSeedData(draft);
       container = ProviderContainer(
-        overrides: [mockOnboardingProvider.overrideWith((ref) => notifier)],
+        overrides: [onboardingStateProvider.overrideWith((ref) => notifier)],
       );
     });
 
     tearDown(() => container.dispose());
 
     test('Initial state has Plan A routine blocks and is current', () {
-      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      final base = container.read(onboardingStateProvider).draft.baseTimeline;
       final skinBlocks = base.confirmedBlocksForSection('skin_care');
 
       expect(skinBlocks, hasLength(2));
@@ -158,14 +158,14 @@ void main() {
         skinCareFlowControllerProvider.notifier,
       );
       final baseBefore = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline;
 
       controller.startEditing(baseBefore);
 
       final baseAfter = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline;
       final skinBlocks = baseAfter.confirmedBlocksForSection('skin_care');
@@ -183,7 +183,7 @@ void main() {
         skinCareFlowControllerProvider.notifier,
       );
       final baseBefore = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline;
 
@@ -191,7 +191,7 @@ void main() {
       controller.cancelEditing();
 
       final baseAfter = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline;
       final skinBlocks = baseAfter.confirmedBlocksForSection('skin_care');
@@ -211,7 +211,7 @@ void main() {
           skinCareFlowControllerProvider.notifier,
         );
         final baseBefore = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline;
 
@@ -225,7 +225,7 @@ void main() {
 
         // Mutate inputs during edit (e.g. user changes budget, skinType, problems)
         container
-            .read(mockOnboardingProvider.notifier)
+            .read(onboardingStateProvider.notifier)
             .updateDraft(
               (d) => d.copyWith(
                 baseTimeline: d.baseTimeline.copyWith(
@@ -239,7 +239,7 @@ void main() {
             );
 
         final dirtyBase = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline;
         expect(dirtyBase.isSkinCareRoutineCurrent(testUid), isFalse);
@@ -248,7 +248,7 @@ void main() {
         controller.cancelEditing();
 
         final restoredBase = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline;
 
@@ -278,7 +278,7 @@ void main() {
           skinCareFlowControllerProvider.notifier,
         );
         final baseBefore = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline;
 
@@ -286,7 +286,7 @@ void main() {
 
         // Mutate inputs during edit
         container
-            .read(mockOnboardingProvider.notifier)
+            .read(onboardingStateProvider.notifier)
             .updateDraft(
               (d) => d.copyWith(
                 baseTimeline: d.baseTimeline.copyWith(
@@ -301,7 +301,7 @@ void main() {
         expect(handled, isTrue);
 
         final restoredBase = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline;
         expect(restoredBase.skinCareBudget, 'medium');
@@ -319,7 +319,7 @@ void main() {
         skinCareFlowControllerProvider.notifier,
       );
       final baseBefore = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline;
 
@@ -332,7 +332,7 @@ void main() {
       );
 
       final baseAfter = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline;
       final skinBlocks = baseAfter.confirmedBlocksForSection('skin_care');
@@ -353,7 +353,7 @@ void main() {
           skinCareFlowControllerProvider.notifier,
         );
         final baseBefore = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline;
 
@@ -379,12 +379,12 @@ void main() {
 
         // Commit rebuild success
         container
-            .read(mockOnboardingProvider.notifier)
+            .read(onboardingStateProvider.notifier)
             .updateDraft((d) => d.copyWith(baseTimeline: updatedBase));
         controller.commitRebuildSuccess(updatedBase);
 
         final finalBase = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline;
         final skinBlocks = finalBase.confirmedBlocksForSection('skin_care');
@@ -408,7 +408,7 @@ void main() {
           skinCareFlowControllerProvider.notifier,
         );
         final baseBefore = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline;
 
@@ -465,7 +465,7 @@ void main() {
           ),
         ];
 
-        container.read(mockOnboardingProvider.notifier).updateDraft((d) {
+        container.read(onboardingStateProvider.notifier).updateDraft((d) {
           final withRecs = d.baseTimeline.copyWith(
             skinCareProductRecommendations: newRecs,
             skinCareSelectedProductNames: const ['CeraVe Hydrating Cleanser'],
@@ -491,7 +491,7 @@ void main() {
 
         // Plan A blocks are still preserved in draft
         final currentBase = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline;
         final currentBlocks = currentBase.confirmedBlocksForSection(
@@ -508,7 +508,7 @@ void main() {
         controller.cancelEditing();
 
         final restoredBase = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline;
         expect(restoredBase.skinCareProductRecommendations, _testRecs);
@@ -560,7 +560,7 @@ void main() {
         );
 
         container
-            .read(mockOnboardingProvider.notifier)
+            .read(onboardingStateProvider.notifier)
             .updateDraft((d) => d.copyWith(baseTimeline: hpBase));
 
         expect(hpBase.isSkinCareRoutineCurrent(testUid), isTrue);
@@ -581,7 +581,7 @@ void main() {
 
         // Photo analysis completes
         container
-            .read(mockOnboardingProvider.notifier)
+            .read(onboardingStateProvider.notifier)
             .updateDraft(
               (d) => d.copyWith(
                 baseTimeline: d.baseTimeline.copyWith(
@@ -604,7 +604,7 @@ void main() {
 
         // Blocks are still HP Plan A
         final draftBlocks = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline
             .confirmedBlocksForSection('skin_care');
@@ -660,11 +660,10 @@ void main() {
             ),
           );
 
-          final testNotifier = MockOnboardingNotifier()
-            ..loadSeedData(testDraft);
+          final testNotifier = OnboardingNotifier()..loadSeedData(testDraft);
           final testContainer = ProviderContainer(
             overrides: [
-              mockOnboardingProvider.overrideWith((ref) => testNotifier),
+              onboardingStateProvider.overrideWith((ref) => testNotifier),
               authProvider.overrideWith(
                 (ref) => _Step7TestAuthNotifier(
                   const AuthUser(
@@ -781,11 +780,10 @@ void main() {
             ),
           );
 
-          final testNotifier = MockOnboardingNotifier()
-            ..loadSeedData(testDraft);
+          final testNotifier = OnboardingNotifier()..loadSeedData(testDraft);
           final testContainer = ProviderContainer(
             overrides: [
-              mockOnboardingProvider.overrideWith((ref) => testNotifier),
+              onboardingStateProvider.overrideWith((ref) => testNotifier),
               authProvider.overrideWith(
                 (ref) => _Step7TestAuthNotifier(
                   const AuthUser(
@@ -892,11 +890,10 @@ void main() {
             ),
           );
 
-          final testNotifier = MockOnboardingNotifier()
-            ..loadSeedData(testDraft);
+          final testNotifier = OnboardingNotifier()..loadSeedData(testDraft);
           final testContainer = ProviderContainer(
             overrides: [
-              mockOnboardingProvider.overrideWith((ref) => testNotifier),
+              onboardingStateProvider.overrideWith((ref) => testNotifier),
               authProvider.overrideWith(
                 (ref) => _Step7TestAuthNotifier(
                   const AuthUser(
@@ -946,7 +943,7 @@ void main() {
           flowController.cancelEditing();
 
           final base = testContainer
-              .read(mockOnboardingProvider)
+              .read(onboardingStateProvider)
               .draft
               .baseTimeline;
           expect(base.skinCareFacePhotoAssetId, isNull);
@@ -997,11 +994,10 @@ void main() {
             ),
           );
 
-          final testNotifier = MockOnboardingNotifier()
-            ..loadSeedData(testDraft);
+          final testNotifier = OnboardingNotifier()..loadSeedData(testDraft);
           final testContainer = ProviderContainer(
             overrides: [
-              mockOnboardingProvider.overrideWith((ref) => testNotifier),
+              onboardingStateProvider.overrideWith((ref) => testNotifier),
               authProvider.overrideWith(
                 (ref) => _Step7TestAuthNotifier(
                   const AuthUser(

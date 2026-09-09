@@ -10,7 +10,7 @@ class OnboardingStep1 extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final draft = ref.watch(mockOnboardingProvider).draft;
+    final draft = ref.watch(onboardingStateProvider).draft;
     final accepted = draft.patiencePledgeAccepted;
 
     return OnboardingScrollView(
@@ -71,7 +71,7 @@ class OnboardingStep1 extends ConsumerWidget {
                   behavior: HitTestBehavior.opaque,
                   onTap: () {
                     ref
-                        .read(mockOnboardingProvider.notifier)
+                        .read(onboardingStateProvider.notifier)
                         .updateDraft(
                           (current) => current.copyWith(
                             patiencePledgeAccepted:
@@ -82,7 +82,7 @@ class OnboardingStep1 extends ConsumerWidget {
                           ),
                         );
                     ref
-                        .read(mockOnboardingProvider.notifier)
+                        .read(onboardingStateProvider.notifier)
                         .setStepDirty(OnboardingStepId.patience.index, true);
                   },
                   child: OnboardingGlassCard(

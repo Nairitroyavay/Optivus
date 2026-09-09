@@ -5,7 +5,6 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/onboarding_completion_job.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/state/auth_state.dart';
-import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
 import 'package:optivus/features/recovery/services/diagnostic_bundle_service.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
@@ -25,13 +24,8 @@ void main() {
           ),
           status: AuthFlowStatus.signedInOnboardingIncomplete,
         );
-        final profileInputIncomplete = UserProfile.empty(
-          uid: 'user1',
-        ).copyWith(onboardingInputCompleted: false, onboardingCompleted: false);
-
         final redirect1 = optivusAuthRedirect(
           authState: authStateIncomplete,
-          userProfile: profileInputIncomplete,
           uri: Uri.parse('/onboarding/recovery'),
         );
         expect(redirect1, equals('/onboarding'));
@@ -42,16 +36,10 @@ void main() {
             email: 'test@example.com',
             emailVerified: true,
           ),
-          status: AuthFlowStatus.backendRestoreFailed,
-          onboardingFailureReason: OnboardingFailureReason.projectionFailed,
+          status: AuthFlowStatus.needsAction,
         );
-        final profileInputCompleted = UserProfile.empty(
-          uid: 'user1',
-        ).copyWith(onboardingInputCompleted: true, onboardingCompleted: false);
-
         final redirect2 = optivusAuthRedirect(
           authState: authStateFailed,
-          userProfile: profileInputCompleted,
           uri: Uri.parse('/onboarding'),
         );
         expect(redirect2, equals('/onboarding/needs-action'));

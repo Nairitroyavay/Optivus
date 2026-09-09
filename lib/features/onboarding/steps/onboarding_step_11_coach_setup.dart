@@ -40,9 +40,9 @@ class _OnboardingCoachSetupStepState
   void initState() {
     super.initState();
     // We can't use ref.read here safely without Future.microtask if it's a provider that hasn't initialized,
-    // but mockOnboardingProvider is already initialized since we are in Step 11.
+    // but onboardingStateProvider is already initialized since we are in Step 11.
     // However, in Riverpod it's safer to read it in didChangeDependencies or read it here if it's synchronous.
-    // Since mockOnboardingProvider is a StateNotifierProvider, we can read it.
+    // Since onboardingStateProvider is a StateNotifierProvider, we can read it.
   }
 
   @override
@@ -50,7 +50,7 @@ class _OnboardingCoachSetupStepState
     super.didChangeDependencies();
     // Initialize the text controller once
     if (_customCtrl.text.isEmpty) {
-      final draft = ref.read(mockOnboardingProvider).draft;
+      final draft = ref.read(onboardingStateProvider).draft;
       if (draft.coachSetup.customCoachName != null) {
         _customCtrl.text = draft.coachSetup.customCoachName!;
       }
@@ -65,7 +65,7 @@ class _OnboardingCoachSetupStepState
 
   @override
   Widget build(BuildContext context) {
-    final draft = ref.watch(mockOnboardingProvider).draft;
+    final draft = ref.watch(onboardingStateProvider).draft;
     final coach = draft.coachSetup;
     final selectedCoachName = coach.coachName;
     final isCustom = coach.customCoachName != null;
@@ -109,7 +109,7 @@ class _OnboardingCoachSetupStepState
                                     : _customCtrl.text.trim())
                               : coachNameOption;
                           ref
-                              .read(mockOnboardingProvider.notifier)
+                              .read(onboardingStateProvider.notifier)
                               .updateDraft(
                                 (current) => current.copyWith(
                                   coachSetup: current.coachSetup.copyWith(
@@ -122,7 +122,7 @@ class _OnboardingCoachSetupStepState
                                 ),
                               );
                           ref
-                              .read(mockOnboardingProvider.notifier)
+                              .read(onboardingStateProvider.notifier)
                               .setStepDirty(
                                 OnboardingStepId.coachSetup.index,
                                 true,
@@ -146,7 +146,7 @@ class _OnboardingCoachSetupStepState
                         final trimmed = value.trim();
                         final next = trimmed.isEmpty ? 'My Coach' : trimmed;
                         ref
-                            .read(mockOnboardingProvider.notifier)
+                            .read(onboardingStateProvider.notifier)
                             .updateDraft(
                               (current) => current.copyWith(
                                 coachSetup: current.coachSetup.copyWith(
@@ -157,7 +157,7 @@ class _OnboardingCoachSetupStepState
                               ),
                             );
                         ref
-                            .read(mockOnboardingProvider.notifier)
+                            .read(onboardingStateProvider.notifier)
                             .setStepDirty(
                               OnboardingStepId.coachSetup.index,
                               true,
@@ -179,7 +179,7 @@ class _OnboardingCoachSetupStepState
                             accent: OptivusColors.aquaAccent,
                             onTap: () {
                               ref
-                                  .read(mockOnboardingProvider.notifier)
+                                  .read(onboardingStateProvider.notifier)
                                   .updateDraft(
                                     (current) => current.copyWith(
                                       coachSetup: current.coachSetup.copyWith(
@@ -189,7 +189,7 @@ class _OnboardingCoachSetupStepState
                                     ),
                                   );
                               ref
-                                  .read(mockOnboardingProvider.notifier)
+                                  .read(onboardingStateProvider.notifier)
                                   .setStepDirty(
                                     OnboardingStepId.coachSetup.index,
                                     true,

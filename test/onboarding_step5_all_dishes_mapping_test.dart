@@ -69,8 +69,7 @@ OnboardingDraft _makeGate2Draft(
   );
   final initialDraft = OnboardingDraft(baseTimeline: base);
   final targets = initialDraft.canonicalNutritionTargets();
-  final inputs =
-      initialDraft.canonicalEatingGenerationInputs(targets: targets);
+  final inputs = initialDraft.canonicalEatingGenerationInputs(targets: targets);
   return initialDraft.copyWith(
     baseTimeline: initialDraft.baseTimeline.copyWith(
       eatingGeneratedInputFingerprint: inputs.computeFingerprint(),
@@ -138,8 +137,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith(
-                (_) => MockOnboardingNotifier()..loadSeedData(draft),
+              onboardingStateProvider.overrideWith(
+                (_) => OnboardingNotifier()..loadSeedData(draft),
               ),
             ],
             child: const MaterialApp(
@@ -167,16 +166,20 @@ void main() {
     testWidgets(
       'renders +N more when available height is restricted and long dishes cause overflow',
       (tester) async {
-        final draft = _makeGate2Draft(const [
-          'First Extremely Long Dish Name That Takes Space',
-          'Second Extremely Long Dish Name That Takes Space',
-          'Third Extremely Long Dish Name That Takes Space',
-          'Fourth Extremely Long Dish Name That Takes Space',
-          'Fifth Extremely Long Dish Name That Takes Space',
-          'Sixth Extremely Long Dish Name That Takes Space',
-          'Seventh Extremely Long Dish Name That Takes Space',
-          'Eighth Extremely Long Dish Name That Takes Space',
-        ], startMinute: 700, endMinute: 730);
+        final draft = _makeGate2Draft(
+          const [
+            'First Extremely Long Dish Name That Takes Space',
+            'Second Extremely Long Dish Name That Takes Space',
+            'Third Extremely Long Dish Name That Takes Space',
+            'Fourth Extremely Long Dish Name That Takes Space',
+            'Fifth Extremely Long Dish Name That Takes Space',
+            'Sixth Extremely Long Dish Name That Takes Space',
+            'Seventh Extremely Long Dish Name That Takes Space',
+            'Eighth Extremely Long Dish Name That Takes Space',
+          ],
+          startMinute: 700,
+          endMinute: 730,
+        );
 
         tester.view.physicalSize = const Size(1080, 2400);
         tester.view.devicePixelRatio = 3.0;
@@ -188,8 +191,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith(
-                (_) => MockOnboardingNotifier()..loadSeedData(draft),
+              onboardingStateProvider.overrideWith(
+                (_) => OnboardingNotifier()..loadSeedData(draft),
               ),
             ],
             child: MaterialApp(

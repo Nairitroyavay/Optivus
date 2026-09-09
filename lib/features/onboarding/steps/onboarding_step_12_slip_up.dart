@@ -11,7 +11,7 @@ class OnboardingSlipUpStep extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final draft = ref.watch(mockOnboardingProvider).draft;
+    final draft = ref.watch(onboardingStateProvider).draft;
     final coachName = draft.coachSetup.coachName ?? 'Coach';
     const styles = [
       (
@@ -62,7 +62,7 @@ class OnboardingSlipUpStep extends ConsumerWidget {
                       selected: selected,
                       onTap: () {
                         ref
-                            .read(mockOnboardingProvider.notifier)
+                            .read(onboardingStateProvider.notifier)
                             .updateDraft(
                               (current) => current.copyWith(
                                 slipUpHandling: style.$1,
@@ -70,7 +70,7 @@ class OnboardingSlipUpStep extends ConsumerWidget {
                               ),
                             );
                         ref
-                            .read(mockOnboardingProvider.notifier)
+                            .read(onboardingStateProvider.notifier)
                             .setStepDirty(OnboardingStepId.slipUp.index, true);
                       },
                     ),

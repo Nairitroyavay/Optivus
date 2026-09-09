@@ -572,7 +572,7 @@ void main() {
         ) {
           if (next.status == AuthFlowStatus.signedInOnboardingIncomplete) {
             hydratedBeforePublish =
-                container.read(mockOnboardingProvider).draft.currentStep == 4;
+                container.read(onboardingStateProvider).draft.currentStep == 4;
           }
         });
         addTearDown(subscription.close);
@@ -639,9 +639,9 @@ void main() {
           if (entry.value == AuthFlowStatus.finishingOnboarding) {
             expect(container.read(authProvider).completionRunId, 'run-1');
           } else if (entry.value == AuthFlowStatus.signedInOnboardingComplete) {
-            expect(container.read(mockOnboardingProvider).draft.uid, uid);
+            expect(container.read(onboardingStateProvider).draft.uid, uid);
           } else {
-            expect(container.read(mockOnboardingProvider).draft.uid, uid);
+            expect(container.read(onboardingStateProvider).draft.uid, uid);
             expect(
               container.read(authProvider).reconstructionResult,
               isA<ReconstructionRecovery>(),
@@ -670,12 +670,12 @@ void main() {
       source.completeFresh(userB.uid);
       await pumpEventQueue(times: 10);
       expect(container.read(authProvider).user?.uid, userB.uid);
-      expect(container.read(mockUserProfileProvider).uid, userB.uid);
+      expect(container.read(userProfileProvider).uid, userB.uid);
 
       source.completeFresh(userA.uid);
       await pumpEventQueue(times: 10);
       expect(container.read(authProvider).user?.uid, userB.uid);
-      expect(container.read(mockUserProfileProvider).uid, userB.uid);
+      expect(container.read(userProfileProvider).uid, userB.uid);
     });
 
     test(
@@ -894,7 +894,7 @@ void main() {
           container.read(authProvider).status,
           AuthFlowStatus.signedInOnboardingComplete,
         );
-        expect(container.read(mockUserProfileProvider).uid, 'account-a');
+        expect(container.read(userProfileProvider).uid, 'account-a');
 
         auth.emit(userB);
         await pumpEventQueue(times: 20);
@@ -907,9 +907,9 @@ void main() {
           authStateB.reconstructionResult,
           isA<ReconstructionIncomplete>(),
         );
-        expect(container.read(mockUserProfileProvider).uid, 'account-b');
-        expect(container.read(mockOnboardingProvider).draft.uid, 'account-b');
-        expect(container.read(mockOnboardingProvider).draft.currentStep, 4);
+        expect(container.read(userProfileProvider).uid, 'account-b');
+        expect(container.read(onboardingStateProvider).draft.uid, 'account-b');
+        expect(container.read(onboardingStateProvider).draft.currentStep, 4);
       },
     );
 

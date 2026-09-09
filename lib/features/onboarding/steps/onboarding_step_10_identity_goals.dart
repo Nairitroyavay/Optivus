@@ -70,7 +70,7 @@ class _OnboardingIdentityGoalsStepState
   void initState() {
     super.initState();
     final selected = ref
-        .read(mockOnboardingProvider)
+        .read(onboardingStateProvider)
         .draft
         .identityGoals
         .map((goal) => goal.goalKey)
@@ -92,13 +92,13 @@ class _OnboardingIdentityGoalsStepState
         )
         .toList();
     ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .updateDraft(
           (draft) =>
               draft.copyWith(identityGoals: selected, clearFinalPreview: true),
         );
     ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .setStepDirty(OnboardingStepId.identityGoals.index, true);
   }
 
@@ -139,7 +139,7 @@ class _OnboardingIdentityGoalsStepState
                           ? Consumer(
                               builder: (context, ref, _) {
                                 final skipped = ref
-                                    .watch(mockOnboardingProvider)
+                                    .watch(onboardingStateProvider)
                                     .draft
                                     .skippedDuplicateSystemKeys();
                                 final isDuplicate = goal.systemKeys.any(

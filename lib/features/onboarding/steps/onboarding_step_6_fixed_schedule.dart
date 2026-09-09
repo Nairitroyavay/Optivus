@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/optivus_colors.dart';
 import '../../../models/onboarding_draft.dart';
 import '../../routine/utils/timeline_utils.dart';
-import '../../../state/app_state.dart' show mockOnboardingProvider;
+import '../../../state/app_state.dart' show onboardingStateProvider;
 import 'onboarding_base_timeline_helpers.dart' show onboardingFixedStepIndex;
 import 'onboarding_step_4_schedule_models.dart' show ClassRoutineBlock;
 
@@ -36,14 +36,14 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
   }
 
   void _ensureDefaults() {
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     final base = draft.baseTimeline.withRequiredFixedBlocks();
     if (draft.baseTimeline != base) {
       ref
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .updateDraft((d) => d.copyWith(baseTimeline: base));
       ref
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .setStepDirty(onboardingFixedStepIndex, true);
     }
   }
@@ -70,7 +70,7 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
   }
 
   void _setBlocks(List<ClassRoutineBlock> blocks) {
-    ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+    ref.read(onboardingStateProvider.notifier).updateDraft((draft) {
       final base = draft.baseTimeline;
       final existingBlocks = base.blocks
           .where((b) => b.section != 'fixed')
@@ -123,13 +123,13 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
       );
     });
     ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .setStepDirty(onboardingFixedStepIndex, true);
     _validate();
   }
 
   void _validate() {
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     final blocks = _getBlocks(draft.baseTimeline);
     final sleep = blocks
         .where((b) => b.id == BaseTimelineDraft.fixedSleepId)
@@ -140,12 +140,12 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
 
     if (sleep.isEmpty || bath.isEmpty) {
       ref
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .setValidationMessage('Missing required Sleep or Bath block.');
       return;
     }
 
-    ref.read(mockOnboardingProvider.notifier).setValidationMessage(null);
+    ref.read(onboardingStateProvider.notifier).setValidationMessage(null);
   }
 
   @override
@@ -156,7 +156,7 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
 
   @override
   Widget build(BuildContext context) {
-    final draft = ref.watch(mockOnboardingProvider).draft;
+    final draft = ref.watch(onboardingStateProvider).draft;
     final blocks = _getBlocks(draft.baseTimeline);
 
     return Column(
@@ -554,7 +554,7 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
   }
 
   void _deleteBlock(ClassRoutineBlock item) {
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     final blocks = _getBlocks(draft.baseTimeline).toList();
     blocks.removeWhere((b) => b.id == item.id);
     _setBlocks(blocks);
@@ -807,7 +807,7 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                                     );
 
                                     final draft = ref
-                                        .read(mockOnboardingProvider)
+                                        .read(onboardingStateProvider)
                                         .draft;
                                     final blocks = _getBlocks(
                                       draft.baseTimeline,

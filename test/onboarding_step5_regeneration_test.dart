@@ -235,8 +235,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith(
-                (ref) => MockOnboardingNotifier()..loadSeedData(initialDraft),
+              onboardingStateProvider.overrideWith(
+                (ref) => OnboardingNotifier()..loadSeedData(initialDraft),
               ),
               nutritionAiClientProvider.overrideWithValue(fakeClient),
             ],
@@ -259,7 +259,7 @@ void main() {
         );
 
         // User navigates back to preferences (eatingSetupStep = 1)
-        container.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+        container.read(onboardingStateProvider.notifier).updateDraft((draft) {
           return draft.copyWith(
             baseTimeline: draft.baseTimeline.copyWith(eatingSetupStep: 1),
           );
@@ -272,7 +272,7 @@ void main() {
         );
 
         // User changes meals per day from 3 to 4
-        container.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+        container.read(onboardingStateProvider.notifier).updateDraft((draft) {
           return draft.copyWith(
             baseTimeline: draft.baseTimeline.copyWith(mealsPerDay: 4),
           );
@@ -286,7 +286,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Check results
-        final currentDraft = container.read(mockOnboardingProvider).draft;
+        final currentDraft = container.read(onboardingStateProvider).draft;
         final eatingBlocks = currentDraft.baseTimeline
             .confirmedBlocksForSection('eating');
         expect(eatingBlocks.length, 28);
@@ -335,8 +335,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith(
-                (ref) => MockOnboardingNotifier()..loadSeedData(initialDraft),
+              onboardingStateProvider.overrideWith(
+                (ref) => OnboardingNotifier()..loadSeedData(initialDraft),
               ),
               nutritionAiClientProvider.overrideWithValue(fakeClient),
             ],
@@ -352,7 +352,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        container.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+        container.read(onboardingStateProvider.notifier).updateDraft((draft) {
           return draft.copyWith(
             baseTimeline: draft.baseTimeline.copyWith(
               eatingSetupStep: 1,
@@ -366,7 +366,7 @@ void main() {
         await tester.tap(generateBtn);
         await tester.pumpAndSettle();
 
-        final currentDraft = container.read(mockOnboardingProvider).draft;
+        final currentDraft = container.read(onboardingStateProvider).draft;
         final eatingBlocks = currentDraft.baseTimeline
             .confirmedBlocksForSection('eating');
         expect(eatingBlocks.length, 21);
@@ -401,8 +401,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith(
-                (ref) => MockOnboardingNotifier()..loadSeedData(initialDraft),
+              onboardingStateProvider.overrideWith(
+                (ref) => OnboardingNotifier()..loadSeedData(initialDraft),
               ),
               nutritionAiClientProvider.overrideWithValue(fakeClient),
             ],
@@ -418,7 +418,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        container.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+        container.read(onboardingStateProvider.notifier).updateDraft((draft) {
           return draft.copyWith(
             baseTimeline: draft.baseTimeline.copyWith(
               eatingSetupStep: 1,
@@ -432,7 +432,7 @@ void main() {
         await tester.tap(generateBtn);
         await tester.pumpAndSettle();
 
-        final currentDraft = container.read(mockOnboardingProvider).draft;
+        final currentDraft = container.read(onboardingStateProvider).draft;
         final eatingBlocks = currentDraft.baseTimeline
             .confirmedBlocksForSection('eating');
         expect(eatingBlocks.length, 35);
@@ -469,8 +469,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith(
-                (ref) => MockOnboardingNotifier()..loadSeedData(initialDraft),
+              onboardingStateProvider.overrideWith(
+                (ref) => OnboardingNotifier()..loadSeedData(initialDraft),
               ),
               nutritionAiClientProvider.overrideWithValue(fakeClient),
             ],
@@ -486,7 +486,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        container.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+        container.read(onboardingStateProvider.notifier).updateDraft((draft) {
           return draft.copyWith(
             baseTimeline: draft.baseTimeline.copyWith(
               eatingSetupStep: 1,
@@ -502,7 +502,7 @@ void main() {
 
         expect(receivedParams?['bodyGoal'], 'maintain');
         final newFingerprint = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline
             .eatingGeneratedInputFingerprint;
@@ -537,8 +537,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith(
-                (ref) => MockOnboardingNotifier()..loadSeedData(initialDraft),
+              onboardingStateProvider.overrideWith(
+                (ref) => OnboardingNotifier()..loadSeedData(initialDraft),
               ),
               nutritionAiClientProvider.overrideWithValue(fakeClient),
             ],
@@ -554,7 +554,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        container.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+        container.read(onboardingStateProvider.notifier).updateDraft((draft) {
           return draft.copyWith(
             baseTimeline: draft.baseTimeline.copyWith(
               eatingSetupStep: 1,
@@ -605,8 +605,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith(
-                (ref) => MockOnboardingNotifier()..loadSeedData(initialDraft),
+              onboardingStateProvider.overrideWith(
+                (ref) => OnboardingNotifier()..loadSeedData(initialDraft),
               ),
               nutritionAiClientProvider.overrideWithValue(fakeClient),
             ],
@@ -622,7 +622,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        container.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+        container.read(onboardingStateProvider.notifier).updateDraft((draft) {
           return draft.copyWith(
             baseTimeline: draft.baseTimeline.copyWith(
               eatingSetupStep: 1,
@@ -643,7 +643,7 @@ void main() {
         expect(receivedParams?['dinnerMinute'], 1260);
 
         final blocks = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline
             .confirmedBlocksForSection('eating');
@@ -682,8 +682,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith(
-                (ref) => MockOnboardingNotifier()..loadSeedData(initialDraft),
+              onboardingStateProvider.overrideWith(
+                (ref) => OnboardingNotifier()..loadSeedData(initialDraft),
               ),
               nutritionAiClientProvider.overrideWithValue(fakeClient),
             ],
@@ -699,7 +699,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        container.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+        container.read(onboardingStateProvider.notifier).updateDraft((draft) {
           return draft.copyWith(
             baseTimeline: draft.baseTimeline.copyWith(
               eatingSetupStep: 1,
@@ -725,7 +725,7 @@ void main() {
         expect(receivedParams?['eatingMode'], 'custom');
 
         final eatingBlocks = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline
             .confirmedBlocksForSection('eating');
@@ -760,8 +760,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith(
-                (ref) => MockOnboardingNotifier()..loadSeedData(initialDraft),
+              onboardingStateProvider.overrideWith(
+                (ref) => OnboardingNotifier()..loadSeedData(initialDraft),
               ),
               nutritionAiClientProvider.overrideWithValue(fakeClient),
             ],
@@ -778,7 +778,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Go back to preferences and change to 4 meals
-        container.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+        container.read(onboardingStateProvider.notifier).updateDraft((draft) {
           return draft.copyWith(
             baseTimeline: draft.baseTimeline.copyWith(
               eatingSetupStep: 1,
@@ -794,7 +794,7 @@ void main() {
 
         // Verify Plan A blocks are completely retained in state
         final currentBlocks = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline
             .confirmedBlocksForSection('eating');
@@ -823,7 +823,7 @@ void main() {
         );
 
         // When user goes back to preferences step, view current meal routine button is available
-        container.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+        container.read(onboardingStateProvider.notifier).updateDraft((draft) {
           return draft.copyWith(
             baseTimeline: draft.baseTimeline.copyWith(eatingSetupStep: 1),
           );
@@ -859,8 +859,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith(
-                (ref) => MockOnboardingNotifier()..loadSeedData(initialDraft),
+              onboardingStateProvider.overrideWith(
+                (ref) => OnboardingNotifier()..loadSeedData(initialDraft),
               ),
               nutritionAiClientProvider.overrideWithValue(fakeClient),
             ],
@@ -876,7 +876,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        container.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+        container.read(onboardingStateProvider.notifier).updateDraft((draft) {
           return draft.copyWith(
             baseTimeline: draft.baseTimeline.copyWith(eatingSetupStep: 1),
           );
@@ -914,8 +914,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith(
-                (ref) => MockOnboardingNotifier()..loadSeedData(initialDraft),
+              onboardingStateProvider.overrideWith(
+                (ref) => OnboardingNotifier()..loadSeedData(initialDraft),
               ),
               nutritionAiClientProvider.overrideWithValue(fakeClient),
             ],
@@ -931,7 +931,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        container.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+        container.read(onboardingStateProvider.notifier).updateDraft((draft) {
           return draft.copyWith(
             baseTimeline: draft.baseTimeline.copyWith(
               eatingSetupStep: 1,
@@ -946,7 +946,7 @@ void main() {
         await tester.pump(); // generation started
 
         // While generation is in-flight, user edits meal planning goal
-        container.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+        container.read(onboardingStateProvider.notifier).updateDraft((draft) {
           return draft.copyWith(
             baseTimeline: draft.baseTimeline.copyWith(mealPlanningGoal: 'gain'),
           );
@@ -966,7 +966,7 @@ void main() {
 
         // The stale response must have been discarded: confirmed blocks must still be initial 21 blocks
         final currentBlocks = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline
             .confirmedBlocksForSection('eating');

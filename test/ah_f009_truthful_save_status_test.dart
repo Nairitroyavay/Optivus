@@ -25,7 +25,7 @@ void main() {
 
   group('AH-F009 save status contract', () {
     test('successful current revision transitions saving to synced', () {
-      final notifier = MockOnboardingNotifier();
+      final notifier = OnboardingNotifier();
       notifier.setStepDirty(0, true);
       notifier.setStepLoading(0, true);
       final submittedRevision = notifier.state.draft.revision;
@@ -49,7 +49,7 @@ void main() {
     });
 
     test('failed write keeps current edit and records truthful failed state', () {
-      final notifier = MockOnboardingNotifier();
+      final notifier = OnboardingNotifier();
       notifier.updateDraft(
         (draft) => draft.copyWith(patiencePledgeText: 'Current edit'),
       );
@@ -71,7 +71,7 @@ void main() {
     });
 
     test('older success cannot mark or replace a newer edit', () {
-      final notifier = MockOnboardingNotifier();
+      final notifier = OnboardingNotifier();
       notifier.updateDraft(
         (draft) => draft.copyWith(patiencePledgeText: 'Edit A'),
       );
@@ -102,7 +102,7 @@ void main() {
     });
 
     test('older failure does not clobber a newer edit', () {
-      final notifier = MockOnboardingNotifier();
+      final notifier = OnboardingNotifier();
       notifier.updateDraft(
         (draft) => draft.copyWith(patiencePledgeText: 'Edit A'),
       );
@@ -120,7 +120,7 @@ void main() {
     test(
       'account reset clears dirty state while no-op same-UID refresh does not',
       () {
-        final notifier = MockOnboardingNotifier()..reset('user-a');
+        final notifier = OnboardingNotifier()..reset('user-a');
         notifier.updateDraft(
           (draft) => draft.copyWith(patiencePledgeText: 'User A edit'),
         );
@@ -157,7 +157,7 @@ void main() {
     );
 
     test('new edit resets synced status to dirty immediately', () {
-      final notifier = MockOnboardingNotifier();
+      final notifier = OnboardingNotifier();
       notifier.setStepCompleted(0, true);
       expect(notifier.state.stepSaveStatus[0], SaveSyncStatus.synced);
 
@@ -167,7 +167,7 @@ void main() {
     });
 
     test('role invalidation resets affected step save statuses to dirty', () {
-      final notifier = MockOnboardingNotifier();
+      final notifier = OnboardingNotifier();
       notifier.setStepCompleted(2, true);
       notifier.setStepCompleted(4, true);
       expect(notifier.state.stepSaveStatus[2], SaveSyncStatus.synced);
@@ -191,7 +191,7 @@ void main() {
           patiencePledgeText: serverVal,
         );
 
-        final notifier = MockOnboardingNotifier();
+        final notifier = OnboardingNotifier();
         notifier.loadSeedData(repository.durableDraft!);
         expect(notifier.state.draft.patiencePledgeText, serverVal);
 
@@ -239,7 +239,7 @@ void main() {
       tester,
     ) async {
       final repository = _ControlledRepository();
-      late MockOnboardingNotifier notifier;
+      late OnboardingNotifier notifier;
       await _pumpFlow(tester, repository, (value) => notifier = value);
 
       // Navigate through step 0 to step 1
@@ -274,7 +274,7 @@ void main() {
       tester,
     ) async {
       final repository = _ControlledRepository(failuresRemaining: 1);
-      late MockOnboardingNotifier notifier;
+      late OnboardingNotifier notifier;
       await _pumpFlow(tester, repository, (value) => notifier = value);
 
       await tester.tap(find.text('Get Started'));
@@ -317,7 +317,7 @@ void main() {
     ) async {
       final gate = Completer<void>();
       final repository = _ControlledRepository(gate: gate);
-      late MockOnboardingNotifier notifier;
+      late OnboardingNotifier notifier;
       await _pumpFlow(tester, repository, (value) => notifier = value);
 
       await tester.tap(find.text('Get Started'));
@@ -344,7 +344,7 @@ void main() {
         gate: gate,
         failuresRemaining: 1,
       );
-      late MockOnboardingNotifier notifier;
+      late OnboardingNotifier notifier;
       await _pumpFlow(tester, repository, (value) => notifier = value);
 
       await tester.tap(find.text('Get Started'));
@@ -414,15 +414,15 @@ Future<void> _pumpAsyncUi(WidgetTester tester) async {
 Future<void> _pumpFlow(
   WidgetTester tester,
   OnboardingRepository repository,
-  ValueChanged<MockOnboardingNotifier> capture,
+  ValueChanged<OnboardingNotifier> capture,
 ) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         optivusBackendModeProvider.overrideWithValue(OptivusBackendMode.fake),
         optivusDebugBuildProvider.overrideWithValue(true),
-        mockOnboardingProvider.overrideWith((_) {
-          final notifier = MockOnboardingNotifier()..reset('test-user');
+        onboardingStateProvider.overrideWith((_) {
+          final notifier = OnboardingNotifier()..reset('test-user');
           capture(notifier);
           return notifier;
         }),

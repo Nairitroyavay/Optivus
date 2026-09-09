@@ -79,7 +79,7 @@ void main() {
 
           container.read(authProvider.notifier).state = const AuthState(
             user: testUser,
-            status: AuthFlowStatus.backendRestoreFailed,
+            status: AuthFlowStatus.needsAction,
           );
 
           final notifier = container.read(authProvider.notifier);
@@ -88,7 +88,7 @@ void main() {
           );
 
           final authState = container.read(authProvider);
-          final profile = container.read(mockUserProfileProvider);
+          final profile = container.read(userProfileProvider);
 
           expect(
             authState.status,
@@ -126,16 +126,16 @@ void main() {
 
         container.read(authProvider.notifier).state = const AuthState(
           user: testUser,
-          status: AuthFlowStatus.backendRestoreFailed,
+          status: AuthFlowStatus.needsAction,
         );
 
         final notifier = container.read(authProvider.notifier);
         await notifier.executeRecoveryAction(const ResumeOnboardingAction());
 
         final authState = container.read(authProvider);
-        final profile = container.read(mockUserProfileProvider);
+        final profile = container.read(userProfileProvider);
 
-        expect(authState.status, equals(AuthFlowStatus.backendRestoreFailed));
+        expect(authState.status, equals(AuthFlowStatus.needsAction));
         expect(profile.onboardingCompleted, isFalse);
         expect(profile.onboardingStep, equals(0));
       });
@@ -167,7 +167,7 @@ void main() {
 
           container.read(authProvider.notifier).state = const AuthState(
             user: testUser,
-            status: AuthFlowStatus.backendRestoreFailed,
+            status: AuthFlowStatus.needsAction,
           );
 
           final notifier = container.read(authProvider.notifier);
@@ -176,9 +176,9 @@ void main() {
           );
 
           final authState = container.read(authProvider);
-          final profile = container.read(mockUserProfileProvider);
+          final profile = container.read(userProfileProvider);
 
-          expect(authState.status, equals(AuthFlowStatus.backendRestoreFailed));
+          expect(authState.status, equals(AuthFlowStatus.needsAction));
           expect(profile.onboardingCompleted, isFalse);
         },
       );
@@ -232,7 +232,7 @@ void main() {
 
           container.read(authProvider.notifier).state = const AuthState(
             user: testUser,
-            status: AuthFlowStatus.backendRestoreFailed,
+            status: AuthFlowStatus.needsAction,
           );
 
           final notifier = container.read(authProvider.notifier);
@@ -241,9 +241,9 @@ void main() {
           );
 
           final authState = container.read(authProvider);
-          final profile = container.read(mockUserProfileProvider);
+          final profile = container.read(userProfileProvider);
 
-          expect(authState.status, equals(AuthFlowStatus.backendRestoreFailed));
+          expect(authState.status, equals(AuthFlowStatus.needsAction));
           expect(profile.onboardingCompleted, isFalse);
 
           final savedDraft = await fakeOnboardingRepo.fetchDraft(testUser.uid);
@@ -276,7 +276,7 @@ void main() {
 
           container.read(authProvider.notifier).state = const AuthState(
             user: testUser,
-            status: AuthFlowStatus.backendRestoreFailed,
+            status: AuthFlowStatus.needsAction,
           );
 
           // Max out retry attempts
@@ -297,9 +297,9 @@ void main() {
           );
 
           final authState = container.read(authProvider);
-          final profile = container.read(mockUserProfileProvider);
+          final profile = container.read(userProfileProvider);
 
-          expect(authState.status, equals(AuthFlowStatus.backendRestoreFailed));
+          expect(authState.status, equals(AuthFlowStatus.needsAction));
           expect(profile.onboardingCompleted, isFalse);
         },
       );
@@ -404,7 +404,7 @@ void main() {
           status: AuthFlowStatus.signedInOnboardingIncomplete,
         );
 
-        final currentProfile = container.read(mockUserProfileProvider);
+        final currentProfile = container.read(userProfileProvider);
         expect(
           container.read(authProvider).user?.uid,
           equals('account-b-switch'),
@@ -447,7 +447,7 @@ void main() {
         // Active user is User A in recovery state
         notifier.state = const AuthState(
           user: userA,
-          status: AuthFlowStatus.backendRestoreFailed,
+          status: AuthFlowStatus.needsAction,
         );
 
         // Start async recovery action for User A (which will hit fetchDraft delay)

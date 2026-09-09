@@ -18,6 +18,7 @@ import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/profile_frontend_state.dart';
+import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/region_settings_provider.dart';
 import 'package:optivus/widgets/liquid_glass_panel.dart';
 
@@ -155,7 +156,7 @@ class _ProfileMainScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(currentUserProfileProvider);
+    final profile = ref.watch(userProfileProvider);
     final settings = ref.watch(profileSettingsProvider);
     final auth = ref.watch(authProvider);
     final region = ref.watch(regionSettingsProvider);

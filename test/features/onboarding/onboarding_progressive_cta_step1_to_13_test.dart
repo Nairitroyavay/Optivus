@@ -638,7 +638,7 @@ void main() {
     testWidgets('Step 1: Checkbox toggling reveals and disables CTA stably', (
       tester,
     ) async {
-      late MockOnboardingNotifier notifier;
+      late OnboardingNotifier notifier;
       final draft = OnboardingDraft(
         currentStep: 1,
         stepCompleted: [true, for (int i = 1; i < 15; i++) false],
@@ -647,8 +647,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            mockOnboardingProvider.overrideWith((_) {
-              notifier = MockOnboardingNotifier()..loadSeedData(draft);
+            onboardingStateProvider.overrideWith((_) {
+              notifier = OnboardingNotifier()..loadSeedData(draft);
               return notifier;
             }),
             authProvider.overrideWith((ref) => _FakeAuthNotifier()),
@@ -711,7 +711,7 @@ void main() {
     testWidgets('Step 3 -> Step 4 Gate: Step 4 strictly blocked until saved', (
       tester,
     ) async {
-      late MockOnboardingNotifier notifier;
+      late OnboardingNotifier notifier;
       final completed = List.generate(15, (i) => i < 3); // 0, 1, 2 completed
       final draft = OnboardingDraft(
         currentStep: 3,
@@ -722,8 +722,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            mockOnboardingProvider.overrideWith((_) {
-              notifier = MockOnboardingNotifier()..loadSeedData(draft);
+            onboardingStateProvider.overrideWith((_) {
+              notifier = OnboardingNotifier()..loadSeedData(draft);
               return notifier;
             }),
             authProvider.overrideWith((ref) => _FakeAuthNotifier()),

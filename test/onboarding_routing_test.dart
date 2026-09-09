@@ -198,8 +198,8 @@ Future<_RouterHarness> _pumpRouter(
   final container = ProviderContainer(
     overrides: [
       authProvider.overrideWith((ref) => _TestAuthNotifier(authState)),
-      mockUserProfileProvider.overrideWith(
-        (ref) => MockUserProfileNotifier()..loadSeedData(profile),
+      userProfileProvider.overrideWith(
+        (ref) => UserProfileNotifier()..loadSeedData(profile),
       ),
     ],
   );

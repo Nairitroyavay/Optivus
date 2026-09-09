@@ -7,7 +7,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/core/router/app_router.dart';
-import 'package:optivus/core/utils/auth_error_mapper.dart';
+import 'package:optivus/core/errors/auth_error_mapper.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/features/profile/models/profile_settings_models.dart';
 import 'package:optivus/models/coach_models.dart';
 import 'package:optivus/models/goal_models.dart';
@@ -133,27 +134,24 @@ void main() {
       );
     });
 
-    test('legacy deprecated providerId getter is deterministic display-only', () {
-      const googleOnly = AuthUser(
-        uid: 'u1',
-        providerIds: {'google.com'},
-      );
-      const passOnly = AuthUser(
-        uid: 'u2',
-        providerIds: {'password'},
-      );
-      const multi = AuthUser(
-        uid: 'u3',
-        providerIds: {'password', 'google.com'},
-      );
-      // Deprecated getter remains non-crashing compatibility fallback
-      // ignore: deprecated_member_use_from_same_package
-      expect(googleOnly.providerId, 'google.com');
-      // ignore: deprecated_member_use_from_same_package
-      expect(passOnly.providerId, 'password');
-      // ignore: deprecated_member_use_from_same_package
-      expect(multi.providerId, 'google.com');
-    });
+    test(
+      'legacy deprecated providerId getter is deterministic display-only',
+      () {
+        const googleOnly = AuthUser(uid: 'u1', providerIds: {'google.com'});
+        const passOnly = AuthUser(uid: 'u2', providerIds: {'password'});
+        const multi = AuthUser(
+          uid: 'u3',
+          providerIds: {'password', 'google.com'},
+        );
+        // Deprecated getter remains non-crashing compatibility fallback
+        // ignore: deprecated_member_use_from_same_package
+        expect(googleOnly.providerId, 'google.com');
+        // ignore: deprecated_member_use_from_same_package
+        expect(passOnly.providerId, 'password');
+        // ignore: deprecated_member_use_from_same_package
+        expect(multi.providerId, 'google.com');
+      },
+    );
   });
 
   group('AH-F004 logout transaction and state boundary', () {
@@ -202,7 +200,7 @@ void main() {
 
       await expectLater(
         container.read(authProvider.notifier).logout(),
-        throwsA(isA<AuthFailureException>()),
+        throwsA(isA<RecoverableError>()),
       );
 
       final state = container.read(authProvider);
@@ -213,7 +211,6 @@ void main() {
       expect(
         optivusAuthRedirect(
           authState: state,
-          userProfile: container.read(mockUserProfileProvider),
           uri: Uri(path: '/onboarding'),
         ),
         isNull,
@@ -227,10 +224,7 @@ void main() {
       });
       final user = await repository.signIn('fake@example.com', 'password');
 
-      await expectLater(
-        repository.signOut(),
-        throwsA(isA<AuthFailureException>()),
-      );
+      await expectLater(repository.signOut(), throwsA(isA<RecoverableError>()));
       expect(repository.currentUser?.uid, user.uid);
     });
   });
@@ -251,8 +245,8 @@ void main() {
       container.listen<AuthState>(authProvider, (_, next) {
         if (next.user?.uid == _userB.uid) {
           observations.add((
-            profileUid: container.read(mockUserProfileProvider).uid,
-            draftUid: container.read(mockOnboardingProvider).draft.uid,
+            profileUid: container.read(userProfileProvider).uid,
+            draftUid: container.read(onboardingStateProvider).draft.uid,
             goals: container.read(mockGoalProvider).length,
           ));
         }
@@ -265,8 +259,8 @@ void main() {
       expect(observations.first.profileUid, isNot(_userA.uid));
       expect(observations.first.draftUid, isNot(_userA.uid));
       expect(observations.first.goals, 0);
-      expect(container.read(mockUserProfileProvider).uid, _userB.uid);
-      expect(container.read(mockOnboardingProvider).draft.uid, _userB.uid);
+      expect(container.read(userProfileProvider).uid, _userB.uid);
+      expect(container.read(onboardingStateProvider).draft.uid, _userB.uid);
       expect(container.read(mockRoutineProvider), isEmpty);
       expect(container.read(mockGoalProvider), isEmpty);
       expect(container.read(mockTrackerProvider).trackerSessions, isEmpty);
@@ -284,9 +278,9 @@ void main() {
         await pumpEventQueue(times: 20);
         container.read(mockGoalProvider.notifier).addGoal(_secretGoal);
         final profile = container
-            .read(mockUserProfileProvider)
+            .read(userProfileProvider)
             .copyWith(displayName: 'Preserved A');
-        container.read(mockUserProfileProvider.notifier).loadSeedData(profile);
+        container.read(userProfileProvider.notifier).loadSeedData(profile);
         container.read(appNavigationProvider.notifier).goToGoals();
         final establishedStatus = container.read(authProvider).status;
 
@@ -301,10 +295,7 @@ void main() {
         await pumpEventQueue(times: 10);
 
         expect(container.read(mockGoalProvider), contains(_secretGoal));
-        expect(
-          container.read(mockUserProfileProvider).displayName,
-          'Preserved A',
-        );
+        expect(container.read(userProfileProvider).displayName, 'Preserved A');
         expect(
           container.read(authProvider).user?.email,
           'refreshed-a@example.com',
@@ -338,9 +329,9 @@ void main() {
       await pumpEventQueue(times: 20);
 
       expect(container.read(authProvider).user?.uid, _userB.uid);
-      expect(container.read(mockUserProfileProvider).uid, _userB.uid);
-      expect(container.read(mockOnboardingProvider).draft.uid, _userB.uid);
-      expect(container.read(mockOnboardingProvider).draft.currentStep, 2);
+      expect(container.read(userProfileProvider).uid, _userB.uid);
+      expect(container.read(onboardingStateProvider).draft.uid, _userB.uid);
+      expect(container.read(onboardingStateProvider).draft.currentStep, 2);
     });
 
     test('null -> A retains onboarding draft only when UID matches', () async {
@@ -355,25 +346,27 @@ void main() {
       addTearDown(auth.dispose);
 
       // Pre-seed an in-memory draft with user-a UID before auth completes
-      container.read(mockOnboardingProvider.notifier).loadSeedData(
-            OnboardingDraft(uid: _userA.uid, currentStep: 5),
-          );
-      expect(container.read(mockOnboardingProvider).draft.currentStep, 5);
+      container
+          .read(onboardingStateProvider.notifier)
+          .loadSeedData(OnboardingDraft(uid: _userA.uid, currentStep: 5));
+      expect(container.read(onboardingStateProvider).draft.currentStep, 5);
 
       // Transition null -> A
       auth.emit(_userA);
       await pumpEventQueue(times: 20);
 
       // Retained because UID matched and backed by user A data
-      expect(container.read(mockOnboardingProvider).draft.uid, _userA.uid);
-      expect(container.read(mockOnboardingProvider).draft.currentStep, 5);
+      expect(container.read(onboardingStateProvider).draft.uid, _userA.uid);
+      expect(container.read(onboardingStateProvider).draft.currentStep, 5);
 
       // Now log out
       await container.read(authProvider.notifier).logout();
-      expect(container.read(mockOnboardingProvider).draft.uid, isEmpty);
+      expect(container.read(onboardingStateProvider).draft.uid, isEmpty);
 
       // Pre-seed draft with stale UID 'other-user'
-      container.read(mockOnboardingProvider.notifier).loadSeedData(
+      container
+          .read(onboardingStateProvider.notifier)
+          .loadSeedData(
             const OnboardingDraft(uid: 'other-user', currentStep: 3),
           );
 
@@ -382,83 +375,89 @@ void main() {
       await pumpEventQueue(times: 20);
 
       // The non-matching 'other-user' draft was destroyed
-      expect(container.read(mockOnboardingProvider).draft.uid, _userB.uid);
-      expect(container.read(mockOnboardingProvider).draft.currentStep, 0);
+      expect(container.read(onboardingStateProvider).draft.uid, _userB.uid);
+      expect(container.read(onboardingStateProvider).draft.currentStep, 0);
     });
   });
 
   group('AH-F004 async stale work protections', () {
-    test('delayed coach AI response does not write after account reset', () async {
-      final notifier = MockCoachNotifier(fakeDataAllowed: true);
-      addTearDown(notifier.dispose);
+    test(
+      'delayed coach AI response does not write after account reset',
+      () async {
+        final notifier = MockCoachNotifier(fakeDataAllowed: true);
+        addTearDown(notifier.dispose);
 
-      notifier.createNewSession(
-        'Session 1',
-        CoachSessionType.generalChat,
-        'Sage',
-        'Directive',
-      );
-      expect(notifier.state, isNotEmpty);
-      final sessionId = notifier.state.first.id;
+        notifier.createNewSession(
+          'Session 1',
+          CoachSessionType.generalChat,
+          'Sage',
+          'Directive',
+        );
+        expect(notifier.state, isNotEmpty);
+        final sessionId = notifier.state.first.id;
 
-      notifier.sendMessage(sessionId, 'Hello from User A');
-      expect(notifier.state.first.messages, hasLength(2));
+        notifier.sendMessage(sessionId, 'Hello from User A');
+        expect(notifier.state.first.messages, hasLength(2));
 
-      // User A logs out / switches account
-      notifier.resetEmpty();
-      expect(notifier.state, isEmpty);
+        // User A logs out / switches account
+        notifier.resetEmpty();
+        expect(notifier.state, isEmpty);
 
-      // Wait past the 1500ms delayed AI reply timer
-      await Future<void>.delayed(const Duration(milliseconds: 1600));
+        // Wait past the 1500ms delayed AI reply timer
+        await Future<void>.delayed(const Duration(milliseconds: 1600));
 
-      // Stale AI reply was discarded and did not contaminate the reset state
-      expect(notifier.state, isEmpty);
-    });
+        // Stale AI reply was discarded and did not contaminate the reset state
+        expect(notifier.state, isEmpty);
+      },
+    );
 
-    test('stale upload completion does not write into switched account', () async {
-      final auth = _ControlledAuthRepository()..emit(_userA);
-      final assetRepo = FakeUploadedAssetRepository();
-      final prepareService = _CompleterImagePrepareService();
-      final r2Client = _FakeR2Client();
+    test(
+      'stale upload completion does not write into switched account',
+      () async {
+        final auth = _ControlledAuthRepository()..emit(_userA);
+        final assetRepo = FakeUploadedAssetRepository();
+        final prepareService = _CompleterImagePrepareService();
+        final r2Client = _FakeR2Client();
 
-      final controller = UploadController(
-        assetRepository: assetRepo,
-        authRepository: auth,
-        imagePrepareService: prepareService,
-        r2UploadClient: r2Client,
-      );
-      addTearDown(controller.dispose);
-      addTearDown(auth.dispose);
+        final controller = UploadController(
+          assetRepository: assetRepo,
+          authRepository: auth,
+          imagePrepareService: prepareService,
+          r2UploadClient: r2Client,
+        );
+        addTearDown(controller.dispose);
+        addTearDown(auth.dispose);
 
-      // User A initiates photo upload
-      final uploadFuture = controller.startUpload(
-        uid: _userA.uid,
-        purpose: UploadedAssetPurpose.profilePhoto,
-        sourceFeature: 'profile',
-      );
+        // User A initiates photo upload
+        final uploadFuture = controller.startUpload(
+          uid: _userA.uid,
+          purpose: UploadedAssetPurpose.profilePhoto,
+          sourceFeature: 'profile',
+        );
 
-      expect(controller.state.status, UploadFlowStatus.picking);
+        expect(controller.state.status, UploadFlowStatus.picking);
 
-      // Account switches to User B before image picker returns
-      auth.emit(_userB);
-      controller.resetForSignedOut();
-      expect(controller.state.status, UploadFlowStatus.idle);
+        // Account switches to User B before image picker returns
+        auth.emit(_userB);
+        controller.resetForSignedOut();
+        expect(controller.state.status, UploadFlowStatus.idle);
 
-      // Now User A's pick completes
-      prepareService.complete(
-        PreparedUploadImage(
-          fileName: 'photo.jpg',
-          contentType: 'image/jpeg',
-          bytes: Uint8List.fromList([1, 2, 3]),
-          sizeBytes: 3,
-        ),
-      );
+        // Now User A's pick completes
+        prepareService.complete(
+          PreparedUploadImage(
+            fileName: 'photo.jpg',
+            contentType: 'image/jpeg',
+            bytes: Uint8List.fromList([1, 2, 3]),
+            sizeBytes: 3,
+          ),
+        );
 
-      final result = await uploadFuture;
-      expect(result, isNull);
-      expect(controller.state.status, UploadFlowStatus.idle);
-      expect(controller.state.asset, isNull);
-    });
+        final result = await uploadFuture;
+        expect(result, isNull);
+        expect(controller.state.status, UploadFlowStatus.idle);
+        expect(controller.state.asset, isNull);
+      },
+    );
   });
 
   group('AH-F004 repository UID isolation', () {
@@ -470,7 +469,9 @@ void main() {
 
       await goalRepo.saveGoals('user-a', [_secretGoal]);
       await profileRepo.saveUserProfile(
-        UserProfile.empty(uid: 'user-a').copyWith(displayName: 'User A Profile'),
+        UserProfile.empty(
+          uid: 'user-a',
+        ).copyWith(displayName: 'User A Profile'),
       );
       await prefRepo.saveAppPreferences(
         'user-a',
@@ -497,29 +498,39 @@ void main() {
       expect(aGoals, contains(_secretGoal));
       expect(aProfile?.displayName, 'User A Profile');
       expect((await prefRepo.fetchAppPreferences('user-a'))?.theme, 'dark');
-      expect((await regionRepo.fetchRegionSettings('user-a'))?.countryCode, 'CA');
+      expect(
+        (await regionRepo.fetchRegionSettings('user-a'))?.countryCode,
+        'CA',
+      );
     });
   });
 
   group('AH-F004 Google logout semantics', () {
-    test('Google sign-out cleanup runs best-effort and does not revoke consent', () async {
-      final googleClient = _CountingGoogleIdentityClient();
-      expect(googleClient.signOutCalls, 0);
+    test(
+      'Google sign-out cleanup runs best-effort and does not revoke consent',
+      () async {
+        final googleClient = _CountingGoogleIdentityClient();
+        expect(googleClient.signOutCalls, 0);
 
-      await googleClient.signOut();
-      expect(googleClient.signOutCalls, 1);
-    });
+        await googleClient.signOut();
+        expect(googleClient.signOutCalls, 1);
+      },
+    );
 
-    test('failing Google local cleanup does not prevent successful signout completion', () async {
-      final failingClient = _CountingGoogleIdentityClient()..shouldFailSignOut = true;
+    test(
+      'failing Google local cleanup does not prevent successful signout completion',
+      () async {
+        final failingClient = _CountingGoogleIdentityClient()
+          ..shouldFailSignOut = true;
 
-      try {
-        await failingClient.signOut();
-      } catch (e) {
-        // Handled safely by FirebaseAuthRepository without blocking logout
-      }
-      expect(failingClient.signOutCalls, 1);
-    });
+        try {
+          await failingClient.signOut();
+        } catch (e) {
+          // Handled safely by FirebaseAuthRepository without blocking logout
+        }
+        expect(failingClient.signOutCalls, 1);
+      },
+    );
   });
 }
 
@@ -555,28 +566,30 @@ ProviderContainer _container(
 
 void _populateUserAState(ProviderContainer container) {
   container
-      .read(mockUserProfileProvider.notifier)
+      .read(userProfileProvider.notifier)
       .loadSeedData(
         UserProfile.empty(uid: _userA.uid).copyWith(displayName: 'Private A'),
       );
   container
-      .read(mockOnboardingProvider.notifier)
+      .read(onboardingStateProvider.notifier)
       .loadSeedData(OnboardingDraft(uid: _userA.uid, currentStep: 7));
   container.read(mockRoutineProvider.notifier).replaceWith([_secretRoutine]);
   container.read(mockGoalProvider.notifier).addGoal(_secretGoal);
   container.read(mockTrackerProvider.notifier).loadSeedData();
   container.read(mockCoachProvider.notifier).loadSeedData();
-  container.read(mockNotificationPreferencesProvider.notifier).updatePreferences(
-        NotificationPreferences(morningStart: false),
-      );
-  container.read(regionSettingsProvider.notifier).loadSettings(
+  container
+      .read(mockNotificationPreferencesProvider.notifier)
+      .updatePreferences(NotificationPreferences(morningStart: false));
+  container
+      .read(regionSettingsProvider.notifier)
+      .loadSettings(
         RegionSettings.forCountry(userId: _userA.uid, countryCode: 'GB'),
       );
 }
 
 void _expectUserStateCleared(ProviderContainer container) {
-  expect(container.read(mockUserProfileProvider).uid, isEmpty);
-  expect(container.read(mockOnboardingProvider).draft.uid, isEmpty);
+  expect(container.read(userProfileProvider).uid, isEmpty);
+  expect(container.read(onboardingStateProvider).draft.uid, isEmpty);
   expect(container.read(mockRoutineProvider), isEmpty);
   expect(container.read(mockGoalProvider), isEmpty);
   expect(container.read(mockTrackerProvider).trackerSessions, isEmpty);
@@ -627,10 +640,7 @@ class _ControlledAuthRepository implements AuthRepository {
   @override
   Future<void> signOut() async {
     if (signOutShouldFail) {
-      throw const AuthFailureException(
-        reason: AuthFailureReason.networkFailure,
-        message: 'Safe test failure.',
-      );
+      throw AuthErrorMapper.map(Exception('network-request-failed'));
     }
     emit(null);
   }
@@ -691,7 +701,9 @@ class _CompleterImagePrepareService extends ImagePrepareService {
   }
 
   @override
-  Future<XFile?> pickImageFile({ImageSource source = ImageSource.gallery}) async {
+  Future<XFile?> pickImageFile({
+    ImageSource source = ImageSource.gallery,
+  }) async {
     return XFile('test/path');
   }
 }

@@ -74,7 +74,7 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
   HabitSystemsNotifier(this._repository, this._ref)
     : super(const HabitSystemsState()) {
     if (_ref.read(fakeDataAllowedProvider)) {
-      final initialUid = _ref.read(mockUserProfileProvider).uid.trim();
+      final initialUid = _ref.read(userProfileProvider).uid.trim();
       if (initialUid.isNotEmpty) {
         loadForOwner(initialUid);
       }

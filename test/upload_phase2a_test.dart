@@ -10,7 +10,7 @@ import 'package:image/image.dart' as image_lib;
 import 'package:image_picker/image_picker.dart';
 import 'package:optivus/config/upload_config.dart';
 import 'package:optivus/config/upload_policy.dart';
-import 'package:optivus/core/utils/auth_error_mapper.dart';
+import 'package:optivus/core/errors/auth_error_mapper.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/repositories/auth_repository.dart';
@@ -384,8 +384,8 @@ void main() {
 
   test('auth mapper explains email-already-in-use recovery', () {
     expect(
-      friendlyAuthError(Exception('email-already-in-use')),
-      emailAlreadyInUseMessage,
+      AuthErrorMapper.map(Exception('email-already-in-use')).publicMessage,
+      AuthErrorMapper.emailAlreadyInUseMessage,
     );
   });
 

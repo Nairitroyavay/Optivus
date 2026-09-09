@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:optivus/core/utils/auth_error_mapper.dart';
+import 'package:optivus/core/errors/auth_error_mapper.dart';
+import 'package:optivus/core/errors/diagnostic_codes.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/state/auth_state.dart';
 
 enum VerificationMessageKind { network, rateLimited, firebaseFailure, success }
@@ -310,8 +312,11 @@ class VerificationLifecycleController
       _scheduleNextPoll();
     } catch (error) {
       if (!_canApply(uid)) return;
-      final mapped = mapAuthError(error);
-      if (mapped.reason == AuthFailureReason.networkFailure) {
+      final mapped = AuthErrorMapper.mapVerifyEmailError(
+        error,
+        isResend: false,
+      );
+      if (mapped.category == RecoverableErrorCategory.network) {
         state = state.copyWith(
           checking: false,
           message:
@@ -320,7 +325,8 @@ class VerificationLifecycleController
           verificationThrottleStreak: 0,
         );
         _scheduleNextPoll();
-      } else if (mapped.reason == AuthFailureReason.tooManyRequests) {
+      } else if (mapped.diagnosticCode ==
+          DiagnosticCodes.verifyEmailRateLimited) {
         final streak = state.verificationThrottleStreak + 1;
         final delay = _throttleDelay(streak);
         state = state.copyWith(
@@ -384,8 +390,8 @@ class VerificationLifecycleController
       _scheduleNextPoll();
     } catch (error) {
       if (!_canApply(uid)) return;
-      final mapped = mapAuthError(error);
-      if (mapped.reason == AuthFailureReason.tooManyRequests) {
+      final mapped = AuthErrorMapper.mapVerifyEmailError(error, isResend: true);
+      if (mapped.diagnosticCode == DiagnosticCodes.verifyEmailRateLimited) {
         final streak = state.resendThrottleStreak + 1;
         final deadline = _now().add(_throttleDelay(streak));
         state = state.copyWith(
@@ -398,7 +404,7 @@ class VerificationLifecycleController
           messageKind: VerificationMessageKind.rateLimited,
         );
         _startCountdownIfNeeded();
-      } else if (mapped.reason == AuthFailureReason.networkFailure) {
+      } else if (mapped.category == RecoverableErrorCategory.network) {
         state = state.copyWith(
           resendInFlight: false,
           message:

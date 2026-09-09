@@ -13,7 +13,7 @@ Phase 1 through Phase 2D are stabilization inputs for Home. This document marks 
 
 - Auth/profile frontend state for the display name:
   - `authProvider`
-  - `mockUserProfileProvider`
+  - `userProfileProvider`
 - Region settings for formatting money:
   - `regionSettingsProvider`
 - Local/static dashboard state:

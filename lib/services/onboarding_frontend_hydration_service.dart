@@ -139,7 +139,7 @@ class OnboardingFrontendHydrationService {
         .map((system) => system.systemId)
         .toSet();
     final firebaseMode = !read(fakeDataAllowedProvider);
-    read(mockUserProfileProvider.notifier).applyOnboardingBundle(bundle);
+    read(userProfileProvider.notifier).applyOnboardingBundle(bundle);
     final mockRoutineIds = firebaseMode
         ? const <String>[]
         : read(mockRoutineProvider.notifier).mergeMissing(routineItems);

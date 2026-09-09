@@ -6,17 +6,6 @@ import 'package:optivus/services/onboarding_resume_validator.dart';
 export 'package:optivus/services/onboarding_completion_service.dart'
     show OnboardingRecoveryTier;
 
-enum OnboardingFailureReason {
-  networkTimeout,
-  missingBundle,
-  missingDraftAndBundle,
-  corruptedBundle,
-  projectionFailed,
-  projectionReceiptMismatch,
-  habitsProjectionFailed,
-  unhandledException,
-}
-
 abstract class OnboardingRecoveryAction {
   final String actionId;
   final String label;

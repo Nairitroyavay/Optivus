@@ -592,7 +592,7 @@ class _RoutineImportReviewScreenState
       final source = _reviewSourceFor(widget.source);
       final onboardingRepository = ref.read(onboardingRepositoryProvider);
       var onboardingDraft = ref
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .copyWith(uid: uid);
 
@@ -605,7 +605,7 @@ class _RoutineImportReviewScreenState
             stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
           );
           ref
-              .read(mockOnboardingProvider.notifier)
+              .read(onboardingStateProvider.notifier)
               .loadSeedData(onboardingDraft);
         }
       }
@@ -692,9 +692,9 @@ class _RoutineImportReviewScreenState
   String _currentUid() {
     final authUid = ref.read(authProvider).user?.uid;
     if (authUid != null && authUid.trim().isNotEmpty) return authUid;
-    final profileUid = ref.read(mockUserProfileProvider).uid;
+    final profileUid = ref.read(userProfileProvider).uid;
     if (profileUid.trim().isNotEmpty) return profileUid;
-    final draftUid = ref.read(mockOnboardingProvider).draft.uid;
+    final draftUid = ref.read(onboardingStateProvider).draft.uid;
     if (draftUid.trim().isNotEmpty) return draftUid;
     return 'local-routine-import-review';
   }
@@ -762,7 +762,10 @@ class _RoutineImportReviewScreenState
       await ref.read(routineImportReviewRepositoryProvider).saveReview(review);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _errorMessage = 'Could not save review changes. Please try again.');
+      setState(
+        () =>
+            _errorMessage = 'Could not save review changes. Please try again.',
+      );
     }
   }
 
@@ -1211,7 +1214,7 @@ class _RoutineImportReviewScreenState
   ) async {
     final importId = review.onboardingPendingImportId;
     final repository = ref.read(onboardingRepositoryProvider);
-    var draft = ref.read(mockOnboardingProvider).draft;
+    var draft = ref.read(onboardingStateProvider).draft;
     if (importId != null &&
         importId.trim().isNotEmpty &&
         !draft.baseTimeline.pendingFutureImports.any(
@@ -1262,15 +1265,15 @@ class _RoutineImportReviewScreenState
       ),
       clearFinalPreview: true,
     );
-    ref.read(mockOnboardingProvider.notifier).loadSeedData(nextDraft);
-    final notifier = ref.read(mockOnboardingProvider.notifier);
+    ref.read(onboardingStateProvider.notifier).loadSeedData(nextDraft);
+    final notifier = ref.read(onboardingStateProvider.notifier);
     final submittedRevision = nextDraft.revision;
     notifier.markStepSaving(stepIndex);
     try {
       await repository.saveDraft(nextDraft);
       await repository.flushPendingDraftSave();
       if (!mounted ||
-          ref.read(mockOnboardingProvider).draft.uid != review.uid) {
+          ref.read(onboardingStateProvider).draft.uid != review.uid) {
         return;
       }
       notifier.acknowledgeDraftSync(
@@ -1279,7 +1282,7 @@ class _RoutineImportReviewScreenState
       );
     } catch (_) {
       if (!mounted ||
-          ref.read(mockOnboardingProvider).draft.uid != review.uid) {
+          ref.read(onboardingStateProvider).draft.uid != review.uid) {
         return;
       }
       notifier.markStepSyncFailed(

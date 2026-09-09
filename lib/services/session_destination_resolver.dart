@@ -3,6 +3,7 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/services/onboarding_resume_validator.dart';
 import 'package:optivus/services/server_reconstructor.dart';
+import 'package:optivus/state/auth_flow_status.dart';
 
 enum SessionDestinationKind {
   resolving,
@@ -46,6 +47,75 @@ class SessionDestination {
     : this._(SessionDestinationKind.reconnect, reasonCode: reasonCode);
   const SessionDestination.needsAction(String reasonCode)
     : this._(SessionDestinationKind.needsAction, reasonCode: reasonCode);
+}
+
+/// The single pure policy that converts normalized Auth session state into a
+/// router-facing destination. Durable reconstruction evidence wins whenever it
+/// belongs to the currently authenticated UID.
+SessionDestination resolveAuthSessionDestination({
+  required AuthFlowStatus status,
+  required String? userUid,
+  required int? resumeStep,
+  required String? completionRunId,
+  required String? startupReasonCode,
+  required ReconstructionResult? reconstructionResult,
+}) {
+  final reconstructed = reconstructionResult;
+  if (reconstructed != null &&
+      reconstructed.ownerUid == userUid &&
+      (status == AuthFlowStatus.signedInOnboardingIncomplete ||
+          status == AuthFlowStatus.finishingOnboarding ||
+          status == AuthFlowStatus.signedInOnboardingComplete ||
+          status == AuthFlowStatus.needsAction)) {
+    return resolveReconstructionDestination(reconstructed);
+  }
+
+  return switch (status) {
+    AuthFlowStatus.loading ||
+    AuthFlowStatus.loadingBackendUser ||
+    AuthFlowStatus.restoringOnboarding => const SessionDestination.resolving(),
+    AuthFlowStatus.signedOut => const SessionDestination.signedOut(),
+    AuthFlowStatus.signedInEmailUnverified =>
+      const SessionDestination.verifyEmail(),
+    AuthFlowStatus.signedInOnboardingIncomplete =>
+      resumeStep == null
+          ? const SessionDestination.freshOnboarding()
+          : SessionDestination.resumeOnboarding(resumeStep),
+    AuthFlowStatus.finishingOnboarding => SessionDestination.finishOnboarding(
+      runId: completionRunId,
+    ),
+    AuthFlowStatus.signedInOnboardingComplete =>
+      const SessionDestination.home(),
+    AuthFlowStatus.reconnectRequired => SessionDestination.reconnect(
+      reasonCode: startupReasonCode,
+    ),
+    AuthFlowStatus.needsAction => SessionDestination.needsAction(
+      startupReasonCode ?? 'setup_requires_attention',
+    ),
+    AuthFlowStatus.error =>
+      userUid == null
+          ? const SessionDestination.signedOut()
+          : const SessionDestination.needsAction('authenticated_error'),
+  };
+}
+
+/// Reverse presentation mapping used only when AuthNotifier publishes the
+/// result of the canonical destination policy.
+AuthFlowStatus authFlowStatusForDestination(SessionDestination destination) {
+  return switch (destination.kind) {
+    SessionDestinationKind.freshOnboarding ||
+    SessionDestinationKind.resumeOnboarding =>
+      AuthFlowStatus.signedInOnboardingIncomplete,
+    SessionDestinationKind.finishOnboarding =>
+      AuthFlowStatus.finishingOnboarding,
+    SessionDestinationKind.home => AuthFlowStatus.signedInOnboardingComplete,
+    SessionDestinationKind.reconnect => AuthFlowStatus.reconnectRequired,
+    SessionDestinationKind.needsAction => AuthFlowStatus.needsAction,
+    SessionDestinationKind.verifyEmail =>
+      AuthFlowStatus.signedInEmailUnverified,
+    SessionDestinationKind.signedOut => AuthFlowStatus.signedOut,
+    SessionDestinationKind.resolving => AuthFlowStatus.restoringOnboarding,
+  };
 }
 
 /// The single destination mapping for an already reconstructed server session.

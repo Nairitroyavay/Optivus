@@ -33,7 +33,7 @@ void main() {
       addTearDown(container.dispose);
       await _pumpStep3(tester, container);
 
-      final body = container.read(mockOnboardingProvider).draft.bodyBasics;
+      final body = container.read(onboardingStateProvider).draft.bodyBasics;
       expect(body.heightCm, isNull);
       expect(body.weightKg, isNull);
       expect(find.text('Set cm'), findsOneWidget);
@@ -69,13 +69,13 @@ void main() {
 
         _slider(tester, 'height-slider').onChanged(181);
         await tester.pump();
-        var body = container.read(mockOnboardingProvider).draft.bodyBasics;
+        var body = container.read(onboardingStateProvider).draft.bodyBasics;
         expect(body.heightCm, 181);
         expect(body.weightKg, isNull);
 
         _slider(tester, 'weight-slider').onChanged(79);
         await tester.pump();
-        body = container.read(mockOnboardingProvider).draft.bodyBasics;
+        body = container.read(onboardingStateProvider).draft.bodyBasics;
         expect(body.heightCm, 181);
         expect(body.weightKg, 79);
         expect(body.bmiEstimate, isNotNull);
@@ -107,7 +107,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('weight-unit-toggle')));
       await tester.pump();
 
-      final body = container.read(mockOnboardingProvider).draft.bodyBasics;
+      final body = container.read(onboardingStateProvider).draft.bodyBasics;
       expect(body.heightCm, isNull);
       expect(body.weightKg, isNull);
       expect(find.text('Set ft'), findsOneWidget);
@@ -129,7 +129,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('weight-unit-toggle')));
       await tester.pump();
 
-      final body = container.read(mockOnboardingProvider).draft.bodyBasics;
+      final body = container.read(onboardingStateProvider).draft.bodyBasics;
       expect(body.heightCm, 180.25);
       expect(body.weightKg, 80.5);
       expect(
@@ -181,8 +181,8 @@ void main() {
               OptivusBackendMode.fake,
             ),
             optivusDebugBuildProvider.overrideWithValue(true),
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            onboardingStateProvider.overrideWith(
+              (_) => OnboardingNotifier()..loadSeedData(draft),
             ),
           ],
           child: const MaterialApp(

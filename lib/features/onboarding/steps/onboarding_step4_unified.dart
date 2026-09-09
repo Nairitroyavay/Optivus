@@ -785,7 +785,8 @@ class _OnboardingStep4UnifiedState
       ref.read(onboardingUploadInteractionProvider)[_slotKeyForTarget(target)]!;
 
   // ---- Role helpers ----
-  String? get _role => ref.read(mockOnboardingProvider).draft.lifeRole.lifeRole;
+  String? get _role =>
+      ref.read(onboardingStateProvider).draft.lifeRole.lifeRole;
 
   bool get _classesRequired =>
       _role == LifeRoleDraft.studentKey ||
@@ -844,7 +845,7 @@ class _OnboardingStep4UnifiedState
       child: TextButton.icon(
         key: const ValueKey('onboarding-step4-view-current-schedule'),
         onPressed: () {
-          ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+          ref.read(onboardingStateProvider.notifier).updateDraft((draft) {
             return draft.copyWith(
               baseTimeline: draft.baseTimeline.copyWith(classJobSetupStep: 1),
             );
@@ -947,7 +948,7 @@ class _OnboardingStep4UnifiedState
   // ---- Init from draft ----
   void _initFromDraft() {
     final currentRole = ref
-        .read(mockOnboardingProvider)
+        .read(onboardingStateProvider)
         .draft
         .lifeRole
         .lifeRole;
@@ -965,7 +966,7 @@ class _OnboardingStep4UnifiedState
     _didInitFromDraft = true;
     _initializedRole = currentRole;
 
-    final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
+    final base = ref.read(onboardingStateProvider).draft.baseTimeline;
 
     // Restore confirmed class blocks
     if (_classesRequired) {
@@ -1002,14 +1003,14 @@ class _OnboardingStep4UnifiedState
         !hasConfirmed &&
         !hasLocalBlocks &&
         !isGenerating) {
-      ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+      ref.read(onboardingStateProvider.notifier).updateDraft((draft) {
         return draft.copyWith(
           baseTimeline: draft.baseTimeline.copyWith(classJobSetupStep: 0),
         );
       });
     } else if (base.classJobSetupStep == 0 &&
         (hasConfirmed || hasLocalBlocks)) {
-      ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+      ref.read(onboardingStateProvider.notifier).updateDraft((draft) {
         return draft.copyWith(
           baseTimeline: draft.baseTimeline.copyWith(classJobSetupStep: 1),
         );
@@ -1019,7 +1020,7 @@ class _OnboardingStep4UnifiedState
 
   void _restorePhotosFromDurableState() {
     final restored = ref.read(restoredUploadsProvider);
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     final base = draft.baseTimeline;
     final uid = draft.uid;
     if (restored.uid != uid) return;
@@ -1078,7 +1079,7 @@ class _OnboardingStep4UnifiedState
   void _syncLogicalAssetsToDraft() {
     final classPhoto = _photoForSource(RoutineImportReviewSource.classes);
     final workPhoto = _photoForSource(RoutineImportReviewSource.work);
-    ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+    ref.read(onboardingStateProvider.notifier).updateDraft((draft) {
       final base = draft.baseTimeline;
       return draft.copyWith(
         baseTimeline: base.copyWith(
@@ -1406,9 +1407,9 @@ class _OnboardingStep4UnifiedState
       _generationError = null;
       _timelineError = null;
     });
-    ref.read(mockOnboardingProvider.notifier).clearValidation();
+    ref.read(onboardingStateProvider.notifier).clearValidation();
 
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     final uid = ref.read(authProvider).user?.uid ?? draft.uid;
 
     final controller = ref.read(onboardingUploadInteractionProvider.notifier);
@@ -1566,7 +1567,7 @@ class _OnboardingStep4UnifiedState
 
   void _markClassJobDirty() {
     ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .setStepDirty(onboardingClassJobStepIndex, true);
   }
 
@@ -1800,7 +1801,7 @@ class _OnboardingStep4UnifiedState
     final sections = _replaceScheduleSections;
     final pendingSections = _replacePendingImportSections;
     ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .updateDraft(
           (draft) => draft.copyWith(
             baseTimeline: draft.baseTimeline.copyWith(
@@ -1822,7 +1823,7 @@ class _OnboardingStep4UnifiedState
       ref.read(onboardingWorkTimelineProvider.notifier).state = const [];
     }
     ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .setStepCompleted(onboardingClassJobStepIndex, false);
     _markClassJobDirty();
     setState(() {
@@ -1858,18 +1859,18 @@ class _OnboardingStep4UnifiedState
       return;
     }
 
-    ref.read(mockOnboardingProvider.notifier).clearValidation();
-    ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+    ref.read(onboardingStateProvider.notifier).clearValidation();
+    ref.read(onboardingStateProvider.notifier).updateDraft((draft) {
       return draft.copyWith(
         baseTimeline: draft.baseTimeline.copyWith(classJobSetupStep: 1),
       );
     });
     ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .setStepLoading(onboardingClassJobStepIndex, true);
 
     final currentAuthGeneration = ref.read(authGenerationProvider);
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     final uid = ref.read(authProvider).user?.uid ?? draft.uid;
     final currentRole = _role;
     final isRetry = _lifecycle.state.phase == AiGenerationPhase.error;
@@ -1899,7 +1900,7 @@ class _OnboardingStep4UnifiedState
           mounted &&
           ref.read(authGenerationProvider) == currentAuthGeneration &&
           (ref.read(authProvider).user?.uid ??
-                  ref.read(mockOnboardingProvider).draft.uid) ==
+                  ref.read(onboardingStateProvider).draft.uid) ==
               uid &&
           _role == currentRole &&
           sourcesAreCurrent(),
@@ -2028,7 +2029,7 @@ class _OnboardingStep4UnifiedState
 
     if (mounted) {
       ref
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .setStepLoading(onboardingClassJobStepIndex, false);
       if (run.isSuccess) {
         _markClassJobDirty();
@@ -2171,7 +2172,7 @@ class _OnboardingStep4UnifiedState
       });
     });
     ref.listen<String?>(
-      mockOnboardingProvider.select((s) => s.draft.lifeRole.lifeRole),
+      onboardingStateProvider.select((s) => s.draft.lifeRole.lifeRole),
       (previous, current) {
         if (_didInitFromDraft && _initializedRole != current) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2184,7 +2185,7 @@ class _OnboardingStep4UnifiedState
       },
     );
 
-    final draft = ref.watch(mockOnboardingProvider).draft;
+    final draft = ref.watch(onboardingStateProvider).draft;
     ref.watch(onboardingUploadInteractionProvider);
     // Watch providers so we re-build when blocks change
     final classBlocks = ref.watch(onboardingClassTimelineProvider);

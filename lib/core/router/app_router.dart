@@ -13,8 +13,6 @@ import '../../features/recovery/screens/onboarding_recovery_screen.dart';
 import '../../features/recovery/screens/onboarding_startup_status_screens.dart';
 import '../../features/onboarding/onboarding_flow.dart';
 import '../../state/auth_state.dart';
-import '../../state/app_state.dart';
-import '../../models/user_profile.dart';
 import '../../app/app_navigation_controller.dart';
 import '../../features/tracker/providers/tracker_navigation_provider.dart';
 import '../../features/profile/providers/profile_navigation_provider.dart';
@@ -35,11 +33,7 @@ class RouterNotifier extends ChangeNotifier {
 final routerNotifierProvider = Provider((ref) => RouterNotifier(ref));
 
 @visibleForTesting
-String? optivusAuthRedirect({
-  required AuthState authState,
-  required UserProfile userProfile,
-  required Uri uri,
-}) {
+String? optivusAuthRedirect({required AuthState authState, required Uri uri}) {
   final isSignedOutRoute =
       uri.path == '/login' || uri.path.startsWith('/signup') || uri.path == '/';
   final destination = authState.sessionDestination;
@@ -131,12 +125,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/loading',
     redirect: (context, state) {
       final authState = ref.read(authProvider);
-      final userProfile = ref.read(mockUserProfileProvider);
-      return optivusAuthRedirect(
-        authState: authState,
-        userProfile: userProfile,
-        uri: state.uri,
-      );
+      return optivusAuthRedirect(authState: authState, uri: state.uri);
     },
     routes: [
       GoRoute(

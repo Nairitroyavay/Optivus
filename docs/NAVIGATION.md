@@ -61,7 +61,7 @@ control.
 The global redirect runs in this exact order:
 
 1. **Unresolved auth/backend/onboarding restoration:** when `AuthState.isLoading`
-   or `backendRestoreFailed` is true, every path is held at `/loading`. A
+   or `needsAction` is true, every path is held at `/loading`. A
    failure remains there with a retry action. This check intentionally occurs
    before treating a temporarily null user as signed out, preventing a Welcome,
    Onboarding, or App flash while identity/setup truth is unknown.
@@ -72,7 +72,7 @@ The global redirect runs in this exact order:
 4. **Leaving Verify Email after verification:** a complete user goes to
    `/app?tab=0`; an incomplete user goes to `/onboarding`.
 5. **Verified but onboarding incomplete:** if either
-   `mockUserProfileProvider.onboardingCompleted` is false or the auth status is
+   `userProfileProvider.onboardingCompleted` is false or the auth status is
    `signedInOnboardingIncomplete`, `/onboarding` is enforced.
 6. **Verified and onboarding complete:** public auth routes, `/loading`, and
    `/onboarding` redirect to `/app?tab=0`; the shell and protected detail routes
@@ -81,7 +81,7 @@ The global redirect runs in this exact order:
 This matches the intended security order with one important implementation
 detail: unresolved startup/restoration is checked first because authentication
 itself may not yet be known. `RouterNotifier` refreshes the router when either
-`authProvider` or `mockUserProfileProvider` changes.
+`authProvider` or `userProfileProvider` changes.
 
 The focused contract tests in `test/onboarding_routing_test.dart` assert the
 visible destination for signed-out, unverified, restoring, incomplete,

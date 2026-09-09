@@ -68,7 +68,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     if (_didInitFromDraft) return;
     _didInitFromDraft = true;
 
-    final currentDraft = ref.read(mockOnboardingProvider).draft;
+    final currentDraft = ref.read(onboardingStateProvider).draft;
     final base = currentDraft.baseTimeline;
     final eatingBlocks = base.confirmedBlocksForSection('eating');
     final isGenerating =
@@ -92,7 +92,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
             !isFresh ||
             isLegacyGeneratedEatingPlan(base)) &&
         !isGenerating) {
-      ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+      ref.read(onboardingStateProvider.notifier).updateDraft((draft) {
         final fallbackStep = draft.baseTimeline.eatingSetupPath != null ? 1 : 0;
         return draft.copyWith(
           baseTimeline: draft.baseTimeline.copyWith(
@@ -102,7 +102,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       });
     } else if (base.eatingSetupStep <= 1 && eatingBlocks.isNotEmpty) {
       if (isFresh && !isLegacyGeneratedEatingPlan(base)) {
-        ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+        ref.read(onboardingStateProvider.notifier).updateDraft((draft) {
           return draft.copyWith(
             baseTimeline: draft.baseTimeline.copyWith(eatingSetupStep: 2),
           );
@@ -122,14 +122,14 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
   bool _isCurrentSession(String uid, int authGeneration) {
     final currentUid =
         ref.read(authProvider).user?.uid ??
-        ref.read(mockOnboardingProvider).draft.uid;
+        ref.read(onboardingStateProvider).draft.uid;
     return mounted &&
         currentUid == uid &&
         ref.read(authGenerationProvider) == authGeneration;
   }
 
   bool get _hasRetainedEatingBlocks => ref
-      .read(mockOnboardingProvider)
+      .read(onboardingStateProvider)
       .draft
       .baseTimeline
       .confirmedBlocksForSection('eating')
@@ -159,7 +159,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       child: TextButton.icon(
         key: const ValueKey('onboarding-step5-view-current-routine'),
         onPressed: () {
-          ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+          ref.read(onboardingStateProvider.notifier).updateDraft((draft) {
             return draft.copyWith(
               baseTimeline: draft.baseTimeline.copyWith(eatingSetupStep: 2),
             );
@@ -184,7 +184,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
 
   @override
   Widget build(BuildContext context) {
-    final draft = ref.watch(mockOnboardingProvider).draft;
+    final draft = ref.watch(onboardingStateProvider).draft;
     final base = draft.baseTimeline;
     final path = base.eatingSetupPath;
     final eatingBlocks = base.confirmedBlocksForSection('eating');
@@ -387,11 +387,11 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       _uploadError = null;
       _generationError = null;
     });
-    ref.read(mockOnboardingProvider.notifier).clearValidation();
+    ref.read(onboardingStateProvider.notifier).clearValidation();
 
     final uid =
         ref.read(authProvider).user?.uid ??
-        ref.read(mockOnboardingProvider).draft.uid;
+        ref.read(onboardingStateProvider).draft.uid;
     final authGeneration = ref.read(authGenerationProvider);
     final previousAssetId = ref
         .read(onboardingUploadInteractionProvider)[onboardingEatingUploadSlot]
@@ -433,7 +433,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
   Future<void> _removeUploadedRoutine() async {
     final uid =
         ref.read(authProvider).user?.uid ??
-        ref.read(mockOnboardingProvider).draft.uid;
+        ref.read(onboardingStateProvider).draft.uid;
     final asset = ref
         .read(onboardingUploadInteractionProvider)[onboardingEatingUploadSlot]
         ?.durableAsset;
@@ -453,7 +453,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       _uploadError = null;
       _generationError = null;
     });
-    ref.read(mockOnboardingProvider.notifier).clearValidation();
+    ref.read(onboardingStateProvider.notifier).clearValidation();
     _replaceEatingBlocks(const []);
   }
 
@@ -465,13 +465,13 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     }
     final uid =
         ref.read(authProvider).user?.uid ??
-        ref.read(mockOnboardingProvider).draft.uid;
+        ref.read(onboardingStateProvider).draft.uid;
     final authGeneration = ref.read(authGenerationProvider);
     final asset = ref
         .read(onboardingUploadInteractionProvider)[onboardingEatingUploadSlot]
         ?.durableAsset;
     setState(() => _generationError = null);
-    ref.read(mockOnboardingProvider.notifier).clearValidation();
+    ref.read(onboardingStateProvider.notifier).clearValidation();
 
     if (asset == null ||
         !uploadedAssetIsDurablyUploadedForSlot(
@@ -516,7 +516,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       final current = ref
           .read(onboardingUploadInteractionProvider)[onboardingEatingUploadSlot]
           ?.durableAsset;
-      final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
+      final base = ref.read(onboardingStateProvider).draft.baseTimeline;
       return _isCurrentSession(uid, authGeneration) &&
           _photoAiRequestGeneration == requestGeneration &&
           base.eatingSetupPath == onboardingEatingPathHasRoutine &&
@@ -569,7 +569,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     final mapped = mapOnboarding5MealCandidates(
       result.candidates,
       now: DateTime.now(),
-      baseTimeline: ref.read(mockOnboardingProvider).draft.baseTimeline,
+      baseTimeline: ref.read(onboardingStateProvider).draft.baseTimeline,
     );
     final blocks = mapped.blocks;
     debugPrint(
@@ -609,8 +609,8 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
 
   Future<void> _generateCreatedRoutine() async {
     if (_createLifecycle.state.isActive) return;
-    ref.read(mockOnboardingProvider.notifier).clearValidation();
-    final draft = ref.read(mockOnboardingProvider).draft;
+    ref.read(onboardingStateProvider.notifier).clearValidation();
+    final draft = ref.read(onboardingStateProvider).draft;
     final generationInputs = draft.canonicalEatingGenerationInputs();
     final targets = draft.canonicalNutritionTargets();
     if (!targets.hasBodyBasics) {
@@ -628,7 +628,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       return base.copyWith(eatingSetupStep: 2);
     });
     ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .setStepLoading(onboardingEatingStepIndex, true);
 
     final expectedFingerprint = generationInputs.computeFingerprint();
@@ -737,10 +737,10 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     );
     if (!mounted) return;
     ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .setStepLoading(onboardingEatingStepIndex, false);
     if (run.isSuccess) {
-      final currentDraft = ref.read(mockOnboardingProvider).draft;
+      final currentDraft = ref.read(onboardingStateProvider).draft;
       final currentInputs = currentDraft.canonicalEatingGenerationInputs();
       final currentFingerprint = currentInputs.computeFingerprint();
       final currentPath = currentDraft.baseTimeline.eatingSetupPath;
@@ -803,7 +803,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         );
       }
 
-      final draft = ref.read(mockOnboardingProvider).draft;
+      final draft = ref.read(onboardingStateProvider).draft;
       final planVersion = sourceAsset == null
           ? BaseTimelineDraft.currentGate2EatingPlanVersion
           : base.eatingGeneratedPlanVersion;
@@ -829,9 +829,9 @@ class _EatingChoiceScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final draft = ref.watch(mockOnboardingProvider).draft;
+    final draft = ref.watch(onboardingStateProvider).draft;
     void select(String value) {
-      ref.read(mockOnboardingProvider.notifier).clearValidation();
+      ref.read(onboardingStateProvider.notifier).clearValidation();
       updateBaseTimelineDraft(ref, onboardingEatingStepIndex, (base) {
         final switchedPath = base.eatingSetupPath != value;
         final createPath = value == onboardingEatingPathCreate;
@@ -1026,7 +1026,7 @@ class _EatingCreatePreferencesCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final draft = ref.watch(mockOnboardingProvider).draft;
+    final draft = ref.watch(onboardingStateProvider).draft;
     final bodyContext = onboarding5MealBodyContextFromDraft(draft);
     final bodyGoal = onboarding5BodyGoalForBase(base, draft);
     final mealsPerDay = normalizeMealsPerDay(base.mealsPerDay);
@@ -3110,7 +3110,7 @@ void _updateCreateDraft(
   WidgetRef ref,
   BaseTimelineDraft Function(BaseTimelineDraft base) update,
 ) {
-  ref.read(mockOnboardingProvider.notifier).clearValidation();
+  ref.read(onboardingStateProvider.notifier).clearValidation();
   updateBaseTimelineDraft(ref, onboardingEatingStepIndex, (base) {
     return update(base);
   });

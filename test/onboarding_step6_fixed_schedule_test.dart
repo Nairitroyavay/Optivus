@@ -22,8 +22,8 @@ void main() {
         );
     final container = ProviderContainer(
       overrides: [
-        mockOnboardingProvider.overrideWith(
-          (_) => MockOnboardingNotifier()..loadSeedData(d),
+        onboardingStateProvider.overrideWith(
+          (_) => OnboardingNotifier()..loadSeedData(d),
         ),
       ],
     );
@@ -79,7 +79,7 @@ void main() {
     await tester.pumpWidget(buildTestWidget(container));
     await tester.pumpAndSettle();
 
-    final draft = container.read(mockOnboardingProvider).draft;
+    final draft = container.read(onboardingStateProvider).draft;
     final fixedBlocks = draft.baseTimeline.blocks
         .where((b) => b.section == 'fixed')
         .toList();
@@ -143,7 +143,7 @@ void main() {
     await tester.tap(find.text('Save Changes'));
     await tester.pumpAndSettle();
 
-    final draft = container.read(mockOnboardingProvider).draft;
+    final draft = container.read(onboardingStateProvider).draft;
     final sleep = draft.baseTimeline.blocks.firstWhere(
       (b) => b.id == BaseTimelineDraft.fixedSleepId,
     );
@@ -222,7 +222,7 @@ void main() {
     await tester.tap(find.text('Save Changes'));
     await tester.pumpAndSettle();
 
-    final draft = container.read(mockOnboardingProvider).draft;
+    final draft = container.read(onboardingStateProvider).draft;
     final bath = draft.baseTimeline.blocks.firstWhere(
       (b) => b.id == BaseTimelineDraft.fixedBathId,
     );
@@ -299,7 +299,7 @@ void main() {
 
     expect(find.text('Reading'), findsOneWidget);
 
-    final draft = container.read(mockOnboardingProvider).draft;
+    final draft = container.read(onboardingStateProvider).draft;
     final custom = draft.baseTimeline.blocks.last;
     expect(custom.section, 'fixed');
     expect(custom.blockType, TimelineBlockDraft.hardBlockKey);
@@ -356,7 +356,7 @@ void main() {
     await tester.tap(find.text('Save Changes'));
     await tester.pumpAndSettle();
 
-    final draft = container.read(mockOnboardingProvider).draft;
+    final draft = container.read(onboardingStateProvider).draft;
     final customBlockId = draft.baseTimeline.blocks.last.id;
     final menuFinder = find.byKey(
       ValueKey('onboarding-step6-menu-$customBlockId'),
@@ -421,7 +421,7 @@ void main() {
 
   test('Test 13: step-level validation catches invalid saved data', () {
     final container = makeContainer();
-    final draft = container.read(mockOnboardingProvider).draft;
+    final draft = container.read(onboardingStateProvider).draft;
 
     var invalidSleep = draft.baseTimeline.blocks.map((b) {
       if (b.id == BaseTimelineDraft.fixedSleepId) {
@@ -547,8 +547,8 @@ void main() {
     );
     final container = ProviderContainer(
       overrides: [
-        mockOnboardingProvider.overrideWith(
-          (_) => MockOnboardingNotifier()..loadSeedData(draft),
+        onboardingStateProvider.overrideWith(
+          (_) => OnboardingNotifier()..loadSeedData(draft),
         ),
         authProvider.overrideWith((ref) => FakeAuthNotifier()),
         onboardingRepositoryProvider.overrideWithValue(
@@ -575,7 +575,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump(const Duration(milliseconds: 500));
 
-    final newDraft = container.read(mockOnboardingProvider).draft;
+    final newDraft = container.read(onboardingStateProvider).draft;
     expect(newDraft.currentStep, 7);
     expect(newDraft.stepCompleted[6], isTrue);
     expect(newDraft.stepDirty[6], isFalse);
@@ -599,8 +599,8 @@ void main() {
     );
     final container = ProviderContainer(
       overrides: [
-        mockOnboardingProvider.overrideWith(
-          (_) => MockOnboardingNotifier()..loadSeedData(draft),
+        onboardingStateProvider.overrideWith(
+          (_) => OnboardingNotifier()..loadSeedData(draft),
         ),
         authProvider.overrideWith((ref) => FakeAuthNotifier()),
         onboardingRepositoryProvider.overrideWithValue(
@@ -622,7 +622,7 @@ void main() {
     expect(find.text('Fixed Schedule'), findsOneWidget);
 
     // Progressive CTA: Next Step is hidden because the schedule is invalid
-    final newDraft = container.read(mockOnboardingProvider).draft;
+    final newDraft = container.read(onboardingStateProvider).draft;
     expect(newDraft.currentStep, 6);
     expect(newDraft.stepCompleted[6], isFalse);
     expect(newDraft.baseTimeline.validateFixedSchedule(), isNotNull);
@@ -672,14 +672,14 @@ void main() {
     await tester.tap(find.text('Save Changes'));
     await tester.pumpAndSettle();
 
-    final draft = container.read(mockOnboardingProvider).draft;
+    final draft = container.read(onboardingStateProvider).draft;
 
     // Rebuild
     final container2 = makeContainer(draft: draft);
     await tester.pumpWidget(buildTestWidget(container2));
     await tester.pumpAndSettle();
 
-    final draft2 = container2.read(mockOnboardingProvider).draft;
+    final draft2 = container2.read(onboardingStateProvider).draft;
     final fixedBlocks = draft2.baseTimeline.blocks
         .where((b) => b.section == 'fixed')
         .toList();

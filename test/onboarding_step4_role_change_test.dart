@@ -31,8 +31,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            onboardingStateProvider.overrideWith(
+              (_) => OnboardingNotifier()..loadSeedData(draft),
             ),
             onboardingClassTimelineProvider.overrideWith((_) => classBlocks),
             onboardingWorkTimelineProvider.overrideWith((_) => []),
@@ -59,7 +59,9 @@ void main() {
 
       final context = tester.element(find.byType(OnboardingStep4Unified));
       final container = ProviderScope.containerOf(context);
-      container.read(mockOnboardingProvider.notifier).updateDraft((_) => draft);
+      container
+          .read(onboardingStateProvider.notifier)
+          .updateDraft((_) => draft);
 
       await tester.pumpAndSettle();
 

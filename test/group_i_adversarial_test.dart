@@ -425,9 +425,8 @@ void main() {
 
           final container = ProviderContainer(
             overrides: [
-              mockOnboardingProvider.overrideWith((_) {
-                final notifier = MockOnboardingNotifier()
-                  ..loadSeedData(dirtyDraft);
+              onboardingStateProvider.overrideWith((_) {
+                final notifier = OnboardingNotifier()..loadSeedData(dirtyDraft);
                 notifier.setStepDirty(1, true);
                 return notifier;
               }),
@@ -488,8 +487,8 @@ void main() {
 
             final container = ProviderContainer(
               overrides: [
-                mockOnboardingProvider.overrideWith((_) {
-                  final notifier = MockOnboardingNotifier()
+                onboardingStateProvider.overrideWith((_) {
+                  final notifier = OnboardingNotifier()
                     ..loadSeedData(cleanDraft);
                   notifier.setStepDirty(1, false);
                   return notifier;
@@ -525,7 +524,7 @@ void main() {
             expect(find.text('Unsaved Changes'), findsNothing);
 
             // Verify page controller navigated back to step 0
-            final onboardingState = container.read(mockOnboardingProvider);
+            final onboardingState = container.read(onboardingStateProvider);
             expect(onboardingState.currentStep, equals(0));
           },
         );

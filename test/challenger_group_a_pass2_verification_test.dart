@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/core/errors/diagnostic_codes.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/core/router/app_router.dart';
 import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
 import 'package:optivus/features/recovery/screens/onboarding_recovery_screen.dart';
@@ -86,9 +88,9 @@ void main() {
     );
   });
 
-  group('Empirical Verification: Router Redirect for backendRestoreFailed', () {
+  group('Empirical Verification: Router Redirect for needsAction', () {
     testWidgets(
-      'Router redirects backendRestoreFailed to /onboarding/recovery and renders OnboardingRecoveryScreen',
+      'Router redirects needsAction to /onboarding/recovery and renders OnboardingRecoveryScreen',
       (tester) async {
         final profile =
             UserProfile.empty(
@@ -109,13 +111,23 @@ void main() {
                     email: 'emp-failed@ex.com',
                     emailVerified: true,
                   ),
-                  status: AuthFlowStatus.backendRestoreFailed,
-                  errorMessage: 'Empirical verification error in restoration',
+                  status: AuthFlowStatus.needsAction,
+                  error: RecoverableError(
+                    category: RecoverableErrorCategory.recoveryRequired,
+                    publicMessage:
+                        'Empirical verification error in restoration',
+                    severity: RecoverableErrorSeverity.error,
+                    isBlocking: true,
+                    retryAction: RecoverableRetryAction.restartRecovery,
+                    retrySafe: false,
+                    diagnosticCode:
+                        DiagnosticCodes.recoveryDurableStateConflict,
+                  ),
                 ),
               ),
             ),
-            mockUserProfileProvider.overrideWith(
-              (ref) => MockUserProfileNotifier()..loadSeedData(profile),
+            userProfileProvider.overrideWith(
+              (ref) => UserProfileNotifier()..loadSeedData(profile),
             ),
           ],
         );

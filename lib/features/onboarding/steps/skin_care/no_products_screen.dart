@@ -34,7 +34,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         ? null
         : '${action.label}|${action.enabled}|${action.loading}';
     final epoch = _flowController.currentEpoch;
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     final ownerUid = ref.read(authProvider).user?.uid ?? draft.uid;
     final authGeneration = ref.read(authGenerationProvider);
     final bridgeState = ref.read(step7ActionBridgeProvider);
@@ -76,7 +76,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     _actionBridge = ref.read(step7ActionBridgeProvider.notifier);
     _flowController = ref.read(skinCareFlowControllerProvider.notifier);
     _lifecycle = AiGenerationController()..addListener(_onLifecycleChanged);
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     final restored = ref.read(restoredUploadsProvider);
     final restoredAsset = _restoredSkinAssetForSlot(
       restored: restored,
@@ -119,7 +119,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     required SkinCareFlowState expectedState,
   }) {
     if (!mounted) return false;
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     final currentUid = ref.read(authProvider).user?.uid ?? draft.uid;
     final flow = ref.read(skinCareFlowControllerProvider);
     return currentUid == uid &&
@@ -157,11 +157,11 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       _uploadError = null;
       _generationError = null;
     });
-    ref.read(mockOnboardingProvider.notifier).clearValidation();
+    ref.read(onboardingStateProvider.notifier).clearValidation();
 
     final uid =
         ref.read(authProvider).user?.uid ??
-        ref.read(mockOnboardingProvider).draft.uid;
+        ref.read(onboardingStateProvider).draft.uid;
     final requestAuthGeneration = ref.read(authGenerationProvider);
     final requestFlowEpoch = _flowController.currentEpoch;
     final requestFlowState = _flowController.currentFlowState;
@@ -240,7 +240,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     )[onboardingSkinFaceUploadSlot];
     final uploadBusy = uploadState?.isBusy == true;
     if (uploadBusy || _removingPhoto) return;
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     final asset =
         _uploadedAsset ??
         _restoredSkinAssetForSlot(
@@ -322,7 +322,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final uploadBusy = uploadState?.isBusy == true;
     if (uploadBusy || _removingPhoto) return;
 
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     final currentBase = draft.baseTimeline;
     final desiredApplicationsPerDay = _effectiveDesiredApplications(
       currentBase,
@@ -353,12 +353,12 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       return;
     }
 
-    ref.read(mockOnboardingProvider.notifier).clearValidation();
+    ref.read(onboardingStateProvider.notifier).clearValidation();
     final currentAuthGeneration = ref.read(authGenerationProvider);
     final currentAssetId = asset.assetId;
     final currentAssetKey = asset.r2Key;
     final user = ref.read(authProvider).user;
-    final uid = user?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
+    final uid = user?.uid ?? ref.read(onboardingStateProvider).draft.uid;
     final isRetry = _lifecycle.state.phase == AiGenerationPhase.error;
 
     setState(() {
@@ -367,7 +367,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       _recommendationRetryAvailable = false;
     });
     ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .setStepLoading(onboardingSkinCareStepIndex, true);
 
     _flowController.startGeneration(
@@ -385,14 +385,14 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           _flowController.currentEpoch == requestEpoch &&
           ref.read(authGenerationProvider) == currentAuthGeneration &&
           (ref.read(authProvider).user?.uid ??
-                  ref.read(mockOnboardingProvider).draft.uid) ==
+                  ref.read(onboardingStateProvider).draft.uid) ==
               uid &&
           (() {
             final live = currentSkinPhotoForTransaction(
               slot: ref.read(
                 onboardingUploadInteractionProvider,
               )[onboardingSkinFaceUploadSlot],
-              draft: ref.read(mockOnboardingProvider).draft,
+              draft: ref.read(onboardingStateProvider).draft,
               purpose: UploadedAssetPurpose.skinFace,
             );
             return live?.assetId == currentAssetId &&
@@ -511,7 +511,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
 
     if (mounted) {
       ref
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .setStepLoading(onboardingSkinCareStepIndex, false);
       if (run.isSuccess) {
         setState(() {
@@ -534,7 +534,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
 
   Future<void> _generate() async {
     if (_lifecycle.state.isActive) return;
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     final currentBase = draft.baseTimeline;
     final desiredApplicationsPerDay = _effectiveDesiredApplications(
       currentBase,
@@ -575,12 +575,12 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       return;
     }
 
-    ref.read(mockOnboardingProvider.notifier).clearValidation();
+    ref.read(onboardingStateProvider.notifier).clearValidation();
     final currentAuthGeneration = ref.read(authGenerationProvider);
     final currentAssetId = asset.assetId;
     final currentAssetKey = asset.r2Key;
     final user = ref.read(authProvider).user;
-    final uid = user?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
+    final uid = user?.uid ?? ref.read(onboardingStateProvider).draft.uid;
     final isRetry = _lifecycle.state.phase == AiGenerationPhase.error;
 
     setState(() {
@@ -589,7 +589,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       _routineRetryAvailable = false;
     });
     ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .setStepLoading(onboardingSkinCareStepIndex, true);
 
     _flowController.startGeneration(
@@ -607,14 +607,14 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           _flowController.currentEpoch == requestEpoch &&
           ref.read(authGenerationProvider) == currentAuthGeneration &&
           (ref.read(authProvider).user?.uid ??
-                  ref.read(mockOnboardingProvider).draft.uid) ==
+                  ref.read(onboardingStateProvider).draft.uid) ==
               uid &&
           (() {
             final live = currentSkinPhotoForTransaction(
               slot: ref.read(
                 onboardingUploadInteractionProvider,
               )[onboardingSkinFaceUploadSlot],
-              draft: ref.read(mockOnboardingProvider).draft,
+              draft: ref.read(onboardingStateProvider).draft,
               purpose: UploadedAssetPurpose.skinFace,
             );
             return live?.assetId == currentAssetId &&
@@ -704,7 +704,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           result.routinePlans,
         );
         final schedule = onboarding7ScheduleSkinCareRoutine(
-          baseTimeline: ref.read(mockOnboardingProvider).draft.baseTimeline,
+          baseTimeline: ref.read(onboardingStateProvider).draft.baseTimeline,
           routinePlans: partitioned.dailyPlans,
           desiredApplicationsPerDay: desiredApplicationsPerDay,
           ownedProductNames: selectedNames,
@@ -763,7 +763,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
 
     if (mounted) {
       ref
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .setStepLoading(onboardingSkinCareStepIndex, false);
       if (run.isSuccess) {
         setState(() {
@@ -773,7 +773,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         });
         if (_flowController.currentEpoch == requestEpoch) {
           _flowController.commitRebuildSuccess(
-            ref.read(mockOnboardingProvider).draft.baseTimeline,
+            ref.read(onboardingStateProvider).draft.baseTimeline,
           );
         }
       } else if (run.error != null) {
@@ -789,7 +789,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
   }
 
   void _toggleProduct(SkinCareProductRecommendationDraft product) {
-    final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
+    final base = ref.read(onboardingStateProvider).draft.baseTimeline;
     final next = [...base.skinCareSelectedProductNames];
     final index = next.indexWhere(
       (name) => normalizeSkinCareSelectionKey(name) == product.selectionKey,
@@ -825,7 +825,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final flowState = ref.read(skinCareFlowControllerProvider).state;
     final flowController = ref.read(skinCareFlowControllerProvider.notifier);
     final hasRoutine = ref
-        .read(mockOnboardingProvider)
+        .read(onboardingStateProvider)
         .draft
         .baseTimeline
         .blocks
@@ -859,7 +859,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
 
   void _changeDesiredApplications(int value) {
     final normalized = onboarding7NormalizeDesiredApplications(value);
-    final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
+    final base = ref.read(onboardingStateProvider).draft.baseTimeline;
     final hasExistingRoutine = base.blocks.any(
       (block) => block.section == 'skin_care',
     );
@@ -887,7 +887,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final draft = ref.watch(mockOnboardingProvider).draft;
+    final draft = ref.watch(onboardingStateProvider).draft;
     final base = draft.baseTimeline;
     final restored = ref.watch(restoredUploadsProvider);
     final restoredAsset = _restoredSkinAssetForSlot(
@@ -952,11 +952,11 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           _lifecycle.cancel();
         }
         ref
-            .read(mockOnboardingProvider.notifier)
+            .read(onboardingStateProvider.notifier)
             .setStepLoading(onboardingSkinCareStepIndex, false);
       }
       if (previous?.state.isEditing == true && !next.state.isEditing) {
-        final draft = ref.read(mockOnboardingProvider).draft;
+        final draft = ref.read(onboardingStateProvider).draft;
         setState(() {
           _pendingDesiredApplicationsPerDay = null;
           _generationError = null;

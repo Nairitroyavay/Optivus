@@ -67,8 +67,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            onboardingStateProvider.overrideWith(
+              (_) => OnboardingNotifier()..loadSeedData(draft),
             ),
             onboardingClassTimelineProvider.overrideWith((_) => classBlocks),
             onboardingWorkTimelineProvider.overrideWith((_) => workBlocks),
@@ -233,8 +233,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            onboardingStateProvider.overrideWith(
+              (_) => OnboardingNotifier()..loadSeedData(draft),
             ),
             onboardingClassTimelineProvider.overrideWith((_) => classBlocks),
             onboardingWorkTimelineProvider.overrideWith((_) => workBlocks),
@@ -376,8 +376,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            onboardingStateProvider.overrideWith(
+              (_) => OnboardingNotifier()..loadSeedData(draft),
             ),
           ],
           child: const MaterialApp(
@@ -446,8 +446,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          mockOnboardingProvider.overrideWith(
-            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          onboardingStateProvider.overrideWith(
+            (_) => OnboardingNotifier()..loadSeedData(draft),
           ),
         ],
         child: const MaterialApp(
@@ -482,8 +482,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          mockOnboardingProvider.overrideWith(
-            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          onboardingStateProvider.overrideWith(
+            (_) => OnboardingNotifier()..loadSeedData(draft),
           ),
           onboardingClassTimelineProvider.overrideWith(
             (_) => [
@@ -554,8 +554,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          mockOnboardingProvider.overrideWith(
-            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          onboardingStateProvider.overrideWith(
+            (_) => OnboardingNotifier()..loadSeedData(draft),
           ),
         ],
         child: const MaterialApp(
@@ -596,8 +596,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          mockOnboardingProvider.overrideWith(
-            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          onboardingStateProvider.overrideWith(
+            (_) => OnboardingNotifier()..loadSeedData(draft),
           ),
         ],
         child: const MaterialApp(
@@ -636,8 +636,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          mockOnboardingProvider.overrideWith(
-            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          onboardingStateProvider.overrideWith(
+            (_) => OnboardingNotifier()..loadSeedData(draft),
           ),
         ],
         child: const MaterialApp(
@@ -657,7 +657,7 @@ void main() {
   testWidgets(
     'Replace schedule clears current role blocks and upload returns',
     (tester) async {
-      late MockOnboardingNotifier notifier;
+      late OnboardingNotifier notifier;
       final completed = List<bool>.filled(OnboardingDraft.stepCount, false);
       completed[onboardingClassJobStepIndex] = true;
       final draft = OnboardingDraft(
@@ -698,8 +698,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            mockOnboardingProvider.overrideWith((_) {
-              notifier = MockOnboardingNotifier()..loadSeedData(draft);
+            onboardingStateProvider.overrideWith((_) {
+              notifier = OnboardingNotifier()..loadSeedData(draft);
               return notifier;
             }),
           ],
@@ -764,8 +764,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          mockOnboardingProvider.overrideWith(
-            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          onboardingStateProvider.overrideWith(
+            (_) => OnboardingNotifier()..loadSeedData(draft),
           ),
           onboardingWorkTimelineProvider.overrideWith(
             (_) => [misleadingWorkBlock],
@@ -829,8 +829,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          mockOnboardingProvider.overrideWith(
-            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          onboardingStateProvider.overrideWith(
+            (_) => OnboardingNotifier()..loadSeedData(draft),
           ),
           onboardingClassTimelineProvider.overrideWith((_) => classBlocks),
         ],
@@ -944,7 +944,7 @@ void main() {
   testWidgets(
     'final preview projects overlapping class and breakfast as Routine conflict intelligence',
     (tester) async {
-      late MockOnboardingNotifier notifier;
+      late OnboardingNotifier notifier;
       final classBlock = _timelineBlock(
         id: 'monday-class',
         section: 'classes',
@@ -984,12 +984,14 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            mockOnboardingProvider.overrideWith((_) {
-              notifier = MockOnboardingNotifier()..loadSeedData(draft);
+            onboardingStateProvider.overrideWith((_) {
+              notifier = OnboardingNotifier()..loadSeedData(draft);
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: Scaffold(body: OnboardingTodayReadyStep())),
+          child: const MaterialApp(
+            home: Scaffold(body: OnboardingTodayReadyStep()),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -1510,7 +1512,7 @@ void main() {
   testWidgets('Next Step saves overlaps without changing focused block times', (
     tester,
   ) async {
-    late MockOnboardingNotifier notifier;
+    late OnboardingNotifier notifier;
     final completed = List<bool>.filled(OnboardingDraft.stepCount, true);
     completed[onboardingClassJobStepIndex] = false;
     final dirty = List<bool>.filled(OnboardingDraft.stepCount, false);
@@ -1548,8 +1550,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          mockOnboardingProvider.overrideWith((_) {
-            notifier = MockOnboardingNotifier()..loadSeedData(draft);
+          onboardingStateProvider.overrideWith((_) {
+            notifier = OnboardingNotifier()..loadSeedData(draft);
             return notifier;
           }),
           onboardingClassTimelineProvider.overrideWith(
@@ -1650,8 +1652,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          mockOnboardingProvider.overrideWith(
-            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          onboardingStateProvider.overrideWith(
+            (_) => OnboardingNotifier()..loadSeedData(draft),
           ),
         ],
         child: const MaterialApp(
@@ -1690,8 +1692,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          mockOnboardingProvider.overrideWith(
-            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          onboardingStateProvider.overrideWith(
+            (_) => OnboardingNotifier()..loadSeedData(draft),
           ),
         ],
         child: MaterialApp(
@@ -1701,13 +1703,13 @@ void main() {
                 const SizedBox.expand(child: OnboardingStep5()),
                 Consumer(
                   builder: (context, ref, child) {
-                    final draft = ref.watch(mockOnboardingProvider).draft;
+                    final draft = ref.watch(onboardingStateProvider).draft;
                     if (draft.baseTimeline.eatingSetupStep > 0) {
                       return OnboardingStageBackButton(
                         key: const ValueKey('onboarding-step5-back'),
                         onTap: () {
                           ref
-                              .read(mockOnboardingProvider.notifier)
+                              .read(onboardingStateProvider.notifier)
                               .clearValidation();
                           updateBaseTimelineDraft(
                             ref,
@@ -1760,8 +1762,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          mockOnboardingProvider.overrideWith(
-            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          onboardingStateProvider.overrideWith(
+            (_) => OnboardingNotifier()..loadSeedData(draft),
           ),
         ],
         child: const MaterialApp(
@@ -1813,8 +1815,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          mockOnboardingProvider.overrideWith(
-            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          onboardingStateProvider.overrideWith(
+            (_) => OnboardingNotifier()..loadSeedData(draft),
           ),
         ],
         child: MaterialApp(
@@ -1824,13 +1826,13 @@ void main() {
                 const SizedBox.expand(child: OnboardingStep5()),
                 Consumer(
                   builder: (context, ref, child) {
-                    final draft = ref.watch(mockOnboardingProvider).draft;
+                    final draft = ref.watch(onboardingStateProvider).draft;
                     if (draft.baseTimeline.eatingSetupStep > 0) {
                       return OnboardingStageBackButton(
                         key: const ValueKey('onboarding-step5-back'),
                         onTap: () {
                           ref
-                              .read(mockOnboardingProvider.notifier)
+                              .read(onboardingStateProvider.notifier)
                               .clearValidation();
                           updateBaseTimelineDraft(
                             ref,
@@ -1866,7 +1868,7 @@ void main() {
   testWidgets('Eating no path saves generated blocks and advances to Fixed', (
     tester,
   ) async {
-    late MockOnboardingNotifier notifier;
+    late OnboardingNotifier notifier;
     final completed = List<bool>.filled(OnboardingDraft.stepCount, true);
     completed[onboardingEatingStepIndex] = false;
     final dirty = List<bool>.filled(OnboardingDraft.stepCount, false);
@@ -1906,8 +1908,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          mockOnboardingProvider.overrideWith((_) {
-            notifier = MockOnboardingNotifier()..loadSeedData(draft);
+          onboardingStateProvider.overrideWith((_) {
+            notifier = OnboardingNotifier()..loadSeedData(draft);
             return notifier;
           }),
           nutritionAiClientProvider.overrideWithValue(
@@ -1979,7 +1981,7 @@ void main() {
   testWidgets('Eating has-routine path saves AI blocks without review screen', (
     tester,
   ) async {
-    late MockOnboardingNotifier notifier;
+    late OnboardingNotifier notifier;
     final completed = List<bool>.filled(OnboardingDraft.stepCount, true);
     completed[onboardingEatingStepIndex] = false;
     final dirty = List<bool>.filled(OnboardingDraft.stepCount, false);
@@ -2040,8 +2042,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          mockOnboardingProvider.overrideWith((_) {
-            notifier = MockOnboardingNotifier()..loadSeedData(draft);
+          onboardingStateProvider.overrideWith((_) {
+            notifier = OnboardingNotifier()..loadSeedData(draft);
             return notifier;
           }),
         ],
@@ -2493,8 +2495,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          mockOnboardingProvider.overrideWith(
-            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          onboardingStateProvider.overrideWith(
+            (_) => OnboardingNotifier()..loadSeedData(draft),
           ),
           onboardingWorkTimelineProvider.overrideWith((_) => workBlocks),
         ],
@@ -2660,8 +2662,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            onboardingStateProvider.overrideWith(
+              (_) => OnboardingNotifier()..loadSeedData(draft),
             ),
             onboardingClassTimelineProvider.overrideWith((_) => classBlocks),
             onboardingWorkTimelineProvider.overrideWith((_) => workBlocks),

@@ -220,14 +220,14 @@ void updateBaseTimelineDraft(
   BaseTimelineDraft Function(BaseTimelineDraft base) update,
 ) {
   ref
-      .read(mockOnboardingProvider.notifier)
+      .read(onboardingStateProvider.notifier)
       .updateDraft(
         (draft) => draft.copyWith(
           baseTimeline: update(draft.baseTimeline),
           clearFinalPreview: true,
         ),
       );
-  ref.read(mockOnboardingProvider.notifier).setStepDirty(stepIndex, true);
+  ref.read(onboardingStateProvider.notifier).setStepDirty(stepIndex, true);
 }
 
 Future<void> openOnboardingImportReview(
@@ -405,7 +405,7 @@ class OnboardingUploadReviewCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final draft = ref.watch(mockOnboardingProvider).draft;
+    final draft = ref.watch(onboardingStateProvider).draft;
     final pending = draft.baseTimeline.latestImportForSection(sectionLabel);
     final uploadState = ref.watch(uploadControllerProvider);
     final purpose = onboardingUploadPurposeForBaseTimelineSection(sectionLabel);
@@ -548,10 +548,10 @@ class OnboardingUploadReviewCard extends ConsumerWidget {
   ) async {
     final uid =
         ref.read(authProvider).user?.uid ??
-        ref.read(mockOnboardingProvider).draft.uid;
+        ref.read(onboardingStateProvider).draft.uid;
     final now = DateTime.now();
     final existing = ref
-        .read(mockOnboardingProvider)
+        .read(onboardingStateProvider)
         .draft
         .baseTimeline
         .latestImportForSection(sectionLabel);

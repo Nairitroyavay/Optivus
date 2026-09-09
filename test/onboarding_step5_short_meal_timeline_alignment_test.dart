@@ -54,8 +54,9 @@ void main() {
       );
       final initialDraft = OnboardingDraft(baseTimeline: base);
       final targets = initialDraft.canonicalNutritionTargets();
-      final inputs =
-          initialDraft.canonicalEatingGenerationInputs(targets: targets);
+      final inputs = initialDraft.canonicalEatingGenerationInputs(
+        targets: targets,
+      );
       final draft = initialDraft.copyWith(
         baseTimeline: initialDraft.baseTimeline.copyWith(
           eatingGeneratedInputFingerprint: inputs.computeFingerprint(),
@@ -65,8 +66,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            onboardingStateProvider.overrideWith(
+              (_) => OnboardingNotifier()..loadSeedData(draft),
             ),
           ],
           child: const MaterialApp(
@@ -171,8 +172,9 @@ void main() {
     );
     final initialDraft = OnboardingDraft(baseTimeline: base);
     final targets = initialDraft.canonicalNutritionTargets();
-    final inputs =
-        initialDraft.canonicalEatingGenerationInputs(targets: targets);
+    final inputs = initialDraft.canonicalEatingGenerationInputs(
+      targets: targets,
+    );
     final draft = initialDraft.copyWith(
       baseTimeline: initialDraft.baseTimeline.copyWith(
         eatingGeneratedInputFingerprint: inputs.computeFingerprint(),
@@ -189,8 +191,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          mockOnboardingProvider.overrideWith(
-            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          onboardingStateProvider.overrideWith(
+            (_) => OnboardingNotifier()..loadSeedData(draft),
           ),
         ],
         child: const MaterialApp(

@@ -334,7 +334,7 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
   /// Begins editing an existing retained routine (Plan A).
   void startEditing(BaseTimelineDraft base) {
     final authState = ref.read(authProvider);
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     final uid = authState.user?.uid ?? draft.uid;
     final authGen = ref.read(authGenerationProvider);
 
@@ -374,7 +374,7 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
   /// Begins generation and bumps epoch.
   void startGeneration(SkinCareFlowState generatingState) {
     final authState = ref.read(authProvider);
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     final uid = authState.user?.uid ?? draft.uid;
     final authGen = ref.read(authGenerationProvider);
 
@@ -476,7 +476,7 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
 
   void _updateBase(BaseTimelineDraft Function(BaseTimelineDraft base) update) {
     ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .updateDraft(
           (draft) => draft.copyWith(
             baseTimeline: update(draft.baseTimeline),
@@ -484,13 +484,13 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
           ),
         );
     ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .setStepDirty(onboardingSkinCareStepIndex, true);
   }
 
   /// Cancels editing and restores Plan A snapshot onto the draft if session is valid.
   void cancelEditing() {
-    final currentDraft = ref.read(mockOnboardingProvider).draft;
+    final currentDraft = ref.read(onboardingStateProvider).draft;
     final authState = ref.read(authProvider);
     final currentUid = authState.user?.uid ?? currentDraft.uid;
     final currentAuthGen = ref.read(authGenerationProvider);
@@ -550,7 +550,7 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
 
   /// Commits successful Plan B rebuild and returns to review.
   void commitRebuildSuccess(BaseTimelineDraft updatedBase) {
-    final currentDraft = ref.read(mockOnboardingProvider).draft;
+    final currentDraft = ref.read(onboardingStateProvider).draft;
     final authState = ref.read(authProvider);
     final currentUid = authState.user?.uid ?? currentDraft.uid;
 
@@ -686,7 +686,7 @@ final skinCareFlowControllerProvider =
     ) {
       final controller = SkinCareFlowController(ref);
 
-      ref.listen(mockOnboardingProvider, (previous, next) {
+      ref.listen(onboardingStateProvider, (previous, next) {
         final authState = ref.read(authProvider);
         final authGen = ref.read(authGenerationProvider);
         controller.syncFromDraft(
@@ -698,7 +698,7 @@ final skinCareFlowControllerProvider =
 
       ref.listen(authGenerationProvider, (previous, next) {
         final authState = ref.read(authProvider);
-        final draft = ref.read(mockOnboardingProvider).draft;
+        final draft = ref.read(onboardingStateProvider).draft;
         controller.syncFromDraft(
           draft.baseTimeline,
           authState.user?.uid ?? draft.uid,
@@ -708,7 +708,7 @@ final skinCareFlowControllerProvider =
 
       ref.listen(authProvider, (previous, next) {
         final authGen = ref.read(authGenerationProvider);
-        final draft = ref.read(mockOnboardingProvider).draft;
+        final draft = ref.read(onboardingStateProvider).draft;
         controller.syncFromDraft(
           draft.baseTimeline,
           next.user?.uid ?? draft.uid,
@@ -716,7 +716,7 @@ final skinCareFlowControllerProvider =
         );
       });
 
-      final initialDraft = ref.read(mockOnboardingProvider).draft;
+      final initialDraft = ref.read(onboardingStateProvider).draft;
       final authState = ref.read(authProvider);
       final initialAuthGen = ref.read(authGenerationProvider);
       controller.syncFromDraft(

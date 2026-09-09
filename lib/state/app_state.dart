@@ -22,8 +22,8 @@ import 'package:optivus/state/mock_seed_data.dart';
 // ==========================================
 // 1. User Profile State Notifier
 // ==========================================
-class MockUserProfileNotifier extends StateNotifier<UserProfile> {
-  MockUserProfileNotifier() : super(UserProfile.empty(uid: ''));
+class UserProfileNotifier extends StateNotifier<UserProfile> {
+  UserProfileNotifier() : super(UserProfile.empty(uid: ''));
 
   void resetEmpty({
     String uid = '',
@@ -157,9 +157,9 @@ class MockUserProfileNotifier extends StateNotifier<UserProfile> {
   }
 }
 
-final mockUserProfileProvider =
-    StateNotifierProvider<MockUserProfileNotifier, UserProfile>((ref) {
-      return MockUserProfileNotifier();
+final userProfileProvider =
+    StateNotifierProvider<UserProfileNotifier, UserProfile>((ref) {
+      return UserProfileNotifier();
     });
 
 // ==========================================
@@ -1518,8 +1518,8 @@ final mockPermissionProvider =
 // ==========================================
 // 9. Onboarding State Notifier
 // ==========================================
-class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
-  MockOnboardingNotifier() : super(OnboardingState());
+class OnboardingNotifier extends StateNotifier<OnboardingState> {
+  OnboardingNotifier() : super(OnboardingState());
 
   void loadSeedData(OnboardingDraft seedDraft) {
     state = OnboardingState(draft: seedDraft, validationMessage: null);
@@ -1868,11 +1868,11 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
   }
 }
 
-final mockOnboardingProvider =
-    StateNotifierProvider<MockOnboardingNotifier, OnboardingState>((ref) {
-      return MockOnboardingNotifier();
+final onboardingStateProvider =
+    StateNotifierProvider<OnboardingNotifier, OnboardingState>((ref) {
+      return OnboardingNotifier();
     });
 
 final onboardingDraftProvider = Provider<OnboardingDraft>((ref) {
-  return ref.watch(mockOnboardingProvider.select((state) => state.draft));
+  return ref.watch(onboardingStateProvider.select((state) => state.draft));
 });

@@ -468,8 +468,8 @@ void main() {
           ProviderScope(
             key: UniqueKey(),
             overrides: [
-              mockOnboardingProvider.overrideWith((ref) {
-                final notifier = MockOnboardingNotifier();
+              onboardingStateProvider.overrideWith((ref) {
+                final notifier = OnboardingNotifier();
                 notifier.loadSeedData(hasProductsDraft);
                 return notifier;
               }),
@@ -509,8 +509,8 @@ void main() {
           ProviderScope(
             key: UniqueKey(),
             overrides: [
-              mockOnboardingProvider.overrideWith((ref) {
-                final notifier = MockOnboardingNotifier();
+              onboardingStateProvider.overrideWith((ref) {
+                final notifier = OnboardingNotifier();
                 notifier.loadSeedData(noProductsDraft);
                 return notifier;
               }),
@@ -559,8 +559,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith((ref) {
-                final notifier = MockOnboardingNotifier();
+              onboardingStateProvider.overrideWith((ref) {
+                final notifier = OnboardingNotifier();
                 notifier.loadSeedData(draft);
                 return notifier;
               }),
@@ -613,8 +613,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith((ref) {
-                final notifier = MockOnboardingNotifier();
+              onboardingStateProvider.overrideWith((ref) {
+                final notifier = OnboardingNotifier();
                 notifier.loadSeedData(draft);
                 return notifier;
               }),
@@ -690,7 +690,7 @@ void main() {
         addTearDown(tester.view.resetDevicePixelRatio);
 
         final draft = createHasProductsDraftWithBlocks(uid: 'user-shell-back');
-        final notifier = MockOnboardingNotifier()..loadSeedData(draft);
+        final notifier = OnboardingNotifier()..loadSeedData(draft);
 
         await tester.pumpWidget(
           ProviderScope(
@@ -705,7 +705,7 @@ void main() {
                 ),
               ),
               authGenerationProvider.overrideWith((ref) => 7),
-              mockOnboardingProvider.overrideWith((ref) => notifier),
+              onboardingStateProvider.overrideWith((ref) => notifier),
             ],
             child: const MaterialApp(home: OnboardingFlow()),
           ),
@@ -735,7 +735,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 500));
 
         final flow = container.read(skinCareFlowControllerProvider);
-        final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+        final base = container.read(onboardingStateProvider).draft.baseTimeline;
         expect(flow.ownerUid, 'user-shell-back');
         expect(flow.authGeneration, 7);
         expect(flow.state, SkinCareFlowState.hasProductsReview);
@@ -762,14 +762,14 @@ void main() {
         addTearDown(tester.view.resetDevicePixelRatio);
 
         final draft = createNoProductsDraftWithBlocks(uid: 'test-user-123');
-        final notifier = MockOnboardingNotifier()..loadSeedData(draft);
+        final notifier = OnboardingNotifier()..loadSeedData(draft);
 
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
               authProvider.overrideWith((ref) => _Step7TestAuthNotifier(null)),
               authGenerationProvider.overrideWith((ref) => 4),
-              mockOnboardingProvider.overrideWith((ref) => notifier),
+              onboardingStateProvider.overrideWith((ref) => notifier),
             ],
             child: const MaterialApp(home: OnboardingFlow()),
           ),
@@ -799,7 +799,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 500));
 
         final flow = container.read(skinCareFlowControllerProvider);
-        final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+        final base = container.read(onboardingStateProvider).draft.baseTimeline;
         expect(flow.ownerUid, 'test-user-123');
         expect(flow.authGeneration, 4);
         expect(flow.state, SkinCareFlowState.noProductsReview);

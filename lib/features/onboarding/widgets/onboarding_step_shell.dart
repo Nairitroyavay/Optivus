@@ -424,143 +424,148 @@ class OnboardingStepShell extends StatelessWidget {
         backgroundColor: Colors.transparent,
         resizeToAvoidBottomInset: false,
         body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: isDark
-                ? [
-                    OptivusColors.onboardingDarkTop,
-                    OptivusColors.onboardingDarkBottom,
-                  ]
-                : [OptivusColors.onboardingTop, OptivusColors.onboardingBottom],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: isDark
+                  ? [
+                      OptivusColors.onboardingDarkTop,
+                      OptivusColors.onboardingDarkBottom,
+                    ]
+                  : [
+                      OptivusColors.onboardingTop,
+                      OptivusColors.onboardingBottom,
+                    ],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
           ),
-        ),
-        child: SafeArea(
-          top: true,
-          bottom: false,
-          child: Column(
-            children: [
-              SizedBox(
-                height: responsiveHeaderH,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      SizedBox(
-                        width: 40,
-                        child: topLeftOverlay != null
-                            ? Align(
-                                alignment: Alignment.centerLeft,
-                                child: topLeftOverlay!,
-                              )
-                            : null,
-                      ),
-                      Expanded(
-                        child: Center(
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: LiquidGlassOnboardingIndicator(
-                              page: pageOffset,
-                              count: completedSteps.length,
-                              completedSteps: completedSteps,
-                              onDotTap: onDotTap,
-                              onDragTarget: onIndicatorDraggedTo,
+          child: SafeArea(
+            top: true,
+            bottom: false,
+            child: Column(
+              children: [
+                SizedBox(
+                  height: responsiveHeaderH,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        SizedBox(
+                          width: 40,
+                          child: topLeftOverlay != null
+                              ? Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: topLeftOverlay!,
+                                )
+                              : null,
+                        ),
+                        Expanded(
+                          child: Center(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: LiquidGlassOnboardingIndicator(
+                                page: pageOffset,
+                                count: completedSteps.length,
+                                completedSteps: completedSteps,
+                                onDotTap: onDotTap,
+                                onDragTarget: onIndicatorDraggedTo,
+                              ),
                             ),
                           ),
                         ),
+                        SizedBox(
+                          width: 40,
+                          child: showSave
+                              ? Align(
+                                  alignment: Alignment.centerRight,
+                                  child: OnboardingSaveButton(
+                                    isSaving: isSaving,
+                                    isSaved: isSaved,
+                                    enabled: saveEnabled,
+                                    onTap: onSave,
+                                  ),
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  transitionBuilder: (child, animation) => SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0, -0.3),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: FadeTransition(opacity: animation, child: child),
+                  ),
+                  child: (error == null && validationMessage == null)
+                      ? const SizedBox.shrink()
+                      : RecoverableErrorBanner(
+                          error:
+                              error ??
+                              RecoverableError(
+                                category: RecoverableErrorCategory.validation,
+                                publicMessage: validationMessage!,
+                                severity: RecoverableErrorSeverity.error,
+                                isBlocking: true,
+                                retryAction: onRetry != null
+                                    ? RecoverableRetryAction.retry
+                                    : RecoverableRetryAction.none,
+                                retrySafe: onRetry != null,
+                                diagnosticCode:
+                                    DiagnosticCodes.validationIncompleteStep,
+                              ),
+                          onRetry: onRetry,
+                        ),
+                ),
+                Expanded(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Padding(
+                        padding: EdgeInsets.only(
+                          bottom: keyboardOpen
+                              ? MediaQuery.viewInsetsOf(context).bottom
+                              : 0,
+                        ),
+                        child: child,
                       ),
-                      SizedBox(
-                        width: 40,
-                        child: showSave
-                            ? Align(
-                                alignment: Alignment.centerRight,
-                                child: OnboardingSaveButton(
-                                  isSaving: isSaving,
-                                  isSaved: isSaved,
-                                  enabled: saveEnabled,
-                                  onTap: onSave,
-                                ),
-                              )
-                            : const SizedBox.shrink(),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: OnboardingActionBar(
+                          actions: resolvedActions,
+                          reserveHiddenSpace: true,
+                          accessory:
+                              currentPage == OnboardingStepId.welcome.index &&
+                                  showPrimaryCta
+                              ? const Padding(
+                                  padding: EdgeInsets.only(top: 12),
+                                  child: Text(
+                                    'By continuing, you agree to our Terms & Policy',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Color(0xFF6F737C),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                )
+                              : null,
+                        ),
                       ),
                     ],
                   ),
                 ),
-              ),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                transitionBuilder: (child, animation) => SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, -0.3),
-                    end: Offset.zero,
-                  ).animate(animation),
-                  child: FadeTransition(opacity: animation, child: child),
-                ),
-                child: (error == null && validationMessage == null)
-                    ? const SizedBox.shrink()
-                    : RecoverableErrorBanner(
-                        error: error ??
-                            RecoverableError(
-                              category: RecoverableErrorCategory.validation,
-                              publicMessage: validationMessage!,
-                              severity: RecoverableErrorSeverity.error,
-                              isBlocking: true,
-                              retryAction: onRetry != null
-                                  ? RecoverableRetryAction.retry
-                                  : RecoverableRetryAction.none,
-                              retrySafe: onRetry != null,
-                              diagnosticCode: DiagnosticCodes.validationIncompleteStep,
-                            ),
-                        onRetry: onRetry,
-                      ),
-              ),
-              Expanded(
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.only(
-                        bottom: keyboardOpen
-                            ? MediaQuery.viewInsetsOf(context).bottom
-                            : 0,
-                      ),
-                      child: child,
-                    ),
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: OnboardingActionBar(
-                        actions: resolvedActions,
-                        reserveHiddenSpace: true,
-                        accessory:
-                            currentPage == OnboardingStepId.welcome.index &&
-                                showPrimaryCta
-                            ? const Padding(
-                                padding: EdgeInsets.only(top: 12),
-                                child: Text(
-                                  'By continuing, you agree to our Terms & Policy',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: Color(0xFF6F737C),
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              )
-                            : null,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 }

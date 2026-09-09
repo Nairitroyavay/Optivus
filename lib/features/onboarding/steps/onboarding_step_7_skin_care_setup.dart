@@ -58,7 +58,7 @@ class OnboardingStep7 extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final draft = ref.watch(mockOnboardingProvider).draft;
+    final draft = ref.watch(onboardingStateProvider).draft;
     final base = draft.baseTimeline;
     final flowStateHolder = ref.watch(skinCareFlowControllerProvider);
     final flowState = flowStateHolder.state;

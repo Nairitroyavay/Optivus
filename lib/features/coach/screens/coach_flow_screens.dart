@@ -246,7 +246,7 @@ class _CoachSettingsInlineScreenState
                   ),
                 );
             ref
-                .read(mockUserProfileProvider.notifier)
+                .read(userProfileProvider.notifier)
                 .updateCoachPreferences(
                   coachName: _name.text.trim().isEmpty
                       ? prefs.name

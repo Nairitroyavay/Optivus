@@ -32,7 +32,7 @@ void main() {
         ),
       );
 
-      final notifier = MockOnboardingNotifier()..loadSeedData(draft);
+      final notifier = OnboardingNotifier()..loadSeedData(draft);
 
       notifier.saveStep(5, uid: 'user-1');
 

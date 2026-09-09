@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/core/errors/diagnostic_codes.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/core/router/app_router.dart';
 import 'package:optivus/features/profile/models/profile_settings_models.dart';
 import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
@@ -295,7 +297,7 @@ void main() {
 
   group('Group A Stress Tests: Router Redirection & Recovery UI', () {
     testWidgets(
-      'Router routes backendRestoreFailed to /onboarding/recovery rendering OnboardingRecoveryScreen',
+      'Router routes needsAction to /onboarding/recovery rendering OnboardingRecoveryScreen',
       (tester) async {
         final profile =
             UserProfile.empty(
@@ -316,13 +318,22 @@ void main() {
                     email: 'stress-failed@ex.com',
                     emailVerified: true,
                   ),
-                  status: AuthFlowStatus.backendRestoreFailed,
-                  errorMessage: 'Restoration failed during startup',
+                  status: AuthFlowStatus.needsAction,
+                  error: RecoverableError(
+                    category: RecoverableErrorCategory.recoveryRequired,
+                    publicMessage: 'Restoration failed during startup',
+                    severity: RecoverableErrorSeverity.error,
+                    isBlocking: true,
+                    retryAction: RecoverableRetryAction.restartRecovery,
+                    retrySafe: false,
+                    diagnosticCode:
+                        DiagnosticCodes.recoveryDurableStateConflict,
+                  ),
                 ),
               ),
             ),
-            mockUserProfileProvider.overrideWith(
-              (ref) => MockUserProfileNotifier()..loadSeedData(profile),
+            userProfileProvider.overrideWith(
+              (ref) => UserProfileNotifier()..loadSeedData(profile),
             ),
           ],
         );

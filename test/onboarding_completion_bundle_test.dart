@@ -38,7 +38,7 @@ void main() {
 
     final bundle = OnboardingCompletionService.buildBundle(_draft());
     container
-        .read(mockUserProfileProvider.notifier)
+        .read(userProfileProvider.notifier)
         .resetEmpty(
           uid: 'test-user',
           email: 'test@optivus.dev',
@@ -51,15 +51,13 @@ void main() {
         .read(mockGoalProvider.notifier)
         .replaceWith(bundle.identityGoalSystems);
     container.read(mockTrackerProvider.notifier).applyOnboardingBundle(bundle);
-    container
-        .read(mockUserProfileProvider.notifier)
-        .applyOnboardingBundle(bundle);
-    container.read(mockUserProfileProvider.notifier).completeOnboarding();
+    container.read(userProfileProvider.notifier).applyOnboardingBundle(bundle);
+    container.read(userProfileProvider.notifier).completeOnboarding();
 
     expect(container.read(mockRoutineProvider), isNotEmpty);
     expect(container.read(mockGoalProvider), isNotEmpty);
     expect(container.read(mockTrackerProvider).trackerSessions, isNotEmpty);
-    expect(container.read(mockUserProfileProvider).onboardingCompleted, isTrue);
+    expect(container.read(userProfileProvider).onboardingCompleted, isTrue);
   });
 }
 

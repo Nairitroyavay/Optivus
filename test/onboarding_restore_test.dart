@@ -64,12 +64,12 @@ void main() {
         container.read(authProvider).status,
         AuthFlowStatus.signedInOnboardingIncomplete,
       );
-      expect(container.read(authProvider).backendRestoreFailed, isFalse);
+      expect(container.read(authProvider).needsAction, isFalse);
       expect(statuses, isNot(contains(AuthFlowStatus.restoringOnboarding)));
       expect(onboardingRepository.draft, isNull);
       expect(
         container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline
             .blocks
@@ -79,7 +79,7 @@ void main() {
           BaseTimelineDraft.fixedBathId,
         ]),
       );
-      expect(container.read(mockOnboardingProvider).draft.uid, user.uid);
+      expect(container.read(onboardingStateProvider).draft.uid, user.uid);
     },
   );
 
@@ -242,7 +242,7 @@ void main() {
         statuses,
         isNot(contains(AuthFlowStatus.signedInOnboardingIncomplete)),
       );
-      expect(container.read(mockOnboardingProvider).draft.currentStep, 0);
+      expect(container.read(onboardingStateProvider).draft.currentStep, 0);
 
       draftCompleter.complete(_draftFor(user.uid, currentStep: 4));
       await pumpEventQueue(times: 10);
@@ -251,7 +251,7 @@ void main() {
         container.read(authProvider).status,
         AuthFlowStatus.signedInOnboardingIncomplete,
       );
-      expect(container.read(mockOnboardingProvider).draft.currentStep, 4);
+      expect(container.read(onboardingStateProvider).draft.currentStep, 4);
     },
   );
 
@@ -263,8 +263,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          mockOnboardingProvider.overrideWith(
-            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          onboardingStateProvider.overrideWith(
+            (_) => OnboardingNotifier()..loadSeedData(draft),
           ),
         ],
         child: const MaterialApp(home: OnboardingFlow()),
@@ -347,7 +347,7 @@ void main() {
       addTearDown(authRepository.dispose);
 
       container
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .loadSeedData(existingDraft);
       container.read(authProvider);
 
@@ -362,7 +362,7 @@ void main() {
         container.read(authProvider).errorMessage,
         "We couldn't reconnect yet.",
       );
-      expect(container.read(mockOnboardingProvider).draft.currentStep, 4);
+      expect(container.read(onboardingStateProvider).draft.currentStep, 4);
 
       await container.read(authProvider.notifier).retryBackendRestore();
       await pumpEventQueue(times: 10);
@@ -371,7 +371,7 @@ void main() {
         container.read(authProvider).status,
         AuthFlowStatus.signedInOnboardingIncomplete,
       );
-      expect(container.read(mockOnboardingProvider).draft.currentStep, 4);
+      expect(container.read(onboardingStateProvider).draft.currentStep, 4);
     },
   );
 
@@ -399,7 +399,7 @@ void main() {
     await pumpEventQueue(times: 20);
 
     final auth = container.read(authProvider);
-    final draft = container.read(mockOnboardingProvider).draft;
+    final draft = container.read(onboardingStateProvider).draft;
     expect(auth.status, AuthFlowStatus.signedInOnboardingIncomplete);
     expect(draft.uid, user.uid);
     expect(draft.currentStep, 0);
@@ -433,7 +433,7 @@ void main() {
       container.read(authProvider).status,
       AuthFlowStatus.signedInOnboardingIncomplete,
     );
-    expect(container.read(mockOnboardingProvider).draft.currentStep, 4);
+    expect(container.read(onboardingStateProvider).draft.currentStep, 4);
   });
 }
 

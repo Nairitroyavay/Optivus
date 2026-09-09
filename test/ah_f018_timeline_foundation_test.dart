@@ -1388,8 +1388,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith(
-                (_) => MockOnboardingNotifier()..loadSeedData(draft),
+              onboardingStateProvider.overrideWith(
+                (_) => OnboardingNotifier()..loadSeedData(draft),
               ),
               onboardingClassTimelineProvider.overrideWith((_) => classBlocks),
               onboardingWorkTimelineProvider.overrideWith((_) => []),
@@ -1435,8 +1435,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith(
-                (_) => MockOnboardingNotifier()..loadSeedData(draft),
+              onboardingStateProvider.overrideWith(
+                (_) => OnboardingNotifier()..loadSeedData(draft),
               ),
             ],
             child: const MaterialApp(
@@ -1483,8 +1483,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith(
-                (_) => MockOnboardingNotifier()..loadSeedData(draft),
+              onboardingStateProvider.overrideWith(
+                (_) => OnboardingNotifier()..loadSeedData(draft),
               ),
             ],
             child: const MaterialApp(
@@ -1533,12 +1533,14 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            onboardingStateProvider.overrideWith(
+              (_) => OnboardingNotifier()..loadSeedData(draft),
             ),
           ],
           child: const MaterialApp(
-            home: Scaffold(body: SizedBox.expand(child: OnboardingTodayReadyStep())),
+            home: Scaffold(
+              body: SizedBox.expand(child: OnboardingTodayReadyStep()),
+            ),
           ),
         ),
       );

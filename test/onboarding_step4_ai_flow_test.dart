@@ -153,8 +153,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            mockOnboardingProvider.overrideWith(
-              (ref) => MockOnboardingNotifier()..loadSeedData(draft),
+            onboardingStateProvider.overrideWith(
+              (ref) => OnboardingNotifier()..loadSeedData(draft),
             ),
             authRepositoryProvider.overrideWithValue(authRepository),
             onboardingUploadInteractionProvider.overrideWith(

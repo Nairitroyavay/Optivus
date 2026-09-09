@@ -40,7 +40,7 @@ class _SkinCareChoiceScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     Future<void> select(String value) async {
-      final onboardingNotifier = ref.read(mockOnboardingProvider.notifier);
+      final onboardingNotifier = ref.read(onboardingStateProvider.notifier);
       final uploadController = ref.read(
         onboardingUploadInteractionProvider.notifier,
       );
@@ -52,14 +52,14 @@ class _SkinCareChoiceScreen extends ConsumerWidget {
       );
       onboardingNotifier.clearValidation();
       if (value == 'skip') {
-        final draft = ref.read(mockOnboardingProvider).draft;
+        final draft = ref.read(onboardingStateProvider).draft;
         final uid = ref.read(authProvider).user?.uid ?? draft.uid;
         final restored = ref.read(restoredUploadsProvider);
         if (uid.trim().isEmpty ||
             restored.isHydrating ||
             restored.errorMessage != null) {
           ref
-              .read(mockOnboardingProvider.notifier)
+              .read(onboardingStateProvider.notifier)
               .setValidationMessage(
                 'Reconnect before skipping so your private photos can be removed safely.',
               );

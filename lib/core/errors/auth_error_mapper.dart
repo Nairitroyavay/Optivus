@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:optivus/core/errors/diagnostic_codes.dart';
@@ -8,10 +9,7 @@ abstract final class AuthErrorMapper {
       'An account already exists with this email. Please log in. If your email is not verified yet, we’ll help you resend the verification email.';
 
   /// Maps an authentication or login/signup error into a safe RecoverableError.
-  static RecoverableError map(
-    Object error, {
-    bool isBlocking = true,
-  }) {
+  static RecoverableError map(Object error, {bool isBlocking = true}) {
     if (error is RecoverableError) {
       return error;
     }
@@ -20,14 +18,26 @@ abstract final class AuthErrorMapper {
       return _fromFirebaseAuthCode(error.code, isBlocking: isBlocking);
     }
 
-    if (error is SocketException ||
-        error is HttpException) {
-      return const RecoverableError(
+    if (error is TimeoutException) {
+      return RecoverableError(
+        category: RecoverableErrorCategory.network,
+        publicMessage:
+            'The request took too long. Check your connection and try again.',
+        severity: RecoverableErrorSeverity.error,
+        isBlocking: isBlocking,
+        retryAction: RecoverableRetryAction.retry,
+        retrySafe: true,
+        diagnosticCode: DiagnosticCodes.networkTimeout,
+      );
+    }
+
+    if (error is SocketException || error is HttpException) {
+      return RecoverableError(
         category: RecoverableErrorCategory.network,
         publicMessage:
             'We couldn’t connect right now. Check your connection and try again.',
         severity: RecoverableErrorSeverity.error,
-        isBlocking: true,
+        isBlocking: isBlocking,
         retryAction: RecoverableRetryAction.retry,
         retrySafe: true,
         diagnosticCode: DiagnosticCodes.networkUnavailable,
@@ -36,18 +46,30 @@ abstract final class AuthErrorMapper {
 
     final raw = error.toString().toLowerCase();
 
+    if (raw.contains('timeoutexception') || raw.contains('timed out')) {
+      return RecoverableError(
+        category: RecoverableErrorCategory.network,
+        publicMessage:
+            'The request took too long. Check your connection and try again.',
+        severity: RecoverableErrorSeverity.error,
+        isBlocking: isBlocking,
+        retryAction: RecoverableRetryAction.retry,
+        retrySafe: true,
+        diagnosticCode: DiagnosticCodes.networkTimeout,
+      );
+    }
+
     if (raw.contains('socketexception') ||
-        raw.contains('timeoutexception') ||
         raw.contains('network') ||
         raw.contains('connection refused') ||
         raw.contains('connection abort') ||
         raw.contains('network-request-failed')) {
-      return const RecoverableError(
+      return RecoverableError(
         category: RecoverableErrorCategory.network,
         publicMessage:
             'We couldn’t connect right now. Check your connection and try again.',
         severity: RecoverableErrorSeverity.error,
-        isBlocking: true,
+        isBlocking: isBlocking,
         retryAction: RecoverableRetryAction.retry,
         retrySafe: true,
         diagnosticCode: DiagnosticCodes.networkUnavailable,
@@ -55,14 +77,40 @@ abstract final class AuthErrorMapper {
     }
 
     if (raw.contains('email-already-in-use')) {
-      return const RecoverableError(
+      return RecoverableError(
         category: RecoverableErrorCategory.authentication,
         publicMessage: emailAlreadyInUseMessage,
         severity: RecoverableErrorSeverity.error,
-        isBlocking: true,
+        isBlocking: isBlocking,
         retryAction: RecoverableRetryAction.reauthenticate,
         retrySafe: false,
         diagnosticCode: DiagnosticCodes.authEmailInUse,
+      );
+    }
+
+    if (raw.contains('account-exists-with-different-credential') ||
+        raw.contains('credential-already-in-use')) {
+      return RecoverableError(
+        category: RecoverableErrorCategory.authentication,
+        publicMessage:
+            'An account already exists with this email. Sign in with your original method to continue.',
+        severity: RecoverableErrorSeverity.error,
+        isBlocking: isBlocking,
+        retryAction: RecoverableRetryAction.chooseAnother,
+        retrySafe: false,
+        diagnosticCode: DiagnosticCodes.authAccountCollision,
+      );
+    }
+
+    if (raw.contains('invalid-email')) {
+      return RecoverableError(
+        category: RecoverableErrorCategory.validation,
+        publicMessage: 'Please enter a valid email address.',
+        severity: RecoverableErrorSeverity.error,
+        isBlocking: isBlocking,
+        retryAction: RecoverableRetryAction.none,
+        retrySafe: false,
+        diagnosticCode: DiagnosticCodes.authInvalidEmail,
       );
     }
 
@@ -70,24 +118,50 @@ abstract final class AuthErrorMapper {
         raw.contains('user-not-found') ||
         raw.contains('invalid-credential') ||
         raw.contains('invalid-login-credentials')) {
-      return const RecoverableError(
+      return RecoverableError(
         category: RecoverableErrorCategory.authentication,
         publicMessage: 'Incorrect email or password. Please try again.',
         severity: RecoverableErrorSeverity.error,
-        isBlocking: true,
+        isBlocking: isBlocking,
         retryAction: RecoverableRetryAction.retry,
         retrySafe: true,
         diagnosticCode: DiagnosticCodes.authInvalidCredentials,
       );
     }
 
+    if (raw.contains('missing-user')) {
+      return RecoverableError(
+        category: RecoverableErrorCategory.authentication,
+        publicMessage: 'No signed-in user was found. Please log in again.',
+        severity: RecoverableErrorSeverity.error,
+        isBlocking: isBlocking,
+        retryAction: RecoverableRetryAction.reauthenticate,
+        retrySafe: false,
+        diagnosticCode: DiagnosticCodes.authMissingUser,
+      );
+    }
+
+    if (raw.contains('invalid-user-token') ||
+        raw.contains('user-token-expired') ||
+        raw.contains('auth-token-expired')) {
+      return RecoverableError(
+        category: RecoverableErrorCategory.authentication,
+        publicMessage: 'Your session has expired. Please sign in again.',
+        severity: RecoverableErrorSeverity.error,
+        isBlocking: isBlocking,
+        retryAction: RecoverableRetryAction.reauthenticate,
+        retrySafe: false,
+        diagnosticCode: DiagnosticCodes.authSessionExpired,
+      );
+    }
+
     if (raw.contains('too-many-requests')) {
-      return const RecoverableError(
+      return RecoverableError(
         category: RecoverableErrorCategory.authentication,
         publicMessage:
             'Too many attempts. Please wait a little before trying again.',
         severity: RecoverableErrorSeverity.warning,
-        isBlocking: true,
+        isBlocking: isBlocking,
         retryAction: RecoverableRetryAction.none,
         retrySafe: false,
         diagnosticCode: DiagnosticCodes.authRateLimited,
@@ -95,12 +169,12 @@ abstract final class AuthErrorMapper {
     }
 
     if (raw.contains('user-disabled')) {
-      return const RecoverableError(
+      return RecoverableError(
         category: RecoverableErrorCategory.authentication,
         publicMessage:
             'This account has been disabled. Please contact support.',
         severity: RecoverableErrorSeverity.critical,
-        isBlocking: true,
+        isBlocking: isBlocking,
         retryAction: RecoverableRetryAction.none,
         retrySafe: false,
         diagnosticCode: DiagnosticCodes.authUserDisabled,
@@ -108,12 +182,12 @@ abstract final class AuthErrorMapper {
     }
 
     if (raw.contains('weak-password')) {
-      return const RecoverableError(
+      return RecoverableError(
         category: RecoverableErrorCategory.validation,
         publicMessage:
             'Password must be at least 8 characters and include both letters and numbers.',
         severity: RecoverableErrorSeverity.error,
-        isBlocking: true,
+        isBlocking: isBlocking,
         retryAction: RecoverableRetryAction.none,
         retrySafe: false,
         diagnosticCode: DiagnosticCodes.authWeakPassword,
@@ -121,11 +195,11 @@ abstract final class AuthErrorMapper {
     }
 
     if (raw.contains('requires-recent-login')) {
-      return const RecoverableError(
+      return RecoverableError(
         category: RecoverableErrorCategory.authentication,
         publicMessage: 'Please sign in again to complete this action.',
         severity: RecoverableErrorSeverity.error,
-        isBlocking: true,
+        isBlocking: isBlocking,
         retryAction: RecoverableRetryAction.reauthenticate,
         retrySafe: false,
         diagnosticCode: DiagnosticCodes.authRequiresRecentLogin,
@@ -133,15 +207,14 @@ abstract final class AuthErrorMapper {
     }
 
     // Safe firewall default: no raw error strings leaked to production UI
-    return const RecoverableError(
+    return RecoverableError(
       category: RecoverableErrorCategory.authentication,
-      publicMessage:
-          'Could not complete sign in right now. Please try again.',
+      publicMessage: 'Could not complete sign in right now. Please try again.',
       severity: RecoverableErrorSeverity.error,
-      isBlocking: true,
+      isBlocking: isBlocking,
       retryAction: RecoverableRetryAction.retry,
       retrySafe: true,
-      diagnosticCode: DiagnosticCodes.authInvalidCredentials,
+      diagnosticCode: DiagnosticCodes.authUnknown,
     );
   }
 
@@ -222,7 +295,7 @@ abstract final class AuthErrorMapper {
           isBlocking: isBlocking,
           retryAction: RecoverableRetryAction.none,
           retrySafe: false,
-          diagnosticCode: DiagnosticCodes.validationInvalidFormat,
+          diagnosticCode: DiagnosticCodes.authInvalidEmail,
         );
       case 'user-disabled':
         return RecoverableError(
@@ -291,6 +364,40 @@ abstract final class AuthErrorMapper {
           retrySafe: false,
           diagnosticCode: DiagnosticCodes.authRequiresRecentLogin,
         );
+      case 'missing-user':
+        return RecoverableError(
+          category: RecoverableErrorCategory.authentication,
+          publicMessage: 'No signed-in user was found. Please log in again.',
+          severity: RecoverableErrorSeverity.error,
+          isBlocking: isBlocking,
+          retryAction: RecoverableRetryAction.reauthenticate,
+          retrySafe: false,
+          diagnosticCode: DiagnosticCodes.authMissingUser,
+        );
+      case 'invalid-user-token':
+      case 'user-token-expired':
+      case 'auth-token-expired':
+        return RecoverableError(
+          category: RecoverableErrorCategory.authentication,
+          publicMessage: 'Your session has expired. Please sign in again.',
+          severity: RecoverableErrorSeverity.error,
+          isBlocking: isBlocking,
+          retryAction: RecoverableRetryAction.reauthenticate,
+          retrySafe: false,
+          diagnosticCode: DiagnosticCodes.authSessionExpired,
+        );
+      case 'account-exists-with-different-credential':
+      case 'credential-already-in-use':
+        return RecoverableError(
+          category: RecoverableErrorCategory.authentication,
+          publicMessage:
+              'An account already exists with this email. Sign in with your original method to continue.',
+          severity: RecoverableErrorSeverity.error,
+          isBlocking: isBlocking,
+          retryAction: RecoverableRetryAction.chooseAnother,
+          retrySafe: false,
+          diagnosticCode: DiagnosticCodes.authAccountCollision,
+        );
       default:
         return RecoverableError(
           category: RecoverableErrorCategory.authentication,
@@ -300,7 +407,7 @@ abstract final class AuthErrorMapper {
           isBlocking: isBlocking,
           retryAction: RecoverableRetryAction.retry,
           retrySafe: true,
-          diagnosticCode: DiagnosticCodes.authInvalidCredentials,
+          diagnosticCode: DiagnosticCodes.authUnknown,
         );
     }
   }

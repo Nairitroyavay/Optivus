@@ -73,24 +73,27 @@ void main() {
   }
 
   group('AH-F019 footer foundation (Requirements A-H)', () {
-    test('A & C: metrics use the configured CTA geometry and one safe-area inset', () {
-      const metrics = OnboardingFooterMetrics(safeAreaBottom: 34);
-      expect(
-        metrics.actionAreaHeight,
-        OnboardingFooterMetrics.primaryActionHeight,
-      );
-      expect(
-        metrics.obstructionHeight,
-        OnboardingFooterMetrics.topSpacing +
-            OnboardingFooterMetrics.primaryActionHeight +
-            OnboardingFooterMetrics.bottomSpacing +
-            34,
-      );
-      expect(
-        metrics.requiredContentInset,
-        greaterThanOrEqualTo(metrics.obstructionHeight),
-      );
-    });
+    test(
+      'A & C: metrics use the configured CTA geometry and one safe-area inset',
+      () {
+        const metrics = OnboardingFooterMetrics(safeAreaBottom: 34);
+        expect(
+          metrics.actionAreaHeight,
+          OnboardingFooterMetrics.primaryActionHeight,
+        );
+        expect(
+          metrics.obstructionHeight,
+          OnboardingFooterMetrics.topSpacing +
+              OnboardingFooterMetrics.primaryActionHeight +
+              OnboardingFooterMetrics.bottomSpacing +
+              34,
+        );
+        expect(
+          metrics.requiredContentInset,
+          greaterThanOrEqualTo(metrics.obstructionHeight),
+        );
+      },
+    );
 
     testWidgets('B: footer incorporates bottom safe area exactly once', (
       tester,
@@ -131,7 +134,9 @@ void main() {
                   children: [
                     const Expanded(child: ColoredBox(color: Colors.white)),
                     OnboardingActionBar(
-                      actions: [action(OnboardingActionKind.next, 'Next', () {})],
+                      actions: [
+                        action(OnboardingActionKind.next, 'Next', () {}),
+                      ],
                     ),
                   ],
                 ),
@@ -152,39 +157,40 @@ void main() {
       );
     });
 
-    testWidgets('E & F: disabled and loading states retain structural footer space', (
-      tester,
-    ) async {
-      var enabled = true;
-      var loading = false;
+    testWidgets(
+      'E & F: disabled and loading states retain structural footer space',
+      (tester) async {
+        var enabled = true;
+        var loading = false;
 
-      Future<void> pumpState() {
-        return tester.pumpWidget(
-          actionHost(
-            actions: [
-              action(
-                OnboardingActionKind.next,
-                'Next',
-                () {},
-                enabled: enabled,
-                operationState: loading
-                    ? OnboardingActionOperationState.active
-                    : OnboardingActionOperationState.idle,
-              ),
-            ],
-          ),
-        );
-      }
+        Future<void> pumpState() {
+          return tester.pumpWidget(
+            actionHost(
+              actions: [
+                action(
+                  OnboardingActionKind.next,
+                  'Next',
+                  () {},
+                  enabled: enabled,
+                  operationState: loading
+                      ? OnboardingActionOperationState.active
+                      : OnboardingActionOperationState.idle,
+                ),
+              ],
+            ),
+          );
+        }
 
-      await pumpState();
-      final initial = tester.getSize(find.byType(OnboardingActionBar));
-      enabled = false;
-      await pumpState();
-      expect(tester.getSize(find.byType(OnboardingActionBar)), initial);
-      loading = true;
-      await pumpState();
-      expect(tester.getSize(find.byType(OnboardingActionBar)), initial);
-    });
+        await pumpState();
+        final initial = tester.getSize(find.byType(OnboardingActionBar));
+        enabled = false;
+        await pumpState();
+        expect(tester.getSize(find.byType(OnboardingActionBar)), initial);
+        loading = true;
+        await pumpState();
+        expect(tester.getSize(find.byType(OnboardingActionBar)), initial);
+      },
+    );
 
     testWidgets('G: Generate to Retry replacement remains stable in geometry', (
       tester,
@@ -208,7 +214,9 @@ void main() {
       );
     });
 
-    testWidgets('H: hidden footer releases its structural space', (tester) async {
+    testWidgets('H: hidden footer releases its structural space', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         actionHost(
           actions: [
@@ -226,199 +234,227 @@ void main() {
   });
 
   group('AH-F019 validation & appearance stability', () {
-    testWidgets('CTA remains structurally present and disabled in place when invalid', (
-      tester,
-    ) async {
-      var isFormValid = true;
+    testWidgets(
+      'CTA remains structurally present and disabled in place when invalid',
+      (tester) async {
+        var isFormValid = true;
 
-      Widget buildFlow() {
-        return actionHost(
-          actions: [
-            action(
-              OnboardingActionKind.next,
-              'Next',
-              () {},
-              enabled: isFormValid,
-              visible: true,
-            ),
-          ],
-        );
-      }
+        Widget buildFlow() {
+          return actionHost(
+            actions: [
+              action(
+                OnboardingActionKind.next,
+                'Next',
+                () {},
+                enabled: isFormValid,
+                visible: true,
+              ),
+            ],
+          );
+        }
 
-      await tester.pumpWidget(buildFlow());
-      final initialRect = tester.getRect(find.byType(OnboardingActionBar));
-      expect(find.text('Next'), findsOneWidget);
+        await tester.pumpWidget(buildFlow());
+        final initialRect = tester.getRect(find.byType(OnboardingActionBar));
+        expect(find.text('Next'), findsOneWidget);
 
-      // Form becomes invalid -> CTA disabled in place, no layout jump
-      isFormValid = false;
-      await tester.pumpWidget(buildFlow());
-      final invalidRect = tester.getRect(find.byType(OnboardingActionBar));
-      expect(invalidRect, initialRect);
-      expect(find.text('Next'), findsOneWidget);
+        // Form becomes invalid -> CTA disabled in place, no layout jump
+        isFormValid = false;
+        await tester.pumpWidget(buildFlow());
+        final invalidRect = tester.getRect(find.byType(OnboardingActionBar));
+        expect(invalidRect, initialRect);
+        expect(find.text('Next'), findsOneWidget);
 
-      // Form becomes valid again -> CTA re-enabled in identical position
-      isFormValid = true;
-      await tester.pumpWidget(buildFlow());
-      final restoredRect = tester.getRect(find.byType(OnboardingActionBar));
-      expect(restoredRect, initialRect);
-    });
+        // Form becomes valid again -> CTA re-enabled in identical position
+        isFormValid = true;
+        await tester.pumpWidget(buildFlow());
+        final restoredRect = tester.getRect(find.byType(OnboardingActionBar));
+        expect(restoredRect, initialRect);
+      },
+    );
   });
 
   group('AH-F019 interaction ownership & double-tap protection', () {
-    for (final entry in const <(OnboardingActionKind, String, OnboardingActionEmphasis)>[
-      (OnboardingActionKind.next, 'Next', OnboardingActionEmphasis.primary),
-      (OnboardingActionKind.generate, 'Generate', OnboardingActionEmphasis.primary),
-      (OnboardingActionKind.retry, 'Retry', OnboardingActionEmphasis.primary),
-      (OnboardingActionKind.enterOptivus, 'Enter Optivus', OnboardingActionEmphasis.primary),
-      (OnboardingActionKind.skip, 'Skip', OnboardingActionEmphasis.tertiary),
-      (OnboardingActionKind.notNow, 'Not now', OnboardingActionEmphasis.tertiary),
-      (OnboardingActionKind.back, 'Back', OnboardingActionEmphasis.secondary),
-      (OnboardingActionKind.regenerate, 'Regenerate', OnboardingActionEmphasis.secondary),
-    ]) {
-      testWidgets('${entry.$2} rapid taps invoke exactly one active operation', (
-        tester,
-      ) async {
+    for (final entry
+        in const <(OnboardingActionKind, String, OnboardingActionEmphasis)>[
+          (OnboardingActionKind.next, 'Next', OnboardingActionEmphasis.primary),
+          (
+            OnboardingActionKind.generate,
+            'Generate',
+            OnboardingActionEmphasis.primary,
+          ),
+          (
+            OnboardingActionKind.retry,
+            'Retry',
+            OnboardingActionEmphasis.primary,
+          ),
+          (
+            OnboardingActionKind.enterOptivus,
+            'Enter Optivus',
+            OnboardingActionEmphasis.primary,
+          ),
+          (
+            OnboardingActionKind.skip,
+            'Skip',
+            OnboardingActionEmphasis.tertiary,
+          ),
+          (
+            OnboardingActionKind.notNow,
+            'Not now',
+            OnboardingActionEmphasis.tertiary,
+          ),
+          (
+            OnboardingActionKind.back,
+            'Back',
+            OnboardingActionEmphasis.secondary,
+          ),
+          (
+            OnboardingActionKind.regenerate,
+            'Regenerate',
+            OnboardingActionEmphasis.secondary,
+          ),
+        ]) {
+      testWidgets(
+        '${entry.$2} rapid taps invoke exactly one active operation',
+        (tester) async {
+          var calls = 0;
+          final pending = Completer<void>();
+          await tester.pumpWidget(
+            actionHost(
+              actions: [
+                action(entry.$1, entry.$2, () {
+                  calls++;
+                  return pending.future;
+                }, emphasis: entry.$3),
+              ],
+            ),
+          );
+
+          Finder target;
+          if (entry.$3 == OnboardingActionEmphasis.primary) {
+            target = find.byKey(ValueKey('onboarding-action-${entry.$1.name}'));
+          } else {
+            target = find.text(entry.$2);
+          }
+
+          for (var i = 0; i < 5; i++) {
+            await tester.tap(target, warnIfMissed: false);
+          }
+          expect(calls, 1);
+          pending.complete();
+          await tester.pump();
+          await tester.pump();
+        },
+      );
+    }
+
+    testWidgets(
+      'synchronous action callback is fenced against same-frame duplicates',
+      (tester) async {
         var calls = 0;
-        final pending = Completer<void>();
         await tester.pumpWidget(
           actionHost(
             actions: [
-              action(
-                entry.$1,
-                entry.$2,
-                () {
-                  calls++;
-                  return pending.future;
-                },
-                emphasis: entry.$3,
-              ),
+              action(OnboardingActionKind.next, 'Next', () {
+                calls++;
+              }),
             ],
           ),
         );
 
-        Finder target;
-        if (entry.$3 == OnboardingActionEmphasis.primary) {
-          target = find.byKey(ValueKey('onboarding-action-${entry.$1.name}'));
-        } else {
-          target = find.text(entry.$2);
-        }
-
-        for (var i = 0; i < 5; i++) {
-          await tester.tap(target, warnIfMissed: false);
-        }
+        final target = find.byKey(const ValueKey('onboarding-action-next'));
+        // Tap twice within the same frame before post-frame callback runs
+        await tester.tap(target, warnIfMissed: false);
+        await tester.tap(target, warnIfMissed: false);
         expect(calls, 1);
-        pending.complete();
         await tester.pump();
         await tester.pump();
-      });
-    }
-
-    testWidgets('synchronous action callback is fenced against same-frame duplicates', (
-      tester,
-    ) async {
-      var calls = 0;
-      await tester.pumpWidget(
-        actionHost(
-          actions: [
-            action(OnboardingActionKind.next, 'Next', () {
-              calls++;
-            }),
-          ],
-        ),
-      );
-
-      final target = find.byKey(const ValueKey('onboarding-action-next'));
-      // Tap twice within the same frame before post-frame callback runs
-      await tester.tap(target, warnIfMissed: false);
-      await tester.tap(target, warnIfMissed: false);
-      expect(calls, 1);
-      await tester.pump();
-      await tester.pump();
-    });
+      },
+    );
   });
 
   group('AH-F019 loading ownership & state transitions', () {
-    testWidgets('loading action owns CTA and blocks duplicate triggers until complete', (
-      tester,
-    ) async {
-      var calls = 0;
-      final completer = Completer<void>();
-      var operationState = OnboardingActionOperationState.idle;
+    testWidgets(
+      'loading action owns CTA and blocks duplicate triggers until complete',
+      (tester) async {
+        var calls = 0;
+        final completer = Completer<void>();
+        var operationState = OnboardingActionOperationState.idle;
 
-      Widget buildTest(StateSetter setState) {
-        return actionHost(
-          actions: [
-            action(
-              OnboardingActionKind.generate,
-              'Generate',
-              () {
+        Widget buildTest(StateSetter setState) {
+          return actionHost(
+            actions: [
+              action(OnboardingActionKind.generate, 'Generate', () {
                 calls++;
                 setState(() {
                   operationState = OnboardingActionOperationState.active;
                 });
                 return completer.future;
-              },
-              operationState: operationState,
-            ),
-          ],
+              }, operationState: operationState),
+            ],
+          );
+        }
+
+        late StateSetter outerSetState;
+        await tester.pumpWidget(
+          StatefulBuilder(
+            builder: (context, setState) {
+              outerSetState = setState;
+              return buildTest(setState);
+            },
+          ),
         );
-      }
 
-      late StateSetter outerSetState;
-      await tester.pumpWidget(
-        StatefulBuilder(
-          builder: (context, setState) {
-            outerSetState = setState;
-            return buildTest(setState);
-          },
-        ),
-      );
+        final target = find.byKey(const ValueKey('onboarding-action-generate'));
+        await tester.tap(target);
+        await tester.pump();
+        expect(calls, 1);
 
-      final target = find.byKey(const ValueKey('onboarding-action-generate'));
-      await tester.tap(target);
-      await tester.pump();
-      expect(calls, 1);
+        // Rapid additional tap while loading -> ignored
+        await tester.tap(target, warnIfMissed: false);
+        expect(calls, 1);
 
-      // Rapid additional tap while loading -> ignored
-      await tester.tap(target, warnIfMissed: false);
-      expect(calls, 1);
+        // Operation finishes
+        completer.complete();
+        outerSetState(() {
+          operationState = OnboardingActionOperationState.idle;
+        });
+        await tester.pump();
+        await tester.pump();
+      },
+    );
 
-      // Operation finishes
-      completer.complete();
-      outerSetState(() {
-        operationState = OnboardingActionOperationState.idle;
-      });
-      await tester.pump();
-      await tester.pump();
-    });
+    testWidgets(
+      'Generate active -> error -> Retry replacement avoids enabled flash',
+      (tester) async {
+        OnboardingAction currentAction = action(
+          OnboardingActionKind.generate,
+          'Generate',
+          () {},
+          operationState: OnboardingActionOperationState.active,
+        );
 
-    testWidgets('Generate active -> error -> Retry replacement avoids enabled flash', (
-      tester,
-    ) async {
-      OnboardingAction currentAction = action(
-        OnboardingActionKind.generate,
-        'Generate',
-        () {},
-        operationState: OnboardingActionOperationState.active,
-      );
+        Widget buildWidget() => actionHost(actions: [currentAction]);
 
-      Widget buildWidget() => actionHost(actions: [currentAction]);
+        await tester.pumpWidget(buildWidget());
+        final activeHeight = tester
+            .getSize(find.byType(OnboardingActionBar))
+            .height;
 
-      await tester.pumpWidget(buildWidget());
-      final activeHeight = tester.getSize(find.byType(OnboardingActionBar)).height;
-
-      // Transition to Retry directly with stable geometry
-      currentAction = action(
-        OnboardingActionKind.retry,
-        'Retry',
-        () {},
-        operationState: OnboardingActionOperationState.idle,
-      );
-      await tester.pumpWidget(buildWidget());
-      final retryHeight = tester.getSize(find.byType(OnboardingActionBar)).height;
-      expect(retryHeight, activeHeight);
-      expect(find.text('Retry'), findsOneWidget);
-    });
+        // Transition to Retry directly with stable geometry
+        currentAction = action(
+          OnboardingActionKind.retry,
+          'Retry',
+          () {},
+          operationState: OnboardingActionOperationState.idle,
+        );
+        await tester.pumpWidget(buildWidget());
+        final retryHeight = tester
+            .getSize(find.byType(OnboardingActionBar))
+            .height;
+        expect(retryHeight, activeHeight);
+        expect(find.text('Retry'), findsOneWidget);
+      },
+    );
 
     testWidgets('Back action during loading respects feature safety contract', (
       tester,
@@ -503,50 +539,58 @@ void main() {
       expect(find.text('Next'), findsNothing);
     });
 
-    testWidgets('single IME ownership: shell applies keyboard padding without double offset', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: MediaQuery(
-            data: const MediaQueryData(
-              size: Size(393, 873),
-              padding: EdgeInsets.only(top: 44, bottom: 34),
-              viewPadding: EdgeInsets.only(top: 44, bottom: 34),
-              viewInsets: EdgeInsets.only(bottom: 300),
-            ),
-            child: OnboardingStepShell(
-              currentPage: 1,
-              pageOffset: 1.0,
-              completedSteps: List.filled(OnboardingDraft.stepCount, false),
-              validationMessage: null,
-              onDotTap: (_) {},
-              onIndicatorDraggedTo: (_) {},
-              onSave: null,
-              showSave: false,
-              isSaving: false,
-              isSaved: false,
-              saveEnabled: false,
-              ctaLabel: 'Next Step',
-              ctaEnabled: true,
-              ctaLoading: false,
-              actions: [action(OnboardingActionKind.next, 'Next Step', () {})],
-              child: const ColoredBox(
-                key: ValueKey('test-content-box'),
-                color: Colors.blue,
+    testWidgets(
+      'single IME ownership: shell applies keyboard padding without double offset',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(
+                size: Size(393, 873),
+                padding: EdgeInsets.only(top: 44, bottom: 34),
+                viewPadding: EdgeInsets.only(top: 44, bottom: 34),
+                viewInsets: EdgeInsets.only(bottom: 300),
+              ),
+              child: OnboardingStepShell(
+                currentPage: 1,
+                pageOffset: 1.0,
+                completedSteps: List.filled(OnboardingDraft.stepCount, false),
+                validationMessage: null,
+                onDotTap: (_) {},
+                onIndicatorDraggedTo: (_) {},
+                onSave: null,
+                showSave: false,
+                isSaving: false,
+                isSaved: false,
+                saveEnabled: false,
+                ctaLabel: 'Next Step',
+                ctaEnabled: true,
+                ctaLoading: false,
+                actions: [
+                  action(OnboardingActionKind.next, 'Next Step', () {}),
+                ],
+                child: const ColoredBox(
+                  key: ValueKey('test-content-box'),
+                  color: Colors.blue,
+                ),
               ),
             ),
           ),
-        ),
-      );
-      await tester.pump();
+        );
+        await tester.pump();
 
-      // The content box is constrained above the keyboard and footer is hidden
-      final content = tester.getRect(find.byKey(const ValueKey('test-content-box')));
-      expect(content.bottom, lessThanOrEqualTo(873 - 300));
-      expect(find.byKey(const ValueKey('onboarding-cta-hidden-for-keyboard')), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
+        // The content box is constrained above the keyboard and footer is hidden
+        final content = tester.getRect(
+          find.byKey(const ValueKey('test-content-box')),
+        );
+        expect(content.bottom, lessThanOrEqualTo(873 - 300));
+        expect(
+          find.byKey(const ValueKey('onboarding-cta-hidden-for-keyboard')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 
   group('AH-F019 Step 14 structural overlap regression', () {
@@ -585,8 +629,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith(
-                (_) => MockOnboardingNotifier()..loadSeedData(draft),
+              onboardingStateProvider.overrideWith(
+                (_) => OnboardingNotifier()..loadSeedData(draft),
               ),
             ],
             child: MaterialApp(
@@ -626,640 +670,205 @@ void main() {
         final step = tester.getRect(find.byType(OnboardingTodayReadyStep));
         expect(step.bottom, equals(footer.bottom));
         expect(tester.takeException(), isNull);
-
       });
     }
 
-    testWidgets('Step 14 transient invalid state disables Enter Optivus in place', (
-      tester,
-    ) async {
-      var isReady = true;
+    testWidgets(
+      'Step 14 transient invalid state disables Enter Optivus in place',
+      (tester) async {
+        var isReady = true;
 
-      Widget buildHost(StateSetter setState) {
-        return ProviderScope(
-          overrides: [
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(const OnboardingDraft(uid: 'step14-test')),
-            ),
-          ],
-          child: MaterialApp(
-            home: OnboardingStepShell(
-              currentPage: OnboardingDraft.lastStepIndex,
-              pageOffset: OnboardingDraft.lastStepIndex.toDouble(),
-              completedSteps: List.filled(OnboardingDraft.stepCount, isReady),
-              validationMessage: isReady ? null : 'Complete required setup first.',
-              onDotTap: (_) {},
-              onIndicatorDraggedTo: (_) {},
-              onSave: null,
-              showSave: false,
-              isSaving: false,
-              isSaved: isReady,
-              saveEnabled: isReady,
-              ctaLabel: 'Enter Optivus',
-              ctaEnabled: isReady,
-              ctaLoading: false,
-              actions: [
-                action(
-                  OnboardingActionKind.enterOptivus,
-                  'Enter Optivus',
-                  () {},
-                  enabled: isReady,
-                ),
-              ],
-              child: const OnboardingTodayReadyStep(),
-            ),
-          ),
-        );
-      }
-
-      late StateSetter outerSetState;
-      await tester.pumpWidget(
-        StatefulBuilder(
-          builder: (context, setState) {
-            outerSetState = setState;
-            return buildHost(setState);
-          },
-        ),
-      );
-      await tester.pump();
-
-      final initialRect = tester.getRect(find.byKey(const ValueKey('onboarding-cta-visible')));
-      expect(find.text('Enter Optivus'), findsOneWidget);
-
-      // Transient invalid state
-      outerSetState(() {
-        isReady = false;
-      });
-      await tester.pump();
-
-      final invalidRect = tester.getRect(find.byKey(const ValueKey('onboarding-cta-visible')));
-      expect(invalidRect, initialRect);
-      expect(find.text('Complete required setup first.'), findsOneWidget);
-
-      // Valid again
-      outerSetState(() {
-        isReady = true;
-      });
-      await tester.pump();
-      final restoredRect = tester.getRect(find.byKey(const ValueKey('onboarding-cta-visible')));
-      expect(restoredRect, initialRect);
-    });
-
-    testWidgets('Step 14 rapid Enter Optivus taps invoke completion callback only once', (
-      tester,
-    ) async {
-      var completionCalls = 0;
-      final pending = Completer<void>();
-
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(const OnboardingDraft(uid: 'step14-doubletap')),
-            ),
-          ],
-          child: MaterialApp(
-            home: OnboardingStepShell(
-              currentPage: OnboardingDraft.lastStepIndex,
-              pageOffset: OnboardingDraft.lastStepIndex.toDouble(),
-              completedSteps: List.filled(OnboardingDraft.stepCount, true),
-              validationMessage: null,
-              onDotTap: (_) {},
-              onIndicatorDraggedTo: (_) {},
-              onSave: null,
-              showSave: false,
-              isSaving: false,
-              isSaved: true,
-              saveEnabled: true,
-              ctaLabel: 'Enter Optivus',
-              ctaEnabled: true,
-              ctaLoading: false,
-              actions: [
-                action(
-                  OnboardingActionKind.enterOptivus,
-                  'Enter Optivus',
-                  () {
-                    completionCalls++;
-                    return pending.future;
-                  },
-                ),
-              ],
-              child: const OnboardingTodayReadyStep(),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      final cta = find.byKey(const ValueKey('onboarding-action-enterOptivus'));
-      for (var i = 0; i < 5; i++) {
-        await tester.tap(cta, warnIfMissed: false);
-      }
-      expect(completionCalls, 1);
-      pending.complete();
-      await tester.pump();
-      await tester.pump();
-    });
-  });
-
-  group('AH-F018 full-screen timeline integration', () {
-    testWidgets('FullScreenTimelineScaffold inside OnboardingStepShell scrolls last event above footer', (
-      tester,
-    ) async {
-      final entries = List.generate(
-        10,
-        (i) => TimelineEntry(
-          id: 'event-$i',
-          sourceId: 'event-$i',
-          title: 'Event $i',
-          startMinute: 7 * 60 + i * 60,
-          endMinute: 7 * 60 + i * 60 + 45,
-          repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-          category: TimelineCategory.classes,
-        ),
-      );
-
-      int selectedDay = 1;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: OnboardingStepShell(
-            currentPage: 4,
-            pageOffset: 4.0,
-            completedSteps: List.filled(OnboardingDraft.stepCount, false),
-            validationMessage: null,
-            onDotTap: (_) {},
-            onIndicatorDraggedTo: (_) {},
-            onSave: null,
-            showSave: false,
-            isSaving: false,
-            isSaved: false,
-            saveEnabled: false,
-            ctaLabel: 'Next Step',
-            ctaEnabled: true,
-            ctaLoading: false,
-            actions: [action(OnboardingActionKind.next, 'Next Step', () {})],
-            child: StatefulBuilder(
-              builder: (context, setState) {
-                return FullScreenTimelineScaffold(
-                  entries: entries,
-                  selectedDay: selectedDay,
-                  onDayChanged: (day) => setState(() => selectedDay = day),
-                  styleBuilder: (entry) =>
-                      TimelineEntryStyle.defaultForCategory(entry.category),
-                  title: 'Schedule Preview',
-                );
-              },
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-
-      final footerRect = tester.getRect(
-        find.byKey(const ValueKey('onboarding-cta-visible')),
-      );
-      final timelineRect = tester.getRect(find.byType(FullScreenTimelineScaffold));
-
-      // The timeline scaffold extends to the bottom behind the floating footer
-      expect(timelineRect.bottom, equals(footerRect.bottom));
-      expect(tester.takeException(), isNull);
-
-    });
-  });
-
-  group('AH-F019 keyboard dismiss cycle & dynamic insets', () {
-    testWidgets('keyboard dismiss smoothly restores footer without residual gaps', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(393, 873);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
-      var keyboardHeight = 0.0;
-      Widget buildHost(StateSetter setState) {
-        return actionHost(
-          viewPadding: const EdgeInsets.only(bottom: 34),
-          viewInsets: EdgeInsets.only(bottom: keyboardHeight),
-          actions: [action(OnboardingActionKind.next, 'Next', () {})],
-        );
-      }
-
-      late StateSetter outerSetState;
-      await tester.pumpWidget(
-        StatefulBuilder(
-          builder: (context, setState) {
-            outerSetState = setState;
-            return buildHost(setState);
-          },
-        ),
-      );
-      await tester.pump();
-
-      final initialFooterRect = tester.getRect(
-        find.byKey(const ValueKey('onboarding-cta-visible')),
-      );
-      expect(initialFooterRect.bottom, 873);
-
-      // Keyboard opens (300px)
-      outerSetState(() => keyboardHeight = 300);
-      await tester.pump();
-      expect(
-        find.byKey(const ValueKey('onboarding-cta-hidden-for-keyboard')),
-        findsOneWidget,
-      );
-
-      // Keyboard dismisses (0px)
-      outerSetState(() => keyboardHeight = 0);
-      await tester.pump();
-      final restoredFooterRect = tester.getRect(
-        find.byKey(const ValueKey('onboarding-cta-visible')),
-      );
-      expect(restoredFooterRect, initialFooterRect);
-    });
-
-    for (final kb in const [250.0, 300.0, 350.0]) {
-      testWidgets('keyboard height $kb correctly hides footer without double inset', (
-        tester,
-      ) async {
-        await tester.pumpWidget(
-          actionHost(
-            viewPadding: const EdgeInsets.only(bottom: 34),
-            viewInsets: EdgeInsets.only(bottom: kb),
-            actions: [action(OnboardingActionKind.next, 'Next', () {})],
-          ),
-        );
-        expect(
-          find.byKey(const ValueKey('onboarding-cta-hidden-for-keyboard')),
-          findsOneWidget,
-        );
-      });
-    }
-
-    for (final safeBottom in const [0.0, 16.0, 34.0, 48.0]) {
-      testWidgets('safe-area bottom $safeBottom applies metric calculation exactly once', (
-        tester,
-      ) async {
-        await tester.pumpWidget(
-          actionHost(
-            viewPadding: EdgeInsets.only(bottom: safeBottom),
-            actions: [action(OnboardingActionKind.next, 'Next', () {})],
-          ),
-        );
-        final height = tester.getSize(find.byType(OnboardingActionBar)).height;
-        final expectedHeight =
-            OnboardingFooterMetrics.topSpacing +
-            OnboardingFooterMetrics.primaryActionHeight +
-            OnboardingFooterMetrics.bottomSpacing +
-            safeBottom;
-        expect(height, expectedHeight);
-      });
-    }
-  });
-
-  group('AH-F019 operation identity & deduplication resilience', () {
-    testWidgets('stale operation completion does not unlock superseding active operation', (
-      tester,
-    ) async {
-      var callCount = 0;
-      final completerA = Completer<void>();
-      final completerB = Completer<void>();
-      var currentCompleter = completerA;
-
-      Widget buildWidget() {
-        return actionHost(
-          actions: [
-            action(
-              OnboardingActionKind.generate,
-              'Generate',
-              () {
-                callCount++;
-                return currentCompleter.future;
-              },
-            ),
-          ],
-        );
-      }
-
-      await tester.pumpWidget(buildWidget());
-      final btn = find.byKey(const ValueKey('onboarding-action-generate'));
-
-      // First tap -> Starts operation A
-      await tester.tap(btn);
-      await tester.pump();
-      expect(callCount, 1);
-
-      // Attempt second tap while A is active -> Blocked by ownership fence
-      await tester.tap(btn, warnIfMissed: false);
-      expect(callCount, 1);
-
-      // Operation A finishes, then feature initiates operation B
-      completerA.complete();
-      await tester.pump();
-
-      currentCompleter = completerB;
-      await tester.tap(btn);
-      await tester.pump();
-      expect(callCount, 2);
-
-      // Rapid tap during B is blocked
-      await tester.tap(btn, warnIfMissed: false);
-      expect(callCount, 2);
-
-      completerB.complete();
-      await tester.pump();
-    });
-
-    testWidgets('operation failure clears interaction fence allowing deliberate retry', (
-      tester,
-    ) async {
-      var callCount = 0;
-      var shouldFail = true;
-
-      await tester.pumpWidget(
-        actionHost(
-          actions: [
-            action(
-              OnboardingActionKind.retry,
-              'Retry',
-              () async {
-                callCount++;
-                if (shouldFail) {
-                  throw Exception('Network timeout');
-                }
-              },
-            ),
-          ],
-        ),
-      );
-
-      final btn = find.byKey(const ValueKey('onboarding-action-retry'));
-
-      // First attempt fails
-      try {
-        await tester.tap(btn);
-      } catch (_) {}
-      await tester.pump();
-      expect(callCount, 1);
-
-      // Fence was cleaned up in try/catch/finally -> Subsequent deliberate attempt succeeds
-      shouldFail = false;
-      await tester.tap(btn);
-      await tester.pump();
-      expect(callCount, 2);
-    });
-  });
-
-  group('AH-F019 Step 14 long/short content & loading geometry', () {
-    testWidgets('Step 14 short review content anchors footer at bottom without vertical centering bug', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(393, 873);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(const OnboardingDraft(uid: 'short-content')),
-            ),
-          ],
-          child: MaterialApp(
-            home: OnboardingStepShell(
-              currentPage: OnboardingDraft.lastStepIndex,
-              pageOffset: OnboardingDraft.lastStepIndex.toDouble(),
-              completedSteps: List.filled(OnboardingDraft.stepCount, true),
-              validationMessage: null,
-              onDotTap: (_) {},
-              onIndicatorDraggedTo: (_) {},
-              onSave: null,
-              showSave: false,
-              isSaving: false,
-              isSaved: true,
-              saveEnabled: true,
-              ctaLabel: 'Enter Optivus',
-              ctaEnabled: true,
-              ctaLoading: false,
-              actions: [
-                action(
-                  OnboardingActionKind.enterOptivus,
-                  'Enter Optivus',
-                  () {},
-                ),
-              ],
-              child: const OnboardingTodayReadyStep(),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      final footerRect = tester.getRect(
-        find.byKey(const ValueKey('onboarding-cta-visible')),
-      );
-      expect(footerRect.bottom, 873);
-      expect(find.text('Enter Optivus'), findsOneWidget);
-    });
-
-    testWidgets('Step 14 long review content can be scrolled to reveal last item completely above CTA', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(393, 873);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
-      final draft = OnboardingDraft(
-        uid: 'long-content-scroll',
-        baseTimeline: BaseTimelineDraft(
-          blocks: List.generate(
-            15,
-            (index) => TimelineBlockDraft(
-              id: 'block-$index',
-              section: 'classes',
-              title: 'Class item $index',
-              blockType: TimelineBlockDraft.hardBlockKey,
-              startMinute: 6 * 60 + index * 60,
-              endMinute: 6 * 60 + index * 60 + 45,
-              repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-            ),
-          ),
-        ),
-      );
-
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(draft),
-            ),
-          ],
-          child: MaterialApp(
-            home: OnboardingStepShell(
-              currentPage: OnboardingDraft.lastStepIndex,
-              pageOffset: OnboardingDraft.lastStepIndex.toDouble(),
-              completedSteps: List.filled(OnboardingDraft.stepCount, true),
-              validationMessage: null,
-              onDotTap: (_) {},
-              onIndicatorDraggedTo: (_) {},
-              onSave: null,
-              showSave: false,
-              isSaving: false,
-              isSaved: true,
-              saveEnabled: true,
-              ctaLabel: 'Enter Optivus',
-              ctaEnabled: true,
-              ctaLoading: false,
-              actions: [
-                action(
-                  OnboardingActionKind.enterOptivus,
-                  'Enter Optivus',
-                  () {},
-                ),
-              ],
-              child: const OnboardingTodayReadyStep(),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-
-      final scrollable = find.byType(OnboardingScrollView);
-      expect(scrollable, findsOneWidget);
-
-      // Drag/scroll all the way to the bottom
-      await tester.drag(scrollable, const Offset(0, -2000));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-
-      final footerRect = tester.getRect(
-        find.byKey(const ValueKey('onboarding-cta-visible')),
-      );
-      final previewRect = tester.getRect(
-        find.byKey(const ValueKey('step14-final-preview')),
-      );
-
-      // The preview inside the scrollable terminates above the footer
-      expect(previewRect.bottom, lessThanOrEqualTo(footerRect.top));
-    });
-
-    testWidgets('Step 14 Enter Optivus loading state retains button dimensions and footer geometry', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(393, 873);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
-      Widget buildHost({required bool loading}) {
-        return ProviderScope(
-          overrides: [
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(const OnboardingDraft(uid: 'loading-geom')),
-            ),
-          ],
-          child: MaterialApp(
-            home: OnboardingStepShell(
-              currentPage: OnboardingDraft.lastStepIndex,
-              pageOffset: OnboardingDraft.lastStepIndex.toDouble(),
-              completedSteps: List.filled(OnboardingDraft.stepCount, true),
-              validationMessage: null,
-              onDotTap: (_) {},
-              onIndicatorDraggedTo: (_) {},
-              onSave: null,
-              showSave: false,
-              isSaving: false,
-              isSaved: true,
-              saveEnabled: true,
-              ctaLabel: 'Enter Optivus',
-              ctaEnabled: !loading,
-              ctaLoading: loading,
-              actions: [
-                action(
-                  OnboardingActionKind.enterOptivus,
-                  'Enter Optivus',
-                  () {},
-                  operationState: loading
-                      ? OnboardingActionOperationState.active
-                      : OnboardingActionOperationState.idle,
-                ),
-              ],
-              child: const OnboardingTodayReadyStep(),
-            ),
-          ),
-        );
-      }
-
-      await tester.pumpWidget(buildHost(loading: false));
-      final idleFooterRect = tester.getRect(find.byKey(const ValueKey('onboarding-cta-visible')));
-
-      await tester.pumpWidget(buildHost(loading: true));
-      await tester.pump();
-      final loadingFooterRect = tester.getRect(find.byKey(const ValueKey('onboarding-cta-visible')));
-
-      expect(loadingFooterRect, idleFooterRect);
-    });
-  });
-
-  group('AH-F019 OnboardingStepShell integration for Steps 4, 5, 6, 7', () {
-    for (final stepNumber in const [4, 5, 6, 7]) {
-      testWidgets('Step $stepNumber renders cleanly inside OnboardingStepShell above footer', (
-        tester,
-      ) async {
-        tester.view.physicalSize = const Size(393, 873);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-
-        final draft = const OnboardingDraft(uid: 'step-shell-integration');
-
-        Widget stepWidget;
-        switch (stepNumber) {
-          case 4:
-            stepWidget = const OnboardingStep4();
-            break;
-          case 5:
-            stepWidget = const OnboardingStep5();
-            break;
-          case 6:
-            stepWidget = const OnboardingStep6();
-            break;
-          case 7:
-            stepWidget = const OnboardingStep7();
-            break;
-          default:
-            stepWidget = const SizedBox();
-        }
-
-        await tester.pumpWidget(
-          ProviderScope(
+        Widget buildHost(StateSetter setState) {
+          return ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith(
-                (_) => MockOnboardingNotifier()..loadSeedData(draft),
+              onboardingStateProvider.overrideWith(
+                (_) =>
+                    OnboardingNotifier()
+                      ..loadSeedData(const OnboardingDraft(uid: 'step14-test')),
               ),
             ],
             child: MaterialApp(
               home: OnboardingStepShell(
-                currentPage: stepNumber,
-                pageOffset: stepNumber.toDouble(),
-                completedSteps: List.filled(OnboardingDraft.stepCount, false),
+                currentPage: OnboardingDraft.lastStepIndex,
+                pageOffset: OnboardingDraft.lastStepIndex.toDouble(),
+                completedSteps: List.filled(OnboardingDraft.stepCount, isReady),
+                validationMessage: isReady
+                    ? null
+                    : 'Complete required setup first.',
+                onDotTap: (_) {},
+                onIndicatorDraggedTo: (_) {},
+                onSave: null,
+                showSave: false,
+                isSaving: false,
+                isSaved: isReady,
+                saveEnabled: isReady,
+                ctaLabel: 'Enter Optivus',
+                ctaEnabled: isReady,
+                ctaLoading: false,
+                actions: [
+                  action(
+                    OnboardingActionKind.enterOptivus,
+                    'Enter Optivus',
+                    () {},
+                    enabled: isReady,
+                  ),
+                ],
+                child: const OnboardingTodayReadyStep(),
+              ),
+            ),
+          );
+        }
+
+        late StateSetter outerSetState;
+        await tester.pumpWidget(
+          StatefulBuilder(
+            builder: (context, setState) {
+              outerSetState = setState;
+              return buildHost(setState);
+            },
+          ),
+        );
+        await tester.pump();
+
+        final initialRect = tester.getRect(
+          find.byKey(const ValueKey('onboarding-cta-visible')),
+        );
+        expect(find.text('Enter Optivus'), findsOneWidget);
+
+        // Transient invalid state
+        outerSetState(() {
+          isReady = false;
+        });
+        await tester.pump();
+
+        final invalidRect = tester.getRect(
+          find.byKey(const ValueKey('onboarding-cta-visible')),
+        );
+        expect(invalidRect, initialRect);
+        expect(find.text('Complete required setup first.'), findsOneWidget);
+
+        // Valid again
+        outerSetState(() {
+          isReady = true;
+        });
+        await tester.pump();
+        final restoredRect = tester.getRect(
+          find.byKey(const ValueKey('onboarding-cta-visible')),
+        );
+        expect(restoredRect, initialRect);
+      },
+    );
+
+    testWidgets(
+      'Step 14 rapid Enter Optivus taps invoke completion callback only once',
+      (tester) async {
+        var completionCalls = 0;
+        final pending = Completer<void>();
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              onboardingStateProvider.overrideWith(
+                (_) => OnboardingNotifier()
+                  ..loadSeedData(
+                    const OnboardingDraft(uid: 'step14-doubletap'),
+                  ),
+              ),
+            ],
+            child: MaterialApp(
+              home: OnboardingStepShell(
+                currentPage: OnboardingDraft.lastStepIndex,
+                pageOffset: OnboardingDraft.lastStepIndex.toDouble(),
+                completedSteps: List.filled(OnboardingDraft.stepCount, true),
                 validationMessage: null,
                 onDotTap: (_) {},
                 onIndicatorDraggedTo: (_) {},
                 onSave: null,
                 showSave: false,
                 isSaving: false,
-                isSaved: false,
-                saveEnabled: false,
-                ctaLabel: 'Next Step',
+                isSaved: true,
+                saveEnabled: true,
+                ctaLabel: 'Enter Optivus',
                 ctaEnabled: true,
                 ctaLoading: false,
-                actions: [action(OnboardingActionKind.next, 'Next Step', () {})],
-                child: stepWidget,
+                actions: [
+                  action(
+                    OnboardingActionKind.enterOptivus,
+                    'Enter Optivus',
+                    () {
+                      completionCalls++;
+                      return pending.future;
+                    },
+                  ),
+                ],
+                child: const OnboardingTodayReadyStep(),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        final cta = find.byKey(
+          const ValueKey('onboarding-action-enterOptivus'),
+        );
+        for (var i = 0; i < 5; i++) {
+          await tester.tap(cta, warnIfMissed: false);
+        }
+        expect(completionCalls, 1);
+        pending.complete();
+        await tester.pump();
+        await tester.pump();
+      },
+    );
+  });
+
+  group('AH-F018 full-screen timeline integration', () {
+    testWidgets(
+      'FullScreenTimelineScaffold inside OnboardingStepShell scrolls last event above footer',
+      (tester) async {
+        final entries = List.generate(
+          10,
+          (i) => TimelineEntry(
+            id: 'event-$i',
+            sourceId: 'event-$i',
+            title: 'Event $i',
+            startMinute: 7 * 60 + i * 60,
+            endMinute: 7 * 60 + i * 60 + 45,
+            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+            category: TimelineCategory.classes,
+          ),
+        );
+
+        int selectedDay = 1;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: OnboardingStepShell(
+              currentPage: 4,
+              pageOffset: 4.0,
+              completedSteps: List.filled(OnboardingDraft.stepCount, false),
+              validationMessage: null,
+              onDotTap: (_) {},
+              onIndicatorDraggedTo: (_) {},
+              onSave: null,
+              showSave: false,
+              isSaving: false,
+              isSaved: false,
+              saveEnabled: false,
+              ctaLabel: 'Next Step',
+              ctaEnabled: true,
+              ctaLoading: false,
+              actions: [action(OnboardingActionKind.next, 'Next Step', () {})],
+              child: StatefulBuilder(
+                builder: (context, setState) {
+                  return FullScreenTimelineScaffold(
+                    entries: entries,
+                    selectedDay: selectedDay,
+                    onDayChanged: (day) => setState(() => selectedDay = day),
+                    styleBuilder: (entry) =>
+                        TimelineEntryStyle.defaultForCategory(entry.category),
+                    title: 'Schedule Preview',
+                  );
+                },
               ),
             ),
           ),
@@ -1270,146 +879,610 @@ void main() {
         final footerRect = tester.getRect(
           find.byKey(const ValueKey('onboarding-cta-visible')),
         );
-        expect(footerRect.bottom, 873);
+        final timelineRect = tester.getRect(
+          find.byType(FullScreenTimelineScaffold),
+        );
+
+        // The timeline scaffold extends to the bottom behind the floating footer
+        expect(timelineRect.bottom, equals(footerRect.bottom));
         expect(tester.takeException(), isNull);
-      });
+      },
+    );
+  });
+
+  group('AH-F019 keyboard dismiss cycle & dynamic insets', () {
+    testWidgets(
+      'keyboard dismiss smoothly restores footer without residual gaps',
+      (tester) async {
+        tester.view.physicalSize = const Size(393, 873);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        var keyboardHeight = 0.0;
+        Widget buildHost(StateSetter setState) {
+          return actionHost(
+            viewPadding: const EdgeInsets.only(bottom: 34),
+            viewInsets: EdgeInsets.only(bottom: keyboardHeight),
+            actions: [action(OnboardingActionKind.next, 'Next', () {})],
+          );
+        }
+
+        late StateSetter outerSetState;
+        await tester.pumpWidget(
+          StatefulBuilder(
+            builder: (context, setState) {
+              outerSetState = setState;
+              return buildHost(setState);
+            },
+          ),
+        );
+        await tester.pump();
+
+        final initialFooterRect = tester.getRect(
+          find.byKey(const ValueKey('onboarding-cta-visible')),
+        );
+        expect(initialFooterRect.bottom, 873);
+
+        // Keyboard opens (300px)
+        outerSetState(() => keyboardHeight = 300);
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey('onboarding-cta-hidden-for-keyboard')),
+          findsOneWidget,
+        );
+
+        // Keyboard dismisses (0px)
+        outerSetState(() => keyboardHeight = 0);
+        await tester.pump();
+        final restoredFooterRect = tester.getRect(
+          find.byKey(const ValueKey('onboarding-cta-visible')),
+        );
+        expect(restoredFooterRect, initialFooterRect);
+      },
+    );
+
+    for (final kb in const [250.0, 300.0, 350.0]) {
+      testWidgets(
+        'keyboard height $kb correctly hides footer without double inset',
+        (tester) async {
+          await tester.pumpWidget(
+            actionHost(
+              viewPadding: const EdgeInsets.only(bottom: 34),
+              viewInsets: EdgeInsets.only(bottom: kb),
+              actions: [action(OnboardingActionKind.next, 'Next', () {})],
+            ),
+          );
+          expect(
+            find.byKey(const ValueKey('onboarding-cta-hidden-for-keyboard')),
+            findsOneWidget,
+          );
+        },
+      );
+    }
+
+    for (final safeBottom in const [0.0, 16.0, 34.0, 48.0]) {
+      testWidgets(
+        'safe-area bottom $safeBottom applies metric calculation exactly once',
+        (tester) async {
+          await tester.pumpWidget(
+            actionHost(
+              viewPadding: EdgeInsets.only(bottom: safeBottom),
+              actions: [action(OnboardingActionKind.next, 'Next', () {})],
+            ),
+          );
+          final height = tester
+              .getSize(find.byType(OnboardingActionBar))
+              .height;
+          final expectedHeight =
+              OnboardingFooterMetrics.topSpacing +
+              OnboardingFooterMetrics.primaryActionHeight +
+              OnboardingFooterMetrics.bottomSpacing +
+              safeBottom;
+          expect(height, expectedHeight);
+        },
+      );
     }
   });
 
-  group('AH-F019 adversarial narrow viewport & async error recovery', () {
-    testWidgets('360px narrow viewport with multiple lower actions and primary CTA renders without overflow', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(360, 800);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+  group('AH-F019 operation identity & deduplication resilience', () {
+    testWidgets(
+      'stale operation completion does not unlock superseding active operation',
+      (tester) async {
+        var callCount = 0;
+        final completerA = Completer<void>();
+        final completerB = Completer<void>();
+        var currentCompleter = completerA;
 
-      await tester.pumpWidget(
-        actionHost(
-          actions: [
-            action(
-              OnboardingActionKind.back,
-              'Back',
-              () {},
-              emphasis: OnboardingActionEmphasis.secondary,
-            ),
-            action(
-              OnboardingActionKind.regenerate,
-              'Regenerate',
-              () {},
-              emphasis: OnboardingActionEmphasis.secondary,
-            ),
-            action(
-              OnboardingActionKind.next,
-              'Next Step',
-              () {},
-              emphasis: OnboardingActionEmphasis.primary,
-            ),
-          ],
-        ),
-      );
-      await tester.pump();
+        Widget buildWidget() {
+          return actionHost(
+            actions: [
+              action(OnboardingActionKind.generate, 'Generate', () {
+                callCount++;
+                return currentCompleter.future;
+              }),
+            ],
+          );
+        }
 
-      expect(tester.takeException(), isNull);
-      expect(find.text('Back'), findsOneWidget);
-      expect(find.text('Regenerate'), findsOneWidget);
-      expect(find.text('Next Step'), findsOneWidget);
-    });
+        await tester.pumpWidget(buildWidget());
+        final btn = find.byKey(const ValueKey('onboarding-action-generate'));
 
-    testWidgets('asynchronous exception in callback cleanly unlocks ownership fence', (
-      tester,
-    ) async {
-      var invocationCount = 0;
-      var failAsync = true;
+        // First tap -> Starts operation A
+        await tester.tap(btn);
+        await tester.pump();
+        expect(callCount, 1);
 
-      await tester.pumpWidget(
-        actionHost(
-          actions: [
-            action(
-              OnboardingActionKind.next,
-              'Next Step',
-              () async {
-                invocationCount++;
-                await Future<void>.delayed(const Duration(milliseconds: 10));
-                if (failAsync) {
-                  throw Exception('Async network failure');
+        // Attempt second tap while A is active -> Blocked by ownership fence
+        await tester.tap(btn, warnIfMissed: false);
+        expect(callCount, 1);
+
+        // Operation A finishes, then feature initiates operation B
+        completerA.complete();
+        await tester.pump();
+
+        currentCompleter = completerB;
+        await tester.tap(btn);
+        await tester.pump();
+        expect(callCount, 2);
+
+        // Rapid tap during B is blocked
+        await tester.tap(btn, warnIfMissed: false);
+        expect(callCount, 2);
+
+        completerB.complete();
+        await tester.pump();
+      },
+    );
+
+    testWidgets(
+      'operation failure clears interaction fence allowing deliberate retry',
+      (tester) async {
+        var callCount = 0;
+        var shouldFail = true;
+
+        await tester.pumpWidget(
+          actionHost(
+            actions: [
+              action(OnboardingActionKind.retry, 'Retry', () async {
+                callCount++;
+                if (shouldFail) {
+                  throw Exception('Network timeout');
                 }
-              },
-            ),
-          ],
-        ),
-      );
+              }),
+            ],
+          ),
+        );
 
-      final cta = find.byKey(const ValueKey('onboarding-action-next'));
+        final btn = find.byKey(const ValueKey('onboarding-action-retry'));
 
-      // First tap fails asynchronously
-      await tester.tap(cta);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      expect(invocationCount, 1);
+        // First attempt fails
+        try {
+          await tester.tap(btn);
+        } catch (_) {}
+        await tester.pump();
+        expect(callCount, 1);
 
-      // Subsequent deliberate tap succeeds because fence was released in finally
-      failAsync = false;
-      await tester.tap(cta);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      expect(invocationCount, 2);
-    });
+        // Fence was cleaned up in try/catch/finally -> Subsequent deliberate attempt succeeds
+        shouldFail = false;
+        await tester.tap(btn);
+        await tester.pump();
+        expect(callCount, 2);
+      },
+    );
+  });
 
-    testWidgets('sweep all onboarding steps 0 to 14 in OnboardingStepShell to guarantee no footer regressions', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(393, 873);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
-      for (var step = 0; step < OnboardingDraft.stepCount; step++) {
-        final isLast = step == OnboardingDraft.lastStepIndex;
-        final ctaLabel = isLast ? 'Enter Optivus' : 'Next Step';
-        final kind = isLast ? OnboardingActionKind.enterOptivus : OnboardingActionKind.next;
+  group('AH-F019 Step 14 long/short content & loading geometry', () {
+    testWidgets(
+      'Step 14 short review content anchors footer at bottom without vertical centering bug',
+      (tester) async {
+        tester.view.physicalSize = const Size(393, 873);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
 
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith(
-                (_) => MockOnboardingNotifier()..loadSeedData(const OnboardingDraft(uid: 'sweep-test')),
+              onboardingStateProvider.overrideWith(
+                (_) => OnboardingNotifier()
+                  ..loadSeedData(const OnboardingDraft(uid: 'short-content')),
               ),
             ],
             child: MaterialApp(
               home: OnboardingStepShell(
-                currentPage: step,
-                pageOffset: step.toDouble(),
-                completedSteps: List.filled(OnboardingDraft.stepCount, false),
+                currentPage: OnboardingDraft.lastStepIndex,
+                pageOffset: OnboardingDraft.lastStepIndex.toDouble(),
+                completedSteps: List.filled(OnboardingDraft.stepCount, true),
                 validationMessage: null,
                 onDotTap: (_) {},
                 onIndicatorDraggedTo: (_) {},
                 onSave: null,
                 showSave: false,
                 isSaving: false,
-                isSaved: false,
-                saveEnabled: false,
-                ctaLabel: ctaLabel,
+                isSaved: true,
+                saveEnabled: true,
+                ctaLabel: 'Enter Optivus',
                 ctaEnabled: true,
                 ctaLoading: false,
-                actions: [action(kind, ctaLabel, () {})],
-                child: Center(
-                  child: Text('Step $step Content'),
-                ),
+                actions: [
+                  action(
+                    OnboardingActionKind.enterOptivus,
+                    'Enter Optivus',
+                    () {},
+                  ),
+                ],
+                child: const OnboardingTodayReadyStep(),
               ),
             ),
           ),
         );
         await tester.pump();
 
-        final footerRect = tester.getRect(find.byKey(const ValueKey('onboarding-cta-visible')));
+        final footerRect = tester.getRect(
+          find.byKey(const ValueKey('onboarding-cta-visible')),
+        );
         expect(footerRect.bottom, 873);
-        expect(find.text(ctaLabel), findsOneWidget);
+        expect(find.text('Enter Optivus'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Step 14 long review content can be scrolled to reveal last item completely above CTA',
+      (tester) async {
+        tester.view.physicalSize = const Size(393, 873);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final draft = OnboardingDraft(
+          uid: 'long-content-scroll',
+          baseTimeline: BaseTimelineDraft(
+            blocks: List.generate(
+              15,
+              (index) => TimelineBlockDraft(
+                id: 'block-$index',
+                section: 'classes',
+                title: 'Class item $index',
+                blockType: TimelineBlockDraft.hardBlockKey,
+                startMinute: 6 * 60 + index * 60,
+                endMinute: 6 * 60 + index * 60 + 45,
+                repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+              ),
+            ),
+          ),
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              onboardingStateProvider.overrideWith(
+                (_) => OnboardingNotifier()..loadSeedData(draft),
+              ),
+            ],
+            child: MaterialApp(
+              home: OnboardingStepShell(
+                currentPage: OnboardingDraft.lastStepIndex,
+                pageOffset: OnboardingDraft.lastStepIndex.toDouble(),
+                completedSteps: List.filled(OnboardingDraft.stepCount, true),
+                validationMessage: null,
+                onDotTap: (_) {},
+                onIndicatorDraggedTo: (_) {},
+                onSave: null,
+                showSave: false,
+                isSaving: false,
+                isSaved: true,
+                saveEnabled: true,
+                ctaLabel: 'Enter Optivus',
+                ctaEnabled: true,
+                ctaLoading: false,
+                actions: [
+                  action(
+                    OnboardingActionKind.enterOptivus,
+                    'Enter Optivus',
+                    () {},
+                  ),
+                ],
+                child: const OnboardingTodayReadyStep(),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        final scrollable = find.byType(OnboardingScrollView);
+        expect(scrollable, findsOneWidget);
+
+        // Drag/scroll all the way to the bottom
+        await tester.drag(scrollable, const Offset(0, -2000));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        final footerRect = tester.getRect(
+          find.byKey(const ValueKey('onboarding-cta-visible')),
+        );
+        final previewRect = tester.getRect(
+          find.byKey(const ValueKey('step14-final-preview')),
+        );
+
+        // The preview inside the scrollable terminates above the footer
+        expect(previewRect.bottom, lessThanOrEqualTo(footerRect.top));
+      },
+    );
+
+    testWidgets(
+      'Step 14 Enter Optivus loading state retains button dimensions and footer geometry',
+      (tester) async {
+        tester.view.physicalSize = const Size(393, 873);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        Widget buildHost({required bool loading}) {
+          return ProviderScope(
+            overrides: [
+              onboardingStateProvider.overrideWith(
+                (_) => OnboardingNotifier()
+                  ..loadSeedData(const OnboardingDraft(uid: 'loading-geom')),
+              ),
+            ],
+            child: MaterialApp(
+              home: OnboardingStepShell(
+                currentPage: OnboardingDraft.lastStepIndex,
+                pageOffset: OnboardingDraft.lastStepIndex.toDouble(),
+                completedSteps: List.filled(OnboardingDraft.stepCount, true),
+                validationMessage: null,
+                onDotTap: (_) {},
+                onIndicatorDraggedTo: (_) {},
+                onSave: null,
+                showSave: false,
+                isSaving: false,
+                isSaved: true,
+                saveEnabled: true,
+                ctaLabel: 'Enter Optivus',
+                ctaEnabled: !loading,
+                ctaLoading: loading,
+                actions: [
+                  action(
+                    OnboardingActionKind.enterOptivus,
+                    'Enter Optivus',
+                    () {},
+                    operationState: loading
+                        ? OnboardingActionOperationState.active
+                        : OnboardingActionOperationState.idle,
+                  ),
+                ],
+                child: const OnboardingTodayReadyStep(),
+              ),
+            ),
+          );
+        }
+
+        await tester.pumpWidget(buildHost(loading: false));
+        final idleFooterRect = tester.getRect(
+          find.byKey(const ValueKey('onboarding-cta-visible')),
+        );
+
+        await tester.pumpWidget(buildHost(loading: true));
+        await tester.pump();
+        final loadingFooterRect = tester.getRect(
+          find.byKey(const ValueKey('onboarding-cta-visible')),
+        );
+
+        expect(loadingFooterRect, idleFooterRect);
+      },
+    );
+  });
+
+  group('AH-F019 OnboardingStepShell integration for Steps 4, 5, 6, 7', () {
+    for (final stepNumber in const [4, 5, 6, 7]) {
+      testWidgets(
+        'Step $stepNumber renders cleanly inside OnboardingStepShell above footer',
+        (tester) async {
+          tester.view.physicalSize = const Size(393, 873);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+
+          final draft = const OnboardingDraft(uid: 'step-shell-integration');
+
+          Widget stepWidget;
+          switch (stepNumber) {
+            case 4:
+              stepWidget = const OnboardingStep4();
+              break;
+            case 5:
+              stepWidget = const OnboardingStep5();
+              break;
+            case 6:
+              stepWidget = const OnboardingStep6();
+              break;
+            case 7:
+              stepWidget = const OnboardingStep7();
+              break;
+            default:
+              stepWidget = const SizedBox();
+          }
+
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                onboardingStateProvider.overrideWith(
+                  (_) => OnboardingNotifier()..loadSeedData(draft),
+                ),
+              ],
+              child: MaterialApp(
+                home: OnboardingStepShell(
+                  currentPage: stepNumber,
+                  pageOffset: stepNumber.toDouble(),
+                  completedSteps: List.filled(OnboardingDraft.stepCount, false),
+                  validationMessage: null,
+                  onDotTap: (_) {},
+                  onIndicatorDraggedTo: (_) {},
+                  onSave: null,
+                  showSave: false,
+                  isSaving: false,
+                  isSaved: false,
+                  saveEnabled: false,
+                  ctaLabel: 'Next Step',
+                  ctaEnabled: true,
+                  ctaLoading: false,
+                  actions: [
+                    action(OnboardingActionKind.next, 'Next Step', () {}),
+                  ],
+                  child: stepWidget,
+                ),
+              ),
+            ),
+          );
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+
+          final footerRect = tester.getRect(
+            find.byKey(const ValueKey('onboarding-cta-visible')),
+          );
+          expect(footerRect.bottom, 873);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  });
+
+  group('AH-F019 adversarial narrow viewport & async error recovery', () {
+    testWidgets(
+      '360px narrow viewport with multiple lower actions and primary CTA renders without overflow',
+      (tester) async {
+        tester.view.physicalSize = const Size(360, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          actionHost(
+            actions: [
+              action(
+                OnboardingActionKind.back,
+                'Back',
+                () {},
+                emphasis: OnboardingActionEmphasis.secondary,
+              ),
+              action(
+                OnboardingActionKind.regenerate,
+                'Regenerate',
+                () {},
+                emphasis: OnboardingActionEmphasis.secondary,
+              ),
+              action(
+                OnboardingActionKind.next,
+                'Next Step',
+                () {},
+                emphasis: OnboardingActionEmphasis.primary,
+              ),
+            ],
+          ),
+        );
+        await tester.pump();
+
         expect(tester.takeException(), isNull);
-      }
-    });
+        expect(find.text('Back'), findsOneWidget);
+        expect(find.text('Regenerate'), findsOneWidget);
+        expect(find.text('Next Step'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'asynchronous exception in callback cleanly unlocks ownership fence',
+      (tester) async {
+        var invocationCount = 0;
+        var failAsync = true;
+
+        await tester.pumpWidget(
+          actionHost(
+            actions: [
+              action(OnboardingActionKind.next, 'Next Step', () async {
+                invocationCount++;
+                await Future<void>.delayed(const Duration(milliseconds: 10));
+                if (failAsync) {
+                  throw Exception('Async network failure');
+                }
+              }),
+            ],
+          ),
+        );
+
+        final cta = find.byKey(const ValueKey('onboarding-action-next'));
+
+        // First tap fails asynchronously
+        await tester.tap(cta);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(invocationCount, 1);
+
+        // Subsequent deliberate tap succeeds because fence was released in finally
+        failAsync = false;
+        await tester.tap(cta);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(invocationCount, 2);
+      },
+    );
+
+    testWidgets(
+      'sweep all onboarding steps 0 to 14 in OnboardingStepShell to guarantee no footer regressions',
+      (tester) async {
+        tester.view.physicalSize = const Size(393, 873);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        for (var step = 0; step < OnboardingDraft.stepCount; step++) {
+          final isLast = step == OnboardingDraft.lastStepIndex;
+          final ctaLabel = isLast ? 'Enter Optivus' : 'Next Step';
+          final kind = isLast
+              ? OnboardingActionKind.enterOptivus
+              : OnboardingActionKind.next;
+
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                onboardingStateProvider.overrideWith(
+                  (_) => OnboardingNotifier()
+                    ..loadSeedData(const OnboardingDraft(uid: 'sweep-test')),
+                ),
+              ],
+              child: MaterialApp(
+                home: OnboardingStepShell(
+                  currentPage: step,
+                  pageOffset: step.toDouble(),
+                  completedSteps: List.filled(OnboardingDraft.stepCount, false),
+                  validationMessage: null,
+                  onDotTap: (_) {},
+                  onIndicatorDraggedTo: (_) {},
+                  onSave: null,
+                  showSave: false,
+                  isSaving: false,
+                  isSaved: false,
+                  saveEnabled: false,
+                  ctaLabel: ctaLabel,
+                  ctaEnabled: true,
+                  ctaLoading: false,
+                  actions: [action(kind, ctaLabel, () {})],
+                  child: Center(child: Text('Step $step Content')),
+                ),
+              ),
+            ),
+          );
+          await tester.pump();
+
+          final footerRect = tester.getRect(
+            find.byKey(const ValueKey('onboarding-cta-visible')),
+          );
+          expect(footerRect.bottom, 873);
+          expect(find.text(ctaLabel), findsOneWidget);
+          expect(tester.takeException(), isNull);
+        }
+      },
+    );
   });
 }
-
-

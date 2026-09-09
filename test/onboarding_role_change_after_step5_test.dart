@@ -36,7 +36,7 @@ void main() {
           ),
         );
 
-        final notifier = MockOnboardingNotifier()..loadSeedData(draft);
+        final notifier = OnboardingNotifier()..loadSeedData(draft);
 
         final warnings = notifier.updateLifeRoleSelection(
           LifeRoleDraft.notStudentNotWorkingKey,
@@ -98,7 +98,7 @@ void main() {
           ),
         );
 
-        final notifier = MockOnboardingNotifier()..loadSeedData(draft);
+        final notifier = OnboardingNotifier()..loadSeedData(draft);
 
         final warnings = notifier.updateLifeRoleSelection(
           LifeRoleDraft.workingKey,

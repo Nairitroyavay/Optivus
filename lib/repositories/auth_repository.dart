@@ -3,7 +3,8 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:optivus/core/utils/auth_error_mapper.dart';
+import 'package:optivus/core/errors/auth_error_mapper.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
 
 /// A simple user model for authentication purposes.
 class AuthUser {
@@ -199,7 +200,7 @@ class FakeAuthRepository implements AuthRepository {
     final normalizedEmail = email.trim();
 
     if (normalizedEmail.toLowerCase() == 'test@optivus.dev') {
-      throw mapAuthError(Exception('email-already-in-use'));
+      throw AuthErrorMapper.map(Exception('email-already-in-use'));
     }
 
     _currentUser = AuthUser(
@@ -237,14 +238,11 @@ class FakeAuthRepository implements AuthRepository {
     await Future.delayed(const Duration(milliseconds: 300));
     final user = _currentUser;
     if (user == null || !user.isAnonymous) {
-      throw const AuthFailureException(
-        reason: AuthFailureReason.unknown,
-        message: 'No anonymous user is currently signed in to link.',
-      );
+      throw AuthErrorMapper.map(Exception('missing-user'));
     }
     final normalizedEmail = email.trim();
     if (normalizedEmail.toLowerCase() == 'test@optivus.dev') {
-      throw mapAuthError(Exception('email-already-in-use'));
+      throw AuthErrorMapper.map(Exception('email-already-in-use'));
     }
     _currentUser = AuthUser(
       uid: user.uid,
@@ -299,10 +297,7 @@ class FakeAuthRepository implements AuthRepository {
   Future<void> signOut() async {
     await Future.delayed(const Duration(milliseconds: 500));
     if (signOutShouldFail) {
-      throw const AuthFailureException(
-        reason: AuthFailureReason.networkFailure,
-        message: 'Sign-out could not be completed. Please try again.',
-      );
+      throw AuthErrorMapper.map(Exception('network-request-failed'));
     }
     _currentUser = null;
     _verificationEmailSent = false;
@@ -335,31 +330,19 @@ class NativeGoogleIdentityClient implements GoogleIdentityClient {
     try {
       await _ensureInitialized();
       if (!_googleSignIn.supportsAuthenticate()) {
-        throw const AuthFailureException(
-          reason: AuthFailureReason.unknown,
-          message: 'Google sign-in is unavailable on this device.',
-        );
+        throw AuthErrorMapper.map(Exception('google-sign-in-unavailable'));
       }
       final account = await _googleSignIn.authenticate();
       final idToken = account.authentication.idToken;
       if (idToken == null || idToken.isEmpty) {
-        throw const AuthFailureException(
-          reason: AuthFailureReason.invalidToken,
-          message: 'Google sign-in could not be completed. Please try again.',
-        );
+        throw AuthErrorMapper.map(Exception('auth-token-expired'));
       }
       return idToken;
     } on GoogleSignInException catch (error) {
       if (error.code == GoogleSignInExceptionCode.canceled) return null;
-      throw AuthFailureException(
-        reason: error.code == GoogleSignInExceptionCode.interrupted
-            ? AuthFailureReason.networkFailure
-            : AuthFailureReason.unknown,
-        message: error.code == GoogleSignInExceptionCode.interrupted
-            ? 'Google sign-in was interrupted. Please try again.'
-            : 'Google sign-in could not be completed. Please try again.',
-        originalError: error,
-      );
+      throw error.code == GoogleSignInExceptionCode.interrupted
+          ? AuthErrorMapper.map(Exception('network-request-failed'))
+          : AuthErrorMapper.map(error);
     }
   }
 
@@ -452,7 +435,7 @@ class FirebaseAuthRepository
       }
       return _authUserFromFirebase(user);
     } catch (e) {
-      throw mapAuthError(e);
+      throw AuthErrorMapper.map(e);
     }
   }
 
@@ -501,7 +484,7 @@ class FirebaseAuthRepository
       }
       return _authUserFromFirebase(user);
     } catch (e) {
-      throw mapAuthError(e);
+      throw AuthErrorMapper.map(e);
     }
   }
 
@@ -520,7 +503,7 @@ class FirebaseAuthRepository
       }
       await user.updateDisplayName(displayName);
     } catch (e) {
-      throw mapAuthError(e);
+      throw AuthErrorMapper.map(e);
     }
   }
 
@@ -537,7 +520,7 @@ class FirebaseAuthRepository
       }
       return _authUserFromFirebase(user);
     } catch (e) {
-      throw mapAuthError(e);
+      throw AuthErrorMapper.map(e);
     }
   }
 
@@ -569,7 +552,7 @@ class FirebaseAuthRepository
       final refreshed = _auth.currentUser ?? linkedUser;
       return _authUserFromFirebase(refreshed);
     } catch (e) {
-      throw mapAuthError(e);
+      throw AuthErrorMapper.map(e);
     }
   }
 
@@ -592,12 +575,12 @@ class FirebaseAuthRepository
       }
     } catch (e) {
       if (kDebugMode) {
-        final mapped = mapAuthError(e);
+        final mapped = AuthErrorMapper.map(e);
         debugPrint(
-          '[EmailVerificationRepository] stage=firebase_send_failure code=${mapped.reason.name}',
+          '[EmailVerificationRepository] stage=firebase_send_failure code=${mapped.diagnosticCode}',
         );
       }
-      throw mapAuthError(e);
+      throw AuthErrorMapper.map(e);
     }
   }
 
@@ -611,7 +594,7 @@ class FirebaseAuthRepository
       if (refreshed == null) return null;
       return _authUserFromFirebase(refreshed);
     } catch (e) {
-      throw mapAuthError(e);
+      throw AuthErrorMapper.map(e);
     }
   }
 
@@ -621,7 +604,7 @@ class FirebaseAuthRepository
       final user = _auth.currentUser;
       return await user?.getIdToken(true);
     } catch (e) {
-      throw mapAuthError(e);
+      throw AuthErrorMapper.map(e);
     }
   }
 
@@ -630,7 +613,7 @@ class FirebaseAuthRepository
     try {
       await _auth.sendPasswordResetEmail(email: email.trim());
     } catch (e) {
-      throw mapAuthError(e);
+      throw AuthErrorMapper.map(e);
     }
   }
 
@@ -644,7 +627,7 @@ class FirebaseAuthRepository
     try {
       await _auth.signOut();
     } catch (e) {
-      throw mapAuthError(e);
+      throw AuthErrorMapper.map(e);
     }
     if (hadGoogleProvider) {
       try {
@@ -660,27 +643,4 @@ class FirebaseAuthRepository
   }
 }
 
-AuthFailureException mapGoogleAuthError(Object error) {
-  if (error is AuthFailureException) return error;
-  if (error is firebase_auth.FirebaseAuthException) {
-    if (error.code == 'account-exists-with-different-credential' ||
-        error.code == 'credential-already-in-use') {
-      return AuthFailureException(
-        reason: AuthFailureReason.accountCollision,
-        message:
-            'An account already exists with this email. Sign in with your original method to continue; it cannot be merged from Google sign-in.',
-        originalError: error,
-      );
-    }
-    final mapped = mapAuthError(error);
-    if (mapped.reason != AuthFailureReason.unknown &&
-        error.code != 'invalid-credential') {
-      return mapped;
-    }
-  }
-  return AuthFailureException(
-    reason: AuthFailureReason.unknown,
-    message: 'Google sign-in could not be completed. Please try again.',
-    originalError: error,
-  );
-}
+RecoverableError mapGoogleAuthError(Object error) => AuthErrorMapper.map(error);

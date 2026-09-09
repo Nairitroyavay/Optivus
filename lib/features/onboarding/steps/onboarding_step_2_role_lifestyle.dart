@@ -12,7 +12,7 @@ class OnboardingStep2 extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final draft = ref.watch(mockOnboardingProvider).draft;
+    final draft = ref.watch(onboardingStateProvider).draft;
     final lifeRole = draft.lifeRole;
     final roleWarnings = draft.baseTimeline.roleChangeWarnings;
 
@@ -82,7 +82,7 @@ class OnboardingStep2 extends ConsumerWidget {
                       selected: isSelected,
                       onTap: () {
                         ref
-                            .read(mockOnboardingProvider.notifier)
+                            .read(onboardingStateProvider.notifier)
                             .updateLifeRoleSelection(key);
                       },
                       expandedContent: isSelected
@@ -134,7 +134,7 @@ class OnboardingStep2 extends ConsumerWidget {
                     selectedKey: lifeRole.workType,
                     onSelect: (value) {
                       ref
-                          .read(mockOnboardingProvider.notifier)
+                          .read(onboardingStateProvider.notifier)
                           .updateDraft(
                             (current) => current.copyWith(
                               lifeRole: current.lifeRole.copyWith(
@@ -144,7 +144,7 @@ class OnboardingStep2 extends ConsumerWidget {
                             ),
                           );
                       ref
-                          .read(mockOnboardingProvider.notifier)
+                          .read(onboardingStateProvider.notifier)
                           .setStepDirty(
                             OnboardingStepId.roleLifestyle.index,
                             true,
@@ -164,7 +164,7 @@ class OnboardingStep2 extends ConsumerWidget {
                     selectedKey: lifeRole.businessMode,
                     onSelect: (value) {
                       ref
-                          .read(mockOnboardingProvider.notifier)
+                          .read(onboardingStateProvider.notifier)
                           .updateDraft(
                             (current) => current.copyWith(
                               lifeRole: current.lifeRole.copyWith(
@@ -178,7 +178,7 @@ class OnboardingStep2 extends ConsumerWidget {
                             ),
                           );
                       ref
-                          .read(mockOnboardingProvider.notifier)
+                          .read(onboardingStateProvider.notifier)
                           .setStepDirty(
                             OnboardingStepId.roleLifestyle.index,
                             true,
@@ -311,7 +311,7 @@ class _LifestyleSection extends ConsumerWidget {
             selectedKey: lifeRole.exerciseLevel,
             onSelect: (value) {
               ref
-                  .read(mockOnboardingProvider.notifier)
+                  .read(onboardingStateProvider.notifier)
                   .updateDraft(
                     (current) => current.copyWith(
                       lifeRole: current.lifeRole.copyWith(exerciseLevel: value),
@@ -319,7 +319,7 @@ class _LifestyleSection extends ConsumerWidget {
                     ),
                   );
               ref
-                  .read(mockOnboardingProvider.notifier)
+                  .read(onboardingStateProvider.notifier)
                   .setStepDirty(OnboardingStepId.roleLifestyle.index, true);
             },
           ),
@@ -333,7 +333,7 @@ class _LifestyleSection extends ConsumerWidget {
             selectedKey: lifeRole.waterIntake,
             onSelect: (value) {
               ref
-                  .read(mockOnboardingProvider.notifier)
+                  .read(onboardingStateProvider.notifier)
                   .updateDraft(
                     (current) => current.copyWith(
                       lifeRole: current.lifeRole.copyWith(waterIntake: value),
@@ -341,7 +341,7 @@ class _LifestyleSection extends ConsumerWidget {
                     ),
                   );
               ref
-                  .read(mockOnboardingProvider.notifier)
+                  .read(onboardingStateProvider.notifier)
                   .setStepDirty(OnboardingStepId.roleLifestyle.index, true);
             },
           ),
@@ -355,7 +355,7 @@ class _LifestyleSection extends ConsumerWidget {
             selectedKey: lifeRole.stressLevel,
             onSelect: (value) {
               ref
-                  .read(mockOnboardingProvider.notifier)
+                  .read(onboardingStateProvider.notifier)
                   .updateDraft(
                     (current) => current.copyWith(
                       lifeRole: current.lifeRole.copyWith(stressLevel: value),
@@ -363,7 +363,7 @@ class _LifestyleSection extends ConsumerWidget {
                     ),
                   );
               ref
-                  .read(mockOnboardingProvider.notifier)
+                  .read(onboardingStateProvider.notifier)
                   .setStepDirty(OnboardingStepId.roleLifestyle.index, true);
             },
           ),
@@ -377,7 +377,7 @@ class _LifestyleSection extends ConsumerWidget {
             selectedKey: lifeRole.sleepQuality,
             onSelect: (value) {
               ref
-                  .read(mockOnboardingProvider.notifier)
+                  .read(onboardingStateProvider.notifier)
                   .updateDraft(
                     (current) => current.copyWith(
                       lifeRole: current.lifeRole.copyWith(sleepQuality: value),
@@ -385,7 +385,7 @@ class _LifestyleSection extends ConsumerWidget {
                     ),
                   );
               ref
-                  .read(mockOnboardingProvider.notifier)
+                  .read(onboardingStateProvider.notifier)
                   .setStepDirty(OnboardingStepId.roleLifestyle.index, true);
             },
           ),

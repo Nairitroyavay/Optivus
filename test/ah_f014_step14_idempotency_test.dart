@@ -759,9 +759,9 @@ class _ColdRestartHarness {
         routineRepositoryProvider.overrideWithValue(routines),
         routineHistoryRepositoryProvider.overrideWithValue(history),
         habitSystemsRepositoryProvider.overrideWithValue(habits),
-        mockUserProfileProvider.overrideWith(
+        userProfileProvider.overrideWith(
           (ref) =>
-              MockUserProfileNotifier()
+              UserProfileNotifier()
                 ..resetEmpty(uid: uid, email: '$uid@example.com'),
         ),
       ],

@@ -141,7 +141,7 @@ These deviations are tracked in Section 9.
 | Tracker | `mockTrackerProvider`, `trackerSettingsProvider`, and feature-local `fitnessCenterProvider`; hydration totals are derived | Tracker-owned controllers backed by tracker/session repositories, with one owner per tracker record type | Progress cards, history summaries, and Home/Goal evidence views |
 | Goals | `mockGoalProvider` | One Goals controller backed by `GoalRepository` and proof/history repositories | Home identity/progress summary and Coach context |
 | Coach | `mockCoachProvider` plus local preferences | One Coach session controller backed by `CoachSessionRepository` and `CoachAiClient` | Typing/loading state and permitted context snapshots |
-| Profile | `mockUserProfileProvider`, `profileSettingsProvider`, `regionSettingsProvider`, and local permission/service state | Profile/settings controllers backed by their repositories; native status remains queried through adapters | Display-name projections and setup-readiness summaries |
+| Profile | `userProfileProvider`, `profileSettingsProvider`, `regionSettingsProvider`, and local permission/service state | Profile/settings controllers backed by their repositories; native status remains queried through adapters | Display-name projections and setup-readiness summaries |
 
 Routine now has one canonical active owner:
 

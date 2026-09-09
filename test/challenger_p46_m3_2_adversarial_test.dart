@@ -56,10 +56,10 @@ void main() {
         );
 
         final authState = container.read(authProvider);
-        final profile = container.read(mockUserProfileProvider);
+        final profile = container.read(userProfileProvider);
 
         // The action must fail closed, not fabricate a resumable draft.
-        expect(authState.status, equals(AuthFlowStatus.backendRestoreFailed));
+        expect(authState.status, equals(AuthFlowStatus.needsAction));
         expect(profile.onboardingCompleted, isFalse);
         expect(profile.onboardingInputCompleted, isFalse);
         expect(profile.onboardingStep, equals(0));
@@ -94,16 +94,16 @@ void main() {
         );
         container.read(authProvider.notifier).state = const AuthState(
           user: testUser,
-          status: AuthFlowStatus.backendRestoreFailed,
+          status: AuthFlowStatus.needsAction,
         );
 
         final notifier = container.read(authProvider.notifier);
         await notifier.executeRecoveryAction(const ResumeOnboardingAction());
 
         final authState = container.read(authProvider);
-        final profile = container.read(mockUserProfileProvider);
+        final profile = container.read(userProfileProvider);
 
-        expect(authState.status, equals(AuthFlowStatus.backendRestoreFailed));
+        expect(authState.status, equals(AuthFlowStatus.needsAction));
         expect(profile.onboardingCompleted, isFalse);
         expect(profile.onboardingStep, equals(0));
       },
@@ -133,7 +133,7 @@ void main() {
         );
         container.read(authProvider.notifier).state = const AuthState(
           user: testUser,
-          status: AuthFlowStatus.backendRestoreFailed,
+          status: AuthFlowStatus.needsAction,
         );
 
         final notifier = container.read(authProvider.notifier);
@@ -142,7 +142,7 @@ void main() {
         );
 
         final authState = container.read(authProvider);
-        expect(authState.status, equals(AuthFlowStatus.backendRestoreFailed));
+        expect(authState.status, equals(AuthFlowStatus.needsAction));
       },
     );
   });

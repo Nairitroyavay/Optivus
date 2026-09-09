@@ -195,8 +195,8 @@ void main() {
       final container = _container(OptivusBackendMode.firebase);
       addTearDown(container.dispose);
 
-      expect(container.read(mockUserProfileProvider).displayName, isEmpty);
-      expect(container.read(mockUserProfileProvider).email, isEmpty);
+      expect(container.read(userProfileProvider).displayName, isEmpty);
+      expect(container.read(userProfileProvider).email, isEmpty);
       expect(container.read(mockRoutineProvider), isEmpty);
       expect(container.read(mockGoalProvider), isEmpty);
       expect(container.read(mockTrackerProvider).trackerSessions, isEmpty);
@@ -204,11 +204,11 @@ void main() {
       expect(container.read(mockMindNoteProvider), isEmpty);
       expect(container.read(mockCoachProvider), isEmpty);
       expect(
-        container.read(mockOnboardingProvider).draft.bodyBasics.heightCm,
+        container.read(onboardingStateProvider).draft.bodyBasics.heightCm,
         isNull,
       );
       expect(
-        container.read(mockOnboardingProvider).draft.bodyBasics.weightKg,
+        container.read(onboardingStateProvider).draft.bodyBasics.weightKg,
         isNull,
       );
       expect(container.read(homeDashboardProvider).nowNextAction, isNull);
@@ -415,12 +415,12 @@ void main() {
         final container = _container(OptivusBackendMode.firebase);
         addTearDown(container.dispose);
 
-        final profile = container.read(mockUserProfileProvider);
+        final profile = container.read(userProfileProvider);
         expect(profile.displayName, isNot(contains('Roy')));
         expect(profile.displayName, isEmpty);
         expect(profile.email, isEmpty);
 
-        final onboarding = container.read(mockOnboardingProvider);
+        final onboarding = container.read(onboardingStateProvider);
         expect(onboarding.draft.bodyBasics.heightCm, isNull);
         expect(onboarding.draft.bodyBasics.weightKg, isNull);
         expect(onboarding.draft.badHabits, isEmpty);

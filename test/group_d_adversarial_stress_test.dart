@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/core/router/app_router.dart';
-import 'package:optivus/core/utils/auth_error_mapper.dart';
+import 'package:optivus/core/errors/auth_error_mapper.dart';
+import 'package:optivus/core/errors/diagnostic_codes.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/features/coach/providers/coach_navigation_provider.dart';
 import 'package:optivus/features/goals/providers/goals_navigation_provider.dart';
 import 'package:optivus/features/home/models/home_mind_note.dart';
@@ -23,7 +25,6 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/routine_occurrence.dart';
 import 'package:optivus/models/tracker_models.dart';
-import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/app_preferences_repository.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/habit_systems_repository.dart';
@@ -218,10 +219,6 @@ void main() {
           );
           final redirect = optivusAuthRedirect(
             authState: authState,
-            userProfile: UserProfile.empty(
-              uid: unverifiedUser.uid,
-              email: unverifiedUser.email ?? '',
-            ).copyWith(onboardingCompleted: true),
             uri: Uri.parse('/app?tab=0'),
           );
 
@@ -490,29 +487,25 @@ void main() {
   );
 
   group('Group D Adversarial Test - Typed Auth Error Mapping', () {
-    test(
-      'mapAuthError correctly maps edge case exceptions and returns friendly messages',
-      () {
-        final netErr = mapAuthError(
-          const SocketException('Failed host lookup'),
-        );
-        expect(netErr.reason, equals(AuthFailureReason.networkFailure));
-        expect(friendlyAuthError(netErr), contains('Network error'));
+    test('AuthErrorMapper safely maps edge case exceptions', () {
+      final netErr = AuthErrorMapper.map(
+        const SocketException('Failed host lookup'),
+      );
+      expect(netErr.category, RecoverableErrorCategory.network);
+      expect(netErr.publicMessage, contains('connect'));
 
-        final pwdErr = mapAuthError(Exception('wrong-password'));
-        expect(pwdErr.reason, equals(AuthFailureReason.invalidCredentials));
+      final pwdErr = AuthErrorMapper.map(Exception('wrong-password'));
+      expect(pwdErr.diagnosticCode, DiagnosticCodes.authInvalidCredentials);
 
-        final dupErr = mapAuthError(Exception('email-already-in-use'));
-        expect(dupErr.reason, equals(AuthFailureReason.emailAlreadyInUse));
-        expect(isEmailAlreadyInUseError(dupErr), isTrue);
+      final dupErr = AuthErrorMapper.map(Exception('email-already-in-use'));
+      expect(dupErr.diagnosticCode, DiagnosticCodes.authEmailInUse);
 
-        final tokenErr = mapAuthError(Exception('invalid-user-token'));
-        expect(tokenErr.reason, equals(AuthFailureReason.invalidToken));
+      final tokenErr = AuthErrorMapper.map(Exception('invalid-user-token'));
+      expect(tokenErr.diagnosticCode, DiagnosticCodes.authSessionExpired);
 
-        final unknownErr = mapAuthError(Exception('Custom error string'));
-        expect(unknownErr.reason, equals(AuthFailureReason.unknown));
-        expect(unknownErr.message, equals('Custom error string'));
-      },
-    );
+      final unknownErr = AuthErrorMapper.map(Exception('Custom error string'));
+      expect(unknownErr.diagnosticCode, DiagnosticCodes.authUnknown);
+      expect(unknownErr.publicMessage, isNot(contains('Custom error string')));
+    });
   });
 }

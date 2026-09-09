@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/config/backend_config.dart';
-import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
@@ -303,10 +303,7 @@ void main() {
     expect(container.read(routineNotifierProvider).items, isNotEmpty);
     expect(container.read(mockGoalProvider), isNotEmpty);
     expect(container.read(mockTrackerProvider).trackerSessions, isNotEmpty);
-    expect(
-      container.read(mockUserProfileProvider).onboardingCompleted,
-      isFalse,
-    );
+    expect(container.read(userProfileProvider).onboardingCompleted, isFalse);
     expect(container.read(mockTrackerProvider).moneyGoal.dailyTarget, 25);
     expect(container.read(mockCoachPreferencesProvider).name, 'Mira');
     expect(container.read(mockCoachPreferencesProvider).style, 'Strict Mentor');
@@ -411,8 +408,8 @@ void main() {
         contains('both draft and completion snapshot are missing'),
       );
       expect(
-        container.read(authProvider).onboardingFailureReason,
-        OnboardingFailureReason.missingDraftAndBundle,
+        container.read(authProvider).error?.category,
+        RecoverableErrorCategory.recoveryRequired,
       );
       expect(container.read(routineNotifierProvider).items, isEmpty);
     },

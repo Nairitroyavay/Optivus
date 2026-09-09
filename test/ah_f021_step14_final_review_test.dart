@@ -37,8 +37,8 @@ void main() {
           onboardingCompletionJobServiceProvider.overrideWithValue(
             completionService,
           ),
-        mockOnboardingProvider.overrideWith(
-          (_) => MockOnboardingNotifier()..loadSeedData(draft),
+        onboardingStateProvider.overrideWith(
+          (_) => OnboardingNotifier()..loadSeedData(draft),
         ),
       ],
       child: MaterialApp(
@@ -1240,8 +1240,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              mockOnboardingProvider.overrideWith(
-                (_) => MockOnboardingNotifier()..loadSeedData(draft),
+              onboardingStateProvider.overrideWith(
+                (_) => OnboardingNotifier()..loadSeedData(draft),
               ),
             ],
             child: MaterialApp(

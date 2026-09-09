@@ -371,7 +371,7 @@ void main() {
         final hydrationService = const OnboardingFrontendHydrationService();
         await hydrationService.hydrate(read: container.read, bundle: bundle);
 
-        final profile = container.read(mockUserProfileProvider);
+        final profile = container.read(userProfileProvider);
         expect(profile.onboardingCompleted, isFalse);
       },
     );
@@ -405,8 +405,9 @@ void main() {
           plan.projectionId: completedReceipt,
         };
 
-        container.read(mockUserProfileProvider.notifier).state =
-            UserProfile.empty(uid: 'user_1102');
+        container.read(userProfileProvider.notifier).state = UserProfile.empty(
+          uid: 'user_1102',
+        );
         await fakeProfileRepo.saveUserProfile(
           UserProfile.empty(uid: 'user_1102', email: 'test@example.com'),
         );
@@ -428,7 +429,7 @@ void main() {
         final profile = await fakeProfileRepo.fetchUserProfile('user_1102');
         expect(profile?.onboardingCompleted, isTrue);
         expect(
-          container.read(mockUserProfileProvider).onboardingCompleted,
+          container.read(userProfileProvider).onboardingCompleted,
           isFalse,
           reason:
               'Local auth state is finalized only after canonical acceptance.',
@@ -524,8 +525,9 @@ void main() {
         }
         fakeRoutineRepo.database.itemsByUid[uid] = itemsMap;
 
-        container.read(mockUserProfileProvider.notifier).state =
-            UserProfile.empty(uid: uid);
+        container.read(userProfileProvider.notifier).state = UserProfile.empty(
+          uid: uid,
+        );
         await fakeProfileRepo.saveUserProfile(
           UserProfile.empty(uid: uid, email: 'test@example.com'),
         );

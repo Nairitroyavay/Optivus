@@ -92,8 +92,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            mockOnboardingProvider.overrideWith((ref) {
-              final notifier = MockOnboardingNotifier();
+            onboardingStateProvider.overrideWith((ref) {
+              final notifier = OnboardingNotifier();
               notifier.loadSeedData(draft);
               return notifier;
             }),

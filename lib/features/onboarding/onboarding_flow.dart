@@ -103,7 +103,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   }
 
   int _currentDraftStep() {
-    final onboarding = ref.read(mockOnboardingProvider);
+    final onboarding = ref.read(onboardingStateProvider);
     return durableOnboardingResumeStep(onboarding.draft);
   }
 
@@ -154,7 +154,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
   // Helper validation per step
   String? _validateStep(int step) {
-    final onboarding = ref.read(mockOnboardingProvider);
+    final onboarding = ref.read(onboardingStateProvider);
     return onboarding.draft.validateStep(step, onboarding.stepCompleted);
   }
 
@@ -166,22 +166,22 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     final authUser = ref.read(authProvider).user;
     if (_needsEmailVerification(authUser)) return null;
     if (!ref.read(fakeDataAllowedProvider) && authUser == null) return null;
-    return authUser?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
+    return authUser?.uid ?? ref.read(onboardingStateProvider).draft.uid;
   }
 
   bool _stillOwnsDraft(String uid) =>
       _currentPersistenceUid() == uid &&
-      ref.read(mockOnboardingProvider).draft.uid == uid;
+      ref.read(onboardingStateProvider).draft.uid == uid;
 
   Future<void> _persistCurrentDraftAfterNavigation() async {
     final uid = _currentPersistenceUid();
     if (uid == null) return;
 
-    final step = ref.read(mockOnboardingProvider).currentStep;
-    final sourceDraft = ref.read(mockOnboardingProvider).draft;
+    final step = ref.read(onboardingStateProvider).currentStep;
+    final sourceDraft = ref.read(onboardingStateProvider).draft;
     final submittedRevision = sourceDraft.revision;
     final draft = sourceDraft.copyWith(uid: uid, incrementRevision: false);
-    ref.read(mockOnboardingProvider.notifier).markStepSaving(step);
+    ref.read(onboardingStateProvider.notifier).markStepSaving(step);
 
     try {
       await ref.read(onboardingRepositoryProvider).saveDraft(draft);
@@ -190,7 +190,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       if (!mounted) return;
       if (!_stillOwnsDraft(uid)) return;
       ref
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .markStepSyncFailed(
             step,
             message:
@@ -201,7 +201,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     if (!mounted) return;
     if (!_stillOwnsDraft(uid)) return;
     ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .acknowledgeDraftSync(step: step, submittedRevision: submittedRevision);
   }
 
@@ -213,7 +213,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     final readiness = _readStepReadiness(step);
     if (!readiness.canRevealPrimary) {
       ref
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .setValidationMessage(
             readiness.validationMessage ??
                 'Complete the required information before continuing.',
@@ -227,7 +227,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       final validationError = _validateStep(step);
       if (validationError != null) {
         ref
-            .read(mockOnboardingProvider.notifier)
+            .read(onboardingStateProvider.notifier)
             .setValidationMessage(validationError);
         return false;
       }
@@ -235,7 +235,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       final uid = _currentPersistenceUid();
       if (uid == null) {
         ref
-            .read(mockOnboardingProvider.notifier)
+            .read(onboardingStateProvider.notifier)
             .setValidationMessage(
               'Please verify your email before saving onboarding.',
             );
@@ -243,10 +243,13 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       }
       saveOwnerUid = uid;
 
-      ref.read(mockOnboardingProvider.notifier).setStepLoading(step, true);
-      ref.read(mockOnboardingProvider.notifier).clearValidation();
+      ref.read(onboardingStateProvider.notifier).setStepLoading(step, true);
+      ref.read(onboardingStateProvider.notifier).clearValidation();
 
-      final submittedRevision = ref.read(mockOnboardingProvider).draft.revision;
+      final submittedRevision = ref
+          .read(onboardingStateProvider)
+          .draft
+          .revision;
       final savedDraft = _buildStepSaveCandidate(step: step, uid: uid);
 
       final onboardingRepository = ref.read(onboardingRepositoryProvider);
@@ -259,7 +262,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       // Completion becomes visible to navigation only after the repository
       // acknowledges the durable write.
       final acknowledged = ref
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .acknowledgeStepSave(
             step: step,
             submittedRevision: submittedRevision,
@@ -270,12 +273,12 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       // This profile field is only a startup-loader hint. The saved draft's
       // completed-step vector remains the sole progression authority.
       final profile = ref
-          .read(mockUserProfileProvider)
+          .read(userProfileProvider)
           .copyWith(
             onboardingStep: durableOnboardingResumeStep(savedDraft),
             updatedAt: DateTime.now(),
           );
-      ref.read(mockUserProfileProvider.notifier).updateProfile(profile);
+      ref.read(userProfileProvider.notifier).updateProfile(profile);
       if (!ref.read(fakeDataAllowedProvider)) {
         try {
           await ref.read(profileRepositoryProvider).saveUserProfile(profile);
@@ -291,7 +294,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         return false;
       }
       ref
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .markStepSyncFailed(
             step,
             message:
@@ -300,7 +303,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       return false;
     } finally {
       if (saveOwnerUid == null || _stillOwnsDraft(saveOwnerUid)) {
-        ref.read(mockOnboardingProvider.notifier).setStepLoading(step, false);
+        ref.read(onboardingStateProvider.notifier).setStepLoading(step, false);
       }
       if (mounted) setState(() => _isSaving = false);
     }
@@ -311,7 +314,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     required String uid,
   }) {
     final now = DateTime.now();
-    var draft = ref.read(mockOnboardingProvider).draft;
+    var draft = ref.read(onboardingStateProvider).draft;
     if (step == OnboardingStepId.welcome.index) {
       draft = draft.copyWith(welcomeSaved: true);
     } else if (step == OnboardingStepId.bodyBasics.index) {
@@ -355,7 +358,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         _currentPage <= OnboardingStepId.notifications.index &&
         !readiness.canSubmit) {
       ref
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .setValidationMessage(
             readiness.validationMessage ??
                 'Complete the required information before continuing.',
@@ -370,7 +373,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       }
 
       final targetStep = _currentPage;
-      final onboardingState = ref.read(mockOnboardingProvider);
+      final onboardingState = ref.read(onboardingStateProvider);
       final isDirty = onboardingState.stepDirty[targetStep];
       final isCompleted = onboardingState.stepCompleted[targetStep];
 
@@ -384,14 +387,14 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       }
 
       // Otherwise slide to the next step
-      final latestState = ref.read(mockOnboardingProvider);
+      final latestState = ref.read(onboardingStateProvider);
       final nextPage = _currentPage + 1;
       if (!canAccessOnboardingStep(
         targetStep: nextPage,
         completedSteps: latestState.stepCompleted,
       )) {
         ref
-            .read(mockOnboardingProvider.notifier)
+            .read(onboardingStateProvider.notifier)
             .setValidationMessage(
               'This step is available after the previous step is saved.',
             );
@@ -399,7 +402,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       }
       _currentPage = nextPage;
       ref.read(step7ActionBridgeProvider.notifier).clearAll();
-      ref.read(mockOnboardingProvider.notifier).setStep(_currentPage);
+      ref.read(onboardingStateProvider.notifier).setStep(_currentPage);
       await _pageController.animateToPage(
         _currentPage,
         duration: const Duration(milliseconds: 350),
@@ -410,7 +413,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     } catch (e) {
       if (!mounted) return;
       ref
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .setValidationMessage(
             'Could not continue onboarding safely. Please try again.',
           );
@@ -433,14 +436,14 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   Future<void> _completeOnboarding() async {
     // `_onEnterOptivusPressed` owns the completion guard. Keeping this method
     // unguarded lets the initial CTA and the Step 14 recovery retry converge.
-    final onboarding = ref.read(mockOnboardingProvider);
+    final onboarding = ref.read(onboardingStateProvider);
     for (final stepId in currentOnboardingStepOrder) {
       final error = onboarding.draft.validateStep(
         stepId.index,
         onboarding.stepCompleted,
       );
       if (error != null) {
-        ref.read(mockOnboardingProvider.notifier).setValidationMessage(error);
+        ref.read(onboardingStateProvider.notifier).setValidationMessage(error);
         return;
       }
     }
@@ -448,7 +451,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     final authUser = ref.read(authProvider).user;
     if (authUser?.needsEmailVerification ?? false) {
       ref
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .setValidationMessage(
             'Please verify your email before finishing onboarding.',
           );
@@ -458,7 +461,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     final uid = _currentPersistenceUid();
     if (uid == null) {
       ref
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .setValidationMessage(
             'Please verify your email before finishing onboarding.',
           );
@@ -489,7 +492,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
               currentRun.job?.status == OnboardingJobStatus.fatalFailure;
           if (!failedRun) {
             ref
-                .read(mockOnboardingProvider.notifier)
+                .read(onboardingStateProvider.notifier)
                 .setValidationMessage(
                   'Saved completion state does not match this setup. '
                   'Please try again after it finishes syncing.',
@@ -509,7 +512,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         return;
       }
 
-      final savedDraft = ref.read(mockOnboardingProvider).draft;
+      final savedDraft = ref.read(onboardingStateProvider).draft;
       final draftForBundle = savedDraft.copyWith(uid: uid);
       final now = DateTime.now();
       finalDraft = draftForBundle.copyWith(
@@ -534,7 +537,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     }
     if (blockingWarning != null) {
       ref
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .setValidationMessage(blockingWarning);
       return;
     }
@@ -558,7 +561,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         );
         _step14Key.currentState?.setFailureState(recoverable);
         ref
-            .read(mockOnboardingProvider.notifier)
+            .read(onboardingStateProvider.notifier)
             .setValidationMessage(recoverable.publicMessage);
         return;
       }
@@ -589,12 +592,12 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       );
       _step14Key.currentState?.setFailureState(recoverable, job: failureJob);
       ref
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .setValidationMessage(recoverable.publicMessage);
       return;
     }
 
-    ref.read(mockOnboardingProvider.notifier).loadSeedData(finalDraft);
+    ref.read(onboardingStateProvider.notifier).loadSeedData(finalDraft);
 
     if (authUser != null) {
       try {
@@ -607,7 +610,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         ).copyWith(supportHint: 'authHandoff');
         _step14Key.currentState?.setFailureState(recoverable);
         ref
-            .read(mockOnboardingProvider.notifier)
+            .read(onboardingStateProvider.notifier)
             .setValidationMessage(recoverable.publicMessage);
         return;
       }
@@ -627,14 +630,14 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
   Future<void> _navigateToIndicatorStep(int index) async {
     if (_isSaving || _isNavigating) return;
-    final onboardingState = ref.read(mockOnboardingProvider);
+    final onboardingState = ref.read(onboardingStateProvider);
     final boundedIndex = index.clamp(
       0,
       onboardingState.stepCompleted.length - 1,
     );
 
     if (boundedIndex == _currentPage) {
-      ref.read(mockOnboardingProvider.notifier).clearValidation();
+      ref.read(onboardingStateProvider.notifier).clearValidation();
       return;
     }
 
@@ -651,14 +654,14 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
     if (hasUnsavedForwardStep) {
       ref
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .setValidationMessage('Save changed steps before moving forward.');
       return;
     }
 
     if (!isBackward && !isSavedForwardStep) {
       ref
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .setValidationMessage(
             'Use Next Step to unlock the next onboarding step.',
           );
@@ -673,7 +676,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         );
         if (error != null) {
           ref
-              .read(mockOnboardingProvider.notifier)
+              .read(onboardingStateProvider.notifier)
               .setValidationMessage(
                 'Please complete earlier steps before skipping ahead.',
               );
@@ -684,7 +687,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
     _currentPage = boundedIndex;
     ref.read(step7ActionBridgeProvider.notifier).clearAll();
-    ref.read(mockOnboardingProvider.notifier).setStep(boundedIndex);
+    ref.read(onboardingStateProvider.notifier).setStep(boundedIndex);
     await _pageController.animateToPage(
       boundedIndex,
       duration: const Duration(milliseconds: 350),
@@ -778,7 +781,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         return;
       }
 
-      final onboardingState = ref.read(mockOnboardingProvider);
+      final onboardingState = ref.read(onboardingStateProvider);
       if (onboardingState.stepDirty[_currentPage]) {
         final proceed = await _showDiscardDraftDialog(context);
         if (!proceed) return;
@@ -799,7 +802,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     final target = _currentPage - 1;
     _currentPage = target;
     ref.read(step7ActionBridgeProvider.notifier).clearAll();
-    ref.read(mockOnboardingProvider.notifier).setStep(target);
+    ref.read(onboardingStateProvider.notifier).setStep(target);
     _pageController.animateToPage(
       target,
       duration: const Duration(milliseconds: 280),
@@ -818,7 +821,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       final closed = _step14Key.currentState?.closeFullTimelinePreviewIfOpen();
       if (closed == true) return true;
     }
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     return switch (OnboardingStepId.fromIndex(_currentPage)) {
       OnboardingStepId.classesJob => _backClassesJob(draft),
       OnboardingStepId.eating => _backEating(draft),
@@ -1004,7 +1007,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   }
 
   OnboardingStepReadiness _readStepReadiness(int step) {
-    final onboardingState = ref.read(mockOnboardingProvider);
+    final onboardingState = ref.read(onboardingStateProvider);
     return _evaluateReadiness(
       step: step,
       onboardingState: onboardingState,
@@ -1022,7 +1025,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
-    final onboardingState = ref.watch(mockOnboardingProvider);
+    final onboardingState = ref.watch(onboardingStateProvider);
     if (authState.isLoading) {
       return const LoadingScreen(message: 'Restoring your setup...');
     }
@@ -1184,7 +1187,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   }
 
   Future<bool> _handleInternalNextIfNeeded() async {
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     return switch (OnboardingStepId.fromIndex(_currentPage)) {
       OnboardingStepId.classesJob => _nextClassesJob(draft),
       OnboardingStepId.eating => _nextEating(draft),
@@ -1324,7 +1327,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     if (!classesRequired && !workRequired) return false;
 
     if (_classJobActionBusy(draft, watch: false)) {
-      ref.read(mockOnboardingProvider.notifier).clearValidation();
+      ref.read(onboardingStateProvider.notifier).clearValidation();
       return true;
     }
 
@@ -1375,7 +1378,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       allNewBlocks.addAll(visibleWorkBlocks);
     }
 
-    ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+    ref.read(onboardingStateProvider.notifier).updateDraft((draft) {
       final base = draft.baseTimeline;
       final nextBlocks =
           base.blocks
@@ -1402,7 +1405,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       );
     });
     ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .setStepDirty(onboardingClassJobStepIndex, true);
 
     // The outer flow now performs the only durable save/verification and may
@@ -1450,7 +1453,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   }
 
   void _setInternalValidation(String message) {
-    ref.read(mockOnboardingProvider.notifier).setValidationMessage(message);
+    ref.read(onboardingStateProvider.notifier).setValidationMessage(message);
   }
 
   void _updateBaseTimelineStage(
@@ -1458,14 +1461,14 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     BaseTimelineDraft Function(BaseTimelineDraft base) update,
   ) {
     ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .updateDraft(
           (draft) => draft.copyWith(
             baseTimeline: update(draft.baseTimeline),
             clearFinalPreview: true,
           ),
         );
-    ref.read(mockOnboardingProvider.notifier).setStepDirty(stepIndex, true);
+    ref.read(onboardingStateProvider.notifier).setStepDirty(stepIndex, true);
   }
 }
 

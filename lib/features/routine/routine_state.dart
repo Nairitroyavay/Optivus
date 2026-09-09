@@ -448,7 +448,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         ),
       ) {
     if (_ref.read(fakeDataAllowedProvider)) {
-      final initialUid = _ref.read(mockUserProfileProvider).uid.trim();
+      final initialUid = _ref.read(userProfileProvider).uid.trim();
       if (initialUid.isNotEmpty) {
         _initialLoad = loadForOwner(initialUid);
       } else {

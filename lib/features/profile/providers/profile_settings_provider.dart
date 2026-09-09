@@ -153,7 +153,7 @@ class ProfileSettingsNotifier extends StateNotifier<ProfileSettingsState> {
     this._appPreferencesRepository,
   ) : super(_profileSettingsDefaults());
 
-  String get _currentUid => _ref.read(mockUserProfileProvider).uid;
+  String get _currentUid => _ref.read(userProfileProvider).uid;
 
   void loadProfileSettings(UserProfileSettings profile) {
     state = state.copyWith(profile: profile);

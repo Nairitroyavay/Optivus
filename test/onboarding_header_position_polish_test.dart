@@ -79,8 +79,8 @@ class _FakeAuthNotifier extends StateNotifier<AuthState>
 Widget _wrapStep(Widget stepWidget, {OnboardingDraft? draft}) {
   return ProviderScope(
     overrides: [
-      mockOnboardingProvider.overrideWith((_) {
-        final notifier = MockOnboardingNotifier();
+      onboardingStateProvider.overrideWith((_) {
+        final notifier = OnboardingNotifier();
         if (draft != null) notifier.loadSeedData(draft);
         return notifier;
       }),
@@ -100,8 +100,8 @@ Widget _wrapFlow({int currentStep = 2, Widget? child}) {
   final completed = [for (int i = 0; i < 15; i++) i < currentStep];
   return ProviderScope(
     overrides: [
-      mockOnboardingProvider.overrideWith((_) {
-        final notifier = MockOnboardingNotifier()
+      onboardingStateProvider.overrideWith((_) {
+        final notifier = OnboardingNotifier()
           ..loadSeedData(
             OnboardingDraft(
               currentStep: currentStep,

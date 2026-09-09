@@ -38,7 +38,7 @@ class _HasProductsModeScreenState
         ? null
         : '${action.label}|${action.enabled}|${action.loading}';
     final epoch = _flowController.currentEpoch;
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     final ownerUid = ref.read(authProvider).user?.uid ?? draft.uid;
     final authGeneration = ref.read(authGenerationProvider);
     final bridgeState = ref.read(step7ActionBridgeProvider);
@@ -82,7 +82,7 @@ class _HasProductsModeScreenState
     _lifecycle = AiGenerationController()..addListener(_onLifecycleChanged);
     _controller = TextEditingController(text: widget.base.skinCareProductNames);
     _focusNode = FocusNode();
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     _uploadedAsset =
         _restoredSkinAssetForSlot(
           restored: ref.read(restoredUploadsProvider),
@@ -130,7 +130,7 @@ class _HasProductsModeScreenState
     required SkinCareFlowState expectedState,
   }) {
     if (!mounted) return false;
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     final currentUid = ref.read(authProvider).user?.uid ?? draft.uid;
     final flow = ref.read(skinCareFlowControllerProvider);
     return currentUid == uid &&
@@ -168,11 +168,11 @@ class _HasProductsModeScreenState
       _uploadError = null;
       _generationError = null;
     });
-    ref.read(mockOnboardingProvider.notifier).clearValidation();
+    ref.read(onboardingStateProvider.notifier).clearValidation();
 
     final uid =
         ref.read(authProvider).user?.uid ??
-        ref.read(mockOnboardingProvider).draft.uid;
+        ref.read(onboardingStateProvider).draft.uid;
     final requestAuthGeneration = ref.read(authGenerationProvider);
     final requestFlowEpoch = _flowController.currentEpoch;
     final requestFlowState = _flowController.currentFlowState;
@@ -262,7 +262,7 @@ class _HasProductsModeScreenState
     )[onboardingSkinProductsUploadSlot];
     final uploadBusy = uploadState?.isBusy == true;
     if (uploadBusy || _removingPhoto) return;
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     final asset =
         _uploadedAsset ??
         _restoredSkinAssetForSlot(
@@ -351,7 +351,7 @@ class _HasProductsModeScreenState
     if (uploadBusy) return;
 
     final activeSource = _inputSource;
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     final asset = currentSkinPhotoForTransaction(
       slot: uploadState,
       draft: draft,
@@ -411,14 +411,14 @@ class _HasProductsModeScreenState
     final currentAssetId = asset?.assetId;
     final currentAssetKey = asset?.r2Key;
     final user = ref.read(authProvider).user;
-    final uid = user?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
+    final uid = user?.uid ?? ref.read(onboardingStateProvider).draft.uid;
 
     setState(() {
       _generationError = null;
       _uploadError = null;
     });
     ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .setStepLoading(onboardingSkinCareStepIndex, true);
 
     final isPhotoAnalyze = photoNeedsReview;
@@ -439,7 +439,7 @@ class _HasProductsModeScreenState
           _flowController.currentEpoch == requestEpoch &&
           ref.read(authGenerationProvider) == currentAuthGeneration &&
           (ref.read(authProvider).user?.uid ??
-                  ref.read(mockOnboardingProvider).draft.uid) ==
+                  ref.read(onboardingStateProvider).draft.uid) ==
               uid &&
           (currentSource != _ProductInputSource.photo ||
               (() {
@@ -447,7 +447,7 @@ class _HasProductsModeScreenState
                   slot: ref.read(
                     onboardingUploadInteractionProvider,
                   )[onboardingSkinProductsUploadSlot],
-                  draft: ref.read(mockOnboardingProvider).draft,
+                  draft: ref.read(onboardingStateProvider).draft,
                   purpose: UploadedAssetPurpose.skinProducts,
                 );
                 return live?.assetId == currentAssetId &&
@@ -469,11 +469,11 @@ class _HasProductsModeScreenState
         if (!scope.isCurrent) return false;
         final client = ref.read(skinCareAiClientProvider);
         final desiredApplicationsPerDay = ref
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline
             .skinCareDesiredApplicationsPerDay;
-        final latestBase = ref.read(mockOnboardingProvider).draft.baseTimeline;
+        final latestBase = ref.read(onboardingStateProvider).draft.baseTimeline;
         final skinType = latestBase.skinCareSkinType ?? 'not_sure';
         final mainProblem = latestBase.skinCareProblems
             .where((problem) => problem != 'none')
@@ -545,7 +545,7 @@ class _HasProductsModeScreenState
           final typedProductDetails = onboarding7ReconcileReviewedProducts(
             _controller.text,
             ref
-                .read(mockOnboardingProvider)
+                .read(onboardingStateProvider)
                 .draft
                 .baseTimeline
                 .skinCareReviewedProducts,
@@ -651,7 +651,7 @@ class _HasProductsModeScreenState
           }
 
           final schedule = onboarding7ScheduleSkinCareRoutine(
-            baseTimeline: ref.read(mockOnboardingProvider).draft.baseTimeline,
+            baseTimeline: ref.read(onboardingStateProvider).draft.baseTimeline,
             routinePlans: dailyPlans,
             desiredApplicationsPerDay: desiredApplicationsPerDay,
             ownedProductNames: ownedProductNames,
@@ -716,7 +716,7 @@ class _HasProductsModeScreenState
 
     if (mounted) {
       ref
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .setStepLoading(onboardingSkinCareStepIndex, false);
       if (run.isSuccess) {
         setState(() {
@@ -728,7 +728,7 @@ class _HasProductsModeScreenState
           }
         } else {
           _flowController.commitRebuildSuccess(
-            ref.read(mockOnboardingProvider).draft.baseTimeline,
+            ref.read(onboardingStateProvider).draft.baseTimeline,
           );
         }
       } else if (run.error != null) {
@@ -742,7 +742,7 @@ class _HasProductsModeScreenState
 
   @override
   Widget build(BuildContext context) {
-    final draft = ref.watch(mockOnboardingProvider).draft;
+    final draft = ref.watch(onboardingStateProvider).draft;
     final flowStateHolder = ref.watch(skinCareFlowControllerProvider);
     final flowState = flowStateHolder.state;
     final isEditing = flowState == SkinCareFlowState.hasProductsEditing;
@@ -766,11 +766,11 @@ class _HasProductsModeScreenState
           _lifecycle.cancel();
         }
         ref
-            .read(mockOnboardingProvider.notifier)
+            .read(onboardingStateProvider.notifier)
             .setStepLoading(onboardingSkinCareStepIndex, false);
       }
       if (previous?.state.isEditing == true && !next.state.isEditing) {
-        final draft = ref.read(mockOnboardingProvider).draft;
+        final draft = ref.read(onboardingStateProvider).draft;
         final base = draft.baseTimeline;
         _controller.text = base.skinCareProductNames ?? '';
         final restoredCurrent =
@@ -867,7 +867,7 @@ class _HasProductsModeScreenState
       final canonical = onboarding7ReconcileReviewedProducts(
         value,
         ref
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline
             .skinCareReviewedProducts,
@@ -1074,7 +1074,7 @@ class _HasProductsModeScreenState
                             .read(skinCareFlowControllerProvider.notifier)
                             .cancelEditing();
                         final base = ref
-                            .read(mockOnboardingProvider)
+                            .read(onboardingStateProvider)
                             .draft
                             .baseTimeline;
                         _controller.text = base.skinCareProductNames ?? '';

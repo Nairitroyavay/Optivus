@@ -13,7 +13,7 @@ class RecoveryCacheManager {
     required OptivusProviderReader read,
     required String uid,
   }) async {
-    final currentDraft = read(mockOnboardingProvider).draft;
+    final currentDraft = read(onboardingStateProvider).draft;
     final dirtySteps = List<bool>.from(currentDraft.stepDirty);
     final hasUnpushedEdits = dirtySteps.contains(true);
 
@@ -31,9 +31,9 @@ class RecoveryCacheManager {
     read(mockCoachProvider.notifier).resetEmpty();
 
     if (preservedDraft != null) {
-      read(mockOnboardingProvider.notifier).loadSeedData(preservedDraft);
+      read(onboardingStateProvider.notifier).loadSeedData(preservedDraft);
     } else {
-      read(mockOnboardingProvider.notifier).reset(uid);
+      read(onboardingStateProvider.notifier).reset(uid);
     }
   }
 }

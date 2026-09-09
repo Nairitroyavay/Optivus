@@ -305,7 +305,7 @@ class OnboardingCompletionJobService {
                 'Job cancelled because the authenticated session changed.',
               );
             }
-            final profile = reader(mockUserProfileProvider);
+            final profile = reader(userProfileProvider);
             if (profile.uid.trim().isEmpty || profile.uid != uid) {
               throw StateError(
                 'Job cancelled due to sign-out or account switch.',

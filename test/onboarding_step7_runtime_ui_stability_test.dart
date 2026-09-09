@@ -174,8 +174,8 @@ Widget _buildTestApp({
     key: ValueKey(draft.uid),
     overrides: [
       authProvider.overrideWith((ref) => _FakeAuthNotifier()),
-      mockOnboardingProvider.overrideWith((ref) {
-        final notifier = MockOnboardingNotifier();
+      onboardingStateProvider.overrideWith((ref) {
+        final notifier = OnboardingNotifier();
         notifier.loadSeedData(draft);
         return notifier;
       }),
@@ -1084,7 +1084,7 @@ void main() {
           tester.element(find.byType(OnboardingStep7)),
         );
         final blockBefore = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline
             .blocks
@@ -1102,7 +1102,7 @@ void main() {
 
         // Block updated
         final blockAfter = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline
             .blocks
@@ -1202,7 +1202,7 @@ void main() {
           tester.element(find.byType(OnboardingStep7)),
         );
         final blockBefore = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline
             .blocks
@@ -1223,7 +1223,7 @@ void main() {
 
         // Block updated
         final blockAfter = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline
             .blocks
@@ -1243,7 +1243,7 @@ void main() {
         tester.element(find.byType(OnboardingStep7)),
       );
       final currentSelected = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline
           .skinCareSelectedProductNames;
@@ -1289,7 +1289,7 @@ void main() {
         );
         expect(
           onboarding7CanContinue(
-            container.read(mockOnboardingProvider).draft.baseTimeline,
+            container.read(onboardingStateProvider).draft.baseTimeline,
             'user-seq-test',
           ),
           isTrue,
@@ -1426,7 +1426,7 @@ void main() {
         expect(
           onboarding7CanContinue(
             containerAfterCancel
-                .read(mockOnboardingProvider)
+                .read(onboardingStateProvider)
                 .draft
                 .baseTimeline,
             'user-seq-test',
@@ -1503,7 +1503,7 @@ void main() {
         );
         expect(
           onboarding7CanContinue(
-            containerPlanB.read(mockOnboardingProvider).draft.baseTimeline,
+            containerPlanB.read(onboardingStateProvider).draft.baseTimeline,
             'user-seq-test',
           ),
           isTrue,
@@ -1595,7 +1595,7 @@ void main() {
         final container = ProviderScope.containerOf(
           tester.element(find.byType(OnboardingFlow)),
         );
-        expect(container.read(mockOnboardingProvider).currentStep, 8);
+        expect(container.read(onboardingStateProvider).currentStep, 8);
         expect(tester.takeException(), isNull);
       },
     );

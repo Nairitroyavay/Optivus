@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/core/router/app_router.dart';
-import 'package:optivus/core/utils/auth_error_mapper.dart';
+import 'package:optivus/core/errors/auth_error_mapper.dart';
+import 'package:optivus/core/errors/diagnostic_codes.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/features/home/models/home_mind_note.dart';
 import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
 import 'package:optivus/features/home/providers/home_mind_note_provider.dart';
@@ -214,52 +216,48 @@ void main() {
     },
   );
 
-  group('Group D - Issue 19: Typed auth failure mapping', () {
-    test(
-      'mapAuthError correctly classifies errors into AuthFailureReason enum values',
-      () {
-        expect(
-          mapAuthError(Exception('network-request-failed')).reason,
-          equals(AuthFailureReason.networkFailure),
-        );
-        expect(
-          mapAuthError(const SocketException('Failed host lookup')).reason,
-          equals(AuthFailureReason.networkFailure),
-        );
-        expect(
-          mapAuthError(Exception('wrong-password')).reason,
-          equals(AuthFailureReason.invalidCredentials),
-        );
-        expect(
-          mapAuthError(Exception('invalid-user-token')).reason,
-          equals(AuthFailureReason.invalidToken),
-        );
-        expect(
-          mapAuthError(Exception('email-already-in-use')).reason,
-          equals(AuthFailureReason.emailAlreadyInUse),
-        );
-        expect(
-          mapAuthError(Exception('too-many-requests')).reason,
-          equals(AuthFailureReason.tooManyRequests),
-        );
-        expect(
-          mapAuthError(Exception('user-disabled')).reason,
-          equals(AuthFailureReason.userDisabled),
-        );
-        expect(
-          mapAuthError(Exception('unknown-error-code')).reason,
-          equals(AuthFailureReason.unknown),
-        );
-      },
-    );
+  group('Group D - Issue 19: Structured auth failure mapping', () {
+    test('AuthErrorMapper classifies stable categories and codes', () {
+      expect(
+        AuthErrorMapper.map(Exception('network-request-failed')).category,
+        RecoverableErrorCategory.network,
+      );
+      expect(
+        AuthErrorMapper.map(
+          const SocketException('Failed host lookup'),
+        ).category,
+        RecoverableErrorCategory.network,
+      );
+      expect(
+        AuthErrorMapper.map(Exception('wrong-password')).diagnosticCode,
+        DiagnosticCodes.authInvalidCredentials,
+      );
+      expect(
+        AuthErrorMapper.map(Exception('invalid-user-token')).diagnosticCode,
+        DiagnosticCodes.authSessionExpired,
+      );
+      expect(
+        AuthErrorMapper.map(Exception('email-already-in-use')).diagnosticCode,
+        DiagnosticCodes.authEmailInUse,
+      );
+      expect(
+        AuthErrorMapper.map(Exception('too-many-requests')).diagnosticCode,
+        DiagnosticCodes.authRateLimited,
+      );
+      expect(
+        AuthErrorMapper.map(Exception('user-disabled')).diagnosticCode,
+        DiagnosticCodes.authUserDisabled,
+      );
+      expect(
+        AuthErrorMapper.map(Exception('unknown-error-code')).diagnosticCode,
+        DiagnosticCodes.authUnknown,
+      );
+    });
 
-    test(
-      'friendlyAuthError returns readable error message for mapped exception',
-      () {
-        final exception = mapAuthError(Exception('network-request-failed'));
-        expect(friendlyAuthError(exception), contains('Network error'));
-      },
-    );
+    test('AuthErrorMapper returns a readable safe public message', () {
+      final error = AuthErrorMapper.map(Exception('network-request-failed'));
+      expect(error.publicMessage, contains('connect'));
+    });
   });
 
   group('Group D - Issue 20: Email verification step enforcement', () {

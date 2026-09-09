@@ -7,7 +7,8 @@ import 'package:go_router/go_router.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/core/router/app_router.dart';
-import 'package:optivus/core/utils/auth_error_mapper.dart';
+import 'package:optivus/core/errors/auth_error_mapper.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
 import 'package:optivus/models/coach_models.dart';
 import 'package:optivus/models/notification_preferences.dart';
@@ -42,7 +43,6 @@ void main() {
     test('A. cold unresolved auth still resolves to loading', () {
       final redirect = optivusAuthRedirect(
         authState: const AuthState(status: AuthFlowStatus.loading),
-        userProfile: UserProfile.empty(uid: ''),
         uri: Uri.parse('/app?tab=2'),
       );
 
@@ -54,7 +54,6 @@ void main() {
       () {
         final redirect = optivusAuthRedirect(
           authState: const AuthState(status: AuthFlowStatus.loading),
-          userProfile: UserProfile.empty(uid: ''),
           uri: Uri.parse('/login'),
         );
 
@@ -69,7 +68,6 @@ void main() {
           status: AuthFlowStatus.needsAction,
           startupReasonCode: 'reconstruction_invalidDraft',
         ),
-        userProfile: UserProfile.empty(uid: establishedUser.uid),
         uri: Uri.parse('/app?tab=4'),
       );
 
@@ -83,7 +81,6 @@ void main() {
           status: AuthFlowStatus.reconnectRequired,
           startupReasonCode: 'startup_timeout',
         ),
-        userProfile: UserProfile.empty(uid: establishedUser.uid),
         uri: Uri.parse('/app?tab=2'),
       );
 
@@ -657,7 +654,7 @@ void main() {
 
         await expectLater(
           container.read(authProvider.notifier).logout(),
-          throwsA(isA<AuthFailureException>()),
+          throwsA(isA<RecoverableError>()),
         );
 
         final state = container.read(authProvider);
@@ -762,8 +759,8 @@ Future<_RouterHarness> _pumpEstablishedRouter(
   final container = ProviderContainer(
     overrides: [
       authProvider.overrideWith((ref) => auth),
-      mockUserProfileProvider.overrideWith(
-        (ref) => MockUserProfileNotifier()..loadSeedData(profile),
+      userProfileProvider.overrideWith(
+        (ref) => UserProfileNotifier()..loadSeedData(profile),
       ),
     ],
   );
@@ -864,10 +861,7 @@ class _StreamableAuthRepository implements AuthRepository {
   @override
   Future<void> signOut() async {
     if (signOutShouldFail) {
-      throw const AuthFailureException(
-        message: 'Simulated sign out network failure',
-        reason: AuthFailureReason.networkFailure,
-      );
+      throw AuthErrorMapper.map(Exception('network-request-failed'));
     }
     emit(null);
   }
@@ -894,20 +888,18 @@ class _StreamableAuthRepository implements AuthRepository {
     String email,
     String password, {
     String? name,
-  }) async =>
-      AuthUser(
-        uid: _current?.uid ?? 'linked-user',
-        email: email,
-        displayName: name,
-      );
+  }) async => AuthUser(
+    uid: _current?.uid ?? 'linked-user',
+    email: email,
+    displayName: name,
+  );
 
   @override
   Future<AuthUser> signUp(
     String email,
     String password, {
     String? name,
-  }) async =>
-      AuthUser(uid: 'signed-up', email: email, displayName: name);
+  }) async => AuthUser(uid: 'signed-up', email: email, displayName: name);
 
   @override
   Future<void> sendEmailVerification() async {}
@@ -954,8 +946,8 @@ class _StubOnboardingRepository extends FakeOnboardingRepository {}
 class _StubOnboardingCompletionJobService
     extends OnboardingCompletionJobService {
   _StubOnboardingCompletionJobService()
-      : super(
-          onboardingRepository: FakeOnboardingRepository(),
-          profileRepository: FakeProfileRepository(),
-        );
+    : super(
+        onboardingRepository: FakeOnboardingRepository(),
+        profileRepository: FakeProfileRepository(),
+      );
 }

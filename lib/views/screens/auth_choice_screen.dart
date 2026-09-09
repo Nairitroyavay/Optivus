@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_theme.dart';
 import 'package:optivus/core/theme/auth_layout.dart';
-import 'package:optivus/core/utils/auth_error_mapper.dart';
+import 'package:optivus/core/errors/auth_error_mapper.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/widgets/auth_back_button.dart';
 import 'package:optivus/widgets/glass_logo.dart';
@@ -28,7 +28,9 @@ class AuthChoiceScreen extends ConsumerWidget {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(friendlyAuthError(error))));
+          ..showSnackBar(
+            SnackBar(content: Text(AuthErrorMapper.map(error).publicMessage)),
+          );
       }
     }
 

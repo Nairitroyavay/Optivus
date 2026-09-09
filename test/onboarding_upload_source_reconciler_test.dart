@@ -157,8 +157,9 @@ void main() {
           expect(base.blocks, isEmpty);
           expect(base.skinCareProductNames, 'Editable text');
           expect(
-            result.reconciledDraft
-                .stepCompleted[OnboardingStepId.skinCare.index],
+            result.reconciledDraft.stepCompleted[OnboardingStepId
+                .skinCare
+                .index],
             isFalse,
           );
           expect(
@@ -587,18 +588,12 @@ void main() {
           reconciled.stepCompleted[OnboardingStepId.classesJob.index],
           isFalse,
         );
-        expect(
-          reconciled.stepDirty[OnboardingStepId.classesJob.index],
-          isTrue,
-        );
+        expect(reconciled.stepDirty[OnboardingStepId.classesJob.index], isTrue);
         expect(
           reconciled.stepCompleted[OnboardingStepId.todayReady.index],
           isFalse,
         );
-        expect(
-          reconciled.stepDirty[OnboardingStepId.todayReady.index],
-          isTrue,
-        );
+        expect(reconciled.stepDirty[OnboardingStepId.todayReady.index], isTrue);
 
         // Class AI blocks removed
         expect(
@@ -822,10 +817,10 @@ void main() {
       );
 
       expect(result.changed, isTrue);
-        expect(
-          result.earliestAffectedStep,
-          equals(OnboardingStepId.classesJob.index),
-        );
+      expect(
+        result.earliestAffectedStep,
+        equals(OnboardingStepId.classesJob.index),
+      );
       expect(result.reconciledDraft.baseTimeline.classLogicalAssetId, isNull);
     });
 
@@ -866,10 +861,10 @@ void main() {
       );
 
       expect(result.changed, isTrue);
-        expect(
-          result.earliestAffectedStep,
-          equals(OnboardingStepId.classesJob.index),
-        );
+      expect(
+        result.earliestAffectedStep,
+        equals(OnboardingStepId.classesJob.index),
+      );
       expect(result.reconciledDraft.baseTimeline.workLogicalAssetId, isNull);
     });
 
@@ -1000,18 +995,12 @@ void main() {
         expect(result.reasonCodes, contains('step5_eating_source_stale'));
 
         final reconciled = result.reconciledDraft;
-        expect(
-          reconciled.currentStep,
-          equals(OnboardingStepId.eating.index),
-        );
+        expect(reconciled.currentStep, equals(OnboardingStepId.eating.index));
         expect(
           reconciled.stepCompleted[OnboardingStepId.eating.index],
           isFalse,
         );
-        expect(
-          reconciled.stepDirty[OnboardingStepId.eating.index],
-          isTrue,
-        );
+        expect(reconciled.stepDirty[OnboardingStepId.eating.index], isTrue);
 
         // Old Eating AI block removed
         expect(
@@ -1029,10 +1018,7 @@ void main() {
           reconciled.stepCompleted[OnboardingStepId.todayReady.index],
           isFalse,
         );
-        expect(
-          reconciled.stepDirty[OnboardingStepId.todayReady.index],
-          isTrue,
-        );
+        expect(reconciled.stepDirty[OnboardingStepId.todayReady.index], isTrue);
         expect(reconciled.baseTimeline.validateEatingSetup(), isNotNull);
 
         final second = OnboardingUploadSourceReconciler.reconcile(
@@ -1054,7 +1040,7 @@ void main() {
         );
         final draft = OnboardingDraft(
           uid: uid,
-        currentStep: OnboardingStepId.fixedSchedule.index,
+          currentStep: OnboardingStepId.fixedSchedule.index,
           baseTimeline: BaseTimelineDraft(
             eatingSetupPath: 'has_routine',
             pendingFutureImports: [
@@ -1150,7 +1136,7 @@ void main() {
 
       final draft = OnboardingDraft(
         uid: uid,
-          currentStep: OnboardingStepId.badHabits.index,
+        currentStep: OnboardingStepId.badHabits.index,
         lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
         baseTimeline: BaseTimelineDraft(
           classLogicalAssetId: classA.assetId,
@@ -1494,7 +1480,10 @@ void main() {
       expect(result.changed, isTrue);
       expect(result.earliestAffectedStep, OnboardingStepId.skinCare.index);
       expect(result.reasonCodes, contains('step7_face_source_stale'));
-      expect(result.reconciledDraft.currentStep, OnboardingStepId.skinCare.index);
+      expect(
+        result.reconciledDraft.currentStep,
+        OnboardingStepId.skinCare.index,
+      );
       expect(
         result.reconciledDraft.stepCompleted[OnboardingStepId.skinCare.index],
         isFalse,
@@ -1504,8 +1493,7 @@ void main() {
         isTrue,
       );
       expect(
-        result.reconciledDraft
-            .stepCompleted[OnboardingStepId.todayReady.index],
+        result.reconciledDraft.stepCompleted[OnboardingStepId.todayReady.index],
         isFalse,
       );
       expect(

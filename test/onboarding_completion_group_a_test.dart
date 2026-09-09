@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/core/errors/diagnostic_codes.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/core/router/app_router.dart';
 import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
 import 'package:optivus/features/recovery/screens/onboarding_recovery_screen.dart';
@@ -346,13 +348,22 @@ void main() {
                     email: 'failed@ex.com',
                     emailVerified: true,
                   ),
-                  status: AuthFlowStatus.backendRestoreFailed,
-                  errorMessage: 'Projection pipeline failed',
+                  status: AuthFlowStatus.needsAction,
+                  error: const RecoverableError(
+                    category: RecoverableErrorCategory.recoveryRequired,
+                    publicMessage: 'Projection pipeline failed',
+                    severity: RecoverableErrorSeverity.error,
+                    isBlocking: true,
+                    retryAction: RecoverableRetryAction.restartRecovery,
+                    retrySafe: false,
+                    diagnosticCode:
+                        DiagnosticCodes.recoveryDurableStateConflict,
+                  ),
                 ),
               ),
             ),
-            mockUserProfileProvider.overrideWith(
-              (ref) => MockUserProfileNotifier()..loadSeedData(profile),
+            userProfileProvider.overrideWith(
+              (ref) => UserProfileNotifier()..loadSeedData(profile),
             ),
           ],
         );
@@ -373,7 +384,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 
-        // AuthState status is backendRestoreFailed, so router directs to /onboarding/recovery rendering OnboardingRecoveryScreen
+        // AuthState status is needsAction, so router directs to /onboarding/recovery rendering OnboardingRecoveryScreen
         expect(find.byType(OnboardingRecoveryScreen), findsOneWidget);
       },
     );
@@ -490,30 +501,34 @@ void main() {
       },
     );
 
-    test(
-      'AuthState populates onboardingFailureReason and recoveryActions on error',
-      () {
-        const state = AuthState(
-          status: AuthFlowStatus.backendRestoreFailed,
-          errorMessage: 'Bundle missing',
-          onboardingFailureReason: OnboardingFailureReason.missingBundle,
-          recoveryActions: [
-            RebuildBundleFromVerifiedDraftAction(),
-            ResumeOnboardingAction(),
-          ],
-        );
+    test('AuthState exposes one structured error and recovery actions', () {
+      const state = AuthState(
+        status: AuthFlowStatus.needsAction,
+        error: RecoverableError(
+          category: RecoverableErrorCategory.recoveryRequired,
+          publicMessage: 'Bundle missing',
+          severity: RecoverableErrorSeverity.error,
+          isBlocking: true,
+          retryAction: RecoverableRetryAction.restartRecovery,
+          retrySafe: false,
+          diagnosticCode: DiagnosticCodes.recoveryMissingCurrentRun,
+        ),
+        recoveryActions: [
+          RebuildBundleFromVerifiedDraftAction(),
+          ResumeOnboardingAction(),
+        ],
+      );
 
-        expect(
-          state.onboardingFailureReason,
-          equals(OnboardingFailureReason.missingBundle),
-        );
-        expect(state.recoveryActions.length, equals(2));
-        expect(
-          state.recoveryActions.first,
-          isA<RebuildBundleFromVerifiedDraftAction>(),
-        );
-      },
-    );
+      expect(
+        state.error?.diagnosticCode,
+        DiagnosticCodes.recoveryMissingCurrentRun,
+      );
+      expect(state.recoveryActions.length, equals(2));
+      expect(
+        state.recoveryActions.first,
+        isA<RebuildBundleFromVerifiedDraftAction>(),
+      );
+    });
   });
 }
 

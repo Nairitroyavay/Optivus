@@ -101,8 +101,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            mockOnboardingProvider.overrideWith(
-              (ref) => MockOnboardingNotifier()..loadSeedData(draft),
+            onboardingStateProvider.overrideWith(
+              (ref) => OnboardingNotifier()..loadSeedData(draft),
             ),
             // Provide a fake nutrition client that hangs
             nutritionAiClientProvider.overrideWithValue(
@@ -152,8 +152,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            mockOnboardingProvider.overrideWith(
-              (ref) => MockOnboardingNotifier()..loadSeedData(draft),
+            onboardingStateProvider.overrideWith(
+              (ref) => OnboardingNotifier()..loadSeedData(draft),
             ),
             routineImportAiControllerProvider.overrideWith(
               (ref) => MockExtractingRoutineImportAiController(

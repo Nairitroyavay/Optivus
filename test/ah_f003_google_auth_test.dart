@@ -6,7 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/config/backend_config.dart';
-import 'package:optivus/core/utils/auth_error_mapper.dart';
+import 'package:optivus/core/errors/auth_error_mapper.dart';
+import 'package:optivus/core/errors/diagnostic_codes.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/auth_repository.dart';
@@ -69,9 +71,12 @@ void main() {
         ),
       );
 
-      expect(mapped.reason, AuthFailureReason.accountCollision);
-      expect(mapped.message, contains('original method'));
-      expect(mapped.message, isNot(contains('credential-already-in-use')));
+      expect(mapped.diagnosticCode, DiagnosticCodes.authAccountCollision);
+      expect(mapped.publicMessage, contains('original method'));
+      expect(
+        mapped.publicMessage,
+        isNot(contains('credential-already-in-use')),
+      );
     });
   });
 
@@ -179,10 +184,7 @@ void main() {
         var shouldFail = true;
         final auth = _ControlledAuthRepository(() async {
           if (shouldFail) {
-            throw const AuthFailureException(
-              reason: AuthFailureReason.networkFailure,
-              message: 'Network error. Check your connection and retry.',
-            );
+            throw AuthErrorMapper.map(Exception('network-request-failed'));
           }
           return null;
         });
@@ -192,12 +194,12 @@ void main() {
 
         await expectLater(
           container.read(authProvider.notifier).signInWithGoogle(),
-          throwsA(isA<AuthFailureException>()),
+          throwsA(isA<RecoverableError>()),
         );
         expect(container.read(authProvider).isLoading, isFalse);
         expect(
-          container.read(authProvider).failureReason,
-          AuthFailureReason.networkFailure,
+          container.read(authProvider).error?.category,
+          RecoverableErrorCategory.network,
         );
         expect(container.read(authProvider).errorMessage, contains('retry'));
 
@@ -294,10 +296,8 @@ void main() {
       'Auth Choice awaits Google failure, clears loading, and shows friendly error',
       (tester) async {
         final auth = _ControlledAuthRepository(
-          () async => throw const AuthFailureException(
-            reason: AuthFailureReason.networkFailure,
-            message: 'Network error. Check your connection and retry.',
-          ),
+          () async =>
+              throw AuthErrorMapper.map(Exception('network-request-failed')),
         );
         addTearDown(auth.dispose);
         late ProviderContainer container;

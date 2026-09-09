@@ -12,7 +12,7 @@ class OnboardingStep4 extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final draft = ref.watch(mockOnboardingProvider).draft;
+    final draft = ref.watch(onboardingStateProvider).draft;
     final role = draft.lifeRole.lifeRole;
     final classesRequired =
         role == LifeRoleDraft.studentKey ||

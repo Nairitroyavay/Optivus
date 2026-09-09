@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/core/errors/diagnostic_codes.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
 import 'package:optivus/features/recovery/screens/onboarding_recovery_screen.dart';
 import 'package:optivus/features/recovery/services/diagnostic_bundle_service.dart';
@@ -164,7 +166,7 @@ void main() {
           );
           container.read(authProvider.notifier).state = const AuthState(
             user: testUser,
-            status: AuthFlowStatus.backendRestoreFailed,
+            status: AuthFlowStatus.needsAction,
           );
 
           // Under empty repos, RetryNetworkAction encounters Tier 4
@@ -198,7 +200,7 @@ void main() {
           );
           container.read(authProvider.notifier).state = const AuthState(
             user: testUser,
-            status: AuthFlowStatus.backendRestoreFailed,
+            status: AuthFlowStatus.needsAction,
           );
 
           await container
@@ -209,7 +211,7 @@ void main() {
 
           expect(
             container.read(authProvider).status,
-            equals(AuthFlowStatus.backendRestoreFailed),
+            equals(AuthFlowStatus.needsAction),
           );
           expect(await fakeOnboardingRepo.fetchDraft(testUser.uid), isNull);
         },
@@ -237,7 +239,7 @@ void main() {
           );
           container.read(authProvider.notifier).state = const AuthState(
             user: testUser,
-            status: AuthFlowStatus.backendRestoreFailed,
+            status: AuthFlowStatus.needsAction,
           );
 
           await container
@@ -248,7 +250,7 @@ void main() {
 
           expect(
             container.read(authProvider).status,
-            equals(AuthFlowStatus.backendRestoreFailed),
+            equals(AuthFlowStatus.needsAction),
           );
         },
       );
@@ -333,7 +335,7 @@ void main() {
               email: 'resync@test.com',
               emailVerified: true,
             ),
-            status: AuthFlowStatus.backendRestoreFailed,
+            status: AuthFlowStatus.needsAction,
           );
 
           await container
@@ -514,18 +516,19 @@ void main() {
     // 4. RECOVERY UI & STATE REPAIR EDGE CASES
     // =========================================================================
     group('4. Recovery UI & State Repair Edge Cases', () {
-      test(
-        'Failure reason mapping covers all OnboardingFailureReason values',
-        () {
-          final reasons = OnboardingFailureReason.values;
-          expect(reasons.length, equals(8));
-        },
-      );
+      test('Recovery presentation uses structured error categories', () {
+        expect(RecoverableErrorCategory.recoveryRequired, isNotNull);
+        expect(DiagnosticCodes.recoveryDurableStateConflict, isNotEmpty);
+      });
 
       testWidgets(
         'OnboardingRecoveryScreen renders correctly for all failure reasons',
         (tester) async {
-          for (final reason in OnboardingFailureReason.values) {
+          for (final category in <RecoverableErrorCategory>[
+            RecoverableErrorCategory.recoveryRequired,
+            RecoverableErrorCategory.cloudPersistence,
+            RecoverableErrorCategory.completionRetry,
+          ]) {
             final fakeAuthRepo = FakeAuthRepository();
             final container = ProviderContainer(
               overrides: [
@@ -540,9 +543,16 @@ void main() {
                 email: 'test@example.com',
                 emailVerified: true,
               ),
-              status: AuthFlowStatus.backendRestoreFailed,
-              onboardingFailureReason: reason,
-              errorMessage: 'Test error message for ${reason.name}',
+              status: AuthFlowStatus.needsAction,
+              error: RecoverableError(
+                category: category,
+                publicMessage: 'Test error message for ${category.name}',
+                severity: RecoverableErrorSeverity.error,
+                isBlocking: true,
+                retryAction: RecoverableRetryAction.restartRecovery,
+                retrySafe: false,
+                diagnosticCode: DiagnosticCodes.recoveryDurableStateConflict,
+              ),
             );
 
             await tester.pumpWidget(
@@ -559,7 +569,7 @@ void main() {
             );
             expect(find.text('Technical details'), findsOneWidget);
             expect(
-              find.text('Test error message for ${reason.name}'),
+              find.text('Test error message for ${category.name}'),
               findsNothing,
             );
           }

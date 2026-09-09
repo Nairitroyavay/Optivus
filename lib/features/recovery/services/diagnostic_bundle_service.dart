@@ -58,7 +58,7 @@ class DiagnosticBundleService {
     required OptivusProviderReader read,
   }) async {
     final authState = read(authProvider);
-    final userProfile = read(mockUserProfileProvider);
+    final userProfile = read(userProfileProvider);
     final uid = authState.user?.uid ?? userProfile.uid;
     final email = authState.user?.email ?? userProfile.email;
     final displayName = authState.user?.displayName ?? userProfile.displayName;
@@ -93,10 +93,11 @@ class DiagnosticBundleService {
       },
       'receiptStatus': receiptStatus,
       'errorLogs': {
-        'errorMessage': authState.errorMessage ?? 'None',
-        'onboardingFailureReason':
-            authState.onboardingFailureReason?.name ?? 'None',
-        'failureReason': authState.failureReason?.name ?? 'None',
+        'errorCategory': authState.error?.category.name ?? 'None',
+        'diagnosticCode': authState.error?.diagnosticCode ?? 'None',
+        'retryAction': authState.error?.retryAction.name ?? 'None',
+        'retrySafe': authState.error?.retrySafe ?? false,
+        'blocking': authState.error?.isBlocking ?? false,
       },
     };
 

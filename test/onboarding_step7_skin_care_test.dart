@@ -57,8 +57,8 @@ void main() {
         );
     return ProviderScope(
       overrides: [
-        mockOnboardingProvider.overrideWith((ref) {
-          final notifier = MockOnboardingNotifier();
+        onboardingStateProvider.overrideWith((ref) {
+          final notifier = OnboardingNotifier();
           notifier.loadSeedData(draft);
           return notifier;
         }),
@@ -172,7 +172,7 @@ void main() {
         final container = ProviderScope.containerOf(
           tester.element(find.byType(OnboardingStep7)),
         );
-        final before = container.read(mockOnboardingProvider).draft.toMap();
+        final before = container.read(onboardingStateProvider).draft.toMap();
         await tester.tap(
           find.byKey(const ValueKey('onboarding-step7-photo-tile')).first,
         );
@@ -184,7 +184,7 @@ void main() {
         ).pop();
         await tester.pumpAndSettle();
         expect(interaction.startUploadCalls, 0);
-        expect(container.read(mockOnboardingProvider).draft.toMap(), before);
+        expect(container.read(onboardingStateProvider).draft.toMap(), before);
         expect(tester.takeException(), isNull);
       },
     );
@@ -461,7 +461,7 @@ void main() {
     );
     expect(
       container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline
           .skinCareSetupStep,
@@ -841,7 +841,7 @@ void main() {
     expect(find.text('Saved Cleanser - cleanser'), findsOneWidget);
     final base = ProviderScope.containerOf(
       tester.element(find.byType(OnboardingStep7)),
-    ).read(mockOnboardingProvider).draft.baseTimeline;
+    ).read(onboardingStateProvider).draft.baseTimeline;
     expect(base.skinCareProductNames, 'Saved Cleanser - cleanser');
     expect(base.skinCareProductPhotoR2Key, isNull);
   });
@@ -873,7 +873,7 @@ void main() {
     );
     expect(
       container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline
           .confirmedBlocksForSection('skin_care'),
@@ -1001,7 +1001,7 @@ void main() {
       final firstContainer = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       );
-      final persisted = firstContainer.read(mockOnboardingProvider).draft;
+      final persisted = firstContainer.read(onboardingStateProvider).draft;
       final reviewed = persisted.baseTimeline.skinCareReviewedProducts.single;
       expect(reviewed.keyIngredients, ['zinc oxide']);
       expect(reviewed.possibleActives, ['UV filters']);
@@ -1165,7 +1165,7 @@ void main() {
     );
     expect(
       container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline
           .confirmedBlocksForSection('skin_care'),
@@ -1225,7 +1225,7 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       );
-      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      final base = container.read(onboardingStateProvider).draft.baseTimeline;
       final blocks = base.confirmedBlocksForSection('skin_care');
       expect(blocks, hasLength(2));
       expect(blocks.first.section, 'skin_care');
@@ -1351,7 +1351,7 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       );
-      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      final base = container.read(onboardingStateProvider).draft.baseTimeline;
       final blocks = base.confirmedBlocksForSection('skin_care');
 
       expect(blocks, hasLength(2));
@@ -1507,7 +1507,7 @@ void main() {
 
       final base = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
-      ).read(mockOnboardingProvider).draft.baseTimeline;
+      ).read(onboardingStateProvider).draft.baseTimeline;
       final blocks = base.confirmedBlocksForSection('skin_care');
       final nightBlock = blocks.singleWhere(
         (block) => block.skincareSlotLabel == 'night',
@@ -1584,7 +1584,7 @@ void main() {
 
     final notes = ProviderScope.containerOf(
       tester.element(find.byType(OnboardingStep7)),
-    ).read(mockOnboardingProvider).draft.baseTimeline.skinCareSpecialCareNotes;
+    ).read(onboardingStateProvider).draft.baseTimeline.skinCareSpecialCareNotes;
     final joinedNotes = notes.join(' ').toLowerCase();
 
     expect(notes, isEmpty);
@@ -1749,7 +1749,7 @@ void main() {
       tester.element(find.byType(OnboardingStep7)),
     );
     final blocks = container
-        .read(mockOnboardingProvider)
+        .read(onboardingStateProvider)
         .draft
         .baseTimeline
         .blocks;
@@ -1796,7 +1796,7 @@ void main() {
       tester.element(find.byType(OnboardingStep7)),
     );
     final blocks = container
-        .read(mockOnboardingProvider)
+        .read(onboardingStateProvider)
         .draft
         .baseTimeline
         .confirmedBlocksForSection('skin_care');
@@ -1921,7 +1921,7 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       );
-      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      final base = container.read(onboardingStateProvider).draft.baseTimeline;
       final blocks = base.confirmedBlocksForSection('skin_care');
 
       expect(blocks, hasLength(4));
@@ -2041,7 +2041,7 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       );
-      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      final base = container.read(onboardingStateProvider).draft.baseTimeline;
       final blocks = base.confirmedBlocksForSection('skin_care');
 
       expect(blocks, hasLength(3));
@@ -2123,7 +2123,7 @@ void main() {
         tester.element(find.byType(OnboardingStep7)),
       );
       final blocks = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline
           .confirmedBlocksForSection('skin_care');
@@ -2170,7 +2170,7 @@ void main() {
       tester.element(find.byType(OnboardingStep7)),
     );
     final blocks = container
-        .read(mockOnboardingProvider)
+        .read(onboardingStateProvider)
         .draft
         .baseTimeline
         .confirmedBlocksForSection('skin_care');
@@ -3031,7 +3031,7 @@ void main() {
       tester.element(find.byType(OnboardingStep7)),
     );
     final updated = container
-        .read(mockOnboardingProvider)
+        .read(onboardingStateProvider)
         .draft
         .baseTimeline
         .blocks
@@ -3109,7 +3109,7 @@ void main() {
       expectNoModalException();
 
       var updated = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline
           .blocks
@@ -3185,7 +3185,7 @@ void main() {
         tester.element(find.byType(OnboardingStep7)),
       );
       final blocks = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline
           .confirmedBlocksForSection('skin_care');
@@ -3230,7 +3230,7 @@ void main() {
         tester.element(find.byType(OnboardingStep7)),
       );
       final blocks = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline
           .confirmedBlocksForSection('skin_care');
@@ -3281,7 +3281,7 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       );
-      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      final base = container.read(onboardingStateProvider).draft.baseTimeline;
       final blocks = base.confirmedBlocksForSection('skin_care');
 
       expect(blocks, hasLength(0));
@@ -3340,7 +3340,7 @@ void main() {
         tester.element(find.byType(OnboardingStep7)),
       );
       final blocks = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline
           .confirmedBlocksForSection('skin_care');
@@ -3396,7 +3396,7 @@ void main() {
         tester.element(find.byType(OnboardingStep7)),
       );
       final blocks = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline
           .confirmedBlocksForSection('skin_care');
@@ -3451,7 +3451,7 @@ void main() {
         tester.element(find.byType(OnboardingStep7)),
       );
       final blocks = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline
           .confirmedBlocksForSection('skin_care');
@@ -3529,7 +3529,7 @@ void main() {
         tester.element(find.byType(OnboardingStep7)),
       );
       final blocks = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline
           .confirmedBlocksForSection('skin_care');
@@ -3622,7 +3622,7 @@ void main() {
         tester.element(find.byType(OnboardingStep7)),
       );
       final blocks = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline
           .confirmedBlocksForSection('skin_care');
@@ -3697,13 +3697,13 @@ void main() {
         tester.element(find.byType(OnboardingStep7)),
       );
       final blocks = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline
           .confirmedBlocksForSection('skin_care');
 
       expect(blocks, isEmpty);
-      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      final base = container.read(onboardingStateProvider).draft.baseTimeline;
       expect(base.skinCareSpecialCareNotes, isEmpty);
       expect(
         find.text(
@@ -4234,7 +4234,7 @@ void main() {
       );
       expect(
         container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline
             .confirmedBlocksForSection('skin_care'),
@@ -4267,7 +4267,7 @@ void main() {
       final firstContainer = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       );
-      final persistedDraft = firstContainer.read(mockOnboardingProvider).draft;
+      final persistedDraft = firstContainer.read(onboardingStateProvider).draft;
       expect(
         persistedDraft.baseTimeline.skinCareProductPhotoR2Key,
         asset.r2Key,
@@ -4512,7 +4512,7 @@ void main() {
       );
       expect(
         container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline
             .confirmedBlocksForSection('skin_care'),
@@ -4584,7 +4584,7 @@ void main() {
 
     final base = ProviderScope.containerOf(
       tester.element(find.byType(OnboardingStep7)),
-    ).read(mockOnboardingProvider).draft.baseTimeline;
+    ).read(onboardingStateProvider).draft.baseTimeline;
     expect(base.skinCareSkipped, isTrue);
     expect(base.skinCareProductNames, isNull);
     expect(base.skinCareProductPhotoAssetId, isNull);
@@ -4608,7 +4608,7 @@ void main() {
 
       final base = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
-      ).read(mockOnboardingProvider).draft.baseTimeline;
+      ).read(onboardingStateProvider).draft.baseTimeline;
       expect(base.skinCareSetupPath, 'no_products');
       expect(base.skinCareProductNames, 'Cleanser');
       expect(base.skinCareProductPhotoAssetId, isNull);
@@ -4636,7 +4636,7 @@ void main() {
 
     final base = ProviderScope.containerOf(
       tester.element(find.byType(OnboardingStep7)),
-    ).read(mockOnboardingProvider).draft.baseTimeline;
+    ).read(onboardingStateProvider).draft.baseTimeline;
     expect(base.skinCareSetupPath, 'has_products');
     expect(base.skinCareProductNames, 'Cleanser');
     expect(base.skinCareProductPhotoAssetId, 'skin-asset');
@@ -4655,8 +4655,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            mockOnboardingProvider.overrideWith((ref) {
-              final notifier = MockOnboardingNotifier();
+            onboardingStateProvider.overrideWith((ref) {
+              final notifier = OnboardingNotifier();
               notifier.loadSeedData(_hasProductsDraft());
               notifier.setValidationMessage(
                 'Type one product per line, for example "Minimalist SPF 50 - sunscreen".',
@@ -4929,7 +4929,7 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       );
-      final draftState = container.read(mockOnboardingProvider);
+      final draftState = container.read(onboardingStateProvider);
       expect(
         draftState.draft.baseTimeline.skinCareSpecialCareNotes,
         contains(startsWith('Special care: Exfoliation Night - AHA BHA')),
@@ -4987,7 +4987,7 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       );
-      final draftState = container.read(mockOnboardingProvider);
+      final draftState = container.read(onboardingStateProvider);
       final scBlocks = draftState.draft.baseTimeline.blocks
           .where((b) => b.section == 'skin_care')
           .toList();
@@ -5062,7 +5062,7 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       );
-      final persistedDraft = container.read(mockOnboardingProvider).draft;
+      final persistedDraft = container.read(onboardingStateProvider).draft;
       final notes = persistedDraft.baseTimeline.skinCareSpecialCareNotes;
 
       expect(notes, contains('Use barrier moisturizer after exfoliation'));
@@ -5174,7 +5174,7 @@ void main() {
 
       var base = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
-      ).read(mockOnboardingProvider).draft.baseTimeline;
+      ).read(onboardingStateProvider).draft.baseTimeline;
       expect(base.skinCareSpecialCareNotes, ['missing: First note']);
       final originalBlockIds = base
           .confirmedBlocksForSection('skin_care')
@@ -5187,7 +5187,7 @@ void main() {
       await tester.pumpAndSettle();
       base = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
-      ).read(mockOnboardingProvider).draft.baseTimeline;
+      ).read(onboardingStateProvider).draft.baseTimeline;
       expect(base.skinCareSpecialCareNotes, ['missing: First note']);
       expect(
         base
@@ -5201,7 +5201,7 @@ void main() {
       await tester.pumpAndSettle();
       base = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
-      ).read(mockOnboardingProvider).draft.baseTimeline;
+      ).read(onboardingStateProvider).draft.baseTimeline;
       expect(base.skinCareSpecialCareNotes, ['missing: Second note']);
 
       await tester.tap(
@@ -5298,7 +5298,7 @@ void main() {
           ProviderScope.containerOf(
                 tester.element(find.byType(OnboardingStep7)),
               )
-              .read(mockOnboardingProvider)
+              .read(onboardingStateProvider)
               .draft
               .baseTimeline
               .blocks
@@ -5849,7 +5849,7 @@ void main() {
 
       final base = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
-      ).read(mockOnboardingProvider).draft.baseTimeline;
+      ).read(onboardingStateProvider).draft.baseTimeline;
       final blocks = base.confirmedBlocksForSection('skin_care');
       expect(blocks, hasLength(2));
       expect(
@@ -5934,7 +5934,7 @@ void main() {
 
     var base = ProviderScope.containerOf(
       tester.element(find.byType(OnboardingStep7)),
-    ).read(mockOnboardingProvider).draft.baseTimeline;
+    ).read(onboardingStateProvider).draft.baseTimeline;
     expect(client.generateCalls, hasLength(1));
     expect(client.generateCalls.single['recommendationOnly'], isTrue);
     expect(base.skinCareProductRecommendations, hasLength(5));
@@ -5949,7 +5949,7 @@ void main() {
 
     base = ProviderScope.containerOf(
       tester.element(find.byType(OnboardingStep7)),
-    ).read(mockOnboardingProvider).draft.baseTimeline;
+    ).read(onboardingStateProvider).draft.baseTimeline;
     expect(client.generateCalls, hasLength(2));
     expect(base.skinCareSelectedProductNames, hasLength(3));
     expect(base.confirmedBlocksForSection('skin_care'), isNotEmpty);
@@ -6000,7 +6000,7 @@ void main() {
       );
       expect(
         container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline
             .skinCareProductRecommendations,
@@ -6099,7 +6099,7 @@ void main() {
       await chooseSkinPhotoFromGallery(tester);
       var base = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
-      ).read(mockOnboardingProvider).draft.baseTimeline;
+      ).read(onboardingStateProvider).draft.baseTimeline;
       expect(base.skinCareFacePhotoAssetId, asset.assetId);
       expect(base.skinCareFacePhotoR2Key, asset.r2Key);
 
@@ -6111,7 +6111,7 @@ void main() {
       await tester.pumpAndSettle();
       base = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
-      ).read(mockOnboardingProvider).draft.baseTimeline;
+      ).read(onboardingStateProvider).draft.baseTimeline;
       expect(base.skinCareFacePhotoSkipped, isFalse);
 
       await tester.tap(find.text('Rebuild / Edit'));
@@ -6126,7 +6126,7 @@ void main() {
 
       base = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
-      ).read(mockOnboardingProvider).draft.baseTimeline;
+      ).read(onboardingStateProvider).draft.baseTimeline;
       expect(base.skinCareFacePhotoR2Key, isNull);
       expect(uploadController.markDeletedCalls, 1);
     },
@@ -6168,7 +6168,7 @@ void main() {
         tester.element(find.byType(OnboardingStep7)),
       );
       final originalIds = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline
           .confirmedBlocksForSection('skin_care')
@@ -6178,7 +6178,7 @@ void main() {
       await tester.tap(find.text('Rebuild / Edit'));
       await tester.pumpAndSettle();
       final editingBase = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline;
       expect(
@@ -6307,7 +6307,7 @@ void main() {
     );
     final base = ProviderScope.containerOf(
       tester.element(find.byType(OnboardingStep7)),
-    ).read(mockOnboardingProvider).draft.baseTimeline;
+    ).read(onboardingStateProvider).draft.baseTimeline;
     expect(base.skinCareProductRecommendations, isEmpty);
     expect(find.textContaining('Choose products available'), findsNothing);
   });
@@ -6352,7 +6352,7 @@ void main() {
       await tester.tap(find.text('High'));
       await tester.pumpAndSettle();
 
-      var base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      var base = container.read(onboardingStateProvider).draft.baseTimeline;
       expect(base.skinCareSuggestedProducts, hasLength(3));
       expect(base.confirmedBlocksForSection('skin_care'), isNotEmpty);
       expect(onboarding7CanContinue(base, 'uid-1'), isFalse);
@@ -6363,7 +6363,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      base = container.read(onboardingStateProvider).draft.baseTimeline;
       expect(
         find.byKey(const ValueKey('onboarding-step7-selected-products-button')),
         findsOneWidget,
@@ -6510,7 +6510,7 @@ void main() {
 
       expect(
         container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline
             .skinCareProductRecommendations,
@@ -6565,7 +6565,7 @@ void main() {
 
       expect(
         container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline
             .confirmedBlocksForSection('skin_care'),
@@ -6591,8 +6591,8 @@ void main() {
         ProviderScope(
           overrides: [
             authProvider.overrideWith((ref) => FakeAuthNotifier()),
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            onboardingStateProvider.overrideWith(
+              (_) => OnboardingNotifier()..loadSeedData(draft),
             ),
             skinCareAiClientProvider.overrideWithValue(client),
             onboardingUploadInteractionProvider.overrideWith(
@@ -6628,7 +6628,7 @@ void main() {
       );
       expect(
         container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .stepLoading[onboardingSkinCareStepIndex],
         isTrue,
       );
@@ -6644,13 +6644,13 @@ void main() {
       );
       expect(
         container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .stepLoading[onboardingSkinCareStepIndex],
         isFalse,
       );
       expect(
         container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline
             .confirmedBlocksForSection('skin_care')
@@ -6662,7 +6662,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      final base = container.read(onboardingStateProvider).draft.baseTimeline;
       expect(
         base.confirmedBlocksForSection('skin_care').map((block) => block.title),
         ['Morning Skin Care', 'Night Skin Care'],
@@ -6699,8 +6699,8 @@ void main() {
         ProviderScope(
           overrides: [
             authProvider.overrideWith((ref) => FakeAuthNotifier()),
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            onboardingStateProvider.overrideWith(
+              (_) => OnboardingNotifier()..loadSeedData(draft),
             ),
             skinCareAiClientProvider.overrideWithValue(client),
             onboardingUploadInteractionProvider.overrideWith(
@@ -6746,7 +6746,7 @@ void main() {
       );
       expect(
         container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .stepLoading[onboardingSkinCareStepIndex],
         isFalse,
       );
@@ -6755,7 +6755,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      final base = container.read(onboardingStateProvider).draft.baseTimeline;
       expect(
         base.confirmedBlocksForSection('skin_care').map((block) => block.title),
         ['Morning Skin Care', 'Night Skin Care'],
@@ -6789,8 +6789,8 @@ void main() {
         ProviderScope(
           overrides: [
             authProvider.overrideWith((ref) => FakeAuthNotifier()),
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            onboardingStateProvider.overrideWith(
+              (_) => OnboardingNotifier()..loadSeedData(draft),
             ),
             skinCareAiClientProvider.overrideWithValue(client),
             onboardingUploadInteractionProvider.overrideWith(
@@ -6836,7 +6836,7 @@ void main() {
       );
       expect(
         container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .stepLoading[onboardingSkinCareStepIndex],
         isFalse,
       );
@@ -6845,7 +6845,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      final base = container.read(onboardingStateProvider).draft.baseTimeline;
       expect(
         base.confirmedBlocksForSection('skin_care').map((block) => block.title),
         ['Morning Skin Care', 'Night Skin Care'],
@@ -6884,8 +6884,8 @@ void main() {
         ProviderScope(
           overrides: [
             authProvider.overrideWith((ref) => FakeAuthNotifier()),
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            onboardingStateProvider.overrideWith(
+              (_) => OnboardingNotifier()..loadSeedData(draft),
             ),
             skinCareAiClientProvider.overrideWithValue(
               const FakeSkinCareAiClient(),
@@ -6933,7 +6933,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      final base = container.read(onboardingStateProvider).draft.baseTimeline;
       expect(base.skinCareProductPhotoAssetId, 'plan-a-products');
       expect(base.skinCareProductPhotoR2Key, contains('/plan-a.jpg'));
       expect(
@@ -6976,8 +6976,8 @@ void main() {
         ProviderScope(
           overrides: [
             authProvider.overrideWith((ref) => FakeAuthNotifier()),
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            onboardingStateProvider.overrideWith(
+              (_) => OnboardingNotifier()..loadSeedData(draft),
             ),
             skinCareAiClientProvider.overrideWithValue(
               const FakeSkinCareAiClient(),
@@ -7022,7 +7022,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      final base = container.read(onboardingStateProvider).draft.baseTimeline;
       expect(base.skinCareFacePhotoAssetId, 'plan-a-face');
       expect(base.skinCareFacePhotoR2Key, contains('/plan-a-face.jpg'));
       expect(
@@ -7039,7 +7039,7 @@ void main() {
     (tester) async {
       useAndroidWidth(tester);
       final auth = FakeAuthNotifier();
-      final onboarding = MockOnboardingNotifier()
+      final onboarding = OnboardingNotifier()
         ..loadSeedData(
           _hasProductsDraft(
             uid: 'test-uid',
@@ -7062,7 +7062,7 @@ void main() {
         ProviderScope(
           overrides: [
             authProvider.overrideWith((ref) => auth),
-            mockOnboardingProvider.overrideWith((_) => onboarding),
+            onboardingStateProvider.overrideWith((_) => onboarding),
             skinCareAiClientProvider.overrideWithValue(
               const FakeSkinCareAiClient(),
             ),
@@ -7216,7 +7216,7 @@ void main() {
     await tester.pumpAndSettle();
     var base = ProviderScope.containerOf(
       tester.element(find.byType(OnboardingStep7)),
-    ).read(mockOnboardingProvider).draft.baseTimeline;
+    ).read(onboardingStateProvider).draft.baseTimeline;
     expect(base.skinCareDesiredApplicationsPerDay, 3);
 
     await tester.ensureVisible(find.text('Find products'));
@@ -7281,7 +7281,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    var base = container.read(mockOnboardingProvider).draft.baseTimeline;
+    var base = container.read(onboardingStateProvider).draft.baseTimeline;
     expect(base.skinCareDesiredApplicationsPerDay, 2);
     expect(onboarding7CanContinue(base, 'uid-1'), isFalse);
 
@@ -7289,12 +7289,12 @@ void main() {
       find.byKey(const ValueKey('onboarding-step7-no-products-cancel-rebuild')),
     );
     await tester.pumpAndSettle();
-    base = container.read(mockOnboardingProvider).draft.baseTimeline;
+    base = container.read(onboardingStateProvider).draft.baseTimeline;
     expect(base.skinCareDesiredApplicationsPerDay, 2);
     expect(onboarding7CanContinue(base, 'uid-1'), isTrue);
     expect(find.text('Routine built'), findsOneWidget);
     expect(find.text('Changes not applied yet'), findsNothing);
-    final saved = container.read(mockOnboardingProvider).draft;
+    final saved = container.read(onboardingStateProvider).draft;
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(
       buildTestWidget(draft: OnboardingDraft.fromMap(saved.toMap())),
@@ -7367,8 +7367,8 @@ void main() {
         ProviderScope(
           overrides: [
             authProvider.overrideWith((ref) => FakeAuthNotifier()),
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            onboardingStateProvider.overrideWith(
+              (_) => OnboardingNotifier()..loadSeedData(draft),
             ),
             skinCareAiClientProvider.overrideWithValue(
               const FakeSkinCareAiClient(),
@@ -7503,8 +7503,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          mockOnboardingProvider.overrideWith(
-            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          onboardingStateProvider.overrideWith(
+            (_) => OnboardingNotifier()..loadSeedData(draft),
           ),
           skinCareAiClientProvider.overrideWithValue(client),
           uploadControllerProvider.overrideWith((_) => TestUploadController()),
@@ -7613,7 +7613,7 @@ void main() {
 
     final base = ProviderScope.containerOf(
       tester.element(find.byType(OnboardingStep7)),
-    ).read(mockOnboardingProvider).draft.baseTimeline;
+    ).read(onboardingStateProvider).draft.baseTimeline;
     expect(base.skinCareSelectedProductNames, hasLength(3));
     expect(
       base.skinCareSelectedProductNames,

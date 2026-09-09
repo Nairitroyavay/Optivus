@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/core/errors/diagnostic_codes.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/services/session_destination_resolver.dart';
@@ -150,8 +152,8 @@ Widget _buildScreen({
       ),
       verificationLifecyclePolicyProvider.overrideWithValue(policy),
       if (now != null) verificationClockProvider.overrideWithValue(now),
-      mockUserProfileProvider.overrideWith(
-        (ref) => MockUserProfileNotifier()
+      userProfileProvider.overrideWith(
+        (ref) => UserProfileNotifier()
           ..loadSeedData(
             UserProfile.empty(
               uid: authState.user?.uid ?? '',
@@ -216,8 +218,8 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         authRepositoryProvider.overrideWithValue(repo),
-        mockUserProfileProvider.overrideWith(
-          (ref) => MockUserProfileNotifier()
+        userProfileProvider.overrideWith(
+          (ref) => UserProfileNotifier()
             ..loadSeedData(
               UserProfile.empty(
                 uid: _defaultUser.uid,
@@ -248,8 +250,8 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           authRepositoryProvider.overrideWithValue(repo),
-          mockUserProfileProvider.overrideWith(
-            (ref) => MockUserProfileNotifier()
+          userProfileProvider.overrideWith(
+            (ref) => UserProfileNotifier()
               ..loadSeedData(
                 UserProfile.empty(
                   uid: _defaultUser.uid,
@@ -338,8 +340,8 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           authRepositoryProvider.overrideWithValue(repo),
-          mockUserProfileProvider.overrideWith(
-            (ref) => MockUserProfileNotifier()
+          userProfileProvider.overrideWith(
+            (ref) => UserProfileNotifier()
               ..loadSeedData(
                 UserProfile.empty(
                   uid: _defaultUser.uid,
@@ -420,8 +422,8 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           authRepositoryProvider.overrideWithValue(repo),
-          mockUserProfileProvider.overrideWith(
-            (ref) => MockUserProfileNotifier()
+          userProfileProvider.overrideWith(
+            (ref) => UserProfileNotifier()
               ..loadSeedData(
                 UserProfile.empty(
                   uid: _defaultUser.uid,
@@ -466,8 +468,8 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         authRepositoryProvider.overrideWithValue(repo),
-        mockUserProfileProvider.overrideWith(
-          (ref) => MockUserProfileNotifier()
+        userProfileProvider.overrideWith(
+          (ref) => UserProfileNotifier()
             ..loadSeedData(
               UserProfile.empty(
                 uid: _defaultUser.uid,
@@ -1001,8 +1003,16 @@ void main() {
           state: const AuthState(
             user: _defaultUser,
             status: AuthFlowStatus.signedInEmailUnverified,
-            errorMessage:
-                'We couldn\'t send the verification email. Please resend it.',
+            error: RecoverableError(
+              category: RecoverableErrorCategory.authentication,
+              publicMessage:
+                  'We couldn\'t send the verification email. Please resend it.',
+              severity: RecoverableErrorSeverity.error,
+              isBlocking: true,
+              retryAction: RecoverableRetryAction.retry,
+              retrySafe: true,
+              diagnosticCode: DiagnosticCodes.verifyEmailResendFailed,
+            ),
             verificationEmailSendStatus: VerificationEmailSendStatus.failed,
           ),
         ),

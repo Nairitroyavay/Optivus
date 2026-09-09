@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/core/errors/diagnostic_codes.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/core/router/app_router.dart';
 
 import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
@@ -26,12 +28,11 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      // Verify OnboardingFailureReason values exist
-      expect(OnboardingFailureReason.missingDraftAndBundle, isNotNull);
-      expect(OnboardingFailureReason.missingBundle, isNotNull);
-      expect(OnboardingFailureReason.corruptedBundle, isNotNull);
-      expect(OnboardingFailureReason.projectionFailed, isNotNull);
-      expect(OnboardingFailureReason.networkTimeout, isNotNull);
+      expect(RecoverableErrorCategory.recoveryRequired, isNotNull);
+      expect(DiagnosticCodes.recoveryMissingCurrentRun, isNotEmpty);
+      expect(DiagnosticCodes.recoveryCorruptDraft, isNotEmpty);
+      expect(DiagnosticCodes.recoveryDurableStateConflict, isNotEmpty);
+      expect(DiagnosticCodes.networkTimeout, isNotEmpty);
     });
   });
 
@@ -81,7 +82,7 @@ void main() {
         );
         container.read(authProvider.notifier).state = const AuthState(
           user: testUser,
-          status: AuthFlowStatus.backendRestoreFailed,
+          status: AuthFlowStatus.needsAction,
         );
 
         final notifier = container.read(authProvider.notifier);
@@ -89,7 +90,7 @@ void main() {
         await notifier.executeRecoveryAction(const ResumeOnboardingAction());
         expect(
           container.read(authProvider).status,
-          equals(AuthFlowStatus.backendRestoreFailed),
+          equals(AuthFlowStatus.needsAction),
         );
 
         await notifier.executeRecoveryAction(
@@ -123,7 +124,7 @@ void main() {
       final dirtyDraft = const OnboardingDraft(
         uid: 'test-uid-123',
       ).copyWith(stepDirty: [true, false, true, false, false, false, false]);
-      container.read(mockOnboardingProvider.notifier).loadSeedData(dirtyDraft);
+      container.read(onboardingStateProvider.notifier).loadSeedData(dirtyDraft);
 
       final cacheManager = container.read(recoveryCacheManagerProvider);
       await cacheManager.clearCachePreservingDirtyEdits(
@@ -131,7 +132,7 @@ void main() {
         uid: 'test-uid-123',
       );
 
-      final resultDraft = container.read(mockOnboardingProvider).draft;
+      final resultDraft = container.read(onboardingStateProvider).draft;
       expect(resultDraft.stepDirty[0], isTrue);
       expect(resultDraft.stepDirty[2], isTrue);
     });
@@ -194,7 +195,7 @@ void main() {
       addTearDown(container.dispose);
 
       container
-          .read(mockUserProfileProvider.notifier)
+          .read(userProfileProvider.notifier)
           .updateProfile(
             UserProfile.empty(uid: 'user1', email: 'test@example.com').copyWith(
               onboardingInputCompleted: true,
@@ -378,7 +379,7 @@ void main() {
           ).copyWith(stepDirty: dirtyFlags);
 
           container
-              .read(mockOnboardingProvider.notifier)
+              .read(onboardingStateProvider.notifier)
               .loadSeedData(multiStepDirtyDraft);
 
           final cacheManager = container.read(recoveryCacheManagerProvider);
@@ -387,7 +388,7 @@ void main() {
             uid: 'user-multi-dirty',
           );
 
-          final result = container.read(mockOnboardingProvider).draft;
+          final result = container.read(onboardingStateProvider).draft;
           expect(result.uid, equals('user-multi-dirty'));
           expect(result.stepDirty[0], isTrue);
           expect(result.stepDirty[3], isTrue);
@@ -425,7 +426,7 @@ void main() {
           );
 
           container
-              .read(mockOnboardingProvider.notifier)
+              .read(onboardingStateProvider.notifier)
               .loadSeedData(dirtyDraft);
 
           final cacheManager = container.read(recoveryCacheManagerProvider);
@@ -434,7 +435,7 @@ void main() {
             uid: 'user-B',
           );
 
-          final result = container.read(mockOnboardingProvider).draft;
+          final result = container.read(onboardingStateProvider).draft;
           expect(result.uid, equals('user-B'));
           expect(result.stepDirty.every((dirty) => !dirty), isTrue);
         });
@@ -457,11 +458,11 @@ void main() {
             );
             container.read(authProvider.notifier).state = const AuthState(
               user: testUser,
-              status: AuthFlowStatus.backendRestoreFailed,
+              status: AuthFlowStatus.needsAction,
             );
 
             container
-                .read(mockUserProfileProvider.notifier)
+                .read(userProfileProvider.notifier)
                 .updateProfile(
                   UserProfile.empty(
                     uid: 'user-lock-test',

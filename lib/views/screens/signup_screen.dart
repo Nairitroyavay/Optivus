@@ -9,7 +9,8 @@ import 'package:optivus/widgets/liquid_glass_panel.dart';
 // import 'package:optivus/services/auth_service.dart';
 import 'package:optivus/widgets/wavy_loading_indicator.dart';
 import 'package:optivus/state/auth_state.dart';
-import 'package:optivus/core/utils/auth_error_mapper.dart';
+import 'package:optivus/core/errors/auth_error_mapper.dart';
+import 'package:optivus/core/errors/diagnostic_codes.dart';
 import 'package:optivus/core/utils/password_policy.dart';
 import 'package:optivus/core/utils/auth_form_readiness.dart';
 import 'package:optivus/core/theme/auth_layout.dart';
@@ -265,11 +266,13 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       // Handled by GoRouter redirect automatically
     } catch (error) {
       if (!mounted) return;
+      final mapped = AuthErrorMapper.map(error);
       setState(() {
-        _accountExistsEmail = isEmailAlreadyInUseError(error)
+        _accountExistsEmail =
+            mapped.diagnosticCode == DiagnosticCodes.authEmailInUse
             ? _emailCtrl.text.trim()
             : null;
-        _errorMsg = friendlyAuthError(error);
+        _errorMsg = mapped.publicMessage;
       });
     } finally {
       if (mounted) {
@@ -316,7 +319,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _errorMsg = friendlyAuthError(error));
+      setState(() => _errorMsg = AuthErrorMapper.map(error).publicMessage);
     } finally {
       if (mounted) setState(() => _resetLoading = false);
     }
@@ -354,286 +357,288 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         value: OptivusTheme.authOverlayStyle,
         child: Scaffold(
           backgroundColor: AuthLayout.authBackgroundColor,
-        body: Container(
-          width: double.infinity,
-          height: double.infinity,
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [_kCream, _kBg],
-              stops: [0.0, 0.45],
+          body: Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [_kCream, _kBg],
+                stops: [0.0, 0.45],
+              ),
             ),
-          ),
-          child: SafeArea(
-            child: Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    key: const Key('signup-form-scroll'),
-                    controller: _scrollController,
-                    physics: allowAdaptiveScroll
-                        ? const BouncingScrollPhysics()
-                        : const NeverScrollableScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AuthLayout.horizontalPadding,
-                    ),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: AuthLayout.backButtonTopInset),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: AuthBackButton(
-                            onTap: () => context.canPop()
-                                ? context.pop()
-                                : context.go('/signup'),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      key: const Key('signup-form-scroll'),
+                      controller: _scrollController,
+                      physics: allowAdaptiveScroll
+                          ? const BouncingScrollPhysics()
+                          : const NeverScrollableScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AuthLayout.horizontalPadding,
+                      ),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: AuthLayout.backButtonTopInset),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: AuthBackButton(
+                              onTap: () => context.canPop()
+                                  ? context.pop()
+                                  : context.go('/signup'),
+                            ),
                           ),
-                        ),
-                        AnimatedContainer(
-                          duration: OptivusMotion.standardDuration,
-                          curve: Curves.easeInOutCubic,
-                          height: keyboardOpen ? 4 : 8,
-                        ),
-                        AnimatedContainer(
-                          key: const Key('signup-logo'),
-                          duration: OptivusMotion.standardDuration,
-                          curve: Curves.easeInOutCubic,
-                          width: keyboardOpen
-                              ? AuthLayout.compactLogoSize
-                              : AuthLayout.standardLogoSize,
-                          height: keyboardOpen
-                              ? AuthLayout.compactLogoSize
-                              : AuthLayout.standardLogoSize,
-                          child: const FittedBox(child: GlassLogo()),
-                        ),
-                        AnimatedContainer(
-                          duration: OptivusMotion.standardDuration,
-                          curve: Curves.easeInOutCubic,
-                          height: keyboardOpen ? 4 : 8,
-                        ),
+                          AnimatedContainer(
+                            duration: OptivusMotion.standardDuration,
+                            curve: Curves.easeInOutCubic,
+                            height: keyboardOpen ? 4 : 8,
+                          ),
+                          AnimatedContainer(
+                            key: const Key('signup-logo'),
+                            duration: OptivusMotion.standardDuration,
+                            curve: Curves.easeInOutCubic,
+                            width: keyboardOpen
+                                ? AuthLayout.compactLogoSize
+                                : AuthLayout.standardLogoSize,
+                            height: keyboardOpen
+                                ? AuthLayout.compactLogoSize
+                                : AuthLayout.standardLogoSize,
+                            child: const FittedBox(child: GlassLogo()),
+                          ),
+                          AnimatedContainer(
+                            duration: OptivusMotion.standardDuration,
+                            curve: Curves.easeInOutCubic,
+                            height: keyboardOpen ? 4 : 8,
+                          ),
 
-                        // Title
-                        AnimatedContainer(
-                          key: const Key('signup-title'),
-                          duration: OptivusMotion.standardDuration,
-                          curve: Curves.easeInOutCubic,
-                          height: keyboardOpen ? 22 : 28,
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: AnimatedDefaultTextStyle(
-                              duration: OptivusMotion.standardDuration,
-                              curve: Curves.easeInOutCubic,
-                              style: TextStyle(
-                                fontSize: keyboardOpen ? 18 : 22,
-                                fontWeight: FontWeight.w900,
-                                color: _kInk,
-                                letterSpacing: -0.6,
-                              ),
-                              child: const Text(
-                                'Create your Optivus account',
-                                maxLines: 1,
+                          // Title
+                          AnimatedContainer(
+                            key: const Key('signup-title'),
+                            duration: OptivusMotion.standardDuration,
+                            curve: Curves.easeInOutCubic,
+                            height: keyboardOpen ? 22 : 28,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: AnimatedDefaultTextStyle(
+                                duration: OptivusMotion.standardDuration,
+                                curve: Curves.easeInOutCubic,
+                                style: TextStyle(
+                                  fontSize: keyboardOpen ? 18 : 22,
+                                  fontWeight: FontWeight.w900,
+                                  color: _kInk,
+                                  letterSpacing: -0.6,
+                                ),
+                                child: const Text(
+                                  'Create your Optivus account',
+                                  maxLines: 1,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        AnimatedContainer(
-                          duration: OptivusMotion.standardDuration,
-                          curve: Curves.easeInOutCubic,
-                          height: keyboardOpen ? 6 : 10,
-                        ),
+                          AnimatedContainer(
+                            duration: OptivusMotion.standardDuration,
+                            curve: Curves.easeInOutCubic,
+                            height: keyboardOpen ? 6 : 10,
+                          ),
 
-                        // Form panel
-                        LiquidGlassPanel(
-                          padding: AuthLayout.formPanelPadding,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Full Name
-                              _FieldLabel('Full Name'),
-                              const SizedBox(
-                                height: AuthLayout.labelToFieldGap,
-                              ),
-                              AuthTextField(
-                                controller: _nameCtrl,
-                                focusNode: _nameFocus,
-                                hint: 'Your full name',
-                                icon: Icons.person_outline,
-                                autofillHints: const [AutofillHints.name],
-                                next: _emailFocus,
-                              ),
-                              if (_nameError != null)
-                                _InlineFieldError(message: _nameError!),
-                              const SizedBox(height: AuthLayout.fieldGap),
+                          // Form panel
+                          LiquidGlassPanel(
+                            padding: AuthLayout.formPanelPadding,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Full Name
+                                _FieldLabel('Full Name'),
+                                const SizedBox(
+                                  height: AuthLayout.labelToFieldGap,
+                                ),
+                                AuthTextField(
+                                  controller: _nameCtrl,
+                                  focusNode: _nameFocus,
+                                  hint: 'Your full name',
+                                  icon: Icons.person_outline,
+                                  autofillHints: const [AutofillHints.name],
+                                  next: _emailFocus,
+                                ),
+                                if (_nameError != null)
+                                  _InlineFieldError(message: _nameError!),
+                                const SizedBox(height: AuthLayout.fieldGap),
 
-                              // Email
-                              _FieldLabel('Email'),
-                              const SizedBox(
-                                height: AuthLayout.labelToFieldGap,
-                              ),
-                              AuthTextField(
-                                controller: _emailCtrl,
-                                focusNode: _emailFocus,
-                                hint: 'you@example.com',
-                                icon: Icons.email_outlined,
-                                keyboardType: TextInputType.emailAddress,
-                                autofillHints: const [AutofillHints.email],
-                                next: _passFocus,
-                              ),
-                              if (_emailError != null)
-                                _InlineFieldError(message: _emailError!),
-                              const SizedBox(height: AuthLayout.fieldGap),
+                                // Email
+                                _FieldLabel('Email'),
+                                const SizedBox(
+                                  height: AuthLayout.labelToFieldGap,
+                                ),
+                                AuthTextField(
+                                  controller: _emailCtrl,
+                                  focusNode: _emailFocus,
+                                  hint: 'you@example.com',
+                                  icon: Icons.email_outlined,
+                                  keyboardType: TextInputType.emailAddress,
+                                  autofillHints: const [AutofillHints.email],
+                                  next: _passFocus,
+                                ),
+                                if (_emailError != null)
+                                  _InlineFieldError(message: _emailError!),
+                                const SizedBox(height: AuthLayout.fieldGap),
 
-                              // Password
-                              _FieldLabel('Password'),
-                              const SizedBox(
-                                height: AuthLayout.labelToFieldGap,
-                              ),
-                              AuthTextField(
-                                controller: _passCtrl,
-                                focusNode: _passFocus,
-                                hint: 'Min 8 chars, capital, number, sign',
-                                icon: Icons.lock_outline,
-                                obscure: _obscurePass,
-                                autofillHints: const [
-                                  AutofillHints.newPassword,
-                                ],
-                                next: _confirmFocus,
-                                suffix: AuthEyeButton(
+                                // Password
+                                _FieldLabel('Password'),
+                                const SizedBox(
+                                  height: AuthLayout.labelToFieldGap,
+                                ),
+                                AuthTextField(
+                                  controller: _passCtrl,
+                                  focusNode: _passFocus,
+                                  hint: 'Min 8 chars, capital, number, sign',
+                                  icon: Icons.lock_outline,
                                   obscure: _obscurePass,
-                                  onToggle: () => setState(
-                                    () => _obscurePass = !_obscurePass,
+                                  autofillHints: const [
+                                    AutofillHints.newPassword,
+                                  ],
+                                  next: _confirmFocus,
+                                  suffix: AuthEyeButton(
+                                    obscure: _obscurePass,
+                                    onToggle: () => setState(
+                                      () => _obscurePass = !_obscurePass,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              if (_passwordError != null)
-                                _InlineFieldError(message: _passwordError!),
+                                if (_passwordError != null)
+                                  _InlineFieldError(message: _passwordError!),
 
-                              // Live password rules panel
-                              AnimatedSize(
-                                duration: OptivusMotion.standardDuration,
-                                curve: Curves.easeInOutCubic,
-                                child: !showPasswordGuidance
-                                    ? const SizedBox.shrink()
-                                    : Padding(
-                                        key: const Key(
-                                          'signup-password-guidance',
+                                // Live password rules panel
+                                AnimatedSize(
+                                  duration: OptivusMotion.standardDuration,
+                                  curve: Curves.easeInOutCubic,
+                                  child: !showPasswordGuidance
+                                      ? const SizedBox.shrink()
+                                      : Padding(
+                                          key: const Key(
+                                            'signup-password-guidance',
+                                          ),
+                                          padding: const EdgeInsets.only(
+                                            top: 6,
+                                          ),
+                                          child: _PasswordRulesPanel(
+                                            password: _passCtrl.text,
+                                          ),
                                         ),
-                                        padding: const EdgeInsets.only(top: 6),
-                                        child: _PasswordRulesPanel(
-                                          password: _passCtrl.text,
-                                        ),
-                                      ),
-                              ),
-                              const SizedBox(height: AuthLayout.fieldGap),
+                                ),
+                                const SizedBox(height: AuthLayout.fieldGap),
 
-                              // Confirm Password and its local validation
-                              // move together above the keyboard.
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _FieldLabel('Confirm Password'),
-                                  const SizedBox(
-                                    height: AuthLayout.labelToFieldGap,
-                                  ),
-                                  AuthTextField(
-                                    controller: _confirmCtrl,
-                                    focusNode: _confirmFocus,
-                                    hint: 'Repeat your password',
-                                    icon: Icons.lock_outline,
-                                    obscure: _obscureConfirm,
-                                    autofillHints: const [
-                                      AutofillHints.newPassword,
-                                    ],
-                                    onSubmit: (_) => FocusManager
-                                        .instance
-                                        .primaryFocus
-                                        ?.unfocus(),
-                                    suffix: AuthEyeButton(
+                                // Confirm Password and its local validation
+                                // move together above the keyboard.
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _FieldLabel('Confirm Password'),
+                                    const SizedBox(
+                                      height: AuthLayout.labelToFieldGap,
+                                    ),
+                                    AuthTextField(
+                                      controller: _confirmCtrl,
+                                      focusNode: _confirmFocus,
+                                      hint: 'Repeat your password',
+                                      icon: Icons.lock_outline,
                                       obscure: _obscureConfirm,
-                                      onToggle: () => setState(
-                                        () =>
-                                            _obscureConfirm = !_obscureConfirm,
+                                      autofillHints: const [
+                                        AutofillHints.newPassword,
+                                      ],
+                                      onSubmit: (_) => FocusManager
+                                          .instance
+                                          .primaryFocus
+                                          ?.unfocus(),
+                                      suffix: AuthEyeButton(
+                                        obscure: _obscureConfirm,
+                                        onToggle: () => setState(
+                                          () => _obscureConfirm =
+                                              !_obscureConfirm,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  if (_confirmationError != null)
-                                    KeyedSubtree(
-                                      key: const Key('signup-confirm-error'),
-                                      child: _InlineFieldError(
-                                        message: _confirmationError!,
+                                    if (_confirmationError != null)
+                                      KeyedSubtree(
+                                        key: const Key('signup-confirm-error'),
+                                        child: _InlineFieldError(
+                                          message: _confirmationError!,
+                                        ),
                                       ),
-                                    ),
-                                ],
-                              ),
-
-                              const SizedBox(height: AuthLayout.fieldGap),
-
-                              // Terms
-                              Text(
-                                'By joining, you agree to our Terms of Service.',
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 12,
+                                  ],
                                 ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        ),
 
-                        // Error message
-                        if (_errorMsg != null) ...[
-                          const SizedBox(height: 12),
-                          _accountExistsEmail == null
-                              ? _ErrorBanner(message: _errorMsg!)
-                              : _AccountExistsBanner(
-                                  message: _errorMsg!,
-                                  resetLoading: _resetLoading,
-                                  onLogin: () => context.go('/login'),
-                                  onForgotPassword:
-                                      _sendResetForExistingAccount,
-                                  onUseAnotherEmail: _useAnotherEmail,
-                                ),
-                        ],
+                                const SizedBox(height: AuthLayout.fieldGap),
 
-                        if (_successMsg != null) ...[
-                          const SizedBox(height: 12),
-                          _SuccessBanner(message: _successMsg!),
-                        ],
-
-                        // Primary Action Button (Create Account / Loading)
-                        const SizedBox(height: 14),
-                        if (_ctaRevealed || authLoading)
-                          Padding(
-                            key: const ValueKey('signup-primary-visible'),
-                            padding: EdgeInsets.zero,
-                            child: authLoading
-                                ? _LoadingButton(operation: _authOperation)
-                                : AppButton(
-                                    key: const Key('signup-submit'),
-                                    text: 'Create Account',
-                                    enabled: _formReady,
-                                    onPressed: _formReady
-                                        ? _createAccount
-                                        : null,
+                                // Terms
+                                Text(
+                                  'By joining, you agree to our Terms of Service.',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontSize: 12,
                                   ),
-                          )
-                        else
-                          const SizedBox.shrink(
-                            key: ValueKey('signup-primary-hidden'),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
                           ),
 
-                        const SizedBox(height: 24),
-                      ],
+                          // Error message
+                          if (_errorMsg != null) ...[
+                            const SizedBox(height: 12),
+                            _accountExistsEmail == null
+                                ? _ErrorBanner(message: _errorMsg!)
+                                : _AccountExistsBanner(
+                                    message: _errorMsg!,
+                                    resetLoading: _resetLoading,
+                                    onLogin: () => context.go('/login'),
+                                    onForgotPassword:
+                                        _sendResetForExistingAccount,
+                                    onUseAnotherEmail: _useAnotherEmail,
+                                  ),
+                          ],
+
+                          if (_successMsg != null) ...[
+                            const SizedBox(height: 12),
+                            _SuccessBanner(message: _successMsg!),
+                          ],
+
+                          // Primary Action Button (Create Account / Loading)
+                          const SizedBox(height: 14),
+                          if (_ctaRevealed || authLoading)
+                            Padding(
+                              key: const ValueKey('signup-primary-visible'),
+                              padding: EdgeInsets.zero,
+                              child: authLoading
+                                  ? _LoadingButton(operation: _authOperation)
+                                  : AppButton(
+                                      key: const Key('signup-submit'),
+                                      text: 'Create Account',
+                                      enabled: _formReady,
+                                      onPressed: _formReady
+                                          ? _createAccount
+                                          : null,
+                                    ),
+                            )
+                          else
+                            const SizedBox.shrink(
+                              key: ValueKey('signup-primary-hidden'),
+                            ),
+
+                          const SizedBox(height: 24),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
     );
   }
 }
@@ -665,98 +670,98 @@ class _PasswordRulesPanel extends StatelessWidget {
             width: 1,
           ),
         ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  if (isValid) ...[
-                    const Icon(
-                      Icons.check_circle_rounded,
-                      color: _kGreen,
-                      size: 13,
-                    ),
-                    const SizedBox(width: 5),
-                  ],
-                  Expanded(
-                    child: Text(
-                      isValid
-                          ? 'All password requirements met'
-                          : 'Password requirements',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: isValid ? _kGreen : _kSub,
-                        letterSpacing: 0.5,
-                      ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                if (isValid) ...[
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    color: _kGreen,
+                    size: 13,
+                  ),
+                  const SizedBox(width: 5),
+                ],
+                Expanded(
+                  child: Text(
+                    isValid
+                        ? 'All password requirements met'
+                        : 'Password requirements',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: isValid ? _kGreen : _kSub,
+                      letterSpacing: 0.5,
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 5),
-              LayoutBuilder(
-                builder: (context, constraints) => Wrap(
-                  spacing: 8,
-                  runSpacing: 3,
-                  children: optivusPasswordRules.indexed.map((entry) {
-                    final (index, rule) = entry;
-                    final passed = rule.check(password);
-                    return SizedBox(
-                      width: (constraints.maxWidth - 8) / 2,
-                      child: Row(
-                        children: [
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 150),
-                            width: 14,
-                            height: 14,
-                            decoration: BoxDecoration(
-                              color: passed ? _kGreen : Colors.transparent,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: passed
-                                    ? _kGreen
-                                    : _kSub.withValues(alpha: 0.35),
-                                width: 1.2,
-                              ),
-                            ),
-                            child: passed
-                                ? const Icon(
-                                    Icons.check_rounded,
-                                    size: 9,
-                                    color: Colors.white,
-                                  )
-                                : null,
-                          ),
-                          const SizedBox(width: 5),
-                          Expanded(
-                            child: AnimatedDefaultTextStyle(
-                              duration: const Duration(milliseconds: 150),
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: passed
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
-                                color: passed ? _kGreen : _kSub,
-                              ),
-                              child: Text(
-                                _compactPasswordRuleLabels[index],
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
                 ),
+              ],
+            ),
+            const SizedBox(height: 5),
+            LayoutBuilder(
+              builder: (context, constraints) => Wrap(
+                spacing: 8,
+                runSpacing: 3,
+                children: optivusPasswordRules.indexed.map((entry) {
+                  final (index, rule) = entry;
+                  final passed = rule.check(password);
+                  return SizedBox(
+                    width: (constraints.maxWidth - 8) / 2,
+                    child: Row(
+                      children: [
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          width: 14,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: passed ? _kGreen : Colors.transparent,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: passed
+                                  ? _kGreen
+                                  : _kSub.withValues(alpha: 0.35),
+                              width: 1.2,
+                            ),
+                          ),
+                          child: passed
+                              ? const Icon(
+                                  Icons.check_rounded,
+                                  size: 9,
+                                  color: Colors.white,
+                                )
+                              : null,
+                        ),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: AnimatedDefaultTextStyle(
+                            duration: const Duration(milliseconds: 150),
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: passed
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                              color: passed ? _kGreen : _kSub,
+                            ),
+                            child: Text(
+                              _compactPasswordRuleLabels[index],
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+      ),
     );
   }
 }
@@ -858,10 +863,7 @@ class _AccountExistsBanner extends StatelessWidget {
         decoration: BoxDecoration(
           color: _kAmber.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: _kAmber.withValues(alpha: 0.38),
-            width: 1,
-          ),
+          border: Border.all(color: _kAmber.withValues(alpha: 0.38), width: 1),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -978,10 +980,7 @@ class _SuccessBanner extends StatelessWidget {
         decoration: BoxDecoration(
           color: _kGreen.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: _kGreen.withValues(alpha: 0.35),
-            width: 1,
-          ),
+          border: Border.all(color: _kGreen.withValues(alpha: 0.35), width: 1),
         ),
         child: Row(
           children: [

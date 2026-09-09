@@ -18,7 +18,10 @@ class _OnboardingNotificationsStepState
     extends ConsumerState<OnboardingNotificationsStep> {
   @override
   Widget build(BuildContext context) {
-    final notifications = ref.watch(mockOnboardingProvider).draft.notifications;
+    final notifications = ref
+        .watch(onboardingStateProvider)
+        .draft
+        .notifications;
     final toggles = [
       (
         'Morning start',
@@ -143,7 +146,7 @@ class _OnboardingNotificationsStepState
                             value: entry.$2,
                             onChanged: (value) {
                               ref
-                                  .read(mockOnboardingProvider.notifier)
+                                  .read(onboardingStateProvider.notifier)
                                   .updateDraft(
                                     (draft) => draft.copyWith(
                                       notifications: entry.$3(value),
@@ -151,7 +154,7 @@ class _OnboardingNotificationsStepState
                                     ),
                                   );
                               ref
-                                  .read(mockOnboardingProvider.notifier)
+                                  .read(onboardingStateProvider.notifier)
                                   .setStepDirty(
                                     OnboardingStepId.notifications.index,
                                     true,
@@ -188,7 +191,7 @@ class _OnboardingNotificationsStepState
                                     level.toLowerCase(),
                                 onTap: () {
                                   ref
-                                      .read(mockOnboardingProvider.notifier)
+                                      .read(onboardingStateProvider.notifier)
                                       .updateDraft(
                                         (draft) => draft.copyWith(
                                           notifications: draft.notifications
@@ -201,7 +204,7 @@ class _OnboardingNotificationsStepState
                                         ),
                                       );
                                   ref
-                                      .read(mockOnboardingProvider.notifier)
+                                      .read(onboardingStateProvider.notifier)
                                       .setStepDirty(
                                         OnboardingStepId.notifications.index,
                                         true,
@@ -256,7 +259,7 @@ class _OnboardingNotificationsStepState
                         selected: notifications.preferencesConfirmed,
                         onTap: () {
                           ref
-                              .read(mockOnboardingProvider.notifier)
+                              .read(onboardingStateProvider.notifier)
                               .updateDraft(
                                 (draft) => draft.copyWith(
                                   notifications: draft.notifications.copyWith(
@@ -266,7 +269,7 @@ class _OnboardingNotificationsStepState
                                 ),
                               );
                           ref
-                              .read(mockOnboardingProvider.notifier)
+                              .read(onboardingStateProvider.notifier)
                               .setStepDirty(
                                 OnboardingStepId.notifications.index,
                                 true,
@@ -313,7 +316,7 @@ class _OnboardingNotificationsStepState
                               child: TextButton(
                                 onPressed: () {
                                   ref
-                                      .read(mockOnboardingProvider.notifier)
+                                      .read(onboardingStateProvider.notifier)
                                       .updateDraft(
                                         (draft) => draft.copyWith(
                                           notifications: draft.notifications
@@ -324,7 +327,7 @@ class _OnboardingNotificationsStepState
                                         ),
                                       );
                                   ref
-                                      .read(mockOnboardingProvider.notifier)
+                                      .read(onboardingStateProvider.notifier)
                                       .setStepDirty(
                                         OnboardingStepId.notifications.index,
                                         true,
@@ -342,7 +345,7 @@ class _OnboardingNotificationsStepState
                               child: TextButton(
                                 onPressed: () {
                                   ref
-                                      .read(mockOnboardingProvider.notifier)
+                                      .read(onboardingStateProvider.notifier)
                                       .updateDraft(
                                         (draft) => draft.copyWith(
                                           notifications: draft.notifications
@@ -353,7 +356,7 @@ class _OnboardingNotificationsStepState
                                         ),
                                       );
                                   ref
-                                      .read(mockOnboardingProvider.notifier)
+                                      .read(onboardingStateProvider.notifier)
                                       .setStepDirty(
                                         OnboardingStepId.notifications.index,
                                         true,

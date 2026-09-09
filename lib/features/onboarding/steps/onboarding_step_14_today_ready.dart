@@ -100,14 +100,14 @@ class OnboardingTodayReadyStepState
   }
 
   Future<void> _loadFailureSnapshot(int generation) async {
-    final uid = ref.read(mockOnboardingProvider).draft.uid;
+    final uid = ref.read(onboardingStateProvider).draft.uid;
     try {
       final snapshot = await ref
           .read(onboardingCompletionJobServiceProvider)
           .loadCurrentRunSnapshot(uid);
       if (!mounted ||
           generation != _failureReadGeneration ||
-          ref.read(mockOnboardingProvider).draft.uid != uid) {
+          ref.read(onboardingStateProvider).draft.uid != uid) {
         return;
       }
       setState(() {
@@ -147,7 +147,7 @@ class OnboardingTodayReadyStepState
 
   @override
   Widget build(BuildContext context) {
-    final onboarding = ref.watch(mockOnboardingProvider);
+    final onboarding = ref.watch(onboardingStateProvider);
     final draft = onboarding.draft;
     final bundleResult = OnboardingCompletionService.projectBundleResult(draft);
     final bundle = switch (bundleResult) {

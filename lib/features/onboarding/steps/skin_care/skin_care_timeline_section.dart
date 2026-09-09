@@ -35,7 +35,7 @@ class _SkinCareTimelineSectionState
         block: block,
         accent: widget.accent,
         findFreeStart: (candidate) {
-          final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
+          final base = ref.read(onboardingStateProvider).draft.baseTimeline;
           return onboarding7FindFreeStartForSkinCareEdit(
             baseTimeline: base,
             block: candidate,
@@ -43,7 +43,7 @@ class _SkinCareTimelineSectionState
           );
         },
         hasConflict: (candidate) {
-          final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
+          final base = ref.read(onboardingStateProvider).draft.baseTimeline;
           return onboarding7SkinCareCandidateConflicts(
             baseTimeline: base,
             candidate: candidate,
@@ -51,11 +51,11 @@ class _SkinCareTimelineSectionState
           );
         },
         validateBlock: (candidate) {
-          final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
+          final base = ref.read(onboardingStateProvider).draft.baseTimeline;
           return onboarding7ValidateEditedSkinCareBlock(base, candidate);
         },
         onSave: (candidate) async {
-          final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
+          final base = ref.read(onboardingStateProvider).draft.baseTimeline;
           final validationError = onboarding7ValidateEditedSkinCareBlock(
             base,
             candidate,

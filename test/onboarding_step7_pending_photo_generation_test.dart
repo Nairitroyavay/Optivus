@@ -1093,10 +1093,10 @@ class _TestHarness {
     required this.imageService,
     required this.aiClient,
   }) {
-    final notifier = MockOnboardingNotifier()..loadSeedData(draft);
+    final notifier = OnboardingNotifier()..loadSeedData(draft);
     container = ProviderContainer(
       overrides: [
-        mockOnboardingProvider.overrideWith((ref) => notifier),
+        onboardingStateProvider.overrideWith((ref) => notifier),
         authProvider.overrideWith(
           (ref) => _PendingTestAuthNotifier(
             AuthUser(
@@ -1151,7 +1151,7 @@ class _TestHarness {
       container.read(onboardingUploadInteractionProvider.notifier);
 
   OnboardingDraft get currentDraft =>
-      container.read(mockOnboardingProvider).draft;
+      container.read(onboardingStateProvider).draft;
 
   UploadSlotRuntimeState? currentSlot(String slotKey) =>
       container.read(onboardingUploadInteractionProvider)[slotKey];

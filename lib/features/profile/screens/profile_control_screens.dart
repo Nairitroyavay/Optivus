@@ -16,6 +16,7 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/state/profile_frontend_state.dart';
+import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/region_settings_provider.dart';
 
 typedef OpenProfileDetail = void Function(ProfileDetailTarget target);
@@ -221,8 +222,8 @@ class SystemSetupScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(currentUserProfileProvider);
-    final onboarding = ref.watch(currentOnboardingStateProvider);
+    final profile = ref.watch(userProfileProvider);
+    final onboarding = ref.watch(onboardingStateProvider);
     final routineItems = ref.watch(currentRoutineItemsProvider);
     final activeGoals = ref
         .watch(currentGoalsProvider)

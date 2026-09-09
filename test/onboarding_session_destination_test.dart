@@ -204,7 +204,6 @@ void main() {
   });
 
   group('single-destination router', () {
-    final profile = _profile(owner);
     const user = AuthUser(uid: owner, emailVerified: true);
 
     test(
@@ -222,19 +221,11 @@ void main() {
           ),
         ]) {
           expect(
-            optivusAuthRedirect(
-              authState: auth,
-              userProfile: profile,
-              uri: Uri.parse('/app'),
-            ),
+            optivusAuthRedirect(authState: auth, uri: Uri.parse('/app')),
             '/onboarding',
           );
           expect(
-            optivusAuthRedirect(
-              authState: auth,
-              userProfile: profile,
-              uri: Uri.parse('/onboarding'),
-            ),
+            optivusAuthRedirect(authState: auth, uri: Uri.parse('/onboarding')),
             isNull,
           );
         }
@@ -259,7 +250,6 @@ void main() {
           expect(
             optivusAuthRedirect(
               authState: entry.key,
-              userProfile: profile,
               uri: Uri.parse('/onboarding'),
             ),
             entry.value,
@@ -267,7 +257,6 @@ void main() {
           expect(
             optivusAuthRedirect(
               authState: entry.key,
-              userProfile: profile,
               uri: Uri.parse(entry.value),
             ),
             isNull,

@@ -26,7 +26,7 @@ class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
 
   @override
   Widget build(BuildContext context) {
-    final draft = ref.watch(mockOnboardingProvider).draft;
+    final draft = ref.watch(onboardingStateProvider).draft;
     final body = draft.bodyBasics;
     final targets = const NutritionTargetService().calculate(
       ageRange: body.ageRange,
@@ -85,7 +85,7 @@ class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
                                 .withEstimates(),
                           );
                           ref
-                              .read(mockOnboardingProvider.notifier)
+                              .read(onboardingStateProvider.notifier)
                               .setStepDirty(
                                 OnboardingStepId.bodyBasics.index,
                                 true,
@@ -120,7 +120,7 @@ class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
                             body.copyWith(ageRange: value).withEstimates(),
                           );
                           ref
-                              .read(mockOnboardingProvider.notifier)
+                              .read(onboardingStateProvider.notifier)
                               .setStepDirty(
                                 OnboardingStepId.bodyBasics.index,
                                 true,
@@ -162,7 +162,7 @@ class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
                           .withEstimates(),
                     );
                     ref
-                        .read(mockOnboardingProvider.notifier)
+                        .read(onboardingStateProvider.notifier)
                         .setStepDirty(OnboardingStepId.bodyBasics.index, true);
                   },
                   sliderKey: const ValueKey('height-slider'),
@@ -198,7 +198,7 @@ class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
                           .withEstimates(),
                     );
                     ref
-                        .read(mockOnboardingProvider.notifier)
+                        .read(onboardingStateProvider.notifier)
                         .setStepDirty(OnboardingStepId.bodyBasics.index, true);
                   },
                   sliderKey: const ValueKey('weight-slider'),
@@ -258,7 +258,7 @@ class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
 
   void _updateBody(BodyBasicsDraft body) {
     ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .updateDraft(
           (current) =>
               current.copyWith(bodyBasics: body, clearFinalPreview: true),

@@ -31,7 +31,7 @@ class HomeTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final detailTarget = ref.watch(homeDetailViewRequestProvider);
-    final profile = ref.watch(mockUserProfileProvider);
+    final profile = ref.watch(userProfileProvider);
     final auth = ref.watch(authProvider);
     final userName = _safeHomeDisplayName(
       profileName: profile.displayName,

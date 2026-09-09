@@ -30,7 +30,7 @@ class _OnboardingBadHabitsStepState
   @override
   void initState() {
     super.initState();
-    final draft = ref.read(mockOnboardingProvider).draft;
+    final draft = ref.read(onboardingStateProvider).draft;
     _notNow = draft.badHabitsNotNow;
     for (final saved in draft.badHabits) {
       final existingIndex = _habits.indexWhere(
@@ -59,7 +59,7 @@ class _OnboardingBadHabitsStepState
   }
 
   void _dirty() => ref
-      .read(mockOnboardingProvider.notifier)
+      .read(onboardingStateProvider.notifier)
       .setStepDirty(OnboardingStepId.badHabits.index, true);
 
   void _syncDraft() {
@@ -78,7 +78,7 @@ class _OnboardingBadHabitsStepState
               )
               .toList();
     ref
-        .read(mockOnboardingProvider.notifier)
+        .read(onboardingStateProvider.notifier)
         .updateDraft(
           (draft) => draft.copyWith(
             badHabitsNotNow: _notNow,

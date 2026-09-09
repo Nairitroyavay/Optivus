@@ -10,7 +10,7 @@ import 'package:optivus/widgets/liquid_glass_panel.dart';
 // import 'package:optivus/services/auth_service.dart';
 import 'package:optivus/widgets/wavy_loading_indicator.dart';
 import 'package:optivus/state/auth_state.dart';
-import 'package:optivus/core/utils/auth_error_mapper.dart';
+import 'package:optivus/core/errors/auth_error_mapper.dart';
 import 'package:optivus/core/utils/auth_form_readiness.dart';
 import 'package:optivus/core/theme/auth_layout.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
@@ -150,7 +150,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _errorMsg = friendlyAuthError(error);
+        _errorMsg = AuthErrorMapper.map(error).publicMessage;
       });
     } finally {
       if (mounted) {
@@ -177,7 +177,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       await operation;
     } catch (error) {
       if (!mounted) return;
-      setState(() => _errorMsg = friendlyAuthError(error));
+      setState(() => _errorMsg = AuthErrorMapper.map(error).publicMessage);
     } finally {
       if (mounted) setState(() => _googleOperation = null);
     }
@@ -220,7 +220,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!mounted) return;
       setState(() {
         _resetLoading = false;
-        _errorMsg = friendlyAuthError(error);
+        _errorMsg = AuthErrorMapper.map(error).publicMessage;
       });
     }
   }
@@ -337,9 +337,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         children: [
                           // Email
                           _FieldLabel('Email'),
-                          const SizedBox(
-                            height: AuthLayout.labelToFieldGap,
-                          ),
+                          const SizedBox(height: AuthLayout.labelToFieldGap),
                           AuthTextField(
                             controller: _emailCtrl,
                             focusNode: _emailFocus,
@@ -356,9 +354,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                           // Password
                           _FieldLabel('Password'),
-                          const SizedBox(
-                            height: AuthLayout.labelToFieldGap,
-                          ),
+                          const SizedBox(height: AuthLayout.labelToFieldGap),
                           AuthTextField(
                             controller: _passCtrl,
                             focusNode: _passFocus,
@@ -370,9 +366,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             onSubmit: (_) => _signIn(),
                             suffix: AuthEyeButton(
                               obscure: _obscurePass,
-                              onToggle: () => setState(
-                                () => _obscurePass = !_obscurePass,
-                              ),
+                              onToggle: () =>
+                                  setState(() => _obscurePass = !_obscurePass),
                             ),
                           ),
                           if (_passwordError != null)
@@ -628,10 +623,7 @@ class _ErrorBanner extends StatelessWidget {
         decoration: BoxDecoration(
           color: _kRed.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: _kRed.withValues(alpha: 0.35),
-            width: 1,
-          ),
+          border: Border.all(color: _kRed.withValues(alpha: 0.35), width: 1),
         ),
         child: Row(
           children: [

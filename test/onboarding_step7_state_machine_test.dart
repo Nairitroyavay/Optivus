@@ -163,7 +163,7 @@ void main() {
     late ProviderContainer container;
 
     setUp(() {
-      final notifier = MockOnboardingNotifier()
+      final notifier = OnboardingNotifier()
         ..loadSeedData(
           OnboardingDraft(
             uid: testUid,
@@ -172,7 +172,7 @@ void main() {
           ),
         );
       container = ProviderContainer(
-        overrides: [mockOnboardingProvider.overrideWith((ref) => notifier)],
+        overrides: [onboardingStateProvider.overrideWith((ref) => notifier)],
       );
     });
 
@@ -284,7 +284,7 @@ void main() {
         skinCareFlowControllerProvider.notifier,
       );
       container
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .updateDraft(
             (d) => d.copyWith(
               baseTimeline: d.baseTimeline.copyWith(
@@ -304,7 +304,7 @@ void main() {
       );
 
       // Blocks are preserved
-      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      final base = container.read(onboardingStateProvider).draft.baseTimeline;
       expect(base.blocks, isNotEmpty);
       expect(base.skinCareSetupStep, 0);
     });
@@ -382,7 +382,7 @@ void main() {
         );
 
         container
-            .read(mockOnboardingProvider.notifier)
+            .read(onboardingStateProvider.notifier)
             .updateDraft((d) => d.copyWith(baseTimeline: base));
 
         expect(base.skinCareSkinType, isNull);
@@ -399,7 +399,7 @@ void main() {
 
         // Mutate optional fields to non-null values
         container
-            .read(mockOnboardingProvider.notifier)
+            .read(onboardingStateProvider.notifier)
             .updateDraft(
               (d) => d.copyWith(
                 baseTimeline: d.baseTimeline.copyWith(
@@ -411,7 +411,7 @@ void main() {
             );
 
         final dirtyBase = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline;
         expect(dirtyBase.skinCareSkinType, 'oily');
@@ -421,7 +421,7 @@ void main() {
         controller.cancelEditing();
 
         final restoredBase = container
-            .read(mockOnboardingProvider)
+            .read(onboardingStateProvider)
             .draft
             .baseTimeline;
         expect(restoredBase.skinCareSkinType, isNull);
@@ -460,13 +460,13 @@ void main() {
       );
 
       container
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .updateDraft((d) => d.copyWith(baseTimeline: base));
 
       controller.startEditing(base);
 
       container
-          .read(mockOnboardingProvider.notifier)
+          .read(onboardingStateProvider.notifier)
           .updateDraft(
             (d) => d.copyWith(
               baseTimeline: d.baseTimeline.copyWith(
@@ -481,7 +481,7 @@ void main() {
       expect(handled, isTrue);
 
       final restoredBase = container
-          .read(mockOnboardingProvider)
+          .read(onboardingStateProvider)
           .draft
           .baseTimeline;
       expect(restoredBase.skinCareSkinType, isNull);
@@ -499,7 +499,7 @@ void main() {
 
         // Setup skipped state
         container
-            .read(mockOnboardingProvider.notifier)
+            .read(onboardingStateProvider.notifier)
             .updateDraft(
               (d) => d.copyWith(
                 baseTimeline: d.baseTimeline.copyWith(
@@ -524,14 +524,14 @@ void main() {
           SkinCareFlowState.choice,
         );
 
-        final draftAfterBack = container.read(mockOnboardingProvider).draft;
+        final draftAfterBack = container.read(onboardingStateProvider).draft;
         expect(draftAfterBack.baseTimeline.skinCareSkipped, isFalse);
         expect(draftAfterBack.baseTimeline.skinCareSetupPath, isNull);
         expect(draftAfterBack.baseTimeline.skinCareSetupStep, 0);
 
         // An unrelated draft update must not revert back to skipped
         container
-            .read(mockOnboardingProvider.notifier)
+            .read(onboardingStateProvider.notifier)
             .updateDraft((d) => d.copyWith(welcomeSaved: true));
         expect(
           container.read(skinCareFlowControllerProvider).state,
@@ -540,7 +540,7 @@ void main() {
 
         // Cold derivation also reconstructs choice
         final derived = deriveSkinCareFlowState(
-          container.read(mockOnboardingProvider).draft.baseTimeline,
+          container.read(onboardingStateProvider).draft.baseTimeline,
           testUid,
         );
         expect(derived, SkinCareFlowState.choice);
@@ -565,7 +565,7 @@ void main() {
         );
 
         container
-            .read(mockOnboardingProvider.notifier)
+            .read(onboardingStateProvider.notifier)
             .updateDraft((d) => d.copyWith(uid: 'user-a', baseTimeline: baseA));
         controller.syncFromDraft(baseA, 'user-a', authGeneration: 1);
 
