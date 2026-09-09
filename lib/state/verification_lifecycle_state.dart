@@ -7,7 +7,13 @@ import 'package:optivus/core/errors/diagnostic_codes.dart';
 import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/state/auth_state.dart';
 
-enum VerificationMessageKind { network, rateLimited, firebaseFailure, success }
+enum VerificationMessageKind {
+  network,
+  rateLimited,
+  sessionExpired,
+  firebaseFailure,
+  success,
+}
 
 class VerificationLifecycleState {
   final bool foreground;
@@ -142,6 +148,7 @@ class VerificationLifecycleController
   int? _queuedFreshnessEpoch;
   bool _disposed = false;
   bool _detached = false;
+  bool _sessionExpired = false;
 
   VerificationLifecycleController(
     this._ref, {
@@ -338,10 +345,14 @@ class VerificationLifecycleController
           messageKind: VerificationMessageKind.rateLimited,
         );
         _scheduleNextPoll(delay: delay);
+      } else if (mapped.diagnosticCode ==
+              DiagnosticCodes.verifyEmailSessionExpired ||
+          mapped.retryAction == RecoverableRetryAction.reauthenticate) {
+        _stopForExpiredSession(mapped);
       } else {
         state = state.copyWith(
           checking: false,
-          message: 'Couldn\'t check verification. Please try again.',
+          message: mapped.publicMessage,
           messageKind: VerificationMessageKind.firebaseFailure,
           verificationThrottleStreak: 0,
         );
@@ -404,17 +415,20 @@ class VerificationLifecycleController
           messageKind: VerificationMessageKind.rateLimited,
         );
         _startCountdownIfNeeded();
+      } else if (mapped.diagnosticCode ==
+              DiagnosticCodes.verifyEmailSessionExpired ||
+          mapped.retryAction == RecoverableRetryAction.reauthenticate) {
+        _stopForExpiredSession(mapped);
       } else if (mapped.category == RecoverableErrorCategory.network) {
         state = state.copyWith(
           resendInFlight: false,
-          message:
-              'Couldn\'t resend the email. Check your connection and try again.',
+          message: mapped.publicMessage,
           messageKind: VerificationMessageKind.network,
         );
       } else {
         state = state.copyWith(
           resendInFlight: false,
-          message: 'Couldn\'t resend the email. Please try again.',
+          message: mapped.publicMessage,
           messageKind: VerificationMessageKind.firebaseFailure,
         );
       }
@@ -506,6 +520,7 @@ class VerificationLifecycleController
     final auth = _ref.read(authProvider);
     return !_disposed &&
         !_detached &&
+        !_sessionExpired &&
         _expectedUid != null &&
         auth.user?.uid == _expectedUid &&
         auth.emailUnverified &&
@@ -540,6 +555,26 @@ class VerificationLifecycleController
         verificationConfirmed: true,
         message: 'Email verified',
         messageKind: VerificationMessageKind.success,
+      );
+    }
+  }
+
+  void _stopForExpiredSession(RecoverableError error) {
+    _sessionExpired = true;
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    _queuedFreshnessEpoch = null;
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
+    _log('event=poll_cancelled reason=session_expired');
+    if (!_disposed) {
+      state = state.copyWith(
+        checking: false,
+        resendInFlight: false,
+        message: error.publicMessage,
+        messageKind: VerificationMessageKind.sessionExpired,
+        verificationThrottleStreak: 0,
+        clearVerificationDeadline: true,
       );
     }
   }

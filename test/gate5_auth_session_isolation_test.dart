@@ -9,12 +9,36 @@ import 'package:optivus/core/errors/auth_error_mapper.dart';
 import 'package:optivus/core/errors/diagnostic_codes.dart';
 import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/core/router/app_router.dart';
+import 'package:optivus/core/utils/liquid_toast_manager.dart';
+import 'package:optivus/features/coach/providers/coach_navigation_provider.dart';
+import 'package:optivus/features/goals/providers/goals_navigation_provider.dart';
+import 'package:optivus/features/home/models/home_mind_note.dart';
+import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
+import 'package:optivus/features/home/providers/home_mind_note_provider.dart';
+import 'package:optivus/features/home/providers/home_navigation_provider.dart';
+import 'package:optivus/features/profile/providers/profile_navigation_provider.dart';
+import 'package:optivus/features/profile/providers/profile_settings_provider.dart';
+import 'package:optivus/features/recovery/services/recovery_retry_controller.dart';
+import 'package:optivus/features/routine/providers/routine_navigation_provider.dart';
+import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/tracker/fitness/providers/fitness_provider.dart';
+import 'package:optivus/features/tracker/providers/tracker_navigation_provider.dart';
+import 'package:optivus/features/tracker/providers/tracker_settings_provider.dart';
+import 'package:optivus/features/uploads/providers/onboarding_upload_interaction_provider.dart';
+import 'package:optivus/models/coach_models.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/region_settings.dart';
+import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/auth_repository.dart';
+import 'package:optivus/services/auth_session_reset_coordinator.dart';
+import 'package:optivus/services/onboarding_completion_job_service.dart';
 import 'package:optivus/services/session_destination_resolver.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/auth_generation.dart';
 import 'package:optivus/state/auth_state.dart';
+import 'package:optivus/state/region_settings_provider.dart';
+import 'package:optivus/state/upload_state.dart';
 
 const _userA = AuthUser(
   uid: 'gate5-a',
@@ -32,7 +56,7 @@ void main() {
 
   test('canonical Auth session destination and router matrix', () {
     const authenticatedUid = 'gate5-user';
-    final cases = <AuthFlowStatus, (SessionDestinationKind, String)> {
+    final cases = <AuthFlowStatus, (SessionDestinationKind, String)>{
       AuthFlowStatus.loading: (SessionDestinationKind.resolving, '/loading'),
       AuthFlowStatus.signedOut: (SessionDestinationKind.signedOut, '/'),
       AuthFlowStatus.signedInEmailUnverified: (
@@ -72,9 +96,7 @@ void main() {
       expect(state.sessionDestination.kind, entry.value.$1);
       expect(
         optivusAuthRedirect(authState: state, uri: Uri.parse('/login')),
-        entry.value.$2 == '/'
-            ? isNull
-            : entry.value.$2,
+        entry.value.$2 == '/' ? isNull : entry.value.$2,
       );
     }
 
@@ -153,45 +175,402 @@ void main() {
     }
   });
 
-  test('A to B clears A state before Auth first publishes B', () async {
-    final repository = FakeAuthRepository();
-    final container = ProviderContainer(
-      overrides: [
-        optivusBackendModeProvider.overrideWithValue(OptivusBackendMode.fake),
-        authRepositoryProvider.overrideWithValue(repository),
-      ],
-    );
-    addTearDown(container.dispose);
+  test('Verify Email contextualizes raw and repository-mapped errors', () {
+    final cases =
+        <
+          ({Object input, bool resend}),
+          (String, RecoverableErrorCategory, RecoverableRetryAction, bool)
+        >{
+          (input: const SocketException('RAW_NETWORK_SECRET'), resend: false): (
+            DiagnosticCodes.networkUnavailable,
+            RecoverableErrorCategory.network,
+            RecoverableRetryAction.retry,
+            true,
+          ),
+          (
+            input: AuthErrorMapper.map(Exception('network-request-failed')),
+            resend: true,
+          ): (
+            DiagnosticCodes.networkUnavailable,
+            RecoverableErrorCategory.network,
+            RecoverableRetryAction.retry,
+            true,
+          ),
+          (input: Exception('too-many-requests'), resend: false): (
+            DiagnosticCodes.verifyEmailRateLimited,
+            RecoverableErrorCategory.authentication,
+            RecoverableRetryAction.none,
+            false,
+          ),
+          (
+            input: AuthErrorMapper.map(Exception('too-many-requests')),
+            resend: true,
+          ): (
+            DiagnosticCodes.verifyEmailRateLimited,
+            RecoverableErrorCategory.authentication,
+            RecoverableRetryAction.none,
+            false,
+          ),
+          (input: Exception('invalid-user-token'), resend: false): (
+            DiagnosticCodes.verifyEmailSessionExpired,
+            RecoverableErrorCategory.authentication,
+            RecoverableRetryAction.reauthenticate,
+            false,
+          ),
+          (
+            input: AuthErrorMapper.map(Exception('auth-token-expired')),
+            resend: true,
+          ): (
+            DiagnosticCodes.verifyEmailSessionExpired,
+            RecoverableErrorCategory.authentication,
+            RecoverableRetryAction.reauthenticate,
+            false,
+          ),
+          (input: Exception('RAW_UNKNOWN_CHECK_SECRET'), resend: false): (
+            DiagnosticCodes.verifyEmailCheckFailed,
+            RecoverableErrorCategory.authentication,
+            RecoverableRetryAction.retry,
+            true,
+          ),
+          (
+            input: AuthErrorMapper.map(Exception('RAW_UNKNOWN_RESEND_SECRET')),
+            resend: true,
+          ): (
+            DiagnosticCodes.verifyEmailResendFailed,
+            RecoverableErrorCategory.authentication,
+            RecoverableRetryAction.retry,
+            true,
+          ),
+        };
 
-    container.read(authProvider);
+    for (final entry in cases.entries) {
+      final mapped = AuthErrorMapper.mapVerifyEmailError(
+        entry.key.input,
+        isResend: entry.key.resend,
+      );
+      expect(mapped.diagnosticCode, entry.value.$1);
+      expect(mapped.category, entry.value.$2);
+      expect(mapped.retryAction, entry.value.$3);
+      expect(mapped.retrySafe, entry.value.$4);
+      expect(mapped.isBlocking, isTrue);
+      expect(mapped.publicMessage, isNot(contains('RAW_')));
+      if (mapped.diagnosticCode == DiagnosticCodes.verifyEmailSessionExpired) {
+        expect(mapped.publicMessage.toLowerCase(), contains('sign in again'));
+      }
+    }
+  });
+
+  test(
+    'A to B clears the six-area matrix before first B publication',
+    () async {
+      final repository = FakeAuthRepository();
+      final container = ProviderContainer(
+        overrides: [
+          optivusBackendModeProvider.overrideWithValue(OptivusBackendMode.fake),
+          authRepositoryProvider.overrideWithValue(repository),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      container.read(authProvider);
+      repository.emitUserForTesting(_userA);
+      await pumpEventQueue(times: 30);
+      await _seedAccountAState(container);
+      final generationA = container.read(authGenerationProvider);
+      final completionServiceA = container.read(
+        onboardingCompletionJobServiceProvider,
+      );
+      final uploadInteractionA = container.read(
+        onboardingUploadInteractionProvider.notifier,
+      );
+
+      var observedB = false;
+      final subscription = container.listen<AuthState>(authProvider, (_, next) {
+        if (observedB || next.user?.uid != _userB.uid) return;
+        observedB = true;
+        _expectUserStateCleared(container);
+        expect(
+          container.read(authGenerationProvider),
+          greaterThan(generationA),
+        );
+        expect(
+          container.read(onboardingCompletionJobServiceProvider),
+          isNot(same(completionServiceA)),
+        );
+        expect(
+          container.read(onboardingUploadInteractionProvider.notifier),
+          isNot(same(uploadInteractionA)),
+        );
+        expect(
+          container.read(optivusBackendModeProvider),
+          OptivusBackendMode.fake,
+        );
+      });
+      addTearDown(subscription.close);
+
+      repository.emitUserForTesting(_userB);
+      await pumpEventQueue(times: 30);
+      expect(observedB, isTrue);
+      expect(container.read(authProvider).user?.uid, _userB.uid);
+      expect(container.read(userProfileProvider).uid, _userB.uid);
+      expect(container.read(onboardingStateProvider).draft.uid, _userB.uid);
+    },
+  );
+
+  test('reset coordinator is the synchronous privacy boundary', () async {
+    final repository = FakeAuthRepository();
+    final container = _gate5Container(repository);
+    addTearDown(container.dispose);
     repository.emitUserForTesting(_userA);
     await pumpEventQueue(times: 30);
+    await _seedAccountAState(container);
+    final generationA = container.read(authGenerationProvider);
+    final completionServiceA = container.read(
+      onboardingCompletionJobServiceProvider,
+    );
 
-    container
-        .read(userProfileProvider.notifier)
-        .loadSeedData(UserProfile.empty(uid: _userA.uid));
-    container
-        .read(onboardingStateProvider.notifier)
-        .loadSeedData(OnboardingDraft(uid: _userA.uid));
-    container.read(mockGoalProvider.notifier).loadSeedData();
-    container.read(appNavigationProvider.notifier).goToProfile();
+    container.read(authSessionResetCoordinatorProvider).resetIdentityBoundary();
 
-    var observedB = false;
-    final subscription = container.listen<AuthState>(authProvider, (_, next) {
-      if (observedB || next.user?.uid != _userB.uid) return;
-      observedB = true;
-      expect(container.read(userProfileProvider).uid, isNot(_userA.uid));
-      expect(container.read(onboardingStateProvider).draft.uid, isNot(_userA.uid));
-      expect(container.read(mockGoalProvider), isEmpty);
-      expect(container.read(appNavigationProvider), 0);
-    });
-    addTearDown(subscription.close);
-
-    repository.emitUserForTesting(_userB);
-    await pumpEventQueue(times: 30);
-    expect(observedB, isTrue);
-    expect(container.read(authProvider).user?.uid, _userB.uid);
-    expect(container.read(userProfileProvider).uid, _userB.uid);
-    expect(container.read(onboardingStateProvider).draft.uid, _userB.uid);
+    _expectUserStateCleared(container);
+    expect(container.read(authGenerationProvider), generationA + 1);
+    expect(
+      container.read(onboardingCompletionJobServiceProvider),
+      isNot(same(completionServiceA)),
+    );
+    expect(container.read(optivusBackendModeProvider), OptivusBackendMode.fake);
   });
+
+  test('successful sign out clears the complete matrix', () async {
+    final repository = FakeAuthRepository();
+    final container = _gate5Container(repository);
+    addTearDown(container.dispose);
+    repository.emitUserForTesting(_userA);
+    await pumpEventQueue(times: 30);
+    await _seedAccountAState(container);
+
+    await container.read(authProvider.notifier).logout();
+
+    expect(container.read(authProvider).status, AuthFlowStatus.signedOut);
+    _expectUserStateCleared(container);
+    expect(container.read(optivusBackendModeProvider), OptivusBackendMode.fake);
+  });
+
+  test('failed sign out preserves the complete A matrix', () async {
+    final repository = FakeAuthRepository()..signOutShouldFail = true;
+    final container = _gate5Container(repository);
+    addTearDown(container.dispose);
+    repository.emitUserForTesting(_userA);
+    await pumpEventQueue(times: 30);
+    await _seedAccountAState(container);
+    final generationA = container.read(authGenerationProvider);
+
+    await expectLater(
+      container.read(authProvider.notifier).logout(),
+      throwsA(isA<RecoverableError>()),
+    );
+
+    expect(container.read(authProvider).user?.uid, _userA.uid);
+    expect(
+      container.read(authProvider).errorMessage,
+      contains('still signed in'),
+    );
+    _expectAccountAStatePresent(container);
+    expect(container.read(authGenerationProvider), generationA);
+  });
+
+  test('same-UID refresh preserves the complete A matrix', () async {
+    final repository = FakeAuthRepository();
+    final container = _gate5Container(repository);
+    addTearDown(container.dispose);
+    repository.emitUserForTesting(_userA);
+    await pumpEventQueue(times: 30);
+    await _seedAccountAState(container);
+    final generationA = container.read(authGenerationProvider);
+
+    repository.emitUserForTesting(
+      const AuthUser(
+        uid: 'gate5-a',
+        email: 'refreshed-a@example.com',
+        emailVerified: true,
+        providerIds: {'password', 'google.com'},
+      ),
+    );
+    await pumpEventQueue(times: 10);
+
+    _expectAccountAStatePresent(container);
+    expect(container.read(authProvider).user?.email, 'refreshed-a@example.com');
+    expect(container.read(authGenerationProvider), generationA);
+  });
+}
+
+ProviderContainer _gate5Container(FakeAuthRepository repository) {
+  return ProviderContainer(
+    overrides: [
+      optivusBackendModeProvider.overrideWithValue(OptivusBackendMode.fake),
+      authRepositoryProvider.overrideWithValue(repository),
+    ],
+  )..read(authProvider);
+}
+
+Future<void> _seedAccountAState(ProviderContainer container) async {
+  container
+      .read(userProfileProvider.notifier)
+      .loadSeedData(
+        UserProfile.empty(uid: _userA.uid).copyWith(displayName: 'Private A'),
+      );
+  container.read(profileSettingsProvider.notifier).toggleDeleteScope('A-only');
+  container.read(homeDashboardProvider.notifier).cycleNowNextState();
+  container
+      .read(homeMindNoteProvider.notifier)
+      .addNote(
+        'Private A note',
+        MindNoteType.overthinking,
+        MindNoteIntensity.high,
+      );
+  container.read(routineNotifierProvider.notifier).toggleFullDay(true);
+  container.read(mockRoutineProvider.notifier).loadSeedData();
+  container.read(mockTrackerProvider.notifier).loadSeedData();
+  container.read(fitnessCenterProvider.notifier).startSelectedActivity();
+  container.read(trackerSettingsProvider.notifier).activateTracker('Nutrition');
+  container.read(mockCoachProvider.notifier).loadSeedData();
+  container
+      .read(mockCoachPreferencesProvider.notifier)
+      .updatePreferences(CoachPreferences(name: 'Private A Coach'));
+  container.read(mockGoalProvider.notifier).loadSeedData();
+  container
+      .read(onboardingStateProvider.notifier)
+      .loadSeedData(OnboardingDraft(uid: _userA.uid, currentStep: 7));
+  await container
+      .read(restoredUploadsProvider.notifier)
+      .hydrate(uid: _userA.uid);
+  await container
+      .read(uploadControllerProvider.notifier)
+      .startUpload(
+        uid: _userA.uid,
+        purpose: UploadedAssetPurpose.profilePhoto,
+        sourceFeature: 'gate5-test',
+      );
+  container.read(onboardingUploadInteractionProvider);
+  container
+      .read(regionSettingsProvider.notifier)
+      .loadSettings(
+        RegionSettings.forCountry(userId: _userA.uid, countryCode: 'GB'),
+      );
+  container.read(appNavigationProvider.notifier).goToProfile();
+  container.read(homeDetailViewRequestProvider.notifier).state =
+      const HomeDetailTarget.mission();
+  container.read(trackerDetailViewRequestProvider.notifier).state =
+      TrackerDetailTarget.view(TrackerDetailView.fitness);
+  container.read(profileDetailViewRequestProvider.notifier).state =
+      const ProfileDetailTarget(view: ProfileDetailView.editProfile);
+  container.read(routineDetailViewRequestProvider.notifier).state =
+      const RoutineDetailTarget(view: RoutineDetailView.routineSettings);
+  container.read(coachDetailViewRequestProvider.notifier).state =
+      CoachDetailView.coachSettings;
+  container.read(goalsDetailViewRequestProvider.notifier).state =
+      const GoalsDetailTarget(view: GoalsDetailView.weeklyReview);
+  container
+      .read(recoveryRetryControllerProvider.notifier)
+      .recordAttemptAndStartCooldown();
+  container.read(toastQueueProvider.notifier).showToast('Private A toast');
+}
+
+void _expectUserStateCleared(ProviderContainer container) {
+  expect(container.read(userProfileProvider).uid, isNot(_userA.uid));
+  expect(container.read(profileSettingsProvider).selectedDeleteScopes, isEmpty);
+  expect(container.read(homeDashboardProvider).nowNextAction, isNull);
+  expect(container.read(homeMindNoteProvider), isEmpty);
+  expect(container.read(routineNotifierProvider).showFullDay, isFalse);
+  expect(container.read(mockRoutineProvider), isEmpty);
+  expect(container.read(mockTrackerProvider).trackerSessions, isEmpty);
+  expect(container.read(fitnessCenterProvider).activeActivity, isNull);
+  expect(
+    container.read(trackerSettingsProvider).activeTrackers['Nutrition'],
+    isFalse,
+  );
+  expect(container.read(mockCoachProvider), isEmpty);
+  expect(container.read(mockCoachPreferencesProvider).name, 'Coach');
+  expect(container.read(mockGoalProvider), isEmpty);
+  expect(container.read(onboardingStateProvider).draft.uid, isNot(_userA.uid));
+  expect(container.read(restoredUploadsProvider).uid, isNull);
+  expect(container.read(uploadControllerProvider).uid, isNull);
+  expect(container.read(regionSettingsProvider).userId, 'signed-out');
+  expect(container.read(appNavigationProvider), 0);
+  expect(
+    container.read(homeDetailViewRequestProvider).view,
+    HomeDetailView.none,
+  );
+  expect(
+    container.read(trackerDetailViewRequestProvider).view,
+    TrackerDetailView.none,
+  );
+  expect(
+    container.read(profileDetailViewRequestProvider).view,
+    ProfileDetailView.none,
+  );
+  expect(
+    container.read(routineDetailViewRequestProvider).view,
+    RoutineDetailView.none,
+  );
+  expect(container.read(coachDetailViewRequestProvider), CoachDetailView.none);
+  expect(
+    container.read(goalsDetailViewRequestProvider).view,
+    GoalsDetailView.none,
+  );
+  expect(container.read(recoveryRetryControllerProvider).attemptCount, 0);
+  expect(container.read(toastQueueProvider).current, isNull);
+}
+
+void _expectAccountAStatePresent(ProviderContainer container) {
+  expect(container.read(userProfileProvider).displayName, 'Private A');
+  expect(container.read(profileSettingsProvider).selectedDeleteScopes, {
+    'A-only',
+  });
+  expect(container.read(homeDashboardProvider).nowNextAction, isNotNull);
+  expect(container.read(homeMindNoteProvider), isNotEmpty);
+  expect(container.read(routineNotifierProvider).showFullDay, isTrue);
+  expect(container.read(mockRoutineProvider), isNotEmpty);
+  expect(container.read(mockTrackerProvider).trackerSessions, isNotEmpty);
+  expect(container.read(fitnessCenterProvider).activeActivity, isNotNull);
+  expect(
+    container.read(trackerSettingsProvider).activeTrackers['Nutrition'],
+    isTrue,
+  );
+  expect(container.read(mockCoachProvider), isNotEmpty);
+  expect(container.read(mockCoachPreferencesProvider).name, 'Private A Coach');
+  expect(container.read(mockGoalProvider), isNotEmpty);
+  expect(container.read(onboardingStateProvider).draft.uid, _userA.uid);
+  expect(container.read(restoredUploadsProvider).uid, _userA.uid);
+  expect(container.read(uploadControllerProvider).uid, _userA.uid);
+  expect(container.read(regionSettingsProvider).userId, _userA.uid);
+  expect(container.read(appNavigationProvider), 5);
+  expect(
+    container.read(homeDetailViewRequestProvider).view,
+    HomeDetailView.missionDetail,
+  );
+  expect(
+    container.read(trackerDetailViewRequestProvider).view,
+    TrackerDetailView.fitness,
+  );
+  expect(
+    container.read(profileDetailViewRequestProvider).view,
+    ProfileDetailView.editProfile,
+  );
+  expect(
+    container.read(routineDetailViewRequestProvider).view,
+    RoutineDetailView.routineSettings,
+  );
+  expect(
+    container.read(coachDetailViewRequestProvider),
+    CoachDetailView.coachSettings,
+  );
+  expect(
+    container.read(goalsDetailViewRequestProvider).view,
+    GoalsDetailView.weeklyReview,
+  );
+  expect(container.read(recoveryRetryControllerProvider).attemptCount, 1);
+  expect(
+    container.read(toastQueueProvider).current?.message,
+    'Private A toast',
+  );
 }

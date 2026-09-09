@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/core/errors/auth_error_mapper.dart';
 import 'package:optivus/core/errors/diagnostic_codes.dart';
 import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/models/user_profile.dart';
@@ -1098,7 +1099,7 @@ void main() {
       contains('connection'),
     );
 
-    repo.resendError = Exception('too-many-requests');
+    repo.resendError = AuthErrorMapper.map(Exception('too-many-requests'));
     const expected = [120, 240, 480, 900, 900];
     for (var index = 0; index < expected.length; index++) {
       await controller.resend();
@@ -1130,7 +1131,7 @@ void main() {
     expect(lifecycle.messageKind, VerificationMessageKind.network);
     expect(lifecycle.message, contains('connection'));
 
-    repo.reloadError = Exception('too-many-requests');
+    repo.reloadError = AuthErrorMapper.map(Exception('too-many-requests'));
     await _container(
       tester,
     ).read(verificationLifecycleProvider.notifier).checkNow(manual: true);
@@ -1146,6 +1147,32 @@ void main() {
     lifecycle = _container(tester).read(verificationLifecycleProvider);
     expect(lifecycle.messageKind, VerificationMessageKind.firebaseFailure);
     expect(lifecycle.message, isNot(contains('secret')));
+  });
+
+  testWidgets('expired verification session stops automatic polling', (
+    tester,
+  ) async {
+    await _setLogicalViewport(tester);
+    final repo = _TestAuthRepo(user: _defaultUser)
+      ..reloadError = AuthErrorMapper.map(Exception('auth-token-expired'));
+    await tester.pumpWidget(
+      _buildScreen(repo: repo, policy: _fastPollingPolicy),
+    );
+    await tester.pump();
+
+    final container = _container(tester);
+    final lifecycle = container.read(verificationLifecycleProvider);
+    expect(lifecycle.messageKind, VerificationMessageKind.sessionExpired);
+    expect(lifecycle.message?.toLowerCase(), contains('sign in again'));
+    final reloadsAfterExpiry = repo.reloadCount;
+
+    await tester.pump(const Duration(seconds: 2));
+    expect(repo.reloadCount, reloadsAfterExpiry);
+
+    await container
+        .read(verificationLifecycleProvider.notifier)
+        .checkNow(manual: true);
+    expect(repo.reloadCount, reloadsAfterExpiry);
   });
 
   testWidgets('UID switch and disposal ignore late verification results', (

@@ -223,14 +223,12 @@ abstract final class AuthErrorMapper {
     Object error, {
     required bool isResend,
   }) {
-    if (error is RecoverableError) return error;
+    // FirebaseAuthRepository deliberately normalizes backend exceptions before
+    // they reach presentation code. Verify Email is a narrower context, so it
+    // must refine both those structured errors and raw test/platform errors.
+    final mapped = error is RecoverableError ? error : map(error);
 
-    final raw = error.toString().toLowerCase();
-
-    if (error is SocketException ||
-        raw.contains('socketexception') ||
-        raw.contains('network') ||
-        raw.contains('connection refused')) {
+    if (mapped.category == RecoverableErrorCategory.network) {
       return RecoverableError(
         category: RecoverableErrorCategory.network,
         publicMessage: isResend
@@ -240,11 +238,12 @@ abstract final class AuthErrorMapper {
         isBlocking: true,
         retryAction: RecoverableRetryAction.retry,
         retrySafe: true,
-        diagnosticCode: DiagnosticCodes.networkUnavailable,
+        diagnosticCode: mapped.diagnosticCode,
       );
     }
 
-    if (raw.contains('too-many-requests')) {
+    if (mapped.diagnosticCode == DiagnosticCodes.authRateLimited ||
+        mapped.diagnosticCode == DiagnosticCodes.verifyEmailRateLimited) {
       return const RecoverableError(
         category: RecoverableErrorCategory.authentication,
         publicMessage:
@@ -257,11 +256,25 @@ abstract final class AuthErrorMapper {
       );
     }
 
+    if (mapped.diagnosticCode == DiagnosticCodes.authSessionExpired ||
+        mapped.diagnosticCode == DiagnosticCodes.verifyEmailSessionExpired) {
+      return const RecoverableError(
+        category: RecoverableErrorCategory.authentication,
+        publicMessage:
+            'Your verification session has expired. Please sign in again.',
+        severity: RecoverableErrorSeverity.error,
+        isBlocking: true,
+        retryAction: RecoverableRetryAction.reauthenticate,
+        retrySafe: false,
+        diagnosticCode: DiagnosticCodes.verifyEmailSessionExpired,
+      );
+    }
+
     return RecoverableError(
       category: RecoverableErrorCategory.authentication,
       publicMessage: isResend
-          ? 'Couldn’t resend the verification email. Please try again.'
-          : 'Couldn’t check verification status. Please try again.',
+          ? 'Couldn’t resend the email. Please try again.'
+          : 'Couldn’t check verification. Please try again.',
       severity: RecoverableErrorSeverity.error,
       isBlocking: true,
       retryAction: RecoverableRetryAction.retry,
