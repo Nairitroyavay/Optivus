@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/state/app_state.dart';
 
@@ -24,17 +26,12 @@ void main() {
     },
   );
 
-  test('mock app state starts empty and accepts onboarding bundle output', () {
+  test('app state starts empty and accepts onboarding bundle output', () async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
 
-    expect(container.read(mockRoutineProvider), isEmpty);
+    expect(container.read(routineNotifierProvider).items, isEmpty);
     expect(container.read(mockGoalProvider), isEmpty);
-
-    container.read(mockRoutineProvider.notifier).loadSeedData();
-    expect(container.read(mockRoutineProvider), isNotEmpty);
-    container.read(mockRoutineProvider.notifier).resetEmpty();
-    expect(container.read(mockRoutineProvider), isEmpty);
 
     final bundle = OnboardingCompletionService.buildBundle(_draft());
     container
@@ -44,9 +41,13 @@ void main() {
           email: 'test@optivus.dev',
           displayName: 'Test',
         );
-    container
-        .read(mockRoutineProvider.notifier)
-        .replaceWith(bundle.routineItemsForApp);
+    final routineRepo = container.read(routineRepositoryProvider);
+    for (final item in bundle.routineItemsForApp) {
+      await routineRepo.createRoutineItem('test-user', item);
+    }
+    await container
+        .read(routineNotifierProvider.notifier)
+        .loadForOwner('test-user');
     container
         .read(mockGoalProvider.notifier)
         .replaceWith(bundle.identityGoalSystems);
@@ -54,7 +55,7 @@ void main() {
     container.read(userProfileProvider.notifier).applyOnboardingBundle(bundle);
     container.read(userProfileProvider.notifier).completeOnboarding();
 
-    expect(container.read(mockRoutineProvider), isNotEmpty);
+    expect(container.read(routineNotifierProvider).items, isNotEmpty);
     expect(container.read(mockGoalProvider), isNotEmpty);
     expect(container.read(mockTrackerProvider).trackerSessions, isNotEmpty);
     expect(container.read(userProfileProvider).onboardingCompleted, isTrue);

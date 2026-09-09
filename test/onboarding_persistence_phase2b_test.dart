@@ -300,7 +300,6 @@ void main() {
     );
 
     expect(result.changed, isTrue);
-    expect(container.read(mockRoutineProvider), isNotEmpty);
     expect(container.read(routineNotifierProvider).items, isNotEmpty);
     expect(container.read(mockGoalProvider), isNotEmpty);
     expect(container.read(mockTrackerProvider).trackerSessions, isNotEmpty);
@@ -332,12 +331,6 @@ void main() {
       container
           .read(routineNotifierProvider)
           .items
-          .where((item) => item.onboardingSourceItemId == 'class-main'),
-      hasLength(1),
-    );
-    expect(
-      container
-          .read(mockRoutineProvider)
           .where((item) => item.onboardingSourceItemId == 'class-main'),
       hasLength(1),
     );

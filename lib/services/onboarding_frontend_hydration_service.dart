@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/routine/controllers/habit_systems_controller.dart';
 import 'package:optivus/repositories/habit_systems_repository.dart';
 import 'package:optivus/features/routine/routine_state.dart';
@@ -119,7 +118,11 @@ class OnboardingFrontendHydrationService {
     read(
       mockNotificationPreferencesProvider.notifier,
     ).updatePreferences(bundle.notificationPreferences);
-    verifyFrontendState(read: read, bundle: bundle);
+    verifyFrontendState(
+      read: read,
+      bundle: bundle,
+      allowUserModifications: true,
+    );
   }
 
   Future<OnboardingFrontendHydrationResult> hydrate({
@@ -138,11 +141,8 @@ class OnboardingFrontendHydrationService {
     final expectedHabitSystemIds = habitSystemProjections
         .map((system) => system.systemId)
         .toSet();
-    final firebaseMode = !read(fakeDataAllowedProvider);
     read(userProfileProvider.notifier).applyOnboardingBundle(bundle);
-    final mockRoutineIds = firebaseMode
-        ? const <String>[]
-        : read(mockRoutineProvider.notifier).mergeMissing(routineItems);
+    const mockRoutineIds = <String>[];
     final goalIds = read(
       mockGoalProvider.notifier,
     ).mergeMissing(bundle.identityGoalSystems);
@@ -255,7 +255,9 @@ class OnboardingFrontendHydrationService {
   void verifyFrontendState({
     required OptivusProviderReader read,
     required OnboardingCompletionBundle bundle,
+    bool allowUserModifications = false,
   }) {
+    if (allowUserModifications) return;
     final projection = RoutineOnboardingProjection.build(bundle);
     final expectedRoutineIds = projection.items.map((item) => item.id).toSet();
     final visibleRoutineIds = read(

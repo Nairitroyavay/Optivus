@@ -25,7 +25,6 @@ import 'package:optivus/repositories/routine_transaction_repository.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
-import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/features/routine/services/routine_materializer.dart';
 
@@ -535,7 +534,6 @@ void main() {
           bundle: harness.bundle,
         );
         expect(container.read(routineNotifierProvider).items, hasLength(1));
-        expect(container.read(mockRoutineProvider), isEmpty);
         expect(first.mockRoutineItemIds, isEmpty);
       },
     );
@@ -604,7 +602,6 @@ void main() {
             .read(routineNotifierProvider.notifier)
             .loadForOwner(user.uid);
         expect(container.read(routineNotifierProvider).items, hasLength(1));
-        expect(container.read(mockRoutineProvider), isEmpty);
       },
     );
   });

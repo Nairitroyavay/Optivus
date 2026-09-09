@@ -19,7 +19,6 @@ import 'package:optivus/services/routine_import_extraction_service.dart';
 import 'package:optivus/services/routine_import_timeline_edit_service.dart';
 import 'package:optivus/services/routine_import_validation_service.dart';
 import 'package:optivus/services/uploads/upload_object_key.dart';
-import 'package:optivus/state/app_state.dart';
 
 void main() {
   test('RoutineImportReviewDraft toMap/fromMap round-trips', () {
@@ -527,10 +526,6 @@ void main() {
     expect(result.restoredItemIds, ['imported-review-1-candidate-1']);
     expect(
       container.read(routineNotifierProvider).items.map((item) => item.id),
-      contains('imported-review-1-candidate-1'),
-    );
-    expect(
-      container.read(mockRoutineProvider).map((item) => item.id),
       contains('imported-review-1-candidate-1'),
     );
   });

@@ -1740,7 +1740,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
             onboardingCompleted: true,
           ),
         );
-    _ref.read(mockRoutineProvider.notifier).loadSeedData();
     await _ref.read(routineNotifierProvider.notifier).loadForOwner(user.uid);
     await _ref
         .read(routineNotifierProvider.notifier)

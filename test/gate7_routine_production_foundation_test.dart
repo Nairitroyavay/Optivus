@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/config/backend_config.dart';
@@ -5,6 +6,7 @@ import 'package:optivus/features/routine/controllers/habit_systems_controller.da
 import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/habit_system_record.dart';
+import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/routine_projection_receipt.dart';
 import 'package:optivus/repositories/fake_habit_systems_repository.dart';
@@ -14,6 +16,8 @@ import 'package:optivus/repositories/routine_history_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/repositories/routine_transaction_repository.dart';
 import 'package:optivus/services/auth_session_reset_coordinator.dart';
+import 'package:optivus/services/onboarding_completion_service.dart';
+import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
 import 'package:optivus/state/app_state.dart';
 
 void main() {
@@ -193,9 +197,22 @@ void main() {
       );
 
       // But the routine occurrence itself is successfully completed
-      final occ =
-          container.read(routineNotifierProvider).occurrences.first;
-      expect(occ.status, RoutineStatus.completed);
+      expect(
+        container.read(routineNotifierProvider).occurrences.first.status,
+        RoutineStatus.completed,
+      );
+
+      // Execute markSkipped on money task in Firebase mode
+      final skipResult = await notifier.markSkipped('money_task_1');
+      expect(skipResult.outcome, RoutineWriteOutcome.saved);
+      expect(
+        container.read(mockTrackerProvider).savingsEntries.length,
+        initialSavings,
+      );
+      expect(
+        container.read(routineNotifierProvider).occurrences.first.status,
+        RoutineStatus.skipped,
+      );
     });
 
     test('Habit Systems persistence, update, archive, and restore', () async {
@@ -315,5 +332,145 @@ void main() {
       expect(container.read(routineNotifierProvider).items, isEmpty);
       expect(container.read(routineNotifierProvider.notifier).ownerUid, 'user-B');
     });
+
+    test(
+      'Real async race: delayed Account A load completing after Account B publishes does not leak',
+      () async {
+        final aCompleter = Completer<List<RoutineItem>>();
+        final database = FakeRoutineDatabase();
+        final routineRepo = _DelayedRoutineRepository(
+          database: database,
+          delayedUid: 'user-A',
+          completer: aCompleter,
+        );
+        final container = ProviderContainer(
+          overrides: [
+            routineRepositoryProvider.overrideWithValue(routineRepo),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final resetCoordinator =
+            container.read(authSessionResetCoordinatorProvider);
+        final notifier = container.read(routineNotifierProvider.notifier);
+
+        // Start slow Account A load
+        final loadA = notifier.loadForOwner('user-A');
+
+        // Immediate account switch to Account B while A is in flight
+        resetCoordinator.resetIdentityBoundary();
+        await notifier.loadForOwner('user-B');
+        await notifier.addItem(
+          RoutineItem(
+            id: 'user_b_item',
+            userId: 'user-B',
+            title: 'Routine B Item',
+            startMinute: 500,
+            endMinute: 550,
+            blockType: RoutineBlockType.hardBlock,
+          ),
+        );
+
+        // Now Account A delayed fetch completes
+        aCompleter.complete([
+          RoutineItem(
+            id: 'user_a_slow_item',
+            userId: 'user-A',
+            title: 'Routine A Stale Item',
+            startMinute: 300,
+            endMinute: 350,
+            blockType: RoutineBlockType.hardBlock,
+          ),
+        ]);
+        await loadA;
+
+        // Assert Account B is intact and unaffected
+        final currentItems = container.read(routineNotifierProvider).items;
+        expect(currentItems, hasLength(1));
+        expect(currentItems.first.id, 'user_b_item');
+        expect(currentItems.first.userId, 'user-B');
+        expect(notifier.ownerUid, 'user-B');
+      },
+    );
+
+    test(
+      'User deletion protection: deleted routine item survives restoreVerifiedFrontendState without resurrection or error',
+      () async {
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
+
+        const uid = 'user-del-protection';
+        final draft = OnboardingDraft(
+          uid: uid,
+          currentStep: 14,
+          baseTimeline: const BaseTimelineDraft(
+            blocks: [
+              TimelineBlockDraft(
+                id: 'class-main',
+                section: 'classes',
+                title: 'Advanced Physics',
+                startMinute: 540,
+                endMinute: 600,
+                repeatDays: [1, 2, 3, 4, 5],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+            ],
+          ),
+        );
+        final bundle = OnboardingCompletionService.buildBundle(draft);
+
+        final routineRepo = container.read(routineRepositoryProvider);
+        for (final item in bundle.routineItemsForApp) {
+          await routineRepo.createRoutineItem(uid, item);
+        }
+        final notifier = container.read(routineNotifierProvider.notifier);
+        await notifier.loadForOwner(uid);
+
+        final initialItems = container.read(routineNotifierProvider).items;
+        expect(initialItems, isNotEmpty);
+        final itemToDelete = initialItems.first;
+
+        // User deletes item
+        final deleteResult = await notifier.deleteItem(itemToDelete.id);
+        expect(deleteResult.outcome, RoutineWriteOutcome.saved);
+        expect(
+          container.read(routineNotifierProvider).items.any((i) => i.id == itemToDelete.id),
+          isFalse,
+        );
+
+        // Subsequent session reconnect / restoreVerifiedFrontendState
+        const hydrationService = OnboardingFrontendHydrationService();
+        await hydrationService.restoreVerifiedFrontendState(
+          read: container.read,
+          bundle: bundle,
+        );
+
+        // Verify no StateError thrown and item was NOT resurrected
+        final postRestoreItems = container.read(routineNotifierProvider).items;
+        expect(
+          postRestoreItems.any((i) => i.id == itemToDelete.id),
+          isFalse,
+        );
+      },
+    );
   });
+}
+
+class _DelayedRoutineRepository extends FakeRoutineRepository {
+  final String delayedUid;
+  final Completer<List<RoutineItem>> completer;
+
+  _DelayedRoutineRepository({
+    super.database,
+    required this.delayedUid,
+    required this.completer,
+  });
+
+  @override
+  Future<List<RoutineItem>> fetchRoutineItems(String uid) {
+    if (uid == delayedUid) {
+      return completer.future;
+    }
+    return super.fetchRoutineItems(uid);
+  }
 }

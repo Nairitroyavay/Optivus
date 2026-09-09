@@ -150,12 +150,10 @@ void main() {
       );
       expect(container.read(fitnessCenterProvider).containsDemoData, isTrue);
 
-      container.read(mockRoutineProvider.notifier).loadSeedData();
       container.read(mockTrackerProvider.notifier).loadSeedData();
       container.read(mockGoalProvider.notifier).loadSeedData();
       container.read(mockMindNoteProvider.notifier).loadSeedData();
       container.read(mockCoachProvider.notifier).loadSeedData();
-      expect(container.read(mockRoutineProvider), isNotEmpty);
       expect(container.read(mockTrackerProvider).trackerSessions, isNotEmpty);
       expect(container.read(mockGoalProvider), isNotEmpty);
       expect(container.read(mockMindNoteProvider), isNotEmpty);
@@ -197,7 +195,6 @@ void main() {
 
       expect(container.read(userProfileProvider).displayName, isEmpty);
       expect(container.read(userProfileProvider).email, isEmpty);
-      expect(container.read(mockRoutineProvider), isEmpty);
       expect(container.read(mockGoalProvider), isEmpty);
       expect(container.read(mockTrackerProvider).trackerSessions, isEmpty);
       expect(container.read(mockTrackerProvider).fitnessActivities, isEmpty);
@@ -229,10 +226,6 @@ void main() {
             .having((identity) => identity.primaryProof, 'proof', isEmpty),
       );
 
-      expect(
-        container.read(mockRoutineProvider.notifier).loadSeedData,
-        throwsStateError,
-      );
       expect(
         container.read(mockTrackerProvider.notifier).loadSeedData,
         throwsStateError,
@@ -267,7 +260,6 @@ void main() {
             .loadForOwner('real-uid');
 
         expect(container.read(routineNotifierProvider).items, isEmpty);
-        expect(container.read(mockRoutineProvider), isEmpty);
       },
     );
 
@@ -293,7 +285,6 @@ void main() {
         expect(state.loading, isFalse);
         expect(state.error, isNotNull);
         expect(state.items, isEmpty);
-        expect(container.read(mockRoutineProvider), isEmpty);
       },
     );
 
@@ -333,7 +324,6 @@ void main() {
 
       expect(container.read(routineNotifierProvider).loading, isTrue);
       expect(container.read(routineNotifierProvider).items, isEmpty);
-      expect(container.read(mockRoutineProvider), isEmpty);
 
       repository.complete([_realRoutine]);
       await load;
@@ -361,7 +351,6 @@ void main() {
           .read(routineNotifierProvider.notifier)
           .loadForOwner('real-uid');
       expect(container.read(routineNotifierProvider).items, [_realRoutine]);
-      expect(container.read(mockRoutineProvider), isEmpty);
     });
 
     test(

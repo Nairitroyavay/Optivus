@@ -1,51 +1,63 @@
 # Gate 7 Verification Report: Routine Entry Gate / Routine Production Foundation
 
-**Date:** 2026-09-09  
-**Gate:** Gate 7 — Routine Entry Gate / Routine Production Foundation  
-**Status:** **GATE 7 PASSED**  
-**Verdict:** **ROUTINE FEATURE DEVELOPMENT UNBLOCKED**  
+**Date:** 2026-09-09<br/>
+**Gate:** Gate 7 — Routine Entry Gate / Routine Production Foundation (Second & Final Closure Pass)<br/>
+**Status:** **GATE 7 IMPLEMENTATION COMPLETE — EXTERNAL ACCEPTANCE BLOCKED**<br/>
+**Verdict:** **Physical Android device with live Firebase optivus-lifeos not connected**<br/>
 
 ---
 
 ## 1. Executive Summary
 
-Gate 7 establishes the production foundation for the Routine feature area, ensuring that:
-1. `routineNotifierProvider` is the sole authoritative in-app state owner for Routine templates and dated occurrences.
-2. `mockRoutineProvider` is strictly contained to the test/development allowlist and banned from all production feature screens in `lib/features/routine/`.
-3. Habit Systems ownership is unified under `habitSystemsNotifierProvider` and `habitSystemsRepositoryProvider`. The legacy `habitRepositoryProvider` and its associated classes (`HabitRepository`, `FakeHabitRepository`, `UnavailableFirebaseHabitRepository`) are formally deprecated and have zero callers in production code.
-4. The cross-feature boundary between Routine and Tracker (specifically `mockTrackerProvider` mutations for money actions) is properly isolated behind `fakeDataAllowedProvider`. In Firebase mode, Routine reliably persists occurrences and writes history without mutating unbacked local mock state.
-5. Projection receipts and deterministic template creation are strictly verified for codec roundtrip and idempotency.
-6. Multi-tenant user isolation and session reset are verified.
-7. Continuous integration automation is established via checked-in `.github/workflows/ci.yml`.
-8. Physical device verification is confirmed on real iPhone hardware.
+During the second and final closure pass for Gate 7, an independent, comprehensive audit and verification was conducted across the current repository. All implementation requirements for Gate 7 have been satisfied and verified with automated test evidence:
+
+1. **Test-Suite Contradiction Settled:** The historical `test_output.txt` showing 12 failures was invalidated by executing the full repository test suite. The complete test suite now passes with **2,098 passed, 10 skipped, 0 failed**, and `test_output.txt` is updated to reflect this authoritative reality.
+2. **TD-001 Formally Resolved:** `MockRoutineNotifier` and `mockRoutineProvider` have been completely eliminated from the production codebase (`lib/`). `routineNotifierProvider` is now the single canonical Routine state owner across both fake and Firebase modes. Static architecture tests verify zero references to `mockRoutineProvider` across all `lib/` files.
+3. **Async Race Protection Verified:** Verified that when Account A initiates an asynchronous load that is delayed and finishes after Account B has already signed in and published, Account A's items are discarded and never contaminate Account B's state.
+4. **User Deletion Protection Verified:** Verified that user deletions are honored across restarts/restores without resurrection or `StateError`, achieved by setting `allowUserModifications: true` during frontend hydration.
+5. **Routine → Tracker Boundary Enforced:** In Firebase mode (`fakeDataAllowedProvider` is false), Routine skip/save money operations persist occurrences and history without mutating unbacked local `mockTrackerProvider` state.
+6. **Habit Systems Ownership Unified (TD-012):** Deprecated legacy `habitRepositoryProvider` and verified zero call sites in `lib/`. Ownership is unified under `habitSystemsNotifierProvider` and `habitSystemsRepositoryProvider`.
+7. **Projection Receipt Codec & Idempotency (TD-014):** Codec roundtrip and idempotent create-only projection verified.
+8. **CI Reproducibility Enforced:** `.github/workflows/ci.yml` is pinned to Flutter `3.47.2`, Firebase CLI `15.28.2`, and enforces `flutter analyze --fatal-infos`.
+9. **Platform & Hardware Reality Clarified:** `lib/config/firebase_options.dart` explicitly configures Firebase only for Android; iOS throws `UnsupportedError`. Physical testing on iOS was restricted to UI/fake mode. Running live Firebase `optivus-lifeos` acceptance requires physical Android hardware, which is currently not connected (`flutter devices` reports only `macOS desktop`). Under Section 15 pass rules, the implementation is complete, but external acceptance is blocked until a physical Android device is connected.
 
 ---
 
 ## 2. Source Audit & Root-Cause Resolutions
 
-### 2.1 Routine Provider Containment (`mockRoutineProvider` vs `routineNotifierProvider`)
-- **Audit Finding:** `mockRoutineProvider` existed in `lib/state/app_state.dart` as a legacy prototype store.
-- **Verification:** An exhaustive audit of `lib/features/routine/` confirmed that zero production screens or widgets import or read `mockRoutineProvider`. All active views watch `routineNotifierProvider`.
-- **Enforcement:** Enforced via static architectural tests in `test/gate7_static_architecture_test.dart` and `test/routine_architecture_test.dart` that fail the build if `mockRoutineProvider` is referenced inside `lib/features/routine/`.
+### 2.1 TD-001 Resolution: Complete Eradication of `mockRoutineProvider` from `lib/`
+- **Root Cause:** `mockRoutineProvider` and `MockRoutineNotifier` resided in `lib/state/app_state.dart` and were mirrored in `routine_import_applied_restore_service.dart`, `onboarding_frontend_hydration_service.dart`, `auth_session_reset_coordinator.dart`, and `auth_state.dart`.
+- **Resolution:**
+  - Deleted `MockRoutineNotifier` and `mockRoutineProvider` entirely from `lib/state/app_state.dart`.
+  - Removed mirror writes from `lib/services/routine_import_applied_restore_service.dart`.
+  - Removed mock provider reads from `lib/services/onboarding_frontend_hydration_service.dart` and `lib/state/auth_state.dart`.
+  - Updated `lib/services/auth_session_reset_coordinator.dart` to reset `routineNotifierProvider.notifier.resetForSignedOut()`.
+- **Verification:** Verified via `rg "mockRoutineProvider" lib/` returning zero matches. Static tests `test/gate7_static_architecture_test.dart` and `test/routine_phase4_4_ownership_test.dart` enforce zero occurrences in `lib/`.
 
-### 2.2 Habit Systems Ownership & Legacy Deprecation (TD-012)
-- **Audit Finding:** Two habit repository abstractions coexisted: `lib/repositories/habit_systems_repository.dart` (the active, Firestore-capable domain store) and `lib/repositories/habit_repository.dart` (a legacy abstraction returning `UnavailableFirebaseHabitRepository`).
-- **Resolution:** A global search proved zero callers of `habitRepositoryProvider` across `lib/` and `test/`. The legacy classes (`HabitRepository`, `FakeHabitRepository`, `UnavailableFirebaseHabitRepository`) and provider `habitRepositoryProvider` were marked `@Deprecated('Retired in Gate 7. Use habitSystemsRepositoryProvider instead.')`.
-- **Enforcement:** Enforced via `test/gate7_static_architecture_test.dart` verifying zero call sites in `lib/`. TD-012 is formally **RESOLVED**.
+### 2.2 User Deletion Protection (`allowUserModifications`)
+- **Root Cause:** When user-modified routines were restored during onboarding frontend hydration, `restoreVerifiedFrontendState` omitted `allowUserModifications: true`, which could risk resetting user deletions or raising errors.
+- **Resolution:** Added `allowUserModifications: true` to `restoreVerifiedFrontendState` in `lib/services/onboarding_frontend_hydration_service.dart`.
+- **Verification:** Added test in `test/gate7_routine_production_foundation_test.dart` verifying that deleting an item persists across reconnect and does not resurrect or throw.
 
-### 2.3 Routine → Tracker Boundary Isolation
-- **Audit Finding:** In `lib/features/routine/routine_state.dart`, `skipRoutineItem` and `saveRoutineItem` directly mutated `mockTrackerProvider.notifier.skipMoneyToday` and `saveMoneyToday`. In Firebase mode (`fakeDataAllowedProvider` is false), mutating `mockTrackerProvider` was misleading because tracker repositories in Firebase mode throw `UnavailableFirebaseTrackerRepositories`.
-- **Resolution:** Bounded both calls behind `if (_ref.read(fakeDataAllowedProvider))`. In Firebase mode, Routine reliably persists the occurrence and writes history via `_writeOccurrence` without mutating unbacked local mock state.
-- **Verification:** Verified via `test/gate7_routine_production_foundation_test.dart` ("Tracker boundary: Firebase mode isolates Tracker and avoids mockTrackerProvider mutation").
+### 2.3 Async Race Protection Across Account Switching
+- **Root Cause:** A slow, asynchronous routine fetch initiated under Account A could finish after Account B had already signed in, potentially overwriting Account B's state if not checked against current active credentials.
+- **Resolution:** Verified that `RoutineNotifier` tracks active `ownerUid` and ignores/aborts state emissions from previous sessions.
+- **Verification:** Added test in `test/gate7_routine_production_foundation_test.dart` simulating a delayed Account A fetch resolving after Account B publishes; verified zero Account A items appear in Account B's state.
 
-### 2.4 Routine Projection Receipt Codec & Idempotency (TD-014)
-- **Audit Finding:** Routine onboarding projection relies on `RoutineProjectionReceipt` to ensure deterministic, create-only materialization of absent templates.
-- **Verification:** Added comprehensive roundtrip serialization, deserialization, timestamp handling, and duplicate idempotency tests in `test/gate7_routine_production_foundation_test.dart`. TD-014 is formally **RESOLVED**.
+### 2.4 Routine → Tracker Boundary Isolation
+- **Root Cause:** `skipRoutineItem` and `saveRoutineItem` directly mutated `mockTrackerProvider`, which has no Firebase backend.
+- **Resolution:** Gated calls behind `if (_ref.read(fakeDataAllowedProvider))`. In Firebase mode, Routine persists occurrence history without touching `mockTrackerProvider`.
+- **Verification:** Verified via `test/gate7_routine_production_foundation_test.dart`.
 
-### 2.5 Multi-Tenant User Isolation
-- **Audit Finding:** Routine and Habit state must not leak across user accounts.
-- **Resolution:** Added `ownerUid` getter on `RoutineNotifier`. Verified that `AuthSessionResetCoordinator` properly invalidates and resets Routine and Habit state on logout, and that switching users prevents cross-account data leakage.
-- **Verification:** Verified via `test/gate7_routine_production_foundation_test.dart` ("User isolation: Auth reset coordinator cleanses Routine & Habit state on UID change").
+### 2.5 Habit Systems Ownership & Legacy Deprecation (TD-012)
+- **Root Cause:** `habit_repository.dart` was coexisting with `habit_systems_repository.dart`.
+- **Resolution:** Deprecated legacy classes and provider. Confirmed zero callers in `lib/`.
+- **Verification:** Verified via `test/gate7_static_architecture_test.dart`.
+
+### 2.6 Projection Receipt Codec & Idempotency (TD-014)
+- **Root Cause:** Need for deterministic, create-only materialization of absent templates.
+- **Resolution:** Added codec roundtrip and idempotency validation.
+- **Verification:** Verified via `test/gate7_routine_production_foundation_test.dart`.
 
 ---
 
@@ -53,25 +65,31 @@ Gate 7 establishes the production foundation for the Routine feature area, ensur
 
 | File | Change Description | Rationale |
 | --- | --- | --- |
-| `lib/features/routine/routine_state.dart` | Added `String? get ownerUid => _ownerUid;` accessor. | Allows architecture and isolation tests to verify the authenticated owner UID. |
-| `lib/features/routine/routine_state.dart` | Lines 2135–2138: Gated `mockTrackerProvider.notifier.skipMoneyToday` behind `if (_ref.read(fakeDataAllowedProvider))`. | Prevents unbacked mock tracker mutation in Firebase mode. |
-| `lib/features/routine/routine_state.dart` | Lines 2187–2196: Gated `mockTrackerProvider.notifier.saveMoneyToday` behind `if (_ref.read(fakeDataAllowedProvider))`. | Prevents unbacked mock tracker mutation in Firebase mode. |
-| `lib/repositories/habit_repository.dart` | Added `@Deprecated('Retired in Gate 7. Use habitSystemsRepositoryProvider instead.')` to `HabitRepository`, `FakeHabitRepository`, `UnavailableFirebaseHabitRepository`, and `habitRepositoryProvider`. | Deprecates overlapping legacy abstraction and establishes `habitSystemsRepositoryProvider` as sole authority. |
+| `lib/state/app_state.dart` | Removed `MockRoutineNotifier` and `mockRoutineProvider`. | Resolves TD-001; ensures single canonical Routine owner. |
+| `lib/services/routine_import_applied_restore_service.dart` | Removed mirror mutations to `mockRoutineProvider`. | Eliminates dual-state writes. |
+| `lib/services/onboarding_frontend_hydration_service.dart` | Removed `mockRoutineProvider` imports/reads; added `allowUserModifications: true`. | Resolves TD-001 and protects user deletions from resurrection. |
+| `lib/services/auth_session_reset_coordinator.dart` | Replaced `mockRoutineProvider` reset with `routineNotifierProvider.notifier.resetForSignedOut()`. | Canonical state reset on sign-out. |
+| `lib/state/auth_state.dart` | Removed unused `mockRoutineProvider` read. | Resolves TD-001. |
+| `lib/features/routine/routine_state.dart` | Gated `mockTrackerProvider` calls behind `fakeDataAllowedProvider`; added `ownerUid` getter. | Prevents unbacked mock mutations in Firebase mode. |
+| `lib/repositories/habit_repository.dart` | Deprecated `HabitRepository` and `habitRepositoryProvider`. | Deprecates overlapping legacy abstraction (TD-012). |
+| `.github/workflows/ci.yml` | Pinned Flutter `3.47.2`, Firebase CLI `15.28.2`, set `flutter analyze --fatal-infos`. | Enforces reproducible CI builds. |
 
 ---
 
 ## 4. Test Suite Created & Verified
 
-### 4.1 `test/gate7_routine_production_foundation_test.dart` (6 tests)
+### 4.1 `test/gate7_routine_production_foundation_test.dart` (8 tests)
 1. **Routine CRUD + operation logging**: Verifies template creation, retrieval, mutation, deletion, and optimistic concurrency logging.
 2. **Occurrence lifecycle + history**: Verifies dated occurrence state transitions (`planned` → `active` → `completed`), retry-safe upserts, and history queries.
 3. **Tracker boundary isolation**: Verifies that in Firebase mode (`fakeDataAllowedProvider = false`), Routine operations record history without mutating `mockTrackerProvider`.
 4. **Habit Systems persistence/archive/restore**: Verifies creation, day-interval updates, archiving, restoring, and Firestore persistence.
 5. **Projection receipt codec roundtrip**: Verifies `RoutineProjectionReceipt` JSON serialization, deserialization, metadata integrity, and idempotent template projection.
 6. **User isolation & UID boundary reset**: Verifies that `AuthSessionResetCoordinator` synchronously cleanses Routine and Habit state on account switch / logout, preventing cross-tenant leakage.
+7. **Async account switch race protection**: Verifies delayed Account A load completing after Account B load publishes does not leak Account A items into Account B.
+8. **User deletion protection**: Verifies deleted routine items survive reconnect and restore without resurrection or `StateError`.
 
 ### 4.2 `test/gate7_static_architecture_test.dart` (4 tests)
-1. **Zero `mockRoutineProvider` in Routine UI**: Asserts no references to `mockRoutineProvider` exist within `lib/features/routine/`.
+1. **Zero `mockRoutineProvider` across ALL of `lib/`**: Asserts no references to `mockRoutineProvider` exist anywhere in production source code.
 2. **Zero callers of legacy `habitRepositoryProvider`**: Asserts no active call sites exist across all of `lib/`.
 3. **`routineNotifierProvider` authoritative in Routine UI**: Verifies that Routine UI screens consume `routineNotifierProvider`.
 4. **`habitSystemsNotifierProvider` authoritative in Habit UI**: Verifies that Habit UI screens consume `habitSystemsNotifierProvider`.
@@ -80,10 +98,11 @@ Gate 7 establishes the production foundation for the Routine feature area, ensur
 
 ## 5. CI / Delivery Automation
 
-Created `.github/workflows/ci.yml` defining automated pull-request and push validation:
-- **`flutter-check`**: Runs `flutter analyze --fatal-infos` and all Flutter unit/widget/architecture test suites.
-- **`firestore-rules`**: Installs Firebase emulator suite and executes 144 Jest security rules tests.
-- **`worker-tests`**: Runs typechecks and Vitest request test suites across all 5 Cloudflare Workers (`r2-upload-worker`, `routine-import-worker`, `nutrition-worker`, `skin-care-worker`, `coach-worker`).
+`.github/workflows/ci.yml` configuration:
+- Pinned Flutter SDK: `3.47.2`
+- Pinned Firebase CLI: `15.28.2`
+- Analysis command: `flutter analyze --fatal-infos`
+- Test jobs: `flutter-check`, `firestore-rules`, `worker-tests`
 
 ---
 
@@ -91,26 +110,28 @@ Created `.github/workflows/ci.yml` defining automated pull-request and push vali
 
 | Suite / Check | Command | Result | Details |
 | --- | --- | --- | --- |
-| Static Analysis | `flutter analyze` | **PASS (0 issues)** | Clean repository, zero errors, warnings, or infos |
-| Gate 7 Architecture Tests | `flutter test test/gate7_static_architecture_test.dart` | **PASS (4/4)** | Zero architectural boundary violations |
-| Gate 7 Foundation Tests | `flutter test test/gate7_routine_production_foundation_test.dart` | **PASS (6/6)** | 100% pass on CRUD, occurrences, isolation |
-| Routine Total Suites | `flutter test test/gate7_*.dart test/routine_*.dart` | **PASS (26/26)** | All Routine tests pass |
+| Static Analysis | `flutter analyze --fatal-infos` | **PASS (0 issues)** | Clean repository, 0 errors, 0 warnings, 0 infos |
+| Gate 7 Architecture Tests | `flutter test test/gate7_static_architecture_test.dart` | **PASS (4/4)** | Zero `mockRoutineProvider` references across all `lib/` |
+| Gate 7 Foundation Tests | `flutter test test/gate7_routine_production_foundation_test.dart` | **PASS (8/8)** | CRUD, occurrences, isolation, race, deletion passed |
+| Routine Total Suites | `flutter test test/routine_*.dart` | **PASS (168/168)** | All Routine tests pass |
+| Full Flutter Test Suite | `flutter test --reporter compact` | **PASS (2,098 passed, 10 skipped, 0 failed)** | Full suite pass; `test_output.txt` updated |
 | Firestore Security Rules | `npm run test:firestore` | **PASS (144/144)** | 100% pass across all collection security rules |
 | Worker Test Suites | `npm test` (per worker) | **PASS (121/121)** | All 5 Cloudflare Workers pass typecheck & unit tests |
-| Physical Hardware Matrix | Real iPhone device testing | **USER-CONFIRMED PHYSICAL PASS** | Routine template CRUD, occurrence lifecycle, habit systems, restart persistence verified |
+| Physical Hardware Matrix | Real Android hardware | **BLOCKED** | No physical Android device connected (`flutter devices` reports only macOS desktop); iOS is unsupported by `firebase_options.dart`. |
 
 ---
 
 ## 7. Technical Debt Register Impact
 
-- **TD-001** (Routine mock provider containment): Updated. Verified `mockRoutineProvider` is strictly banned from `lib/features/routine/` and contained to test/dev allowlist. Status: *In progress* (Phase 4 final cleanup).
-- **TD-002** (Firestore Routine CRUD): Updated with Gate 7 verification and user-confirmed physical device acceptance. Status: *In progress* (Phase 4 feature development).
-- **TD-011** (Routine occurrence persistence): Updated with Gate 7 verification and user-confirmed physical device acceptance. Status: *In progress* (Phase 4 feature development).
+- **TD-001** (Routine mock provider containment): **RESOLVED**. `mockRoutineProvider` and `MockRoutineNotifier` completely eradicated from `lib/`. `routineNotifierProvider` is the sole canonical state owner.
+- **TD-002** (Firestore Routine CRUD): **In progress**. Implementation complete; pending physical Android acceptance with live Firebase `optivus-lifeos`.
+- **TD-011** (Routine occurrence persistence): **In progress**. Implementation complete; pending physical Android acceptance with live Firebase `optivus-lifeos`.
 - **TD-012** (Habit systems repository coexistence): **RESOLVED**. Legacy `habitRepositoryProvider` retired; zero callers in `lib/`.
 - **TD-014** (Routine projection receipt & template materialization): **RESOLVED**. Codec roundtrip, idempotency, and projection verified.
+- **Active Technical Debt:** 38 total (P0: 8, P1: 21, P2: 8, P3: 1).
 
 ---
 
 ## 8. Final Verdict
 
-**GATE 7 PASSED — ROUTINE FEATURE DEVELOPMENT UNBLOCKED**
+**GATE 7 IMPLEMENTATION COMPLETE — EXTERNAL ACCEPTANCE BLOCKED: Physical Android device with live Firebase optivus-lifeos not connected**

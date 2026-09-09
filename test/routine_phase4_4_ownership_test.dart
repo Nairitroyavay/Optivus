@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/routine/routine_state.dart';
-import 'package:optivus/state/app_state.dart';
 import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/repositories/routine_history_repository.dart';
 import 'package:optivus/repositories/routine_transaction_repository.dart';
@@ -40,37 +39,27 @@ void main() {
 
   test('Source-level ownership audit', () {
     final dir = Directory('lib');
-    final allowlist = {
-      'lib/state/app_state.dart',
-      'lib/state/auth_state.dart',
-      'lib/services/auth_session_reset_coordinator.dart',
-      'lib/services/onboarding_frontend_hydration_service.dart',
-      'lib/services/routine_import_applied_restore_service.dart',
-      'lib/features/routine/managers/base_timeline/screens/routine_import_review_screen.dart',
-    };
     final violatingFiles = <String>[];
     for (final entity in dir.listSync(recursive: true)) {
       if (entity is File && entity.path.endsWith('.dart')) {
         final content = entity.readAsStringSync();
         if (content.contains('mockRoutineProvider')) {
           final normalizedPath = entity.path.replaceAll('\\', '/');
-          if (!allowlist.contains(normalizedPath)) {
-            violatingFiles.add(normalizedPath);
-          }
+          violatingFiles.add(normalizedPath);
         }
       }
     }
     expect(
       violatingFiles,
       isEmpty,
-      reason: 'mockRoutineProvider used outside allowlist',
+      reason: 'mockRoutineProvider must have ZERO references in lib/',
     );
 
-    // AuthSessionResetCoordinator is reset-only and cannot become Routine authority
+    // AuthSessionResetCoordinator resets routineNotifierProvider and cannot leak
     final coordinatorContent = File(
       'lib/services/auth_session_reset_coordinator.dart',
     ).readAsStringSync();
-    expect(coordinatorContent, contains('mockRoutineProvider.notifier'));
+    expect(coordinatorContent, contains('routineNotifierProvider.notifier'));
     expect(coordinatorContent, contains('resetForSignedOut()'));
     expect(
       coordinatorContent,
@@ -83,17 +72,6 @@ void main() {
   });
 
   test('Firebase-mode provider test', () async {
-    final mockNotifier = container.read(mockRoutineProvider.notifier);
-    final mockItem = RoutineItem(
-      id: 'mock_1',
-      userId: 'mock',
-      title: 'Mock',
-      startMinute: 0,
-      endMinute: 60,
-      blockType: RoutineBlockType.flexibleTask,
-    );
-    mockNotifier.state = [mockItem];
-
     final notifier = container.read(routineNotifierProvider.notifier);
     const uid = 'user_1';
     await repo.createRoutineItem(
@@ -112,10 +90,6 @@ void main() {
     final state = container.read(routineNotifierProvider);
     expect(state.items.length, 1);
     expect(state.items.first.id, 'item_1');
-
-    final mockState = container.read(mockRoutineProvider);
-    expect(mockState.length, 1);
-    expect(mockState.first.id, 'mock_1');
   });
 
   test('Sign-in loads only owner data', () async {

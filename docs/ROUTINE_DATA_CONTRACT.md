@@ -11,11 +11,14 @@ Routine model, repository, screen, onboarding snapshot, or older document
 disagrees with this contract, the canonical Firestore codecs and this document
 control new durable writes.
 
-Routine has completed the **Gate 7 (Routine Production Foundation)** gate.
+Routine has completed the **Gate 7 (Routine Production Foundation)** implementation.
 The Firebase-capable implementation, collection-specific rules, 144 Firestore
-emulator rules tests, 26 local automated Routine tests, checked-in CI pipeline,
-and user-confirmed physical-device verification on real hardware (iPhone) have
-all passed cleanly. Routine is ready for routine feature development.
+emulator rules tests, 168 local automated Routine tests, and checked-in CI pipeline
+have all passed cleanly. `routineNotifierProvider` is the sole canonical Routine
+state authority across fake and Firebase modes (`mockRoutineProvider` eliminated
+from `lib/`). Gates 1–6 have user-confirmed physical acceptance on iPhone hardware
+in fake/local mode; live Firebase persistence is supported on Android (`optivus-lifeos`),
+with physical acceptance pending connected Android hardware.
 
 ## 1. Ownership
 
@@ -473,8 +476,8 @@ A checked-in Firebase emulator/Jest harness exercises Firestore rules
 locally. On 2026-09-09, `npm run test:firestore` passed all 144 tests
 (including strict Routine templates, occurrences, projection receipts, habit
 systems, and multi-tenant isolation). CI automation (`.github/workflows/ci.yml`)
-runs `flutter analyze`, Flutter test suites, Firestore security rules tests, and
-all five Worker test suites. Real physical device testing (iPhone hardware) has
-been verified by the user for Routine creation, occurrence lifecycle, habit
-systems, and cross-restart durability. Gate 7 (Routine Production Foundation) is
-passed.
+runs `flutter analyze --fatal-infos`, Flutter test suites, Firestore security rules tests, and
+all five Worker test suites. Gates 1–6 have user-confirmed physical acceptance on real
+iPhone hardware in fake/local mode. For Gate 7, all implementation and automated tests
+are complete; live Firebase persistence on Android hardware (`optivus-lifeos`) is pending
+connected physical device.

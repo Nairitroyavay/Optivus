@@ -319,7 +319,6 @@ void main() {
           'coachDetailViewRequestProvider': 'SESSION_UI_RESET',
           'goalsDetailViewRequestProvider': 'SESSION_UI_RESET',
           'regionSettingsProvider': 'USER_SCOPED_RESET',
-          'mockRoutineProvider': 'USER_SCOPED_RESET',
           'mockTrackerProvider': 'USER_SCOPED_RESET',
           'mockGoalProvider': 'USER_SCOPED_RESET',
           'mockMindNoteProvider': 'USER_SCOPED_RESET',

@@ -4,12 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('Gate 7: Static Architecture & Boundary Enforcement', () {
     test(
-      'zero mockRoutineProvider usages in lib/features/routine/',
+      'zero mockRoutineProvider usages across all of lib/',
       () {
-        final routineDir = Directory('lib/features/routine');
-        expect(routineDir.existsSync(), isTrue);
+        final libDir = Directory('lib');
+        expect(libDir.existsSync(), isTrue);
 
-        final dartFiles = routineDir
+        final dartFiles = libDir
             .listSync(recursive: true)
             .whereType<File>()
             .where((f) => f.path.endsWith('.dart'));
@@ -26,7 +26,7 @@ void main() {
           violations,
           isEmpty,
           reason:
-              'Production Routine features must never reference mockRoutineProvider',
+              'Production code must never reference mockRoutineProvider anywhere in lib/',
         );
       },
     );

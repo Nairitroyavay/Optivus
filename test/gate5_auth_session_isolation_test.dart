@@ -511,7 +511,6 @@ Future<void> _seedAccountAState(ProviderContainer container) async {
         MindNoteIntensity.high,
       );
   container.read(routineNotifierProvider.notifier).toggleFullDay(true);
-  container.read(mockRoutineProvider.notifier).loadSeedData();
   container.read(mockTrackerProvider.notifier).loadSeedData();
   container.read(fitnessCenterProvider.notifier).startSelectedActivity();
   container.read(trackerSettingsProvider.notifier).activateTracker('Nutrition');
@@ -582,7 +581,6 @@ void _expectUserStateCleared(ProviderContainer container) {
   expect(container.read(homeDashboardProvider).nowNextAction, isNull);
   expect(container.read(homeMindNoteProvider), isEmpty);
   expect(container.read(routineNotifierProvider).showFullDay, isFalse);
-  expect(container.read(mockRoutineProvider), isEmpty);
   expect(container.read(mockTrackerProvider).trackerSessions, isEmpty);
   expect(container.read(fitnessCenterProvider).activeActivity, isNull);
   expect(
@@ -643,7 +641,6 @@ void _expectAccountAStatePresent(ProviderContainer container) {
   expect(container.read(homeDashboardProvider).nowNextAction, isNotNull);
   expect(container.read(homeMindNoteProvider), isNotEmpty);
   expect(container.read(routineNotifierProvider).showFullDay, isTrue);
-  expect(container.read(mockRoutineProvider), isNotEmpty);
   expect(container.read(mockTrackerProvider).trackerSessions, isNotEmpty);
   expect(container.read(fitnessCenterProvider).activeActivity, isNotNull);
   expect(

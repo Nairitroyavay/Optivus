@@ -10,12 +10,12 @@ import 'package:optivus/core/router/app_router.dart';
 import 'package:optivus/core/errors/auth_error_mapper.dart';
 import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/features/profile/models/profile_settings_models.dart';
+import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/coach_models.dart';
 import 'package:optivus/models/goal_models.dart';
 import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/region_settings.dart';
-import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/app_preferences_repository.dart';
@@ -261,7 +261,7 @@ void main() {
       expect(observations.first.goals, 0);
       expect(container.read(userProfileProvider).uid, _userB.uid);
       expect(container.read(onboardingStateProvider).draft.uid, _userB.uid);
-      expect(container.read(mockRoutineProvider), isEmpty);
+      expect(container.read(routineNotifierProvider).items, isEmpty);
       expect(container.read(mockGoalProvider), isEmpty);
       expect(container.read(mockTrackerProvider).trackerSessions, isEmpty);
     });
@@ -573,7 +573,7 @@ void _populateUserAState(ProviderContainer container) {
   container
       .read(onboardingStateProvider.notifier)
       .loadSeedData(OnboardingDraft(uid: _userA.uid, currentStep: 7));
-  container.read(mockRoutineProvider.notifier).replaceWith([_secretRoutine]);
+  container.read(routineNotifierProvider.notifier).toggleFullDay(true);
   container.read(mockGoalProvider.notifier).addGoal(_secretGoal);
   container.read(mockTrackerProvider.notifier).loadSeedData();
   container.read(mockCoachProvider.notifier).loadSeedData();
@@ -590,21 +590,12 @@ void _populateUserAState(ProviderContainer container) {
 void _expectUserStateCleared(ProviderContainer container) {
   expect(container.read(userProfileProvider).uid, isEmpty);
   expect(container.read(onboardingStateProvider).draft.uid, isEmpty);
-  expect(container.read(mockRoutineProvider), isEmpty);
+  expect(container.read(routineNotifierProvider).showFullDay, isFalse);
+  expect(container.read(routineNotifierProvider).items, isEmpty);
   expect(container.read(mockGoalProvider), isEmpty);
   expect(container.read(mockTrackerProvider).trackerSessions, isEmpty);
   expect(container.read(mockCoachProvider), isEmpty);
 }
-
-final _secretRoutine = RoutineItem(
-  id: 'secret-routine-a',
-  title: 'A private routine',
-  startMinute: 60,
-  endMinute: 90,
-  blockType: RoutineBlockType.softBlock,
-  category: RoutineCategory.habit,
-  source: RoutineSource.manual,
-);
 
 final _secretGoal = GoalModel(
   id: 'secret-goal-a',

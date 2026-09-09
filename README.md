@@ -16,10 +16,13 @@ and **Gate 7 — Routine Entry Gate / Routine Production Foundation** has been
 completed and verified (`GATE 7 PASSED`).
 
 Routine feature development is unblocked. `routineNotifierProvider` is the sole
-active owner for Routine templates and dated occurrences; `habitSystemsNotifierProvider`
+canonical owner for Routine templates and dated occurrences across fake and Firebase
+modes; `mockRoutineProvider` is completely eradicated from `lib/`; `habitSystemsNotifierProvider`
 owns Habit Systems; legacy `habitRepositoryProvider` is formally retired.
-CI automation (`.github/workflows/ci.yml`) is checked in, and user-confirmed
-physical-device verification on real hardware (iPhone) covers Gates 1–7.
+CI automation (`.github/workflows/ci.yml`) is checked in with pinned toolchains.
+Gates 1–6 have user-confirmed physical acceptance on iPhone hardware in fake/local mode.
+Live Firebase persistence is supported on Android (`optivus-lifeos`); physical acceptance
+on an Android device is pending hardware attachment.
 
 Important warnings:
 
@@ -50,11 +53,11 @@ Automated and physical verification snapshot as of 2026-09-09:
 - Gate 7 Routine Production Foundation tests: PASS, 10 tests across static architecture and domain foundation.
 - Routine full test suite: PASS, 26 tests (100%).
 - Pre-Routine stabilization matrix (Gates 1-6): PASS.
-- Full `flutter test`: PASS, 1743+ tests.
+- Full `flutter test`: PASS, 2,098 tests (10 skipped, 0 failed).
 - Firestore rules emulator (`npm run test:firestore`): PASS, 144 Jest tests.
 - Worker typecheck + request tests: PASS, 121 tests total across all 5 Workers (R2 Upload 19, Routine Import 13, Nutrition 12, Skin Care 66, Coach 11).
 - CI workflow: `.github/workflows/ci.yml` checked in with static analysis, Flutter test suites, Firestore security rules, and Worker test suites.
-- Physical device verification: USER-CONFIRMED PHYSICAL PASS across Gates 1–7 on real iPhone hardware. Staging/production cloud deployment verification remains scheduled for Phase 11.
+- Physical device verification: Gates 1–6 USER-CONFIRMED PHYSICAL PASS on real iPhone hardware (fake/local mode; iOS Firebase unconfigured per `firebase_options.dart`). Gate 7 live Firebase persistence verified on Android via emulator/test suites; physical Android device acceptance pending hardware connection. Staging/production cloud deployment verification remains scheduled for Phase 11.
 
 ## Supported platforms
 

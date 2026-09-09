@@ -23,6 +23,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.47.2'
           channel: 'stable'
           cache: true
 
@@ -30,7 +31,7 @@ jobs:
         run: flutter pub get
 
       - name: Analyze code
-        run: flutter analyze --no-fatal-infos
+        run: flutter analyze --fatal-infos
 
       - name: Run Flutter tests
         run: flutter test --concurrency=4
@@ -58,7 +59,7 @@ jobs:
         run: npm ci
 
       - name: Install Firebase CLI
-        run: npm install -g firebase-tools
+        run: npm install -g firebase-tools@15.28.2
 
       - name: Run Firestore emulator tests
         run: npm run test:firestore

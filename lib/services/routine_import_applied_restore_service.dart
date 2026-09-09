@@ -1,11 +1,9 @@
-import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/repositories/routine_import_review_repository.dart';
 import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
 import 'package:optivus/services/routine_import_conversion_service.dart';
-import 'package:optivus/state/app_state.dart';
 
 class RoutineImportAppliedRestoreResult {
   final List<String> expectedItemIds;
@@ -75,12 +73,6 @@ class RoutineImportAppliedRestoreService {
     final restoredIds = batchResult.isValid && batchResult.durableSaved
         ? missing.map((item) => item.id).toList(growable: false)
         : const <String>[];
-
-    if (restoredIds.isNotEmpty && read(fakeDataAllowedProvider)) {
-      read(mockRoutineProvider.notifier).mergeMissing(
-        missing.where((item) => restoredIds.contains(item.id)).toList(),
-      );
-    }
 
     return RoutineImportAppliedRestoreResult(
       expectedItemIds: expectedItemIds,

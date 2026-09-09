@@ -80,7 +80,7 @@ class AuthSessionResetCoordinator {
   /// Onboarding are intentionally excluded because their owner-scoped seed or
   /// draft has already been selected by the caller.
   void resetFeatureStateForHydration() {
-    _ref.read(mockRoutineProvider.notifier).resetForSignedOut();
+    _ref.read(routineNotifierProvider.notifier).resetForSignedOut();
     _ref.read(mockTrackerProvider.notifier).resetForSignedOut();
     _ref.read(mockGoalProvider.notifier).resetForSignedOut();
     _ref.read(mockMindNoteProvider.notifier).resetForSignedOut();
