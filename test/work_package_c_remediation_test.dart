@@ -772,6 +772,7 @@ void main() {
             'timezoneId',
             'currentStep',
             'stepCompleted',
+            'stepCompletionContractVersions',
             'stepDirty',
             'stepLoading',
             'createdAt',

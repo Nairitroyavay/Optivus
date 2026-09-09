@@ -735,7 +735,7 @@ void main() {
             ),
             (
               'applications',
-              (base) => base.copyWith(skinCareDesiredApplicationsPerDay: 2),
+              (base) => base.copyWith(skinCareDesiredApplicationsPerDay: 3),
             ),
             (
               'reviewed',

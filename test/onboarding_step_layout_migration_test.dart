@@ -390,7 +390,7 @@ void main() {
         var base = const BaseTimelineDraft(
           skinCareSetupPath: 'has_products',
           skinCareProductNames: 'Gentle Cleanser',
-          skinCareDesiredApplicationsPerDay: 1,
+          skinCareDesiredApplicationsPerDay: 2,
           skinCareReviewedProducts: [
             SkinCareDetectedProduct(name: 'Gentle Cleanser'),
           ],
@@ -405,6 +405,19 @@ void main() {
               title: 'AM routine',
               startMinute: 480,
               endMinute: 495,
+              repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+              source: 'ai_generated_skin_care_setup',
+              blockType: TimelineBlockDraft.softBlockKey,
+              skincareProducts: const ['Gentle Cleanser'],
+              skincareSteps: const ['Apply and rinse'],
+              provenanceSourceIds: ['skin-care-generation:$fingerprint'],
+            ),
+            TimelineBlockDraft(
+              id: 'legacy-skin-pm',
+              section: 'skin_care',
+              title: 'PM routine',
+              startMinute: 1260,
+              endMinute: 1275,
               repeatDays: const [1, 2, 3, 4, 5, 6, 7],
               source: 'ai_generated_skin_care_setup',
               blockType: TimelineBlockDraft.softBlockKey,

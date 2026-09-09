@@ -8,8 +8,8 @@
 - Verification date: 2026-09-09
 - Current verification tree: base revision plus concurrent, uncommitted Gate 5
   Auth/session work; those unrelated edits were preserved
-- Scope: onboarding foundation/read compatibility only
-- Firestore shape or rules changed: **No**
+- Scope: onboarding foundation/read compatibility and durable restore
+- Firestore shape or rules changed: **Yes** — updated to support schemaVersion 4 and stepCompletionContractVersions (map with 15 integer keys, values bounded to contract range 1..2)
 - Worker changes: **None**
 - R2 changes: **None**
 - Auth architecture, Step 4/5/7 UX, Step 14 completion semantics, and Routine
@@ -42,15 +42,15 @@ three progression vectors once for the whole document.
 | schema v2 + 15 vector | `current15` | Preserve numeric meaning | PASS |
 | schema v2 + exact 12 vector | `ambiguous` | Preserve positions; pad 12–14 false; no fan-out | PASS |
 | schema v2 + short vector | `ambiguous` | Preserve positions; pad false | PASS |
-| schema v3/current + exact 12 vector | `current15` | Preserve positions; pad 12–14 false | PASS |
-| schema v3/current + other short vector | `current15` | Preserve positions; pad false | PASS |
+| schema v3/v4/current + exact 12 vector | `current15` | Preserve positions; pad 12–14 false | PASS |
+| schema v3/v4/current + other short vector | `current15` | Preserve positions; pad false | PASS |
 | mixed 15/12 vectors | `ambiguous` | One fail-safe positional interpretation | PASS |
 | no usable topology evidence | `ambiguous` | Clamp `currentStep`; normalize vectors to 15 | PASS |
 
 Ambiguous data is not shifted. `validateOnboardingResume()` and
 `durableOnboardingResumeStep()` remain the final monotonic resume authority.
-Serialization writes current schema v3 and 15 positions, making the next read
-unequivocally current.
+Serialization writes current schema v4, `stepCompletionContractVersions` (length 15),
+and 15 positions, making the next read unequivocally current.
 
 ## D. Legacy12 → Current15 mapping
 
@@ -60,7 +60,7 @@ unequivocally current.
 | 1 Patience | 1 `patience` | Direct |
 | 2 Role / Lifestyle | 2 `roleLifestyle` | Direct |
 | 3 Body Basics | 3 `bodyBasics` | Direct |
-| 4 combined Base Timeline | 4 `classesJob` | Maps directly and, when completed, fans out completion to 5 `eating`, 6 `fixedSchedule`, and 7 `skinCare` |
+| 4 combined Base Timeline | 4 `classesJob` | Maps directly. Completed flags for 5 `eating`, 6 `fixedSchedule`, and 7 `skinCare` are derived independently from persisted evidence (nutrition target/eating plan, fixed schedule blocks, skin care routine/products), avoiding blind completion fan-out |
 | 5 Bad Habits | 8 `badHabits` | Explicit semantic map |
 | 6 Good Habits | 9 `goodHabits` | Explicit semantic map |
 | 7 Identity Goals | 10 `identityGoals` | Explicit semantic map |
@@ -89,7 +89,9 @@ No `+3` arithmetic migration is used.
 | string `currentStep` | PASS |
 | legacy round-trip | PASS |
 | ambiguous schema2 round-trip | PASS |
-| modern round-trip | PASS |
+| modern round-trip (schema4) | PASS |
+| schema4 completion without receipt | PASS |
+| schema4 invalid receipt version | PASS |
 | completed legacy user | PASS |
 
 ## F. Semantic step registry
@@ -166,7 +168,7 @@ being handled.
 
 | Compat ID | Current symbol/path | Category | Actual read/write path | New writes use it? | Current reason and removal condition | Test owner |
 |---|---|---|---|---|---|---|
-| G4-C01 | `OnboardingDraft._detectPersistedStepLayout`, `_migrateLegacyStepBoolList` | REQUIRED_READER | `OnboardingDraft.fromMap` | No | Reads clear historical 12-page progression. Remove only after supported-data retention proves no legacy draft remains. | Gate 4 migration suite |
+| G4-C01 | `OnboardingDraft._detectPersistedStepLayout`, `_migrateLegacyStepCompleted`, `_migrateLegacyStepDirty`, `_readStepCompletionContractVersions`, `_readStepLoading` | REQUIRED_READER | `OnboardingDraft.fromMap` | No | Reads clear historical 12-page progression, independently deriving completion from persisted evidence without blind fan-out. Remove only after supported-data retention proves no legacy draft remains. | Gate 4 migration suite |
 | G4-C02 | `BaseTimelineDraft.acceptedConflictKeys` | REQUIRED_READER | `BaseTimelineDraft.fromMap`; excluded from `toMap` | No | Reads schema-v2 schedule-unbound acceptances. Remove after supported drafts use typed `conflictAcceptances` and migration telemetry is zero. | AH-F015 durable overlap suite |
 | G4-C03 | `isLegacyGeneratedEatingPlan` | REQUIRED_READER | Eating draft validation/read | No | Detects obsolete generated-plan shapes and forces safe regeneration. Remove after all supported drafts carry the current generated-plan version/fingerprint. | Gate 2 weekly-plan suite |
 | G4-C04 | goal/exercise alias normalizers | REQUIRED_READER | `BaseTimelineDraft.fromMap`, `LifeRoleDraft.fromMap` | No | Canonicalizes repository-evidenced aliases. Remove only after the supported retention window contains canonical values exclusively. | Gate 4 migration suite |
@@ -288,7 +290,7 @@ flutter test
 
 `flutter test`
 
-**PASS — 2,015 passed, 10 skipped, 0 failed (1 minute 2 seconds).**
+**PASS — 2,042 passed, 10 skipped, 0 failed (1 minute 4 seconds).**
 
 The ten skips remain the explicitly disabled AH-F021 legacy onboarding conflict-decision UI group.
 There are **0 test failures** across the entire repository.
@@ -338,7 +340,7 @@ behavior was preserved.
 | Gate 2 regressions | PASS |
 | Gate 3 regressions | PASS |
 | Gate-4 focused tests | PASS |
-| Full Flutter suite | PASS — 2,015 passed, 10 skipped, 0 failed |
+| Full Flutter suite | PASS — 2,042 passed, 10 skipped, 0 failed |
 | Flutter analyze | PASS |
 | Gate-4 changed-file formatting | PASS |
 
@@ -382,6 +384,6 @@ active production caller of its deprecated aliases; its in-repo compatibility
 exercise is `onboarding_completion_group_a_stress_test.dart`, while the aliases
 remain source-compatible for supported downstream callers. G4-C14 remains
 owner-scoped and unchanged. G4-C15 and G4-C16 are permanently removed and
-statically protected. The current 25-file repository formatting baseline and
-the three concurrent Gate 5 full-suite failures are recorded above; neither was
-expanded into Gate 4 cleanup.
+statically protected. The repository formatting baseline is maintained; all test
+suites pass with 0 failures (2,042 passed, 10 skipped, 0 failed across the entire
+repository).
