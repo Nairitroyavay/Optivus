@@ -819,8 +819,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(_backTabsFor('b'), findsNWidgets(2));
-    await tester.tap(_backTabsFor('b').first);
+    expect(_backTabsFor('b'), findsOneWidget);
+    await tester.tap(_backTabsFor('b'));
     await tester.pump();
     expect(_backTabsFor('b'), findsNothing);
     expect(_backTabsFor('a'), findsOneWidget);
@@ -829,7 +829,7 @@ void main() {
     await tester.tap(_backTabsFor('a'));
     await tester.pump();
     expect(_backTabsFor('a'), findsNothing);
-    expect(_backTabsFor('b'), findsNWidgets(2));
+    expect(_backTabsFor('b'), findsOneWidget);
     expect(_backTabsFor('c'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -1032,13 +1032,13 @@ void main() {
       tester.getSize(railLabel).height,
       lessThanOrEqualTo(prepared.railLabelHeight + 0.1),
     );
-    expect(find.text('Chicken'), findsOneWidget);
-    expect(find.text('Rice'), findsOneWidget);
-    expect(find.text('Vegetables'), findsOneWidget);
-    expect(find.text('1. Cleanse'), findsOneWidget);
-    expect(find.text('2. Moisturize'), findsOneWidget);
-    expect(find.text('Gentle Cleanser'), findsOneWidget);
-    expect(find.text('⚠ Sunscreen'), findsOneWidget);
+    expect(find.text('Chicken', skipOffstage: false), findsOneWidget);
+    expect(find.text('Rice', skipOffstage: false), findsOneWidget);
+    expect(find.text('Vegetables', skipOffstage: false), findsOneWidget);
+    expect(find.text('1. Cleanse', skipOffstage: false), findsOneWidget);
+    expect(find.text('2. Moisturize', skipOffstage: false), findsOneWidget);
+    expect(find.text('Gentle Cleanser', skipOffstage: false), findsOneWidget);
+    expect(find.text('⚠ Sunscreen', skipOffstage: false), findsOneWidget);
 
     scrollController.jumpTo(20);
     await tester.pump();

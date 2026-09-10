@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
@@ -842,13 +843,12 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
                 labelWidth: prepared.railLabelWidth,
                 labelHeight: prepared.railLabelHeight,
                 lineStart: prepared.leftOffset - 6,
+                leftOffset: prepared.leftOffset,
+                items: prepared.items,
               ),
               for (final item in _cardPaintOrder(prepared))
                 _buildLogicalCard(prepared, item),
-              for (final region in prepared.regions.where(
-                (region) => region.entryIds.length > 1,
-              ))
-                ..._buildBackTabs(prepared, region),
+              ..._buildExposedBackTabs(prepared),
             ],
           ),
         ),
@@ -913,7 +913,10 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
       child: ExcludeSemantics(
         key: ValueKey('step14-timeline-card-semantics-${item.entry.id}'),
         excluding: !isFrontSomewhere,
-        child: Step14FinalTimelineCard(item: item),
+        child: Offstage(
+          offstage: !isFrontSomewhere,
+          child: Step14FinalTimelineCard(item: item),
+        ),
       ),
     );
   }
@@ -934,77 +937,124 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
         : _defaultFront(candidates);
   }
 
-  List<Widget> _buildBackTabs(
-    Step14PreparedTimelineLayout prepared,
-    Step14OverlapRegion region,
-  ) {
-    final regionKey = region.keyForDay(prepared.selectedDay);
-    final componentId = prepared.componentIdByEntryId[region.entryIds.first]!;
-    final front = _frontForRegion(prepared, region);
-    final candidates = region.entryIds
-        .map((id) => prepared.itemById[id]!)
-        .toList();
-    final backs = candidates.where((item) => item.entry.id != front.entry.id);
-    final top = prepared.layout.scale.yForMinute(region.startMinute);
-    final tabHeight = prepared.tabHeightByRegionKey[regionKey]!;
-    return [
-      for (final indexed in backs.indexed)
-        Positioned(
-          key: ValueKey(
-            'step14-timeline-back-tab-${indexed.$2.entry.id}-$regionKey',
-          ),
-          top: top + indexed.$1 * tabHeight,
-          left: prepared.leftOffset,
-          width: prepared.gutterWidth,
-          height: tabHeight,
-          child: Semantics(
-            excludeSemantics: true,
-            button: true,
-            label:
-                'Show ${indexed.$2.sourceBlock.title} in front, ${_logicalTimeRange(indexed.$2.sourceBlock)}',
-            child: Material(
-              color: indexed.$2.identity.accent.withValues(alpha: 0.2),
-              borderRadius: const BorderRadius.horizontal(
-                left: Radius.circular(12),
-              ),
-              child: InkWell(
-                onTap: () => setState(
-                  () => _focusedEntryByComponent[componentId] =
-                      indexed.$2.entry.id,
-                ),
+  List<Widget> _buildExposedBackTabs(Step14PreparedTimelineLayout prepared) {
+    final widgets = <Widget>[];
+    for (final component in prepared.components) {
+      final componentId = component.id;
+      final componentRegions = prepared.regions
+          .where(
+            (r) =>
+                r.entryIds.any((id) => component.entryIds.contains(id)) &&
+                r.entryIds.length > 1,
+          )
+          .toList();
+
+      final backItems = <Step14FinalTimelineItem>[];
+      final firstRegionByItemId = <String, Step14OverlapRegion>{};
+
+      for (final id in component.entryIds) {
+        final item = prepared.itemById[id];
+        if (item == null) continue;
+        for (final region in componentRegions) {
+          if (!region.entryIds.contains(id)) continue;
+          final front = _frontForRegion(prepared, region);
+          if (front.entry.id != id) {
+            firstRegionByItemId.putIfAbsent(id, () => region);
+            if (!backItems.contains(item)) {
+              backItems.add(item);
+            }
+            break;
+          }
+        }
+      }
+
+      backItems.sort((a, b) {
+        final regA = firstRegionByItemId[a.entry.id]!;
+        final regB = firstRegionByItemId[b.entry.id]!;
+        final startComp = regA.startMinute.compareTo(regB.startMinute);
+        if (startComp != 0) return startComp;
+        final entryComp = a.entry.startMinute.compareTo(b.entry.startMinute);
+        if (entryComp != 0) return entryComp;
+        return a.canonicalOrdinal.compareTo(b.canonicalOrdinal);
+      });
+
+      var lastStartY = -1.0;
+      var stackIndex = 0;
+
+      for (final item in backItems) {
+        final firstRegion = firstRegionByItemId[item.entry.id]!;
+        final regionKey = firstRegion.keyForDay(prepared.selectedDay);
+        final tabHeight = prepared.tabHeightByRegionKey[regionKey] ?? 44.0;
+        final startY = prepared.layout.scale.yForMinute(firstRegion.startMinute);
+
+        if (lastStartY >= 0 && (startY - lastStartY).abs() < 4.0) {
+          stackIndex++;
+        } else {
+          stackIndex = 0;
+          lastStartY = startY;
+        }
+
+        final top = startY + stackIndex * tabHeight;
+
+        widgets.add(
+          Positioned(
+            key: ValueKey(
+              'step14-timeline-back-tab-${item.entry.id}-$regionKey',
+            ),
+            top: top,
+            left: prepared.leftOffset,
+            width: prepared.gutterWidth,
+            height: tabHeight,
+            child: Semantics(
+              excludeSemantics: true,
+              button: true,
+              label:
+                  'Show ${item.sourceBlock.title} in front, ${_logicalTimeRange(item.sourceBlock)}',
+              child: Material(
+                color: item.identity.accent.withValues(alpha: 0.2),
                 borderRadius: const BorderRadius.horizontal(
                   left: Radius.circular(12),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 7),
-                  child: Row(
-                    children: [
-                      Icon(
-                        indexed.$2.identity.icon,
-                        size: 14,
-                        color: indexed.$2.identity.accent,
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          indexed.$2.sourceBlock.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w800,
-                            height: 1.15,
+                child: InkWell(
+                  onTap: () => setState(
+                    () => _focusedEntryByComponent[componentId] = item.entry.id,
+                  ),
+                  borderRadius: const BorderRadius.horizontal(
+                    left: Radius.circular(12),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 7),
+                    child: Row(
+                      children: [
+                        Icon(
+                          item.identity.icon,
+                          size: 14,
+                          color: item.identity.accent,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            item.sourceBlock.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              height: 1.15,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-    ];
+        );
+      }
+    }
+    return widgets;
   }
 }
 
@@ -1060,11 +1110,13 @@ class Step14FinalTimelineCard extends StatelessWidget {
     Step14FinalTimelineItem item,
   ) {
     final scaler = MediaQuery.textScalerOf(context);
+    final textDirection = Directionality.of(context);
     final contentWidth = math.max(40.0, width - 24);
+
     double measure(String text, TextStyle style) {
       final painter = TextPainter(
         text: TextSpan(text: text, style: style),
-        textDirection: Directionality.of(context),
+        textDirection: textDirection,
         textScaler: scaler,
       )..layout(maxWidth: contentWidth);
       return painter.height;
@@ -1074,33 +1126,197 @@ class Step14FinalTimelineCard extends StatelessWidget {
     double measureTitle(String text, TextStyle style) {
       final painter = TextPainter(
         text: TextSpan(text: text, style: style),
-        textDirection: Directionality.of(context),
+        textDirection: textDirection,
         textScaler: scaler,
       )..layout(maxWidth: titleWidth);
       return math.max(18.0, painter.height);
     }
 
-    var height = 20.0;
+    double measureWrap(
+      List<String> items,
+      TextStyle textStyle,
+      EdgeInsets chipPadding,
+      double spacing,
+      double runSpacing,
+    ) {
+      if (items.isEmpty) return 0;
+      var currentLineWidth = 0.0;
+      var lineCount = 1;
+      var maxChipHeight = 0.0;
+      for (final text in items) {
+        final painter = TextPainter(
+          text: TextSpan(text: text, style: textStyle),
+          textDirection: textDirection,
+          textScaler: scaler,
+          maxLines: 1,
+        )..layout();
+        final chipWidth = painter.width + chipPadding.horizontal + 2.0;
+        maxChipHeight = math.max(
+          maxChipHeight,
+          painter.height + chipPadding.vertical + 2.0,
+        );
+        if (currentLineWidth > 0 &&
+            currentLineWidth + spacing + chipWidth > contentWidth) {
+          lineCount++;
+          currentLineWidth = chipWidth;
+        } else {
+          currentLineWidth +=
+              (currentLineWidth > 0 ? spacing : 0) + chipWidth;
+        }
+      }
+      return lineCount * maxChipHeight + (lineCount - 1) * runSpacing;
+    }
+
+    const detailStyle = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+      color: OptivusColors.textPrimary,
+      height: 1.25,
+    );
+    const headingStyle = TextStyle(
+      fontSize: 9.5,
+      fontWeight: FontWeight.w900,
+      color: OptivusColors.textSecondary,
+      letterSpacing: 0.7,
+      height: 1.2,
+    );
+    const chipTextStyle = TextStyle(
+      fontSize: 10.5,
+      fontWeight: FontWeight.w700,
+      color: OptivusColors.textPrimary,
+    );
+
+    var height = 0.0;
+
+    // Title
     height += measureTitle(
       item.sourceBlock.title,
       const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, height: 1.2),
     );
-    height +=
-        5 +
-        measure(
-          _logicalTimeRange(item.sourceBlock),
-          const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-            height: 1.2,
-          ),
-        );
-    final lines = _detailLines(item);
-    for (final line in lines) {
-      height += line.gapBefore;
-      height += measure(line.text, line.style);
+
+    // Time range
+    height += 5.0;
+    height += measure(
+      _logicalTimeRange(item.sourceBlock),
+      const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, height: 1.2),
+    );
+
+    final block = item.sourceBlock;
+
+    // Location
+    final location = block.location?.trim();
+    if (location != null && location.isNotEmpty) {
+      height += 8.0;
+      height += measure(location, detailStyle);
     }
-    return math.max(76.0, height + 12);
+
+    // Eating section
+    if (block.section == 'eating') {
+      final slot = block.mealSlot?.trim();
+      final category = _userFacingMealLabel(block.mealCategory);
+      final titleKey = _normalizedMealLabel(block.title);
+      final slotKey = _normalizedMealLabel(slot);
+
+      if (slot != null && slot.isNotEmpty && slotKey != titleKey) {
+        height += 6.0;
+        height += measure(slot, detailStyle);
+      }
+
+      final categoryKey = _normalizedMealLabel(category);
+      if (category != null && categoryKey != titleKey && categoryKey != slotKey) {
+        height += 6.0;
+        height += measure(category, detailStyle);
+      }
+
+      final nutrition = <String>[];
+      if (block.calories != null) {
+        nutrition.add('${_compactNumber(block.calories!)} kcal');
+      }
+      if (block.protein != null) {
+        nutrition.add('${_compactNumber(block.protein!)}g protein');
+      }
+      if (nutrition.isNotEmpty) {
+        height += 8.0;
+        final nutritionText = nutrition.join(' • ');
+        height += measure(
+          nutritionText,
+          const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+        ) + 8.0;
+      }
+
+      final dishes = block.dishes
+          .map((v) => v.trim())
+          .where((v) => v.isNotEmpty)
+          .toList();
+      if (dishes.isNotEmpty) {
+        height += 6.0;
+        height += measureWrap(
+          dishes,
+          chipTextStyle,
+          const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          6.0,
+          6.0,
+        );
+      }
+    }
+
+    // Skin care section
+    if (block.section == 'skin_care') {
+      final slot = block.skincareSlotLabel?.trim();
+      if (slot != null &&
+          slot.isNotEmpty &&
+          slot.toLowerCase() != block.title.trim().toLowerCase()) {
+        height += 6.0;
+        height += measure(slot, detailStyle);
+      }
+
+      if (block.skincareSteps.isNotEmpty) {
+        height += 9.0;
+        height += measure('STEPS', headingStyle);
+        for (var index = 0; index < block.skincareSteps.length; index++) {
+          final value = block.skincareSteps[index].trim();
+          if (value.isNotEmpty) {
+            height += 3.0;
+            height += measure('${index + 1}. $value', detailStyle);
+          }
+        }
+      }
+
+      if (block.skincareProducts.isNotEmpty) {
+        height += 9.0;
+        height += measure('PRODUCTS', headingStyle);
+        for (final product in block.skincareProducts) {
+          if (product.trim().isNotEmpty) {
+            height += 3.0;
+            height += measure(product.trim(), detailStyle);
+          }
+        }
+      }
+
+      if (block.skincareMissingItems.isNotEmpty) {
+        height += 9.0;
+        height += measure('MISSING', headingStyle);
+        for (final missing in block.skincareMissingItems) {
+          if (missing.trim().isNotEmpty) {
+            height += 3.0;
+            height += measure('⚠ ${missing.trim()}', detailStyle);
+          }
+        }
+      }
+    }
+
+    // Continuation
+    final continuation = switch (item.continuation) {
+      Step14Continuation.none => null,
+      Step14Continuation.continuesTomorrow => 'Continues tomorrow',
+      Step14Continuation.continuedFromYesterday => 'Continued from yesterday',
+    };
+    if (continuation != null) {
+      height += 8.0;
+      height += measure(continuation, detailStyle);
+    }
+
+    return math.max(76.0, height + 24.0 + 2.8 + 12.0);
   }
 
   @override
@@ -1112,75 +1328,250 @@ class Step14FinalTimelineCard extends StatelessWidget {
       _logicalTimeRange(block),
       ...lines.map((line) => line.text),
     ].join(', ');
+
+    const detailStyle = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+      color: OptivusColors.textPrimary,
+      height: 1.25,
+    );
+    const headingStyle = TextStyle(
+      fontSize: 9.5,
+      fontWeight: FontWeight.w900,
+      color: OptivusColors.textSecondary,
+      letterSpacing: 0.7,
+      height: 1.2,
+    );
+
+    final location = block.location?.trim();
+
+    final nutrition = <String>[];
+    if (block.section == 'eating') {
+      if (block.calories != null) {
+        nutrition.add('${_compactNumber(block.calories!)} kcal');
+      }
+      if (block.protein != null) {
+        nutrition.add('${_compactNumber(block.protein!)}g protein');
+      }
+    }
+
+    final cleanDishes = block.section == 'eating'
+        ? block.dishes
+            .map((v) => v.trim())
+            .where((v) => v.isNotEmpty)
+            .toList()
+        : const <String>[];
+
+    final slot = block.section == 'eating'
+        ? block.mealSlot?.trim()
+        : block.section == 'skin_care'
+        ? block.skincareSlotLabel?.trim()
+        : null;
+
+    final category = block.section == 'eating'
+        ? _userFacingMealLabel(block.mealCategory)
+        : null;
+
+    final titleKey = _normalizedMealLabel(block.title);
+    final slotKey = _normalizedMealLabel(slot);
+    final showSlot = slot != null &&
+        slot.isNotEmpty &&
+        slotKey != titleKey &&
+        (block.section != 'skin_care' ||
+            slot.toLowerCase() != block.title.trim().toLowerCase());
+
+    final categoryKey = _normalizedMealLabel(category);
+    final showCategory = category != null &&
+        categoryKey != titleKey &&
+        categoryKey != slotKey;
+
+    final continuation = switch (item.continuation) {
+      Step14Continuation.none => null,
+      Step14Continuation.continuesTomorrow => 'Continues tomorrow',
+      Step14Continuation.continuedFromYesterday => 'Continued from yesterday',
+    };
+
     return Semantics(
       container: true,
       label: semantic,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.9),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              item.identity.accent.withValues(alpha: 0.24),
-              item.identity.accent.withValues(alpha: 0.06),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: item.identity.accent.withValues(alpha: 0.42),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: item.identity.accent.withValues(alpha: 0.12),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.94),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: item.identity.accent.withValues(alpha: 0.45),
+                width: 1.4,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: item.identity.accent.withValues(alpha: 0.12),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    item.identity.icon,
-                    size: 18,
-                    color: item.identity.accent,
-                  ),
-                  const SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      block.title,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                        color: OptivusColors.textPrimary,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          item.identity.icon,
+                          size: 18,
+                          color: item.identity.accent,
+                        ),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Text(
+                            block.title,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w900,
+                              color: OptivusColors.textPrimary,
+                              height: 1.2,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      _logicalTimeRange(block),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: item.identity.accent,
                         height: 1.2,
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 5),
-              Text(
-                _logicalTimeRange(block),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: item.identity.accent,
-                  height: 1.2,
+                    if (location != null && location.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(location, style: detailStyle),
+                    ],
+                    if (showSlot) ...[
+                      const SizedBox(height: 6),
+                      Text(slot, style: detailStyle),
+                    ],
+                    if (showCategory) ...[
+                      const SizedBox(height: 6),
+                      Text(category, style: detailStyle),
+                    ],
+                    if (nutrition.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: item.identity.accent.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          nutrition.join(' • '),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: item.identity.accent,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (cleanDishes.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final dish in cleanDishes)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(
+                                  alpha: 0.8,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: item.identity.accent.withValues(
+                                    alpha: 0.25,
+                                  ),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Text(
+                                dish,
+                                style: const TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: OptivusColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                    if (block.section == 'skin_care') ...[
+                      if (block.skincareSteps.isNotEmpty) ...[
+                        const SizedBox(height: 9),
+                        const Text('STEPS', style: headingStyle),
+                        for (var index = 0;
+                            index < block.skincareSteps.length;
+                            index++) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            '${index + 1}. ${block.skincareSteps[index].trim()}',
+                            style: detailStyle,
+                          ),
+                        ],
+                      ],
+                      if (block.skincareProducts.isNotEmpty) ...[
+                        const SizedBox(height: 9),
+                        const Text('PRODUCTS', style: headingStyle),
+                        for (final product in block.skincareProducts)
+                          if (product.trim().isNotEmpty) ...[
+                            const SizedBox(height: 3),
+                            Text(product.trim(), style: detailStyle),
+                          ],
+                      ],
+                      if (block.skincareMissingItems.isNotEmpty) ...[
+                        const SizedBox(height: 9),
+                        const Text('MISSING', style: headingStyle),
+                        for (final missing in block.skincareMissingItems)
+                          if (missing.trim().isNotEmpty) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              '⚠ ${missing.trim()}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: OptivusColors.warning,
+                                height: 1.25,
+                              ),
+                            ),
+                          ],
+                      ],
+                    ],
+                    if (continuation != null) ...[
+                      const SizedBox(height: 8),
+                      Text(continuation, style: detailStyle),
+                    ],
+                  ],
                 ),
               ),
-              for (final line in lines) ...[
-                SizedBox(height: line.gapBefore),
-                Text(line.text, style: line.style),
-              ],
-            ],
+            ),
           ),
         ),
       ),
@@ -1294,6 +1685,8 @@ class Step14RichTimeRail extends StatelessWidget {
   final double labelWidth;
   final double labelHeight;
   final double lineStart;
+  final double? leftOffset;
+  final List<Step14FinalTimelineItem> items;
 
   const Step14RichTimeRail({
     super.key,
@@ -1301,17 +1694,100 @@ class Step14RichTimeRail extends StatelessWidget {
     this.labelWidth = 58,
     this.labelHeight = 18,
     this.lineStart = 66,
+    this.leftOffset,
+    this.items = const [],
   });
 
   @override
   Widget build(BuildContext context) {
     final first = (scale.startMinute ~/ 10) * 10;
     final last = ((scale.endMinute + 9) ~/ 10) * 10;
+    final actualLeftOffset = leftOffset ?? (lineStart + 12.0);
+
+    final boundaryAccents = <int, Color>{};
+    for (final item in items) {
+      if (item.entry.startMinute >= scale.startMinute &&
+          item.entry.startMinute <= scale.endMinute) {
+        boundaryAccents.putIfAbsent(
+          item.entry.startMinute,
+          () => item.identity.accent,
+        );
+      }
+      if (item.entry.endMinute >= scale.startMinute &&
+          item.entry.endMinute <= scale.endMinute) {
+        boundaryAccents.putIfAbsent(
+          item.entry.endMinute,
+          () => item.identity.accent,
+        );
+      }
+    }
+
+    final spineStart = scale.yForMinute(scale.startMinute);
+    final spineEnd = scale.yForMinute(scale.endMinute);
+
     return Stack(
+      clipBehavior: Clip.none,
       children: [
+        Positioned(
+          key: const ValueKey('step14-rail-spine'),
+          top: spineStart,
+          left: lineStart + 1.0,
+          width: 2.0,
+          height: math.max(0.0, spineEnd - spineStart),
+          child: Container(
+            color: OptivusColors.aquaAccent.withValues(alpha: 0.25),
+          ),
+        ),
+        for (final entry in boundaryAccents.entries)
+          _connectorMark(
+            entry.key,
+            entry.value,
+            actualLeftOffset,
+          ),
         for (var minute = first; minute <= last; minute += 10)
           if (minute >= scale.startMinute && minute <= scale.endMinute)
             _railMark(minute),
+      ],
+    );
+  }
+
+  Widget _connectorMark(int minute, Color accent, double actualLeftOffset) {
+    final isMajor = minute % 60 == 0 || minute % 60 == 30;
+    final connectorWidth = math.max(0.0, actualLeftOffset - (lineStart + 1.0));
+    final y = scale.yForMinute(minute);
+
+    return Stack(
+      key: ValueKey('step14-rail-connector-$minute'),
+      children: [
+        Positioned(
+          top: y - 0.5,
+          left: lineStart + 1.0,
+          width: connectorWidth,
+          height: 1.0,
+          child: Container(
+            color: accent.withValues(alpha: 0.35),
+          ),
+        ),
+        if (!isMajor && minute % 10 != 0)
+          Positioned(
+            top: y - labelHeight / 2,
+            left: 0,
+            width: labelWidth,
+            height: labelHeight,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                _clock(minute),
+                textAlign: TextAlign.right,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w800,
+                  color: accent,
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -1324,6 +1800,28 @@ class Step14RichTimeRail extends StatelessWidget {
         : half
         ? 'step14-rail-half-$minute'
         : 'step14-rail-minor-$minute';
+
+    final tickStart = hour
+        ? lineStart - 4.0
+        : half
+        ? lineStart - 2.0
+        : lineStart;
+    final tickLength = hour
+        ? 12.0
+        : half
+        ? 7.0
+        : 3.0;
+    final tickHeight = hour
+        ? 1.5
+        : half
+        ? 1.0
+        : 0.8;
+    final tickAlpha = hour
+        ? 0.5
+        : half
+        ? 0.3
+        : 0.18;
+
     return Positioned(
       key: ValueKey(key),
       top: scale.yForMinute(minute) - (hour || half ? labelHeight / 2 : 0.5),
@@ -1347,15 +1845,11 @@ class Step14RichTimeRail extends StatelessWidget {
                   )
                 : const SizedBox.shrink(),
           ),
-          SizedBox(width: math.max(0, lineStart - labelWidth)),
-          Expanded(
-            child: Divider(
-              height: 1,
-              thickness: hour ? 1.2 : (half ? 0.9 : 0.6),
-              color: OptivusColors.aquaAccent.withValues(
-                alpha: hour ? 0.26 : (half ? 0.17 : 0.09),
-              ),
-            ),
+          SizedBox(width: math.max(0.0, tickStart - labelWidth)),
+          Container(
+            width: tickLength,
+            height: tickHeight,
+            color: OptivusColors.aquaAccent.withValues(alpha: tickAlpha),
           ),
         ],
       ),

@@ -1107,7 +1107,12 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         !_isNavigating &&
         !_isSaving &&
         !onboardingState.stepLoading[_currentPage];
-    final showPrimaryCta = step7Action != null || defaultShowPrimaryCta;
+    final suppressCtaForStep14FullPreview =
+        _currentPage == OnboardingDraft.lastStepIndex &&
+        _step14FullTimelinePreviewOpen;
+    final showPrimaryCta =
+        !suppressCtaForStep14FullPreview &&
+        (step7Action != null || defaultShowPrimaryCta);
     if (step7Action != null) {
       ctaLabel = step7Action.label;
       ctaKind = OnboardingActionKind.generate;
