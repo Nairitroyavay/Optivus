@@ -6,6 +6,7 @@ import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/features/onboarding/presentation/step14_presentation_models.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_14_today_ready.dart';
+import 'package:optivus/features/onboarding/timeline/widgets/step14_final_timeline.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/recovery/screens/onboarding_startup_status_screens.dart';
@@ -1348,6 +1349,114 @@ void main() {
           findsNothing,
         );
         expect(find.byKey(const ValueKey('step14-readiness')), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'full timeline keeps focus and prepared geometry across unrelated parent rebuild',
+      (tester) async {
+        final draft = buildReadyDraft(
+          blocks: const [
+            TimelineBlockDraft(
+              id: 'overlap-a',
+              section: 'classes',
+              title: 'Overlap A',
+              startMinute: 540,
+              endMinute: 600,
+              repeatDays: [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+            TimelineBlockDraft(
+              id: 'overlap-b',
+              section: 'classes',
+              title: 'Overlap B',
+              startMinute: 540,
+              endMinute: 600,
+              repeatDays: [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+            TimelineBlockDraft(
+              id: 'breakfast',
+              section: 'eating',
+              title: 'Breakfast',
+              startMinute: 450,
+              endMinute: 480,
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+          ],
+        );
+        final step14Key = GlobalKey<OnboardingTodayReadyStepState>();
+        late StateSetter rebuildHost;
+        var unrelatedValue = 0;
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              onboardingStateProvider.overrideWith(
+                (_) => OnboardingNotifier()..loadSeedData(draft),
+              ),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: StatefulBuilder(
+                  builder: (context, setHostState) {
+                    rebuildHost = setHostState;
+                    return Column(
+                      children: [
+                        Text('unrelated-$unrelatedValue'),
+                        Expanded(
+                          child: OnboardingTodayReadyStep(
+                            key: step14Key,
+                            onJumpToStep: (_) => unrelatedValue,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('step14-view-timeline')),
+        );
+        await tester.tap(find.byKey(const ValueKey('step14-view-timeline')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.tap(find.byKey(const ValueKey('timeline-day-chip-1')));
+        await tester.pump();
+
+        Finder backTab(String id) => find.byWidgetPredicate(
+          (widget) =>
+              widget.key is ValueKey<String> &&
+              (widget.key! as ValueKey<String>).value.startsWith(
+                'step14-timeline-back-tab-$id-',
+              ),
+        );
+        final timeline = find.byKey(
+          const ValueKey('onboarding-step14-shared-preview'),
+        );
+        final timelineState = tester.state<Step14FinalTimelineState>(timeline);
+        final preparedBefore = timelineState.preparedLayoutForTesting;
+        expect(backTab('overlap-b'), findsOneWidget);
+        await tester.tap(backTab('overlap-b'));
+        await tester.pump();
+        expect(backTab('overlap-b'), findsNothing);
+
+        rebuildHost(() => unrelatedValue++);
+        await tester.pump();
+
+        final rebuiltState = tester.state<Step14FinalTimelineState>(timeline);
+        expect(identical(rebuiltState, timelineState), isTrue);
+        expect(
+          identical(rebuiltState.preparedLayoutForTesting, preparedBefore),
+          isTrue,
+        );
+        expect(backTab('overlap-b'), findsNothing);
+        expect(backTab('overlap-a'), findsOneWidget);
       },
     );
 

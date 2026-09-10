@@ -188,3 +188,16 @@ class ClassRoutineBlock {
     );
   }
 }
+
+/// Keeps the visible Step 4 color contract aligned with section list order.
+List<ClassRoutineBlock> normalizeScheduleBlockColors(
+  List<ClassRoutineBlock> blocks,
+  ScheduleSetupConfig config,
+) {
+  return List<ClassRoutineBlock>.unmodifiable([
+    for (final entry in blocks.indexed)
+      entry.$2.copyWith(
+        color: config.colorCycle[entry.$1 % config.colorCycle.length],
+      ),
+  ]);
+}

@@ -8,6 +8,7 @@ import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_mod
 import 'package:optivus/features/onboarding/steps/onboarding_step4_unified.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_5_eating_setup.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_14_today_ready.dart';
+import 'package:optivus/features/onboarding/timeline/widgets/step14_final_timeline.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
@@ -1643,6 +1644,112 @@ void main() {
     );
   });
 
+  testWidgets('deleting first Class reindexes visible colors through Step 14', (
+    tester,
+  ) async {
+    await _expectDeleteColorParity(
+      tester,
+      config: ScheduleSetupConfig.classSetup,
+      role: LifeRoleDraft.studentKey,
+      ids: const ['class-a', 'class-b', 'class-c'],
+      deletedId: 'class-a',
+    );
+  });
+
+  testWidgets('deleting first Work reindexes visible colors through Step 14', (
+    tester,
+  ) async {
+    await _expectDeleteColorParity(
+      tester,
+      config: ScheduleSetupConfig.workSetup,
+      role: LifeRoleDraft.workingKey,
+      ids: const ['work-a', 'work-b', 'work-c'],
+      deletedId: 'work-a',
+    );
+  });
+
+  testWidgets('deleting middle Class preserves IDs and compact color order', (
+    tester,
+  ) async {
+    await _expectDeleteColorParity(
+      tester,
+      config: ScheduleSetupConfig.classSetup,
+      role: LifeRoleDraft.studentKey,
+      ids: const ['class-a', 'class-b', 'class-c', 'class-d'],
+      deletedId: 'class-b',
+    );
+  });
+
+  testWidgets('non-structural Class edit keeps color and Step 14 identity', (
+    tester,
+  ) async {
+    final config = ScheduleSetupConfig.classSetup;
+    final original = _scheduleBlock(
+      id: 'class-edit',
+      title: 'Original Class',
+      startMinute: 9 * 60,
+      endMinute: 10 * 60,
+      room: 'Room A',
+      repeatDays: const [1],
+      config: config,
+      color: config.colorCycle[1],
+    );
+    final edited = original.copyWith(
+      subject: 'Edited Class',
+      room: 'Room B',
+      startMinute: 11 * 60 + 15,
+      endMinute: 12 * 60 + 45,
+      repeatDays: const [2, 4],
+    );
+    expect(edited.id, original.id);
+    expect(edited.color, original.color);
+
+    final normalized = normalizeScheduleBlockColors([
+      _scheduleBlock(
+        id: 'class-leading',
+        title: 'Leading Class',
+        startMinute: 8 * 60,
+        endMinute: 9 * 60,
+        config: config,
+        color: config.colorCycle[0],
+      ),
+      edited,
+    ], config);
+    expect(normalized[1].id, 'class-edit');
+    expect(normalized[1].color, config.colorCycle[1]);
+
+    final source = [
+      for (final block in normalized)
+        TimelineBlockDraft(
+          id: block.id,
+          section: config.timelineSection,
+          title: block.subject,
+          startMinute: block.startMinute,
+          endMinute: block.endMinute,
+          repeatDays: block.repeatDays,
+          location: block.room,
+          blockType: TimelineBlockDraft.hardBlockKey,
+        ),
+    ];
+    final bundle = OnboardingCompletionService.buildBundle(
+      OnboardingDraft(
+        uid: 'step4-edit-parity',
+        lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
+        baseTimeline: BaseTimelineDraft(blocks: source),
+      ),
+    );
+    final step14 = buildStep14FinalTimelineItems(
+      bundle,
+      sourceVisualOrder: Step14SourceVisualOrder.fromBlocks(source),
+    ).singleWhere((item) => item.entry.sourceId == 'class-edit');
+    expect(step14.sourceBlock.title, 'Edited Class');
+    expect(step14.sourceBlock.location, 'Room B');
+    expect(step14.sourceBlock.startMinute, 11 * 60 + 15);
+    expect(step14.sourceBlock.endMinute, 12 * 60 + 45);
+    expect(step14.sourceBlock.repeatDays, const [2, 4]);
+    expect(step14.identity.accent, normalized[1].color);
+  });
+
   testWidgets('Eating setup starts with two simple choices', (tester) async {
     final draft = OnboardingDraft(
       currentStep: onboardingEatingStepIndex,
@@ -2698,6 +2805,133 @@ void main() {
   );
 }
 
+Future<void> _expectDeleteColorParity(
+  WidgetTester tester, {
+  required ScheduleSetupConfig config,
+  required String role,
+  required List<String> ids,
+  required String deletedId,
+}) async {
+  late OnboardingNotifier notifier;
+  final completed = List<bool>.filled(OnboardingDraft.stepCount, true);
+  completed[onboardingClassJobStepIndex] = false;
+  final dirty = List<bool>.filled(OnboardingDraft.stepCount, false);
+  dirty[onboardingClassJobStepIndex] = true;
+  final isClass = config.source == RoutineImportReviewSource.classes;
+  final blocks = [
+    for (final entry in ids.indexed)
+      _scheduleBlock(
+        id: entry.$2,
+        title: entry.$2,
+        startMinute: (8 + entry.$1) * 60,
+        endMinute: (9 + entry.$1) * 60,
+        config: config,
+        color: config.colorCycle[entry.$1 % config.colorCycle.length],
+      ),
+  ];
+  final draft = OnboardingDraft(
+    uid: 'step4-${config.timelineSection}-delete-parity',
+    currentStep: onboardingClassJobStepIndex,
+    welcomeSaved: true,
+    patiencePledgeAccepted: true,
+    stepCompleted: completed,
+    stepDirty: dirty,
+    lifeRole: LifeRoleDraft(
+      lifeRole: role,
+      workType: role == LifeRoleDraft.workingKey ? 'full_time' : null,
+      exerciseLevel: 'moderate',
+      waterIntake: 'medium',
+      stressLevel: 'medium',
+      sleepQuality: 'good',
+    ),
+    bodyBasics: const BodyBasicsDraft(
+      ageRange: '25-34',
+      heightCm: 175,
+      weightKg: 70,
+      gender: 'other',
+    ).withEstimates(),
+    baseTimeline: BaseTimelineDraft(
+      classJobSetupStep: 1,
+      classLogicalAssetId: isClass ? 'class-asset' : null,
+      classLogicalAssetR2Key: isClass ? 'class-r2' : null,
+      workLogicalAssetId: isClass ? null : 'work-asset',
+      workLogicalAssetR2Key: isClass ? null : 'work-r2',
+      skinCareSkipped: true,
+    ),
+  );
+
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        onboardingStateProvider.overrideWith((_) {
+          notifier = OnboardingNotifier()..loadSeedData(draft);
+          return notifier;
+        }),
+        onboardingClassTimelineProvider.overrideWith(
+          (_) => isClass ? blocks : const [],
+        ),
+        onboardingWorkTimelineProvider.overrideWith(
+          (_) => isClass ? const [] : blocks,
+        ),
+      ],
+      child: const MaterialApp(home: OnboardingFlow()),
+    ),
+  );
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 500));
+
+  await tester.tap(find.byKey(const ValueKey('timeline-day-chip-1')));
+  await tester.pump(const Duration(milliseconds: 250));
+  final menu = find.byKey(ValueKey('onboarding-step4-menu-$deletedId'));
+  await tester.ensureVisible(menu);
+  await tester.tap(menu);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 500));
+  await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Delete'));
+  await tester.pump(const Duration(milliseconds: 250));
+
+  final container = ProviderScope.containerOf(
+    tester.element(find.byType(OnboardingStep4Unified)),
+  );
+  final visible = container.read(
+    isClass ? onboardingClassTimelineProvider : onboardingWorkTimelineProvider,
+  );
+  final expectedIds = ids.where((id) => id != deletedId).toList();
+  expect(visible.map((block) => block.id), expectedIds);
+  for (final entry in visible.indexed) {
+    expect(
+      entry.$2.color,
+      config.colorCycle[entry.$1 % config.colorCycle.length],
+      reason: 'Step 4 visible color for ${entry.$2.id}',
+    );
+  }
+
+  final next = find.text('Next Step');
+  await tester.ensureVisible(next);
+  await tester.tap(next);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 500));
+
+  final saved = notifier.state.draft;
+  final savedSection = saved.baseTimeline.confirmedBlocksForSection(
+    config.timelineSection,
+  );
+  expect(savedSection.map((block) => block.id), expectedIds);
+  final bundle = OnboardingCompletionService.buildBundle(saved);
+  final step14Items = buildStep14FinalTimelineItems(
+    bundle,
+    sourceVisualOrder: Step14SourceVisualOrder.fromBlocks(
+      saved.baseTimeline.blocks,
+    ),
+  );
+  final step14ById = {
+    for (final item in step14Items) item.entry.sourceId: item.identity.accent,
+  };
+  for (final block in visible) {
+    expect(step14ById[block.id], block.color, reason: block.id);
+  }
+}
+
 ClassRoutineBlock _scheduleBlock({
   required String id,
   required String title,
@@ -2705,16 +2939,18 @@ ClassRoutineBlock _scheduleBlock({
   required int endMinute,
   required ScheduleSetupConfig config,
   IconData? icon,
+  Color? color,
   String room = '',
+  List<int> repeatDays = const [1],
 }) {
   return ClassRoutineBlock(
     id: id,
     subject: title,
     startMinute: startMinute,
     endMinute: endMinute,
-    repeatDays: const [1],
+    repeatDays: repeatDays,
     icon: icon ?? config.icon,
-    color: OptivusColors.aquaAccent,
+    color: color ?? OptivusColors.aquaAccent,
     room: room,
   );
 }

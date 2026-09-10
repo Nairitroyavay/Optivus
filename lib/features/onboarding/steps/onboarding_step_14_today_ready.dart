@@ -48,6 +48,8 @@ class OnboardingTodayReadyStepState
   OnboardingCompletionJob? _failureJob;
   OnboardingCurrentRunSnapshot? _failureSnapshot;
   int _failureReadGeneration = 0;
+  OnboardingDraft? _projectedBundleDraft;
+  Step14BundleBuildResult? _projectedBundleResult;
 
   @override
   void dispose() {
@@ -145,11 +147,22 @@ class OnboardingTodayReadyStepState
     });
   }
 
+  Step14BundleBuildResult _bundleResultFor(OnboardingDraft draft) {
+    if (!identical(_projectedBundleDraft, draft) ||
+        _projectedBundleResult == null) {
+      _projectedBundleDraft = draft;
+      _projectedBundleResult = OnboardingCompletionService.projectBundleResult(
+        draft,
+      );
+    }
+    return _projectedBundleResult!;
+  }
+
   @override
   Widget build(BuildContext context) {
     final onboarding = ref.watch(onboardingStateProvider);
     final draft = onboarding.draft;
-    final bundleResult = OnboardingCompletionService.projectBundleResult(draft);
+    final bundleResult = _bundleResultFor(draft);
     final bundle = switch (bundleResult) {
       Step14BundleBuildSuccess(:final bundle) => bundle,
       _ => null,

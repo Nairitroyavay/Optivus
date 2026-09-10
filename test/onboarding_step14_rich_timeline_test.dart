@@ -191,6 +191,51 @@ void main() {
     }
   });
 
+  test('source visual order matches confirmed Step 4 block eligibility', () {
+    const source = [
+      TimelineBlockDraft(
+        id: 'unconfirmed',
+        section: 'classes',
+        title: 'Needs Review',
+        startMinute: 420,
+        endMinute: 480,
+        repeatDays: [1],
+        blockType: TimelineBlockDraft.hardBlockKey,
+        needsTimeConfirmation: true,
+      ),
+      TimelineBlockDraft(
+        id: 'blank',
+        section: 'classes',
+        title: '   ',
+        startMinute: 480,
+        endMinute: 540,
+        repeatDays: [1],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      ),
+      TimelineBlockDraft(
+        id: 'confirmed-a',
+        section: 'classes',
+        title: 'Confirmed A',
+        startMinute: 540,
+        endMinute: 600,
+        repeatDays: [1],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      ),
+      TimelineBlockDraft(
+        id: 'confirmed-b',
+        section: 'classes',
+        title: 'Confirmed B',
+        startMinute: 600,
+        endMinute: 660,
+        repeatDays: [1],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      ),
+    ];
+
+    final order = Step14SourceVisualOrder.fromBlocks(source);
+    expect(order.classOrdinalById, {'confirmed-a': 0, 'confirmed-b': 1});
+  });
+
   test(
     'constraint stretch uses maximum deficiency for identical intervals',
     () {
@@ -962,6 +1007,18 @@ void main() {
       find.bySemanticsLabel(RegExp(r'^Show .+ in front, .+$')),
       findsNWidgets(3),
     );
+    const overlapIds = {'class', 'work', 'meal', 'skin'};
+    bool cardSemanticsExcluded(String id) {
+      final excluding = find.byKey(
+        ValueKey('step14-timeline-card-semantics-$id'),
+      );
+      return tester.widget<ExcludeSemantics>(excluding).excluding;
+    }
+
+    expect(cardSemanticsExcluded('class'), isFalse);
+    expect(cardSemanticsExcluded('work'), isTrue);
+    expect(cardSemanticsExcluded('meal'), isTrue);
+    expect(cardSemanticsExcluded('skin'), isTrue);
 
     final prepared = key.currentState!.preparedLayoutForTesting!;
     expect(prepared.frontWidth, greaterThan(0));
@@ -1001,6 +1058,9 @@ void main() {
         _paintedFrontCardId(tester, const {'class', 'work', 'meal', 'skin'}),
         id,
       );
+      for (final candidateId in overlapIds) {
+        expect(cardSemanticsExcluded(candidateId), candidateId != id);
+      }
       expect(
         identical(key.currentState!.preparedLayoutForTesting, prepared),
         isTrue,

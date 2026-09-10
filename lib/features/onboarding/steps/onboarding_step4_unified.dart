@@ -1099,7 +1099,7 @@ class _OnboardingStep4UnifiedState
     List<TimelineBlockDraft> blocks,
     ScheduleSetupConfig config,
   ) {
-    return blocks
+    final restored = blocks
         .asMap()
         .entries
         .map(
@@ -1118,13 +1118,14 @@ class _OnboardingStep4UnifiedState
         )
         .where((b) => b.subject.trim().isNotEmpty)
         .where((b) => b.startMinute < b.endMinute)
-        .toList(growable: false)
-      ..sort((a, b) {
-        final dayCompare = (a.weekday ?? 1).compareTo(b.weekday ?? 1);
-        return dayCompare != 0
-            ? dayCompare
-            : a.startMinute.compareTo(b.startMinute);
-      });
+        .toList(growable: false);
+    restored.sort((a, b) {
+      final dayCompare = (a.weekday ?? 1).compareTo(b.weekday ?? 1);
+      return dayCompare != 0
+          ? dayCompare
+          : a.startMinute.compareTo(b.startMinute);
+    });
+    return normalizeScheduleBlockColors(restored, config);
   }
 
   List<int> _safeRepeatDays(List<int> days) {
@@ -2111,9 +2112,12 @@ class _OnboardingStep4UnifiedState
   void _deleteBlock(ClassRoutineBlock item) {
     final config = _configForBlock(item);
     final provider = _providerFor(config);
-    ref.read(provider.notifier).state = _currentBlocks(
+    ref.read(provider.notifier).state = normalizeScheduleBlockColors(
+      _currentBlocks(
+        config,
+      ).where((block) => block.id != item.id).toList(growable: false),
       config,
-    ).where((block) => block.id != item.id).toList(growable: false);
+    );
     if (_frontBlockId == item.id) {
       setState(() => _frontBlockId = null);
     }

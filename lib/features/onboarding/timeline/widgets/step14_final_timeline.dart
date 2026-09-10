@@ -101,6 +101,7 @@ class Step14SourceVisualOrder {
     final classOrdinals = <String, int>{};
     final workOrdinals = <String, int>{};
     for (final block in blocks) {
+      if (block.needsTimeConfirmation || block.title.trim().isEmpty) continue;
       if (block.section == 'classes') {
         classOrdinals.putIfAbsent(block.id, () => classOrdinals.length);
       } else if (block.section == 'job_work_business') {
@@ -897,14 +898,40 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
   ) {
     final geometry = prepared.positionedById[item.entry.id]!;
     final overlaps = prepared.overlapEntryIds.contains(item.entry.id);
+    final isFrontSomewhere = prepared.regions
+        .where((region) => region.entryIds.contains(item.entry.id))
+        .any(
+          (region) =>
+              _frontForRegion(prepared, region).entry.id == item.entry.id,
+        );
     return Positioned(
       key: ValueKey('step14-timeline-card-${item.entry.id}'),
       top: geometry.top,
       left: prepared.leftOffset + (overlaps ? prepared.gutterWidth : 0),
       width: overlaps ? prepared.frontWidth : prepared.fullWidth,
       height: geometry.height,
-      child: Step14FinalTimelineCard(item: item),
+      child: ExcludeSemantics(
+        key: ValueKey('step14-timeline-card-semantics-${item.entry.id}'),
+        excluding: !isFrontSomewhere,
+        child: Step14FinalTimelineCard(item: item),
+      ),
     );
+  }
+
+  Step14FinalTimelineItem _frontForRegion(
+    Step14PreparedTimelineLayout prepared,
+    Step14OverlapRegion region,
+  ) {
+    final candidates = region.entryIds
+        .map((id) => prepared.itemById[id]!)
+        .toList();
+    final componentId = prepared.componentIdByEntryId[region.entryIds.first];
+    final focused = componentId == null
+        ? null
+        : _focusedEntryByComponent[componentId];
+    return focused != null && region.entryIds.contains(focused)
+        ? prepared.itemById[focused]!
+        : _defaultFront(candidates);
   }
 
   List<Widget> _buildBackTabs(
@@ -912,14 +939,11 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
     Step14OverlapRegion region,
   ) {
     final regionKey = region.keyForDay(prepared.selectedDay);
+    final componentId = prepared.componentIdByEntryId[region.entryIds.first]!;
+    final front = _frontForRegion(prepared, region);
     final candidates = region.entryIds
         .map((id) => prepared.itemById[id]!)
         .toList();
-    final componentId = prepared.componentIdByEntryId[region.entryIds.first]!;
-    final focused = _focusedEntryByComponent[componentId];
-    final front = focused != null && region.entryIds.contains(focused)
-        ? prepared.itemById[focused]!
-        : _defaultFront(candidates);
     final backs = candidates.where((item) => item.entry.id != front.entry.id);
     final top = prepared.layout.scale.yForMinute(region.startMinute);
     final tabHeight = prepared.tabHeightByRegionKey[regionKey]!;
