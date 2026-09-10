@@ -917,9 +917,16 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
       }
     }
 
-    return prepared.regions
-        .where((r) => r.entryIds.contains(item.entry.id))
-        .any((r) => _frontForRegion(prepared, r).entry.id == item.entry.id);
+    final contestedRegions = prepared.regions
+        .where(
+          (r) => r.entryIds.contains(item.entry.id) && r.entryIds.length > 1,
+        )
+        .toList();
+    if (contestedRegions.isEmpty) return true;
+
+    return contestedRegions.every(
+      (r) => _frontForRegion(prepared, r).entry.id == item.entry.id,
+    );
   }
 
   Step14FinalTimelineItem _frontForRegion(
@@ -943,8 +950,8 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
   ) {
     final geometry = prepared.positionedById[item.entry.id]!;
     final overlaps = prepared.overlapEntryIds.contains(item.entry.id);
-    final isFrontSomewhere = _isFrontItem(prepared, item);
-    final isFrontCard = overlaps && isFrontSomewhere;
+    final isFront = _isFrontItem(prepared, item);
+    final isFrontCard = overlaps && isFront;
     final cardLeft =
         prepared.leftOffset + (isFrontCard ? prepared.gutterWidth : 0);
     final cardWidth =
@@ -971,42 +978,31 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
       height: geometry.height,
       child: GestureDetector(
         key: ValueKey('step14-card-gesture-${item.entry.id}'),
-        behavior: isFrontSomewhere
-            ? HitTestBehavior.opaque
-            : HitTestBehavior.deferToChild,
+        behavior: HitTestBehavior.opaque,
         onTap: handleTap,
         child: ExcludeSemantics(
           key: ValueKey('step14-timeline-card-semantics-${item.entry.id}'),
-          excluding: !isFrontSomewhere,
-          child: isFrontSomewhere
-              ? Offstage(
-                  offstage: false,
-                  child: Step14FinalTimelineCard(
-                    item: item,
-                    isFront: true,
-                    hasOverlap: overlaps,
-                    gutterWidth: prepared.gutterWidth,
-                  ),
-                )
-              : Container(
-                  key: ValueKey('step14-card-background-${item.entry.id}'),
-                  child: OnboardingTimelineCardChrome(
-                    baseColor: item.identity.accent,
-                    isFront: false,
-                    hasOverlap: true,
-                    padding: EdgeInsets.zero,
-                    child: Offstage(
-                      offstage: true,
-                      child: Step14FinalTimelineCard(
-                        item: item,
-                        isFront: false,
-                        hasOverlap: true,
-                        gutterWidth: prepared.gutterWidth,
-                        includeBackground: false,
-                      ),
-                    ),
-                  ),
+          excluding: overlaps && !isFront,
+          child: Container(
+            key: ValueKey('step14-card-background-${item.entry.id}'),
+            child: OnboardingTimelineCardChrome(
+              baseColor: item.identity.accent,
+              isFront: isFront,
+              hasOverlap: overlaps,
+              padding: EdgeInsets.zero,
+              child: Offstage(
+                offstage: overlaps && !isFront,
+                child: Step14FinalTimelineCard(
+                  key: ValueKey('step14-card-front-content-${item.entry.id}'),
+                  item: item,
+                  isFront: isFront,
+                  hasOverlap: overlaps,
+                  gutterWidth: prepared.gutterWidth,
+                  includeBackground: false,
                 ),
+              ),
+            ),
+          ),
         ),
       ),
     );
