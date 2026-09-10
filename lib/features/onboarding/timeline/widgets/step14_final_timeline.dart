@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
@@ -7,7 +6,9 @@ import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_mod
 import 'package:optivus/features/onboarding/timeline/layout/timeline_overlap_engine.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_entry.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
+import 'package:optivus/features/onboarding/timeline/widgets/onboarding_timeline_card_chrome.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/timeline_day_chips.dart';
+import 'package:optivus/features/onboarding/timeline/widgets/timeline_time_rail.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 
@@ -526,7 +527,7 @@ class Step14PreparedTimelineLayout {
       );
     }
     final config = TimelineGeometryConfig(
-      pixelsPerMinute: 1.1,
+      pixelsPerMinute: 84.0 / 60.0,
       minInteractiveHeight: 44,
       leftOffset: leftOffset,
       rightPadding: rightPadding,
@@ -827,6 +828,20 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
   }
 
   Widget _buildPreparedTimeline(Step14PreparedTimelineLayout prepared) {
+    final cardLeftOffsetByMinute = <int, double>{};
+    final itemsForRail = List<Step14FinalTimelineItem>.from(prepared.items)
+      ..sort((a, b) => (_isFrontItem(prepared, a) ? 1 : 0)
+          .compareTo(_isFrontItem(prepared, b) ? 1 : 0));
+    for (final item in itemsForRail) {
+      final isFront = _isFrontItem(prepared, item);
+      final isFrontOverlap =
+          prepared.overlapEntryIds.contains(item.entry.id) && isFront;
+      final offset =
+          prepared.leftOffset + (isFrontOverlap ? prepared.gutterWidth : 0.0);
+      cardLeftOffsetByMinute[item.entry.startMinute] = offset;
+      cardLeftOffsetByMinute[item.entry.endMinute] = offset;
+    }
+
     return DecoratedBox(
       decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.3)),
       child: SingleChildScrollView(
@@ -845,6 +860,7 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
                 lineStart: prepared.leftOffset - 6,
                 leftOffset: prepared.leftOffset,
                 items: prepared.items,
+                cardLeftOffsetByMinute: cardLeftOffsetByMinute,
               ),
               for (final item in _cardPaintOrder(prepared))
                 _buildLogicalCard(prepared, item),
@@ -859,37 +875,66 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
   List<Step14FinalTimelineItem> _cardPaintOrder(
     Step14PreparedTimelineLayout prepared,
   ) {
-    final chronological = List<Step14FinalTimelineItem>.from(prepared.items)
-      ..sort((a, b) {
-        final start = a.entry.startMinute.compareTo(b.entry.startMinute);
-        if (start != 0) return start;
-        return a.canonicalOrdinal.compareTo(b.canonicalOrdinal);
-      });
-    final result = <Step14FinalTimelineItem>[];
-    final emittedComponents = <String>{};
-    for (final item in chronological) {
-      final componentId = prepared.componentIdByEntryId[item.entry.id];
-      if (componentId == null) {
-        result.add(item);
-        continue;
+    final items = List<Step14FinalTimelineItem>.from(prepared.items);
+    items.sort((a, b) {
+      final aFront = _isFrontItem(prepared, a);
+      final bFront = _isFrontItem(prepared, b);
+      if (aFront != bFront) {
+        // Back cards painted first (-1), front cards painted last (1)
+        return aFront ? 1 : -1;
       }
-      if (!emittedComponents.add(componentId)) continue;
-      final componentItems = prepared.items
-          .where(
-            (candidate) =>
-                prepared.componentIdByEntryId[candidate.entry.id] ==
-                componentId,
-          )
-          .toList();
-      final focused = _focusedEntryByComponent[componentId];
-      componentItems.sort((a, b) {
-        if (a.entry.id == focused) return 1;
-        if (b.entry.id == focused) return -1;
-        return -_compareFrontPriority(a, b);
-      });
-      result.addAll(componentItems);
+      final aDuration = a.entry.endMinute - a.entry.startMinute;
+      final bDuration = b.entry.endMinute - b.entry.startMinute;
+      if (aDuration != bDuration) {
+        // Longer duration painted earlier so shorter overlaps on top
+        return bDuration.compareTo(aDuration);
+      }
+      final startCompare = a.entry.startMinute.compareTo(b.entry.startMinute);
+      if (startCompare != 0) return startCompare;
+      return a.canonicalOrdinal.compareTo(b.canonicalOrdinal);
+    });
+    return items;
+  }
+
+  bool _isFrontItem(
+    Step14PreparedTimelineLayout prepared,
+    Step14FinalTimelineItem item,
+  ) {
+    final overlaps = prepared.overlapEntryIds.contains(item.entry.id);
+    if (!overlaps) return true;
+
+    final componentId = prepared.componentIdByEntryId[item.entry.id];
+    final focusedId =
+        componentId == null ? null : _focusedEntryByComponent[componentId];
+
+    if (focusedId != null) {
+      if (item.entry.id == focusedId) return true;
+      final focusedItem = prepared.itemById[focusedId];
+      if (focusedItem != null &&
+          item.entry.startMinute < focusedItem.entry.endMinute &&
+          item.entry.endMinute > focusedItem.entry.startMinute) {
+        return false;
+      }
     }
-    return result;
+
+    return prepared.regions
+        .where((r) => r.entryIds.contains(item.entry.id))
+        .any((r) => _frontForRegion(prepared, r).entry.id == item.entry.id);
+  }
+
+  Step14FinalTimelineItem _frontForRegion(
+    Step14PreparedTimelineLayout prepared,
+    Step14OverlapRegion region,
+  ) {
+    final componentId = prepared.componentIdByEntryId[region.entryIds.first];
+    final focused = componentId == null
+        ? null
+        : _focusedEntryByComponent[componentId];
+    return focused != null && region.entryIds.contains(focused)
+        ? prepared.itemById[focused]!
+        : _defaultFront(
+            region.entryIds.map((id) => prepared.itemById[id]!).toList(),
+          );
   }
 
   Widget _buildLogicalCard(
@@ -898,43 +943,73 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
   ) {
     final geometry = prepared.positionedById[item.entry.id]!;
     final overlaps = prepared.overlapEntryIds.contains(item.entry.id);
-    final isFrontSomewhere = prepared.regions
-        .where((region) => region.entryIds.contains(item.entry.id))
-        .any(
-          (region) =>
-              _frontForRegion(prepared, region).entry.id == item.entry.id,
-        );
+    final isFrontSomewhere = _isFrontItem(prepared, item);
+    final isFrontCard = overlaps && isFrontSomewhere;
+    final cardLeft =
+        prepared.leftOffset + (isFrontCard ? prepared.gutterWidth : 0);
+    final cardWidth =
+        isFrontCard ? prepared.frontWidth : prepared.fullWidth;
+
+    void handleTap() {
+      final componentId = prepared.componentIdByEntryId[item.entry.id];
+      if (componentId != null) {
+        setState(() {
+          if (_focusedEntryByComponent[componentId] == item.entry.id) {
+            _focusedEntryByComponent.remove(componentId);
+          } else {
+            _focusedEntryByComponent[componentId] = item.entry.id;
+          }
+        });
+      }
+    }
+
     return Positioned(
       key: ValueKey('step14-timeline-card-${item.entry.id}'),
       top: geometry.top,
-      left: prepared.leftOffset + (overlaps ? prepared.gutterWidth : 0),
-      width: overlaps ? prepared.frontWidth : prepared.fullWidth,
+      left: cardLeft,
+      width: cardWidth,
       height: geometry.height,
-      child: ExcludeSemantics(
-        key: ValueKey('step14-timeline-card-semantics-${item.entry.id}'),
-        excluding: !isFrontSomewhere,
-        child: Offstage(
-          offstage: !isFrontSomewhere,
-          child: Step14FinalTimelineCard(item: item),
+      child: GestureDetector(
+        key: ValueKey('step14-card-gesture-${item.entry.id}'),
+        behavior: isFrontSomewhere
+            ? HitTestBehavior.opaque
+            : HitTestBehavior.deferToChild,
+        onTap: handleTap,
+        child: ExcludeSemantics(
+          key: ValueKey('step14-timeline-card-semantics-${item.entry.id}'),
+          excluding: !isFrontSomewhere,
+          child: isFrontSomewhere
+              ? Offstage(
+                  offstage: false,
+                  child: Step14FinalTimelineCard(
+                    item: item,
+                    isFront: true,
+                    hasOverlap: overlaps,
+                    gutterWidth: prepared.gutterWidth,
+                  ),
+                )
+              : Container(
+                  key: ValueKey('step14-card-background-${item.entry.id}'),
+                  child: OnboardingTimelineCardChrome(
+                    baseColor: item.identity.accent,
+                    isFront: false,
+                    hasOverlap: true,
+                    padding: EdgeInsets.zero,
+                    child: Offstage(
+                      offstage: true,
+                      child: Step14FinalTimelineCard(
+                        item: item,
+                        isFront: false,
+                        hasOverlap: true,
+                        gutterWidth: prepared.gutterWidth,
+                        includeBackground: false,
+                      ),
+                    ),
+                  ),
+                ),
         ),
       ),
     );
-  }
-
-  Step14FinalTimelineItem _frontForRegion(
-    Step14PreparedTimelineLayout prepared,
-    Step14OverlapRegion region,
-  ) {
-    final candidates = region.entryIds
-        .map((id) => prepared.itemById[id]!)
-        .toList();
-    final componentId = prepared.componentIdByEntryId[region.entryIds.first];
-    final focused = componentId == null
-        ? null
-        : _focusedEntryByComponent[componentId];
-    return focused != null && region.entryIds.contains(focused)
-        ? prepared.itemById[focused]!
-        : _defaultFront(candidates);
   }
 
   List<Widget> _buildExposedBackTabs(Step14PreparedTimelineLayout prepared) {
@@ -985,7 +1060,8 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
         final firstRegion = firstRegionByItemId[item.entry.id]!;
         final regionKey = firstRegion.keyForDay(prepared.selectedDay);
         final tabHeight = prepared.tabHeightByRegionKey[regionKey] ?? 44.0;
-        final startY = prepared.layout.scale.yForMinute(firstRegion.startMinute);
+        final startY =
+            prepared.layout.scale.yForMinute(firstRegion.startMinute);
 
         if (lastStartY >= 0 && (startY - lastStartY).abs() < 4.0) {
           stackIndex++;
@@ -1010,43 +1086,15 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
               button: true,
               label:
                   'Show ${item.sourceBlock.title} in front, ${_logicalTimeRange(item.sourceBlock)}',
-              child: Material(
-                color: item.identity.accent.withValues(alpha: 0.2),
-                borderRadius: const BorderRadius.horizontal(
-                  left: Radius.circular(12),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(
+                  () => _focusedEntryByComponent[componentId] = item.entry.id,
                 ),
-                child: InkWell(
-                  onTap: () => setState(
-                    () => _focusedEntryByComponent[componentId] = item.entry.id,
-                  ),
-                  borderRadius: const BorderRadius.horizontal(
-                    left: Radius.circular(12),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 7),
-                    child: Row(
-                      children: [
-                        Icon(
-                          item.identity.icon,
-                          size: 14,
-                          color: item.identity.accent,
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            item.sourceBlock.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w800,
-                              height: 1.15,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                child: _buildBackTabStrip(
+                  item: item,
+                  width: prepared.gutterWidth,
+                  height: tabHeight,
                 ),
               ),
             ),
@@ -1057,6 +1105,8 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
     return widgets;
   }
 }
+
+
 
 Step14FinalTimelineItem _defaultFront(
   List<Step14FinalTimelineItem> candidates,
@@ -1099,10 +1149,34 @@ int _categoryPriority(TimelineCategory category) => switch (category) {
   TimelineCategory.other => 5,
 };
 
+@immutable
+class Step14BackLabelSegment {
+  final double top;
+  final double height;
+  final String key;
+
+  const Step14BackLabelSegment({
+    required this.top,
+    required this.height,
+    required this.key,
+  });
+}
+
 class Step14FinalTimelineCard extends StatelessWidget {
   final Step14FinalTimelineItem item;
+  final bool isFront;
+  final bool hasOverlap;
+  final double gutterWidth;
+  final bool includeBackground;
 
-  const Step14FinalTimelineCard({super.key, required this.item});
+  const Step14FinalTimelineCard({
+    super.key,
+    required this.item,
+    this.isFront = true,
+    this.hasOverlap = false,
+    this.gutterWidth = 80.0,
+    this.includeBackground = true,
+  });
 
   static double measureHeight(
     BuildContext context,
@@ -1329,6 +1403,34 @@ class Step14FinalTimelineCard extends StatelessWidget {
       ...lines.map((line) => line.text),
     ].join(', ');
 
+    final content = Semantics(
+      container: true,
+      label: semantic,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: _buildRichCardBody(context),
+      ),
+    );
+
+    if (!includeBackground) {
+      return content;
+    }
+
+    return Container(
+      key: ValueKey('step14-card-background-${item.entry.id}'),
+      child: OnboardingTimelineCardChrome(
+        baseColor: item.identity.accent,
+        isFront: isFront,
+        hasOverlap: hasOverlap,
+        padding: EdgeInsets.zero,
+        child: content,
+      ),
+    );
+  }
+
+  Widget _buildRichCardBody(BuildContext context) {
+    final block = item.sourceBlock;
+
     const detailStyle = TextStyle(
       fontSize: 11,
       fontWeight: FontWeight.w600,
@@ -1391,192 +1493,269 @@ class Step14FinalTimelineCard extends StatelessWidget {
       Step14Continuation.continuedFromYesterday => 'Continued from yesterday',
     };
 
-    return Semantics(
-      container: true,
-      label: semantic,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.94),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: item.identity.accent.withValues(alpha: 0.45),
-                width: 1.4,
+    return SingleChildScrollView(
+      physics: const NeverScrollableScrollPhysics(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                item.identity.icon,
+                size: 18,
+                color: item.identity.accent,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: item.identity.accent.withValues(alpha: 0.12),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: SingleChildScrollView(
-                physics: const NeverScrollableScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          item.identity.icon,
-                          size: 18,
-                          color: item.identity.accent,
-                        ),
-                        const SizedBox(width: 7),
-                        Expanded(
-                          child: Text(
-                            block.title,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w900,
-                              color: OptivusColors.textPrimary,
-                              height: 1.2,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      _logicalTimeRange(block),
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: item.identity.accent,
-                        height: 1.2,
-                      ),
-                    ),
-                    if (location != null && location.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(location, style: detailStyle),
-                    ],
-                    if (showSlot) ...[
-                      const SizedBox(height: 6),
-                      Text(slot, style: detailStyle),
-                    ],
-                    if (showCategory) ...[
-                      const SizedBox(height: 6),
-                      Text(category, style: detailStyle),
-                    ],
-                    if (nutrition.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: item.identity.accent.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          nutrition.join(' • '),
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: item.identity.accent,
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (cleanDishes.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final dish in cleanDishes)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(
-                                  alpha: 0.8,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: item.identity.accent.withValues(
-                                    alpha: 0.25,
-                                  ),
-                                  width: 0.8,
-                                ),
-                              ),
-                              child: Text(
-                                dish,
-                                style: const TextStyle(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: OptivusColors.textPrimary,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                    if (block.section == 'skin_care') ...[
-                      if (block.skincareSteps.isNotEmpty) ...[
-                        const SizedBox(height: 9),
-                        const Text('STEPS', style: headingStyle),
-                        for (var index = 0;
-                            index < block.skincareSteps.length;
-                            index++) ...[
-                          const SizedBox(height: 3),
-                          Text(
-                            '${index + 1}. ${block.skincareSteps[index].trim()}',
-                            style: detailStyle,
-                          ),
-                        ],
-                      ],
-                      if (block.skincareProducts.isNotEmpty) ...[
-                        const SizedBox(height: 9),
-                        const Text('PRODUCTS', style: headingStyle),
-                        for (final product in block.skincareProducts)
-                          if (product.trim().isNotEmpty) ...[
-                            const SizedBox(height: 3),
-                            Text(product.trim(), style: detailStyle),
-                          ],
-                      ],
-                      if (block.skincareMissingItems.isNotEmpty) ...[
-                        const SizedBox(height: 9),
-                        const Text('MISSING', style: headingStyle),
-                        for (final missing in block.skincareMissingItems)
-                          if (missing.trim().isNotEmpty) ...[
-                            const SizedBox(height: 3),
-                            Text(
-                              '⚠ ${missing.trim()}',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: OptivusColors.warning,
-                                height: 1.25,
-                              ),
-                            ),
-                          ],
-                      ],
-                    ],
-                    if (continuation != null) ...[
-                      const SizedBox(height: 8),
-                      Text(continuation, style: detailStyle),
-                    ],
-                  ],
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  block.title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.textPrimary,
+                    height: 1.2,
+                  ),
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(
+            _logicalTimeRange(block),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: item.identity.accent,
+              height: 1.2,
             ),
           ),
-        ),
+          if (location != null && location.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(location, style: detailStyle),
+          ],
+          if (showSlot) ...[
+            const SizedBox(height: 6),
+            Text(slot, style: detailStyle),
+          ],
+          if (showCategory) ...[
+            const SizedBox(height: 6),
+            Text(category, style: detailStyle),
+          ],
+          if (nutrition.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 4,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.85),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: item.identity.accent.withValues(alpha: 0.35),
+                  width: 1,
+                ),
+              ),
+              child: Text(
+                nutrition.join(' • '),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: item.identity.accent,
+                ),
+              ),
+            ),
+          ],
+          if (cleanDishes.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final dish in cleanDishes)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: const Color(0xFFD4D7E2),
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      dish,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: OptivusColors.textPrimary,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+          if (block.section == 'skin_care') ...[
+            if (block.skincareSteps.isNotEmpty) ...[
+              const SizedBox(height: 9),
+              const Text('STEPS', style: headingStyle),
+              for (var index = 0;
+                  index < block.skincareSteps.length;
+                  index++)
+                if (block.skincareSteps[index].trim().isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    '${index + 1}. ${block.skincareSteps[index].trim()}',
+                    style: detailStyle,
+                  ),
+                ],
+            ],
+            if (block.skincareProducts.isNotEmpty) ...[
+              const SizedBox(height: 9),
+              const Text('PRODUCTS', style: headingStyle),
+              for (final product in block.skincareProducts)
+                if (product.trim().isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(product.trim(), style: detailStyle),
+                ],
+            ],
+            if (block.skincareMissingItems.isNotEmpty) ...[
+              const SizedBox(height: 9),
+              const Text(
+                'MISSING',
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w900,
+                  color: OptivusColors.warning,
+                  letterSpacing: 0.7,
+                  height: 1.2,
+                ),
+              ),
+              for (final missing in block.skincareMissingItems)
+                if (missing.trim().isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    '⚠ ${missing.trim()}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: OptivusColors.warning,
+                      height: 1.25,
+                    ),
+                  ),
+                ],
+            ],
+          ],
+          if (continuation != null) ...[
+            const SizedBox(height: 8),
+            Text(continuation, style: detailStyle),
+          ],
+        ],
       ),
     );
   }
+}
+
+Widget _buildBackTabStrip({
+  required Step14FinalTimelineItem item,
+  required double width,
+  required double height,
+}) {
+  final stripWidth = width.clamp(70.0, 96.0);
+  final baseColor = item.identity.accent;
+
+  return Align(
+    alignment: Alignment.centerLeft,
+    child: ClipRect(
+      child: SizedBox(
+        width: stripWidth,
+        height: height,
+        child: Padding(
+          padding: const EdgeInsets.only(left: 6, right: 6),
+          child: Row(
+            children: [
+              Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: baseColor.withValues(alpha: 0.16),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.72),
+                    width: 1,
+                  ),
+                ),
+                child: Icon(
+                  item.identity.icon,
+                  color: baseColor,
+                  size: 11,
+                ),
+              ),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  _shortBackLabel(item.sourceBlock),
+                  key: ValueKey('step14-back-label-${item.entry.id}'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    height: 1.0,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.ink,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+String _shortBackLabel(TimelineBlockDraft block) {
+  final raw = block.title.trim();
+  final lower = raw.toLowerCase();
+
+  if (block.section == 'job_work_business') {
+    if (lower.contains('office')) return 'Office';
+    if (lower.contains('work') || lower.contains('job')) return 'Job';
+    return raw.length <= 8 ? raw : 'Job';
+  }
+
+  if (block.section == 'classes') {
+    return raw.length <= 8 ? raw : raw.split(' ').first;
+  }
+
+  if (block.section == 'eating') {
+    final cat = block.mealCategory?.trim();
+    if (cat != null && cat.isNotEmpty && cat.toLowerCase() != 'meal') {
+      return cat.length <= 8 ? cat : cat.split(' ').first;
+    }
+    if (lower.contains('breakfast')) return 'Breakfast';
+    if (lower.contains('lunch')) return 'Lunch';
+    if (lower.contains('dinner')) return 'Dinner';
+    if (lower.contains('snack')) return 'Snack';
+    return raw.length <= 8 ? raw : raw.split(' ').first;
+  }
+
+  if (block.section == 'fixed') {
+    if (lower.contains('sleep')) return 'Sleep';
+    if (lower.contains('bath')) return 'Bath';
+    return raw.length <= 8 ? raw : raw.split(' ').first;
+  }
+
+  if (block.section == 'skin_care') {
+    return 'Skin';
+  }
+
+  return raw.length <= 8 ? raw : raw.split(' ').first;
 }
 
 class _DetailLine {
@@ -1688,6 +1867,8 @@ class Step14RichTimeRail extends StatelessWidget {
   final double? leftOffset;
   final List<Step14FinalTimelineItem> items;
 
+  final Map<int, double>? cardLeftOffsetByMinute;
+
   const Step14RichTimeRail({
     super.key,
     required this.scale,
@@ -1696,163 +1877,29 @@ class Step14RichTimeRail extends StatelessWidget {
     this.lineStart = 66,
     this.leftOffset,
     this.items = const [],
+    this.cardLeftOffsetByMinute,
   });
 
   @override
   Widget build(BuildContext context) {
-    final first = (scale.startMinute ~/ 10) * 10;
-    final last = ((scale.endMinute + 9) ~/ 10) * 10;
-    final actualLeftOffset = leftOffset ?? (lineStart + 12.0);
-
-    final boundaryAccents = <int, Color>{};
-    for (final item in items) {
-      if (item.entry.startMinute >= scale.startMinute &&
-          item.entry.startMinute <= scale.endMinute) {
-        boundaryAccents.putIfAbsent(
-          item.entry.startMinute,
-          () => item.identity.accent,
-        );
-      }
-      if (item.entry.endMinute >= scale.startMinute &&
-          item.entry.endMinute <= scale.endMinute) {
-        boundaryAccents.putIfAbsent(
-          item.entry.endMinute,
-          () => item.identity.accent,
-        );
-      }
-    }
-
-    final spineStart = scale.yForMinute(scale.startMinute);
-    final spineEnd = scale.yForMinute(scale.endMinute);
-
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Positioned(
-          key: const ValueKey('step14-rail-spine'),
-          top: spineStart,
-          left: lineStart + 1.0,
-          width: 2.0,
-          height: math.max(0.0, spineEnd - spineStart),
-          child: Container(
-            color: OptivusColors.aquaAccent.withValues(alpha: 0.25),
-          ),
-        ),
-        for (final entry in boundaryAccents.entries)
-          _connectorMark(
-            entry.key,
-            entry.value,
-            actualLeftOffset,
-          ),
-        for (var minute = first; minute <= last; minute += 10)
-          if (minute >= scale.startMinute && minute <= scale.endMinute)
-            _railMark(minute),
+    final boundaryMinutes = (<int>{
+      for (final item in items) ...[
+        item.entry.startMinute,
+        item.entry.endMinute,
       ],
-    );
-  }
+    }.where((m) => m >= scale.startMinute && m <= scale.endMinute).toList())
+      ..sort();
 
-  Widget _connectorMark(int minute, Color accent, double actualLeftOffset) {
-    final isMajor = minute % 60 == 0 || minute % 60 == 30;
-    final connectorWidth = math.max(0.0, actualLeftOffset - (lineStart + 1.0));
-    final y = scale.yForMinute(minute);
-
-    return Stack(
-      key: ValueKey('step14-rail-connector-$minute'),
-      children: [
-        Positioned(
-          top: y - 0.5,
-          left: lineStart + 1.0,
-          width: connectorWidth,
-          height: 1.0,
-          child: Container(
-            color: accent.withValues(alpha: 0.35),
-          ),
-        ),
-        if (!isMajor && minute % 10 != 0)
-          Positioned(
-            top: y - labelHeight / 2,
-            left: 0,
-            width: labelWidth,
-            height: labelHeight,
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                _clock(minute),
-                textAlign: TextAlign.right,
-                maxLines: 1,
-                style: TextStyle(
-                  fontSize: 8,
-                  fontWeight: FontWeight.w800,
-                  color: accent,
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _railMark(int minute) {
-    final hour = minute % 60 == 0;
-    final half = minute % 60 == 30;
-    final key = hour
-        ? 'step14-rail-hour-$minute'
-        : half
-        ? 'step14-rail-half-$minute'
-        : 'step14-rail-minor-$minute';
-
-    final tickStart = hour
-        ? lineStart - 4.0
-        : half
-        ? lineStart - 2.0
-        : lineStart;
-    final tickLength = hour
-        ? 12.0
-        : half
-        ? 7.0
-        : 3.0;
-    final tickHeight = hour
-        ? 1.5
-        : half
-        ? 1.0
-        : 0.8;
-    final tickAlpha = hour
-        ? 0.5
-        : half
-        ? 0.3
-        : 0.18;
-
-    return Positioned(
-      key: ValueKey(key),
-      top: scale.yForMinute(minute) - (hour || half ? labelHeight / 2 : 0.5),
-      left: 0,
-      right: 8,
-      height: hour || half ? labelHeight : 1,
-      child: Row(
-        children: [
-          SizedBox(
-            width: labelWidth,
-            child: hour || half
-                ? Text(
-                    _railLabel(minute),
-                    textAlign: TextAlign.right,
-                    maxLines: 1,
-                    style: TextStyle(
-                      fontSize: hour ? 10 : 9,
-                      fontWeight: hour ? FontWeight.w900 : FontWeight.w700,
-                      color: OptivusColors.textSecondary,
-                    ),
-                  )
-                : const SizedBox.shrink(),
-          ),
-          SizedBox(width: math.max(0.0, tickStart - labelWidth)),
-          Container(
-            width: tickLength,
-            height: tickHeight,
-            color: OptivusColors.aquaAccent.withValues(alpha: tickAlpha),
-          ),
-        ],
-      ),
+    return TimelineTimeRailBackground(
+      scale: scale,
+      boundaryMinutes: boundaryMinutes,
+      accent: OptivusColors.brandAccent,
+      keyPrefix: 'step14-rail',
+      minimumBoundaryLabelSpacing: 18,
+      cardLeftOffset: leftOffset ?? 64.0,
+      labelWidth: labelWidth,
+      labelHeight: labelHeight,
+      cardLeftOffsetByMinute: cardLeftOffsetByMinute,
     );
   }
 }
@@ -1881,15 +1928,6 @@ String _clock(int minute) {
   final hour = hour24 == 0 ? 12 : (hour24 > 12 ? hour24 - 12 : hour24);
   final suffix = hour24 < 12 ? 'AM' : 'PM';
   return '$hour:${minutePart.toString().padLeft(2, '0')} $suffix';
-}
-
-String _railLabel(int minute) {
-  final normalized = minute % 1440;
-  final hour24 = normalized ~/ 60;
-  final minutePart = normalized % 60;
-  final hour = hour24 == 0 ? 12 : (hour24 > 12 ? hour24 - 12 : hour24);
-  final suffix = hour24 < 12 ? 'AM' : 'PM';
-  return minutePart == 0 ? '$hour $suffix' : '$hour:30 $suffix';
 }
 
 String _compactNumber(double value) => value == value.roundToDouble()

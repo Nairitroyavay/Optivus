@@ -7,6 +7,7 @@ export 'widgets/timeline_time_rail.dart';
 export 'widgets/timeline_block_card.dart';
 export 'widgets/timeline_viewport.dart';
 export 'widgets/timeline_edit_sheet_shell.dart';
+export 'widgets/onboarding_timeline_card_chrome.dart';
 export 'widgets/full_screen_timeline_scaffold.dart';
 export 'adapters/timeline_feature_adapter.dart';
 export 'adapters/class_timeline_adapter.dart';

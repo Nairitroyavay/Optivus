@@ -3425,99 +3425,71 @@ class _OnboardingStep4UnifiedState
           setState(() => _frontBlockId = item.id);
         },
         child: SizedBox.expand(
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
-              color: Colors.white.withValues(
-                alpha: visual.hasOverlap ? (isFront ? 0.72 : 0.58) : 0.42,
-              ),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  baseColor.withValues(alpha: isFront ? 0.26 : 0.18),
-                  baseColor.withValues(alpha: isFront ? 0.08 : 0.04),
-                ],
-              ),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: isFront ? 0.96 : 0.82),
-                width: isFront ? 1.6 : 1.2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: baseColor.withValues(alpha: isFront ? 0.18 : 0.09),
-                  blurRadius: isFront ? 14 : 10,
-                  offset: Offset(0, isFront ? 5 : 3),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                child: LayoutBuilder(
-                  builder: (context, cardConstraints) {
-                    final cardWidth = cardConstraints.maxWidth;
+          child: OnboardingTimelineCardChrome(
+            baseColor: baseColor,
+            isFront: isFront,
+            hasOverlap: visual.hasOverlap,
+            child: LayoutBuilder(
+              builder: (context, cardConstraints) {
+                final cardWidth = cardConstraints.maxWidth;
 
-                    return Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isBackOverlap
-                            ? 0
-                            : tiny
-                            ? 8
-                            : compact
-                            ? 12
-                            : 14,
-                        vertical: isBackOverlap
-                            ? 5
-                            : tiny
-                            ? 1
-                            : compact
-                            ? 7
-                            : 10,
-                      ),
-                      child: isBackOverlap
-                          ? _buildBackOverlapBlockContent(
-                              item: item,
-                              config: config,
-                              baseColor: baseColor,
-                              exposedLabelWidth: exposedLabelWidth,
-                              labelInset: backLabelInset,
-                              tiny: tiny,
-                              segments: backSegments,
-                            )
-                          : compact
-                          ? KeyedSubtree(
-                              key: ValueKey(
-                                'onboarding-step4-front-content-${item.id}',
-                              ),
-                              child: _buildCompactBlockContent(
-                                item: item,
-                                config: config,
-                                baseColor: baseColor,
-                                showMenu: true,
-                                tiny: tiny,
-                                cardWidth: cardWidth,
-                                exactHeight: exactHeight,
-                              ),
-                            )
-                          : KeyedSubtree(
-                              key: ValueKey(
-                                'onboarding-step4-front-content-${item.id}',
-                              ),
-                              child: _buildRegularBlockContent(
-                                item: item,
-                                config: config,
-                                baseColor: baseColor,
-                                exactHeight: exactHeight,
-                                showMenu: true,
-                                cardWidth: cardWidth,
-                              ),
-                            ),
-                    );
-                  },
-                ),
-              ),
+                return Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isBackOverlap
+                        ? 0
+                        : tiny
+                        ? 8
+                        : compact
+                        ? 12
+                        : 14,
+                    vertical: isBackOverlap
+                        ? 5
+                        : tiny
+                        ? 1
+                        : compact
+                        ? 7
+                        : 10,
+                  ),
+                  child: isBackOverlap
+                      ? _buildBackOverlapBlockContent(
+                          item: item,
+                          config: config,
+                          baseColor: baseColor,
+                          exposedLabelWidth: exposedLabelWidth,
+                          labelInset: backLabelInset,
+                          tiny: tiny,
+                          segments: backSegments,
+                        )
+                      : compact
+                      ? KeyedSubtree(
+                          key: ValueKey(
+                            'onboarding-step4-front-content-${item.id}',
+                          ),
+                          child: _buildCompactBlockContent(
+                            item: item,
+                            config: config,
+                            baseColor: baseColor,
+                            showMenu: true,
+                            tiny: tiny,
+                            cardWidth: cardWidth,
+                            exactHeight: exactHeight,
+                          ),
+                        )
+                      : KeyedSubtree(
+                          key: ValueKey(
+                            'onboarding-step4-front-content-${item.id}',
+                          ),
+                          child: _buildRegularBlockContent(
+                            item: item,
+                            config: config,
+                            baseColor: baseColor,
+                            exactHeight: exactHeight,
+                            showMenu: true,
+                            cardWidth: cardWidth,
+                          ),
+                        ),
+                );
+              },
             ),
           ),
         ),

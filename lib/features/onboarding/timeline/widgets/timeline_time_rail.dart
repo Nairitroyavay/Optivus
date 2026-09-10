@@ -4,12 +4,20 @@ import '../../../routine/utils/timeline_utils.dart';
 import '../models/timeline_geometry.dart';
 
 /// Shared time rail components for rendering the vertical timeline axis.
+///
+/// Matches the golden Step 4 ribbon rail visual reference: 8px ribbon at
+/// left: 48, double-edge border, soft shadow, hour markers, half-hour markers,
+/// subtle 10-minute ticks, and boundary connectors.
 class TimelineTimeRailBackground extends StatelessWidget {
   final TimelineScale scale;
   final List<int> boundaryMinutes;
   final Color accent;
   final String keyPrefix;
   final double minimumBoundaryLabelSpacing;
+  final double? cardLeftOffset;
+  final double? labelWidth;
+  final double? labelHeight;
+  final Map<int, double>? cardLeftOffsetByMinute;
 
   const TimelineTimeRailBackground({
     super.key,
@@ -18,6 +26,10 @@ class TimelineTimeRailBackground extends StatelessWidget {
     this.accent = OptivusColors.brandAccent,
     this.keyPrefix = 'timeline',
     this.minimumBoundaryLabelSpacing = 0,
+    this.cardLeftOffset,
+    this.labelWidth,
+    this.labelHeight,
+    this.cardLeftOffsetByMinute,
   });
 
   @override
@@ -27,16 +39,20 @@ class TimelineTimeRailBackground extends StatelessWidget {
     final hourCount = endHour - startHour;
     var lastBoundaryLabelY = double.negativeInfinity;
 
+    final first10 = (scale.startMinute ~/ 10) * 10;
+    final last10 = ((scale.endMinute + 9) ~/ 10) * 10;
+
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        // ── Vertical Rail Line ──
+        // ── Vertical Rail Line (Step 4 Golden Ribbon Rail) ──
         Positioned(
           top: 0,
           bottom: 0,
           left: 48,
           width: 8,
           child: Container(
+            key: ValueKey('$keyPrefix-spine'),
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.16),
               borderRadius: BorderRadius.circular(4),
@@ -55,12 +71,50 @@ class TimelineTimeRailBackground extends StatelessWidget {
           ),
         ),
 
-        // ── Non-Hour Boundary Minute Indicators ──
+        // ── Minor 10-Minute Ticks on Rail ──
+        for (var minute = first10; minute <= last10; minute += 10)
+          if (minute >= scale.startMinute &&
+              minute <= scale.endMinute &&
+              minute % 60 != 0 &&
+              minute % 30 != 0)
+            Positioned(
+              key: ValueKey('$keyPrefix-minor-$minute'),
+              top: scale.yForMinute(minute) - 0.5,
+              left: 50,
+              width: 4,
+              height: 1.0,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.22),
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+            ),
+
+        // ── Half-Hour Ticks on Rail ──
+        for (var i = 0; i <= hourCount; i++)
+          if ((startHour + i) * 60 + 30 >= scale.startMinute &&
+              (startHour + i) * 60 + 30 <= scale.endMinute)
+            Positioned(
+              key: ValueKey('$keyPrefix-half-${(startHour + i) * 60 + 30}'),
+              top: scale.yForMinute((startHour + i) * 60 + 30) - 0.6,
+              left: 49,
+              width: 6,
+              height: 1.2,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.32),
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+            ),
+
+        // ── Boundary Minute Connectors & Indicators ──
         for (final minute in boundaryMinutes)
           Builder(
             builder: (context) {
               final top = scale.yForMinute(minute);
-              final showLabel =
+              final showLabel = minute % 60 != 0 &&
                   top - lastBoundaryLabelY >= minimumBoundaryLabelSpacing;
               if (showLabel) lastBoundaryLabelY = top;
               return _BoundaryMinuteIndicator(
@@ -69,6 +123,8 @@ class TimelineTimeRailBackground extends StatelessWidget {
                 accent: accent,
                 keyPrefix: keyPrefix,
                 showLabel: showLabel,
+                cardLeftOffset:
+                    cardLeftOffsetByMinute?[minute] ?? cardLeftOffset,
               );
             },
           ),
@@ -76,9 +132,12 @@ class TimelineTimeRailBackground extends StatelessWidget {
         // ── Hour Marks & Labels ──
         for (var i = 0; i <= hourCount; i++) ...[
           _HourMarkLabel(
+            keyPrefix: keyPrefix,
             minute: (startHour + i) * 60,
             top: scale.yForMinute((startHour + i) * 60),
             accent: accent,
+            labelWidth: labelWidth,
+            labelHeight: labelHeight,
           ),
         ],
       ],
@@ -87,14 +146,20 @@ class TimelineTimeRailBackground extends StatelessWidget {
 }
 
 class _HourMarkLabel extends StatelessWidget {
+  final String keyPrefix;
   final int minute;
   final double top;
   final Color accent;
+  final double? labelWidth;
+  final double? labelHeight;
 
   const _HourMarkLabel({
+    required this.keyPrefix,
     required this.minute,
     required this.top,
     required this.accent,
+    this.labelWidth,
+    this.labelHeight,
   });
 
   String _formatHourLabel(int min) {
@@ -106,23 +171,29 @@ class _HourMarkLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveWidth = labelWidth ?? 42.0;
+    final effectiveHeight = labelHeight ?? 18.0;
+
     return Positioned(
-      top: top - 8,
+      key: ValueKey('$keyPrefix-hour-$minute'),
+      top: top - effectiveHeight / 2,
       left: 0,
-      width: 56,
-      height: 18,
+      width: (effectiveWidth + 14.0).clamp(56.0, 120.0),
+      height: effectiveHeight,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
           Positioned(
             left: 0,
-            width: 42,
+            width: effectiveWidth,
             child: Text(
               _formatHourLabel(minute),
               textAlign: TextAlign.right,
               maxLines: 1,
+              softWrap: false,
               style: const TextStyle(
                 fontSize: 10,
+                height: 1.0,
                 fontWeight: FontWeight.w800,
                 color: OptivusColors.textSecondary,
               ),
@@ -130,7 +201,7 @@ class _HourMarkLabel extends StatelessWidget {
           ),
           Positioned(
             left: 48,
-            top: 7.5,
+            top: (effectiveHeight - 1.5) / 2,
             width: 4,
             height: 1.5,
             child: DecoratedBox(
@@ -152,6 +223,7 @@ class _BoundaryMinuteIndicator extends StatelessWidget {
   final Color accent;
   final String keyPrefix;
   final bool showLabel;
+  final double? cardLeftOffset;
 
   const _BoundaryMinuteIndicator({
     required this.minute,
@@ -159,11 +231,18 @@ class _BoundaryMinuteIndicator extends StatelessWidget {
     required this.accent,
     required this.keyPrefix,
     required this.showLabel,
+    this.cardLeftOffset,
   });
 
   @override
   Widget build(BuildContext context) {
+    final connectorRight = cardLeftOffset != null ? null : 16.0;
+    final connectorWidth = cardLeftOffset != null
+        ? (cardLeftOffset! - 56.0).clamp(0.0, 200.0)
+        : null;
+
     return Stack(
+      key: ValueKey('$keyPrefix-connector-$minute'),
       clipBehavior: Clip.none,
       children: [
         if (showLabel)
@@ -185,21 +264,22 @@ class _BoundaryMinuteIndicator extends StatelessWidget {
           ),
         Positioned(
           top: top,
-          left: 60,
-          right: 16,
+          left: 56,
+          right: connectorRight,
+          width: connectorWidth,
           height: 1,
           child: DecoratedBox(
             key: ValueKey('$keyPrefix-minute-line-$minute'),
             decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.12),
+              color: accent.withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(99),
             ),
           ),
         ),
         Positioned(
           top: top - 0.5,
-          left: 44,
-          width: 16,
+          left: 48,
+          width: 8,
           height: 1.5,
           child: DecoratedBox(
             key: ValueKey('$keyPrefix-minute-tick-$minute'),
