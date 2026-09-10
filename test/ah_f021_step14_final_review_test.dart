@@ -1302,6 +1302,8 @@ void main() {
           findsOneWidget,
         );
         expect(find.text('Today timeline preview'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('timeline-day-chip-1')));
+        await tester.pump();
         expect(find.text('Physics Lab'), findsOneWidget);
         expect(find.text('Back to Review'), findsNothing);
         expect(find.byKey(const Key('onboarding-step14-back')), findsOneWidget);

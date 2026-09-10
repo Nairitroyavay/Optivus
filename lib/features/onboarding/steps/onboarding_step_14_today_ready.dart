@@ -191,7 +191,7 @@ class OnboardingTodayReadyStepState
         onPopInvokedWithResult: (didPop, _) {
           if (!didPop) closeFullTimelinePreview();
         },
-        child: _buildFullTimelineView(bundle),
+        child: _buildFullTimelineView(bundle, draft),
       );
     }
 
@@ -624,10 +624,14 @@ class OnboardingTodayReadyStepState
   }
 
   // ── Full Timeline View (AH-F018) ────────────────────────────────────────────
-  Widget _buildFullTimelineView(OnboardingCompletionBundle bundle) {
+  Widget _buildFullTimelineView(
+    OnboardingCompletionBundle bundle,
+    OnboardingDraft draft,
+  ) {
     return Step14FinalTimeline(
       key: const ValueKey('onboarding-step14-shared-preview'),
       bundle: bundle,
+      sourceBlocks: draft.baseTimeline.blocks,
       selectedDay: _timelineSelectedDay,
       onDayChanged: (day) => setState(() => _timelineSelectedDay = day),
     );
