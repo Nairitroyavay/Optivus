@@ -45,6 +45,8 @@ class FullScreenTimelineScaffold extends StatelessWidget {
   final Widget? bottomAction;
   final ScrollController? scrollController;
   final Widget Function(BuildContext, PositionedTimelineEntry)? blockBuilder;
+  final TimelineVisibleRangePolicy visibleRangePolicy;
+  final TimelineStretchPolicy stretchPolicy;
 
   const FullScreenTimelineScaffold({
     super.key,
@@ -63,6 +65,8 @@ class FullScreenTimelineScaffold extends StatelessWidget {
     this.bottomAction,
     this.scrollController,
     this.blockBuilder,
+    this.visibleRangePolicy = TimelineVisibleRangePolicy.legacy,
+    this.stretchPolicy = TimelineStretchPolicy.legacy,
   });
 
   @override
@@ -74,6 +78,8 @@ class FullScreenTimelineScaffold extends StatelessWidget {
           availableWidth: constraints.maxWidth,
           selectedDay: selectedDay,
           config: geometryConfig,
+          visibleRangePolicy: visibleRangePolicy,
+          stretchPolicy: stretchPolicy,
         );
 
         final dayEntries = layoutResult.entries;

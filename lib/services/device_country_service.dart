@@ -19,16 +19,32 @@ abstract class DeviceCountryService {
   Future<DeviceCountry?> detectCountry();
 }
 
-class GeolocatorDeviceCountryService implements DeviceCountryService {
+abstract interface class PermissionAwareDeviceCountryService {
+  Future<DeviceCountry?> detectCountryIfPermissionGranted();
+}
+
+class GeolocatorDeviceCountryService
+    implements DeviceCountryService, PermissionAwareDeviceCountryService {
   const GeolocatorDeviceCountryService();
 
   @override
   Future<DeviceCountry?> detectCountry() async {
+    return _detectCountry(requestPermission: true);
+  }
+
+  @override
+  Future<DeviceCountry?> detectCountryIfPermissionGranted() async {
+    return _detectCountry(requestPermission: false);
+  }
+
+  Future<DeviceCountry?> _detectCountry({
+    required bool requestPermission,
+  }) async {
     try {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (serviceEnabled) {
         var permission = await Geolocator.checkPermission();
-        if (permission == LocationPermission.denied) {
+        if (permission == LocationPermission.denied && requestPermission) {
           permission = await Geolocator.requestPermission();
         }
         if (permission == LocationPermission.whileInUse ||

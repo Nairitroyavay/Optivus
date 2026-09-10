@@ -782,8 +782,10 @@ const int _onboarding7MaximumRecommendations = 10;
 
 @visibleForTesting
 List<SkinCareProductRecommendation> onboarding7NormalizeRecommendations(
-  Iterable<SkinCareProductRecommendation> products,
-) {
+  Iterable<SkinCareProductRecommendation> products, {
+  String? expectedCurrencyCode,
+}) {
+  final expectedCurrency = expectedCurrencyCode?.trim().toUpperCase();
   final valid = <SkinCareProductRecommendation>[];
   final seen = <String>{};
   for (final product in products) {
@@ -792,7 +794,13 @@ List<SkinCareProductRecommendation> onboarding7NormalizeRecommendations(
         product.category.trim().isEmpty ||
         product.estimatedPrice.trim().isEmpty ||
         product.currencyCode.trim().isEmpty ||
-        product.reason.trim().isEmpty) {
+        product.reason.trim().isEmpty ||
+        (expectedCurrency != null &&
+            (product.currencyCode.trim().toUpperCase() != expectedCurrency ||
+                !onboarding7PriceMatchesCurrency(
+                  product.estimatedPrice,
+                  expectedCurrency,
+                )))) {
       continue;
     }
     final key = normalizeSkinCareSelectionKey(product.displayName);
@@ -825,6 +833,80 @@ List<SkinCareProductRecommendation> onboarding7NormalizeRecommendations(
   return result
       .take(_onboarding7MaximumRecommendations)
       .toList(growable: false);
+}
+
+@visibleForTesting
+bool onboarding7PriceMatchesCurrency(
+  String estimatedPrice,
+  String expectedCurrencyCode,
+) {
+  final price = estimatedPrice.trim().toUpperCase();
+  final expected = expectedCurrencyCode.trim().toUpperCase();
+  if (price.isEmpty || expected.isEmpty) return false;
+  const knownCodes = {
+    'AED',
+    'AUD',
+    'BDT',
+    'BRL',
+    'CAD',
+    'CHF',
+    'CNY',
+    'CZK',
+    'DKK',
+    'EGP',
+    'EUR',
+    'GBP',
+    'HKD',
+    'IDR',
+    'INR',
+    'JPY',
+    'KRW',
+    'LKR',
+    'MYR',
+    'MXN',
+    'NGN',
+    'NOK',
+    'NPR',
+    'NZD',
+    'PHP',
+    'PKR',
+    'PLN',
+    'SAR',
+    'SEK',
+    'SGD',
+    'THB',
+    'TRY',
+    'TWD',
+    'USD',
+    'VND',
+    'ZAR',
+  };
+  for (final code in knownCodes) {
+    if (code != expected &&
+        RegExp('(^|[^A-Z])$code([^A-Z]|\$)').hasMatch(price)) {
+      return false;
+    }
+  }
+  if (price.contains('₹') && expected != 'INR') return false;
+  if (price.contains('€') && expected != 'EUR') return false;
+  if (price.contains('£') && expected != 'GBP') return false;
+  if (price.contains('¥') && expected != 'JPY' && expected != 'CNY') {
+    return false;
+  }
+  if (price.contains(r'$') &&
+      !const {
+        'USD',
+        'CAD',
+        'AUD',
+        'NZD',
+        'SGD',
+        'HKD',
+        'MXN',
+        'BRL',
+      }.contains(expected)) {
+    return false;
+  }
+  return true;
 }
 
 /// Normalizes currency and estimated price display strings to prevent duplicated

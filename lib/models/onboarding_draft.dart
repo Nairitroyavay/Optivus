@@ -171,8 +171,8 @@ class OnboardingDraft {
       setupGeneration: setupGeneration,
       setupLineageVersion: setupLineageVersion,
       lastResetOperationId: lastResetOperationId ?? resetOperationId,
-      baseTimeline: baseTimeline ??
-          const BaseTimelineDraft().withRequiredFixedBlocks(),
+      baseTimeline:
+          baseTimeline ?? const BaseTimelineDraft().withRequiredFixedBlocks(),
       createdAt: timestamp,
       updatedAt: updatedAt ?? timestamp,
       revision: 1,
@@ -227,8 +227,7 @@ class OnboardingDraft {
       sourceFingerprint: map['sourceFingerprint'] as String? ?? '',
       timezoneId: map['timezoneId'] as String? ?? 'UTC',
       setupGeneration: (map['setupGeneration'] as num?)?.toInt() ?? 0,
-      setupLineageVersion:
-          (map['setupLineageVersion'] as num?)?.toInt() ?? 0,
+      setupLineageVersion: (map['setupLineageVersion'] as num?)?.toInt() ?? 0,
       lastResetOperationId: map['lastResetOperationId'] as String?,
       welcomeSaved: map['welcomeSaved'] as bool? ?? false,
       patiencePledgeAccepted: map['patiencePledgeAccepted'] as bool? ?? false,
@@ -1764,6 +1763,18 @@ class SkinCareProductRecommendationDraft {
   };
 }
 
+int _readSkinCareSetupStep(Map<String, dynamic> map) {
+  final step = (map['skinCareSetupStep'] as num?)?.toInt() ?? 0;
+  if (map.containsKey('skinCareStageContractVersion') || step != 1) {
+    return step;
+  }
+  final blocks = map['blocks'];
+  final hasLegacyRoutine =
+      blocks is List &&
+      blocks.whereType<Map>().any((block) => block['section'] == 'skin_care');
+  return hasLegacyRoutine ? 2 : step;
+}
+
 class BaseTimelineDraft {
   static const fixedSleepId = 'fixed-sleep';
   static const fixedBathId = 'fixed-bath';
@@ -1773,6 +1784,7 @@ class BaseTimelineDraft {
   final int eatingSetupStep;
   final int fixedScheduleSetupStep;
   final int skinCareSetupStep;
+  final int skinCareStageContractVersion;
   final String? businessMode;
   final int? workDurationMinutes;
   final String? workBestTime;
@@ -1833,6 +1845,7 @@ class BaseTimelineDraft {
   final String? skinCareRecommendationCurrencyCode;
 
   static const currentGate2EatingPlanVersion = 2;
+  static const currentSkinCareStageContractVersion = 1;
 
   final int? eatingGeneratedPlanVersion;
   final String? eatingGeneratedInputFingerprint;
@@ -1843,6 +1856,7 @@ class BaseTimelineDraft {
     this.eatingSetupStep = 0,
     this.fixedScheduleSetupStep = 0,
     this.skinCareSetupStep = 0,
+    this.skinCareStageContractVersion = 0,
     this.businessMode,
     this.workDurationMinutes,
     this.workBestTime,
@@ -1911,7 +1925,10 @@ class BaseTimelineDraft {
       eatingSetupStep: (map['eatingSetupStep'] as num?)?.toInt() ?? 0,
       fixedScheduleSetupStep:
           (map['fixedScheduleSetupStep'] as num?)?.toInt() ?? 0,
-      skinCareSetupStep: (map['skinCareSetupStep'] as num?)?.toInt() ?? 0,
+      skinCareSetupStep: _readSkinCareSetupStep(map),
+      skinCareStageContractVersion:
+          (map['skinCareStageContractVersion'] as num?)?.toInt() ??
+          currentSkinCareStageContractVersion,
       businessMode: map['businessMode'] as String?,
       workDurationMinutes: (map['workDurationMinutes'] as num?)?.toInt(),
       workBestTime: map['workBestTime'] as String?,
@@ -2014,6 +2031,7 @@ class BaseTimelineDraft {
     'eatingSetupStep': eatingSetupStep,
     'fixedScheduleSetupStep': fixedScheduleSetupStep,
     'skinCareSetupStep': skinCareSetupStep,
+    'skinCareStageContractVersion': skinCareStageContractVersion,
     'businessMode': businessMode,
     'workDurationMinutes': workDurationMinutes,
     'workBestTime': workBestTime,
@@ -2085,6 +2103,7 @@ class BaseTimelineDraft {
     int? eatingSetupStep,
     int? fixedScheduleSetupStep,
     int? skinCareSetupStep,
+    int? skinCareStageContractVersion,
     String? businessMode,
     int? workDurationMinutes,
     String? workBestTime,
@@ -2185,6 +2204,8 @@ class BaseTimelineDraft {
       skinCareSetupStep: (skinCareSetupStep ?? this.skinCareSetupStep)
           .clamp(0, 8)
           .toInt(),
+      skinCareStageContractVersion:
+          skinCareStageContractVersion ?? this.skinCareStageContractVersion,
       businessMode: clearBusinessPlanning
           ? null
           : (businessMode ?? this.businessMode),
@@ -3322,6 +3343,10 @@ class BaseTimelineDraft {
     if (skinCareSetupPath == null) {
       return 'Build skin care routine or skip.';
     }
+    if (skinCareSetupStep < 2 &&
+        skinCareStageContractVersion >= currentSkinCareStageContractVersion) {
+      return 'Build skin care routine again to continue.';
+    }
 
     final desired = _normalizeSkinCareDesiredApplicationsPerDay(
       skinCareDesiredApplicationsPerDay,
@@ -3390,6 +3415,17 @@ class BaseTimelineDraft {
 
       if (skinCareSelectedProductNames.isEmpty) {
         return 'Find and select products before building your routine.';
+      }
+
+      final recommendationCurrency =
+          skinCareRecommendationCurrencyCode?.trim().toUpperCase() ?? '';
+      if (recommendationCurrency.isEmpty ||
+          skinCareProductRecommendations.any(
+            (product) =>
+                product.currencyCode.trim().toUpperCase() !=
+                recommendationCurrency,
+          )) {
+        return 'Product recommendation currencies changed. Find products again.';
       }
 
       final recommendations = <String, SkinCareProductRecommendationDraft>{};

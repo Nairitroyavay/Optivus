@@ -23,7 +23,7 @@ class RegionSettingsNotifier extends StateNotifier<RegionSettings> {
       // reconstructing; the safe fallback remains available below.
     }
     if (saved != null) {
-      state = saved.copyWith(userId: userId, source: RegionSource.userSaved);
+      state = saved.copyWith(userId: userId);
       return;
     }
 
@@ -43,6 +43,35 @@ class RegionSettingsNotifier extends StateNotifier<RegionSettings> {
       return;
     }
     state = RegionSettings.defaultForUser(userId);
+  }
+
+  /// Refreshes weak region authority from an already-authorized device
+  /// location. Explicit and legacy user-saved choices are never overwritten.
+  Future<RegionSettings> refreshFromDeviceIfAllowed() async {
+    final before = state;
+    if (before.source == RegionSource.userSaved) return before;
+    DeviceCountry? detected;
+    try {
+      detected = _deviceCountryService is PermissionAwareDeviceCountryService
+          ? await (_deviceCountryService as PermissionAwareDeviceCountryService)
+                .detectCountryIfPermissionGranted()
+          : await _deviceCountryService.detectCountry();
+    } catch (_) {
+      detected = null;
+    }
+    if (state.userId != before.userId ||
+        state.source == RegionSource.userSaved ||
+        detected == null ||
+        !detected.fromDeviceLocation) {
+      return state;
+    }
+    state = RegionSettings.forCountry(
+      userId: before.userId,
+      countryCode: detected.countryCode,
+      countryName: detected.countryName,
+      source: RegionSource.deviceDetected,
+    );
+    return state;
   }
 
   void loadSettings(RegionSettings settings) {

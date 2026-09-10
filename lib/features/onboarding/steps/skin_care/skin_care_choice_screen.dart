@@ -161,6 +161,8 @@ class _SkinCareChoiceScreen extends ConsumerWidget {
           blocks: blocks,
           skinCareSetupPath: value,
           skinCareSetupStep: 1,
+          skinCareStageContractVersion:
+              BaseTimelineDraft.currentSkinCareStageContractVersion,
           skinCareSkipped: isSkip,
           skinCareSpecialCareNotes: clearGeneratedData
               ? const []

@@ -406,6 +406,56 @@ describe("Skin-care Worker", () => {
     expect(calls[0].body.generationConfig.maxOutputTokens).toBe(3072);
   });
 
+  test("wrong model currency is rejected, repaired, and never returned", async () => {
+    const key = "users/uid-1/onboarding/skin_face/face.jpg";
+    const calls: FetchCall[] = [];
+    const initial = completeIndianRecommendationProducts();
+    initial[0] = {
+      ...initial[0],
+      estimatedPrice: "$12 USD",
+      currencyCode: "USD",
+    };
+    stubGeminiResponses([
+      geminiSuccess(JSON.stringify({ recommendedProducts: initial, warnings: [] })),
+      geminiSuccess(JSON.stringify({
+        recommendedProducts: [{
+          name: "Local Gentle Cleanser",
+          brand: "Example",
+          category: "cleanser",
+          estimatedPrice: "₹320",
+          currencyCode: "INR",
+          reason: "A locally priced cleanser",
+        }],
+        warnings: [],
+      })),
+    ], calls);
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        recommendationOnly: true,
+        facePhotoR2Key: key,
+        skinType: "oily",
+        skinConcerns: ["pimples"],
+        budget: "low",
+        countryCode: "IN",
+        countryName: "India",
+        currencyCode: "INR",
+      }),
+      makeEnv({ [key]: { contentType: "image/jpeg" } }) as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(calls).toHaveLength(2);
+    expect(json.warnings).toContain("ai_recommendation_currency_conflict");
+    expect(json.warnings).toContain("ai_product_recommendations_repaired");
+    expect(json.recommendedProducts.length).toBeGreaterThan(0);
+    expect(json.recommendedProducts.every((item: any) =>
+      item.currencyCode === "INR" && !item.estimatedPrice.includes("USD") &&
+      !item.estimatedPrice.includes("$"),
+    )).toBe(true);
+  });
+
   test("incomplete recommendations are repaired and common categories are canonicalized", async () => {
     const key = "users/uid-1/onboarding/skin_face/face.jpg";
     const calls: FetchCall[] = [];

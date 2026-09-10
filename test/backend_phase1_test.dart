@@ -124,6 +124,45 @@ void main() {
     expect(notifier.state.source, RegionSource.deviceDetected);
   });
 
+  test('late device permission refresh replaces only weak fallback', () async {
+    final service = _MutableDeviceCountryService();
+    final notifier = RegionSettingsNotifier(
+      FakeRegionSettingsRepository(),
+      service,
+    );
+    await notifier.loadForUser('u1');
+    expect(notifier.state.source, RegionSource.localeFallback);
+
+    service.result = const DeviceCountry(
+      countryCode: 'IN',
+      countryName: 'India',
+      fromDeviceLocation: true,
+    );
+    final refreshed = await notifier.refreshFromDeviceIfAllowed();
+    expect(refreshed.countryCode, 'IN');
+    expect(refreshed.currencyCode, 'INR');
+    expect(refreshed.source, RegionSource.deviceDetected);
+  });
+
+  test('late device refresh never overwrites explicit saved region', () async {
+    final service = _MutableDeviceCountryService()
+      ..result = const DeviceCountry(
+        countryCode: 'IN',
+        countryName: 'India',
+        fromDeviceLocation: true,
+      );
+    final notifier = RegionSettingsNotifier(
+      FakeRegionSettingsRepository(),
+      service,
+    );
+    notifier.loadSettings(RegionSettings.unitedStates(userId: 'u1'));
+
+    final refreshed = await notifier.refreshFromDeviceIfAllowed();
+    expect(refreshed.countryCode, 'US');
+    expect(refreshed.currencyCode, 'USD');
+    expect(service.calls, 0);
+  });
+
   test('Firestore path strings remain correct', () {
     expect(FirestoreUserPaths.profile('abc'), 'users/abc/profile/main');
     expect(
@@ -143,4 +182,15 @@ class _TestDeviceCountryService implements DeviceCountryService {
 
   @override
   Future<DeviceCountry?> detectCountry() async => result;
+}
+
+class _MutableDeviceCountryService implements DeviceCountryService {
+  DeviceCountry? result;
+  int calls = 0;
+
+  @override
+  Future<DeviceCountry?> detectCountry() async {
+    calls += 1;
+    return result;
+  }
 }

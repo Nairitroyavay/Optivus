@@ -257,7 +257,7 @@ void main() {
       },
     );
 
-    test('Back during editing cancels editing back to review mode', () {
+    test('Back during has-products rebuild returns to choice', () {
       final controller = container.read(
         skinCareFlowControllerProvider.notifier,
       );
@@ -275,11 +275,11 @@ void main() {
       expect(handled, isTrue);
       expect(
         container.read(skinCareFlowControllerProvider).state,
-        SkinCareFlowState.hasProductsReview,
+        SkinCareFlowState.choice,
       );
     });
 
-    test('Back during review returns to choice without clearing blocks', () {
+    test('Back during review enters rebuild without clearing blocks', () {
       final controller = container.read(
         skinCareFlowControllerProvider.notifier,
       );
@@ -289,7 +289,7 @@ void main() {
             (d) => d.copyWith(
               baseTimeline: d.baseTimeline.copyWith(
                 skinCareSetupPath: 'has_products',
-                skinCareSetupStep: 1,
+                skinCareSetupStep: 2,
                 blocks: [_skinBlock(1, 'Routine Block')],
               ),
             ),
@@ -300,13 +300,17 @@ void main() {
       expect(handled, isTrue);
       expect(
         container.read(skinCareFlowControllerProvider).state,
-        SkinCareFlowState.choice,
+        SkinCareFlowState.hasProductsEditing,
       );
 
       // Blocks are preserved
       final base = container.read(onboardingStateProvider).draft.baseTimeline;
       expect(base.blocks, isNotEmpty);
-      expect(base.skinCareSetupStep, 0);
+      expect(base.skinCareSetupStep, 1);
+      expect(
+        deriveSkinCareFlowState(base, testUid),
+        SkinCareFlowState.hasProductsInput,
+      );
     });
 
     test('startGeneration bumps epoch and records generationOrigin', () {
@@ -487,7 +491,8 @@ void main() {
       expect(restoredBase.skinCareSkinType, isNull);
       expect(restoredBase.skinCareBudget, isNull);
       expect(restoredBase.skinCarePreference, isNull);
-      expect(restoredBase.isSkinCareRoutineCurrent(testUid), isTrue);
+      expect(restoredBase.isSkinCareRoutineCurrent(testUid), isFalse);
+      expect(restoredBase.skinCareSetupStep, 0);
     });
 
     test(

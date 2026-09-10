@@ -353,12 +353,23 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       return;
     }
 
-    ref.read(onboardingStateProvider.notifier).clearValidation();
-    final currentAuthGeneration = ref.read(authGenerationProvider);
-    final currentAssetId = asset.assetId;
-    final currentAssetKey = asset.r2Key;
     final user = ref.read(authProvider).user;
     final uid = user?.uid ?? ref.read(onboardingStateProvider).draft.uid;
+    final currentAuthGeneration = ref.read(authGenerationProvider);
+    final region = await ref
+        .read(regionSettingsProvider.notifier)
+        .refreshFromDeviceIfAllowed();
+    if (!mounted ||
+        ref.read(authGenerationProvider) != currentAuthGeneration ||
+        (ref.read(authProvider).user?.uid ??
+                ref.read(onboardingStateProvider).draft.uid) !=
+            uid) {
+      return;
+    }
+
+    ref.read(onboardingStateProvider.notifier).clearValidation();
+    final currentAssetId = asset.assetId;
+    final currentAssetKey = asset.r2Key;
     final isRetry = _lifecycle.state.phase == AiGenerationPhase.error;
 
     setState(() {
@@ -412,10 +423,6 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
             await ref.read(authRepositoryProvider).currentIdToken() ?? '';
         if (!scope.isCurrent) return false;
         final client = ref.read(skinCareAiClientProvider);
-        // Region resolution is a hydrated, user-scoped responsibility.  In
-        // particular, a locale fallback must never replace saved settings in
-        // a request assembled by this screen.
-        final region = ref.read(regionSettingsProvider);
         scope.transition(
           AiGenerationPhase.analyzing,
           message:
@@ -445,6 +452,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
 
         final deduped = onboarding7NormalizeRecommendations(
           result.recommendedProducts,
+          expectedCurrencyCode: region.currencyCode,
         );
 
         final recommendationDrafts = deduped
@@ -581,6 +589,17 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final currentAssetKey = asset.r2Key;
     final user = ref.read(authProvider).user;
     final uid = user?.uid ?? ref.read(onboardingStateProvider).draft.uid;
+    final activeRegion = ref.read(regionSettingsProvider);
+    final requestCountryCode =
+        currentBase.skinCareRecommendationCountryCode?.trim().toUpperCase() ??
+        activeRegion.countryCode;
+    final requestCurrencyCode =
+        currentBase.skinCareRecommendationCurrencyCode?.trim().toUpperCase() ??
+        activeRegion.currencyCode;
+    final requestCountryName = RegionSettings.forCountry(
+      userId: uid,
+      countryCode: requestCountryCode,
+    ).countryName;
     final isRetry = _lifecycle.state.phase == AiGenerationPhase.error;
 
     setState(() {
@@ -633,7 +652,6 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         final idToken =
             await ref.read(authRepositoryProvider).currentIdToken() ?? '';
         if (!scope.isCurrent) return false;
-        final region = ref.read(regionSettingsProvider);
         final selectedNames = selected
             .map((product) => product.displayName)
             .where((name) => name.isNotEmpty)
@@ -669,9 +687,9 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                 'budget': currentBase.skinCareBudget,
                 'routinePreference': currentBase.skinCarePreference,
                 'desiredApplicationsPerDay': desiredApplicationsPerDay,
-                'countryCode': region.countryCode,
-                'countryName': region.countryName,
-                'currencyCode': region.currencyCode,
+                'countryCode': requestCountryCode,
+                'countryName': requestCountryName,
+                'currencyCode': requestCurrencyCode,
               },
             );
         if (!scope.isCurrent) return false;
@@ -754,6 +772,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           return draftForFingerprint.copyWith(
             blocks: nextBlocks,
             skinCareRoutineFingerprint: routineFingerprint,
+            skinCareSetupStep: 2,
           );
         });
 
@@ -1049,167 +1068,13 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     }
 
     if (flowState == SkinCareFlowState.noProductsReview) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-            child: Text(
-              base.isSkinCareRoutineCurrent(draft.uid)
-                  ? 'Routine built'
-                  : 'Changes not applied yet',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w900,
-                color: OptivusColors.textPrimary,
-              ),
-            ),
-          ),
-          if (!base.isSkinCareRoutineCurrent(draft.uid))
-            const Padding(
-              padding: EdgeInsets.fromLTRB(24, 2, 24, 0),
-              child: Text(
-                'Your last routine is kept until a replacement succeeds.',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: OptivusColors.textSecondary,
-                ),
-              ),
-            ),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final selectedProductsButton =
-                  base.skinCareSuggestedProducts.isEmpty
-                  ? null
-                  : IconButton(
-                      key: const ValueKey(
-                        'onboarding-step7-selected-products-button',
-                      ),
-                      tooltip: 'Selected products',
-                      onPressed: () => _showSkinCareSelectedProductsSheet(
-                        context,
-                        products: base.skinCareSuggestedProducts,
-                        recommendations: base.skinCareProductRecommendations,
-                        accent: OptivusColors.purpleAccent,
-                      ),
-                      icon: const Icon(Icons.info_outline_rounded, size: 18),
-                      color: OptivusColors.purpleAccent,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(
-                        width: 32,
-                        height: 32,
-                      ),
-                      splashRadius: 16,
-                    );
-              final rebuildAction = OnboardingActionPill(
-                label: 'Rebuild / Edit',
-                icon: Icons.edit_rounded,
-                accent: OptivusColors.purpleAccent,
-                compact: true,
-                onTap: () {
-                  ref
-                      .read(skinCareFlowControllerProvider.notifier)
-                      .startEditing(base);
-                  setState(() {
-                    _pendingDesiredApplicationsPerDay = null;
-                    _generationError = null;
-                  });
-                },
-              );
-              final compactHeader =
-                  constraints.maxWidth < 360 ||
-                  MediaQuery.textScalerOf(context).scale(14) > 18;
-
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 6),
-                child: compactHeader
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: const Text(
-                                  'Skin Care',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w900,
-                                    color: OptivusColors.textPrimary,
-                                  ),
-                                ),
-                              ),
-                              ?selectedProductsButton,
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          const Text(
-                            'Review your routine for the week.',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: OptivusColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: rebuildAction,
-                          ),
-                        ],
-                      )
-                    : Row(
-                        children: [
-                          Expanded(
-                            child: const Text(
-                              'Skin Care',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w900,
-                                color: OptivusColors.textPrimary,
-                              ),
-                            ),
-                          ),
-                          ?selectedProductsButton,
-                          rebuildAction,
-                        ],
-                      ),
-              );
-            },
-          ),
-          if (uploadState?.cleanupPending == true)
-            TextButton(
-              onPressed: busy
-                  ? null
-                  : () async {
-                      final resolved = await ref
-                          .read(onboardingUploadInteractionProvider.notifier)
-                          .remove(uploadState!.slotKey, uid: draft.uid);
-                      if (mounted && resolved) {
-                        setState(() {
-                          _uploadError = null;
-                        });
-                      }
-                    },
-              child: const Text('Retry private cleanup'),
-            ),
-          if (message != null) ...[
-            const SizedBox(height: 10),
-            _SkinCareInlineMessage(message: message),
-          ],
-          _SkinCareTimelineSection(
-            selectedDay: _selectedDay,
-            blocks: widget.blocks,
-            onDayChanged: (day) => setState(() => _selectedDay = day),
-            emptyLabel: 'No skin care scheduled for this day.',
-            accent: OptivusColors.purpleAccent,
-            specialCareNotes: base.skinCareSpecialCareNotes,
-          ),
-        ],
+      return _SkinCareTimelineSection(
+        selectedDay: _selectedDay,
+        blocks: widget.blocks,
+        onDayChanged: (day) => setState(() => _selectedDay = day),
+        emptyLabel: 'No skin care scheduled for this day.',
+        accent: OptivusColors.purpleAccent,
+        specialCareNotes: base.skinCareSpecialCareNotes,
       );
     }
 
@@ -1241,23 +1106,6 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                   onPressed: busy ? null : _changeDetails,
                   child: const Text('Change details'),
                 ),
-                if (isEditing)
-                  TextButton.icon(
-                    key: const ValueKey(
-                      'onboarding-step7-no-products-cancel-rebuild',
-                    ),
-                    onPressed: () {
-                      ref
-                          .read(skinCareFlowControllerProvider.notifier)
-                          .cancelEditing();
-                      setState(() {
-                        _pendingDesiredApplicationsPerDay = null;
-                        _generationError = null;
-                      });
-                    },
-                    icon: const Icon(Icons.close_rounded, size: 18),
-                    label: const Text('Close editor'),
-                  ),
               ],
             ),
             Expanded(
@@ -1526,36 +1374,6 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final detailsPane = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (isEditing)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const _SkinCareInlineMessage(
-                message: 'Changes not applied yet. Your last routine is kept.',
-              ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  key: const ValueKey(
-                    'onboarding-step7-no-products-cancel-rebuild',
-                  ),
-                  onPressed: busy
-                      ? null
-                      : () {
-                          ref
-                              .read(skinCareFlowControllerProvider.notifier)
-                              .cancelEditing();
-                          setState(() {
-                            _pendingDesiredApplicationsPerDay = null;
-                            _generationError = null;
-                          });
-                        },
-                  icon: const Icon(Icons.close_rounded, size: 18),
-                  label: const Text('Close editor'),
-                ),
-              ),
-            ],
-          ),
         Expanded(
           child: Padding(
             padding: const EdgeInsets.only(bottom: 8),

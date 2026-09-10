@@ -706,6 +706,7 @@ class _HasProductsModeScreenState
             return draftForFingerprint.copyWith(
               blocks: nextBlocks,
               skinCareRoutineFingerprint: routineFingerprint,
+              skinCareSetupStep: 2,
             );
           });
 
@@ -1055,55 +1056,18 @@ class _HasProductsModeScreenState
         ],
       );
 
-      final editorContent = Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (isEditing) ...[
-            const _SkinCareInlineMessage(
-              message: 'Changes not applied yet. Your last routine is kept.',
-            ),
-            const SizedBox(height: 4),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                key: const ValueKey('onboarding-step7-cancel-rebuild'),
-                onPressed: busy
-                    ? null
-                    : () {
-                        ref
-                            .read(skinCareFlowControllerProvider.notifier)
-                            .cancelEditing();
-                        final base = ref
-                            .read(onboardingStateProvider)
-                            .draft
-                            .baseTimeline;
-                        _controller.text = base.skinCareProductNames ?? '';
-                        setState(() {
-                          _generationError = null;
-                        });
-                      },
-                icon: const Icon(Icons.close_rounded, size: 18),
-                label: const Text('Close editor'),
+      final editorContent = isEditing
+          ? SingleChildScrollView(
+              padding: EdgeInsets.only(
+                bottom: hasSharedFooter
+                    ? OnboardingFooterMetrics.resolve(
+                        context,
+                      ).requiredContentInset
+                    : 8,
               ),
-            ),
-            const SizedBox(height: 4),
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  bottom: hasSharedFooter
-                      ? OnboardingFooterMetrics.resolve(
-                          context,
-                        ).requiredContentInset
-                      : 8,
-                ),
-                child: SingleChildScrollView(child: setupBody),
-              ),
-            ),
-          ] else ...[
-            setupBody,
-          ],
-        ],
-      );
+              child: setupBody,
+            )
+          : setupBody;
 
       return _SkinCareContainedPane(
         enabled: isEditingTransaction,
@@ -1111,107 +1075,13 @@ class _HasProductsModeScreenState
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: OnboardingGlassCard(
-                tint: OptivusColors.roseAccent.withValues(alpha: 0.12),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
-                ),
-                radius: 20,
-                child: Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
-                            color: Colors.white.withValues(alpha: 0.4),
-                          ),
-                          child: const Icon(
-                            Icons.auto_awesome_rounded,
-                            color: OptivusColors.roseAccent,
-                            size: 18,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Flexible(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                draft.baseTimeline.isSkinCareRoutineCurrent(
-                                      draft.uid,
-                                    )
-                                    ? 'Routine built'
-                                    : 'Changes not applied yet',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w900,
-                                  color: OptivusColors.textPrimary,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${widget.base.skinCareDesiredApplicationsPerDay} routines per day',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                  color: OptivusColors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    OnboardingActionPill(
-                      label: 'Rebuild / Edit',
-                      icon: Icons.edit_rounded,
-                      accent: OptivusColors.roseAccent,
-                      compact: true,
-                      onTap: () {
-                        ref
-                            .read(skinCareFlowControllerProvider.notifier)
-                            .startEditing(draft.baseTimeline);
-                        setState(() {
-                          _generationError = null;
-                        });
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-        if (message != null) ...[
-          const SizedBox(height: 10),
-          _SkinCareInlineMessage(message: message),
-        ],
-        const SizedBox(height: 12),
-        _SkinCareTimelineSection(
-          selectedDay: _selectedDay,
-          blocks: widget.blocks,
-          onDayChanged: (d) => setState(() => _selectedDay = d),
-          emptyLabel: 'Build your skin-care routine first.',
-          accent: OptivusColors.roseAccent,
-          specialCareNotes: widget.base.skinCareSpecialCareNotes,
-        ),
-      ],
+    return _SkinCareTimelineSection(
+      selectedDay: _selectedDay,
+      blocks: widget.blocks,
+      onDayChanged: (d) => setState(() => _selectedDay = d),
+      emptyLabel: 'Build your skin-care routine first.',
+      accent: OptivusColors.roseAccent,
+      specialCareNotes: widget.base.skinCareSpecialCareNotes,
     );
   }
 }

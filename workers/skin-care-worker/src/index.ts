@@ -459,20 +459,49 @@ function normalizeRecommendedProducts(value: any): RecommendedSkinCareProduct[] 
 function usableRecommendedProducts(
   value: unknown,
   fallbackCurrencyCode: string,
+  rejectionReasons: string[] = [],
 ): RecommendedSkinCareProduct[] {
   return normalizeRecommendedProducts(value)
     .map((product) => ({
       ...product,
       currencyCode: product.currencyCode || fallbackCurrencyCode,
     }))
-    .filter((product) =>
-      product.name.length > 0 &&
-      product.brand.length > 0 &&
-      product.category.length > 0 &&
-      product.estimatedPrice.length > 0 &&
-      product.currencyCode.length > 0 &&
-      product.reason.length > 0
-    );
+    .filter((product) => {
+      const complete = product.name.length > 0 &&
+        product.brand.length > 0 &&
+        product.category.length > 0 &&
+        product.estimatedPrice.length > 0 &&
+        product.currencyCode.length > 0 &&
+        product.reason.length > 0;
+      if (!complete) return false;
+      if (product.currencyCode !== fallbackCurrencyCode ||
+          !estimatedPriceMatchesCurrency(product.estimatedPrice, fallbackCurrencyCode)) {
+        rejectionReasons.push(`currency_conflict:${product.category}`);
+        return false;
+      }
+      return true;
+    });
+}
+
+function estimatedPriceMatchesCurrency(priceValue: string, expectedValue: string): boolean {
+  const price = String(priceValue || "").trim().toUpperCase();
+  const expected = String(expectedValue || "").trim().toUpperCase();
+  if (!price || !expected) return false;
+  const knownCodes = [
+    "AED", "AUD", "BDT", "BRL", "CAD", "CHF", "CNY", "CZK", "DKK", "EGP",
+    "EUR", "GBP", "HKD", "IDR", "INR", "JPY", "KRW", "LKR", "MYR", "MXN",
+    "NGN", "NOK", "NPR", "NZD", "PHP", "PKR", "PLN", "SAR", "SEK", "SGD",
+    "THB", "TRY", "TWD", "USD", "VND", "ZAR",
+  ];
+  for (const code of knownCodes) {
+    if (code !== expected && new RegExp(`(^|[^A-Z])${code}([^A-Z]|$)`).test(price)) return false;
+  }
+  if (price.includes("₹") && expected !== "INR") return false;
+  if (price.includes("€") && expected !== "EUR") return false;
+  if (price.includes("£") && expected !== "GBP") return false;
+  if (price.includes("¥") && expected !== "JPY" && expected !== "CNY") return false;
+  if (price.includes("$") && !["USD", "CAD", "AUD", "NZD", "SGD", "HKD", "MXN", "BRL"].includes(expected)) return false;
+  return true;
 }
 
 function missingRecommendedProductCategories(
@@ -2275,22 +2304,34 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
   const suggestedProducts = ownedProductMode
     ? stringList(rawSuggestedProducts.filter((item: any) => ownedNoteAllowed(item, catalog)).map(noteText))
     : rawSuggestedProducts;
+  const recommendationRejectionReasons: string[] = [];
   let recommendedProducts = usableRecommendedProducts(
     parsed.recommendedProducts,
     currencyCode,
+    recommendationRejectionReasons,
   );
   if (recommendationOnly) {
     const initiallyMissing = missingRecommendedProductCategories(
       recommendedProducts,
     );
-    if (initiallyMissing.length > 0) {
+    const currencyRejectedCategories = recommendationRejectionReasons
+      .filter((reason) => reason.startsWith("currency_conflict:"))
+      .map((reason) => reason.slice("currency_conflict:".length));
+    const repairCategories = Array.from(new Set([
+      ...initiallyMissing,
+      ...currencyRejectedCategories,
+    ])).filter((category) => category.length > 0);
+    if (currencyRejectedCategories.length > 0) {
+      warnings.push("ai_recommendation_currency_conflict");
+    }
+    if (repairCategories.length > 0) {
       const repairPrompt = `Repair an incomplete skin-care shopping list for this user.
 Skin Type: ${body.skinType || "unknown"}
 Skin Concerns: ${JSON.stringify(stringList(body.skinConcerns))}
 Budget: ${body.budget || "medium"}
 Country: ${countryName} (${countryCode})
 Currency: ${currencyCode}
-Missing essential categories: ${JSON.stringify(initiallyMissing)}
+Missing essential categories or currency-conflict categories requiring valid ${currencyCode} recommendations: ${JSON.stringify(repairCategories)}
 Already accepted products: ${JSON.stringify(recommendedProducts)}
 
 Return real, commonly sold products only for the missing required core categories. Return at least two alternatives for every missing category when valid products are available.
@@ -2321,9 +2362,11 @@ Return ONLY strict JSON:
           { onProviderAttempt: () => { providerAttemptCount += 1; } },
         );
         const repairParsed = parseAiJsonText(repairText);
+        const repairRejectionReasons: string[] = [];
         const repairedProducts = usableRecommendedProducts(
           repairParsed?.recommendedProducts,
           currencyCode,
+          repairRejectionReasons,
         );
         const mergedProducts = mergeRecommendedProducts(
           recommendedProducts,
@@ -2331,10 +2374,14 @@ Return ONLY strict JSON:
         );
         if (
           missingRecommendedProductCategories(mergedProducts).length <
-          initiallyMissing.length
+            initiallyMissing.length ||
+          (currencyRejectedCategories.length > 0 && repairedProducts.length > 0)
         ) {
           recommendedProducts = mergedProducts;
           warnings.push("ai_product_recommendations_repaired");
+        }
+        if (repairRejectionReasons.length > 0) {
+          warnings.push("ai_recommendation_repair_currency_invalid");
         }
       } catch (error) {
         const failureKind = error instanceof HttpError

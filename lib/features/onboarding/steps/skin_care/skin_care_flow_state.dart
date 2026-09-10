@@ -62,9 +62,12 @@ SkinCareFlowState deriveSkinCareFlowState(BaseTimelineDraft base, String uid) {
   }
 
   final hasRoutineBlocks = base.blocks.any((b) => b.section == 'skin_care');
+  final isReviewStage =
+      base.skinCareSetupStep >= 2 ||
+      (base.skinCareStageContractVersion == 0 && hasRoutineBlocks);
 
   if (base.skinCareSetupPath == 'has_products') {
-    if (hasRoutineBlocks) {
+    if (isReviewStage && hasRoutineBlocks) {
       return SkinCareFlowState.hasProductsReview;
     }
     final hasPhoto =
@@ -78,7 +81,7 @@ SkinCareFlowState deriveSkinCareFlowState(BaseTimelineDraft base, String uid) {
   }
 
   if (base.skinCareSetupPath == 'no_products') {
-    if (hasRoutineBlocks) {
+    if (isReviewStage && hasRoutineBlocks) {
       return SkinCareFlowState.noProductsReview;
     }
     final hasCurrentRecs =

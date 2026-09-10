@@ -350,6 +350,12 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Step 7 Price Display Formatting', () {
+    test('recommendation currency validation rejects mixed source values', () {
+      expect(onboarding7PriceMatchesCurrency('₹399', 'INR'), isTrue);
+      expect(onboarding7PriceMatchesCurrency(r'$12 USD', 'INR'), isFalse);
+      expect(onboarding7PriceMatchesCurrency('EUR 20', 'GBP'), isFalse);
+      expect(onboarding7PriceMatchesCurrency('¥1200', 'JPY'), isTrue);
+    });
     test(
       'formatSkinCarePriceDisplay handles various price and currency shapes',
       () {
@@ -739,7 +745,9 @@ void main() {
       expect(find.text('1. Wash face'), findsOneWidget);
       expect(find.text('2. Apply cream'), findsOneWidget);
       expect(find.text('3. Protect with SPF'), findsOneWidget);
-      expect(find.text('Cleanser, Moisturizer, Sunscreen'), findsOneWidget);
+      expect(find.text('• Cleanser'), findsOneWidget);
+      expect(find.text('• Moisturizer'), findsOneWidget);
+      expect(find.text('• Sunscreen'), findsOneWidget);
 
       // 'View full details' should NOT be present for normal cards
       expect(
@@ -751,7 +759,7 @@ void main() {
       final cardRect = tester.getRect(
         find.byKey(const ValueKey('onboarding-step7-block-normal-1')),
       );
-      final productsTextFinder = find.text('Cleanser, Moisturizer, Sunscreen');
+      final productsTextFinder = find.text('• Sunscreen');
       expect(productsTextFinder, findsOneWidget);
       final productsRect = tester.getRect(productsTextFinder);
       expect(
@@ -764,7 +772,7 @@ void main() {
     });
 
     testWidgets(
-      'Pathological card renders bounded summary and View full details sheet with all items',
+      'Pathological card renders every detail inside the expanded card',
       (tester) async {
         final longSteps = [
           'Wash face thoroughly with lukewarm water',
@@ -814,44 +822,22 @@ void main() {
 
         expect(tester.takeException(), isNull);
 
-        // Card should display bounded summary: first 2 steps
-        expect(
-          find.text('1. Wash face thoroughly with lukewarm water'),
-          findsOneWidget,
-        );
-        expect(
-          find.text('2. Apply toner gently with cotton pad'),
-          findsOneWidget,
-        );
-        // Steps 3+ should NOT be rendered on the timeline card
-        expect(
-          find.text('3. Apply hyaluronic acid serum on damp skin'),
-          findsNothing,
-        );
-
-        // 'View full details' button must be present
-        final detailsButton = find.byKey(
-          const ValueKey('onboarding-step7-full-details-pathological-1'),
-        );
-        expect(detailsButton, findsOneWidget);
-
-        // Tap 'View full details' to open the details modal bottom sheet
-        await tester.tap(detailsButton);
-        await tester.pumpAndSettle();
-
-        // In the bottom sheet, ALL steps and products should be visible in full
-        expect(find.text('Steps'), findsOneWidget);
-        expect(find.text('Products'), findsOneWidget);
-        for (final step in longSteps) {
-          expect(find.textContaining(step), findsWidgets);
+        for (var i = 0; i < longSteps.length; i += 1) {
+          expect(find.text('${i + 1}. ${longSteps[i]}'), findsOneWidget);
         }
         for (final product in longProducts) {
-          expect(find.textContaining(product), findsWidgets);
+          expect(find.text('• $product'), findsOneWidget);
         }
+        expect(find.text('View full details'), findsNothing);
+        expect(find.textContaining('more'), findsNothing);
 
-        // Close bottom sheet
-        await tester.binding.handlePopRoute();
-        await tester.pumpAndSettle();
+        final cardRect = tester.getRect(
+          find.byKey(const ValueKey('onboarding-step7-block-pathological-1')),
+        );
+        final lastProductRect = tester.getRect(
+          find.text('• ${longProducts.last}'),
+        );
+        expect(lastProductRect.bottom, lessThanOrEqualTo(cardRect.bottom + 1));
         expect(tester.takeException(), isNull);
       },
     );

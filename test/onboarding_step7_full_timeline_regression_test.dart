@@ -117,8 +117,9 @@ void main() {
         findsOneWidget,
       );
 
-      // 3. Routine built header is displayed
-      expect(find.text('Routine built'), findsOneWidget);
+      // 3. Unified review header is displayed
+      expect(find.text('Skin Care Routine'), findsOneWidget);
+      expect(find.text('Review your weekly routine'), findsOneWidget);
 
       // 4. Weekday chips exist (Mon-Sun)
       expect(find.text('Mon'), findsOneWidget);
@@ -133,8 +134,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Morning Skin Care'), findsWidgets);
 
-      // 7. "Rebuild / Edit" button exists to allow modifications
-      expect(find.text('Rebuild / Edit'), findsOneWidget);
+      // 7. Whole-routine rebuilding is owned by Back.
+      expect(find.text('Rebuild / Edit'), findsNothing);
+      expect(find.text('Close editor'), findsNothing);
     },
   );
 }

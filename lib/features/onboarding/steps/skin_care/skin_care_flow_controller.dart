@@ -359,6 +359,13 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
       ),
       clearError: true,
     );
+    _updateBase(
+      (current) => current.copyWith(
+        skinCareSetupStep: 1,
+        skinCareStageContractVersion:
+            BaseTimelineDraft.currentSkinCareStageContractVersion,
+      ),
+    );
   }
 
   /// Moves the no-products editor to a concrete substage without mutating draft data.
@@ -517,7 +524,9 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
         (state.authGeneration == currentAuthGen);
 
     if (canRestore) {
-      _updateBase((base) => snapshot.restoreOnto(base));
+      _updateBase(
+        (base) => snapshot.restoreOnto(base).copyWith(skinCareSetupStep: 2),
+      );
       final nextState = state.state == SkinCareFlowState.noProductsEditing
           ? SkinCareFlowState.noProductsReview
           : SkinCareFlowState.hasProductsReview;
@@ -605,17 +614,30 @@ class SkinCareFlowController extends StateNotifier<SkinCareFlowStateHolder> {
       case SkinCareFlowState.choice:
         return false;
 
-      case SkinCareFlowState.hasProductsEditing:
       case SkinCareFlowState.noProductsEditing:
+        if (state.noProductsEditStage == NoProductsEditStage.productSelection) {
+          setNoProductsEditStage(NoProductsEditStage.details);
+          ref.read(step7ActionBridgeProvider.notifier).clearAll();
+          return true;
+        }
         cancelEditing();
+        _updateBase((base) => base.copyWith(skinCareSetupStep: 0));
+        transitionTo(SkinCareFlowState.choice);
+        return true;
+
+      case SkinCareFlowState.hasProductsEditing:
+        cancelEditing();
+        _updateBase((base) => base.copyWith(skinCareSetupStep: 0));
+        transitionTo(SkinCareFlowState.choice);
         return true;
 
       case SkinCareFlowState.hasProductsReview:
       case SkinCareFlowState.noProductsReview:
-        // Transition back to choice, preserving Plan A blocks.
-        _updateBase((base) => base.copyWith(skinCareSetupStep: 0));
+        // Review Back enters the selected path's durable rebuild stage while
+        // retaining Plan A until a complete replacement is committed.
+        final base = ref.read(onboardingStateProvider).draft.baseTimeline;
+        startEditing(base);
         ref.read(step7ActionBridgeProvider.notifier).clearAll();
-        transitionTo(SkinCareFlowState.choice);
         return true;
 
       case SkinCareFlowState.noProductsProductSelection:
