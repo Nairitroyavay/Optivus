@@ -3,10 +3,7 @@ import 'package:optivus/core/errors/recoverable_error.dart';
 
 abstract final class PersistenceErrorMapper {
   /// Maps step sync and Firestore draft save failures to a truthful RecoverableError.
-  static RecoverableError mapStepSyncFailure({
-    int? step,
-    Object? error,
-  }) {
+  static RecoverableError mapStepSyncFailure({int? step, Object? error}) {
     return const RecoverableError(
       category: RecoverableErrorCategory.cloudPersistence,
       publicMessage:
@@ -20,13 +17,10 @@ abstract final class PersistenceErrorMapper {
   }
 
   /// Maps profile write failures.
-  static RecoverableError mapProfileSaveFailure({
-    Object? error,
-  }) {
+  static RecoverableError mapProfileSaveFailure({Object? error}) {
     return const RecoverableError(
       category: RecoverableErrorCategory.cloudPersistence,
-      publicMessage:
-          'We couldn’t save your profile changes yet. Please retry.',
+      publicMessage: 'We couldn’t save your profile changes yet. Please retry.',
       severity: RecoverableErrorSeverity.warning,
       isBlocking: false,
       retryAction: RecoverableRetryAction.retrySave,

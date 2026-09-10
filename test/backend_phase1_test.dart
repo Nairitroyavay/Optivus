@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/core/utils/password_policy.dart';
 import 'package:optivus/models/region_settings.dart';
@@ -163,6 +164,35 @@ void main() {
     expect(service.calls, 0);
   });
 
+  test(
+    'delayed device country detection completes and updates settings',
+    () async {
+      final completer = Completer<DeviceCountry?>();
+      final service = _CompleterDeviceCountryService(completer);
+      final notifier = RegionSettingsNotifier(
+        FakeRegionSettingsRepository(),
+        service,
+      );
+      await notifier.loadForUser('u1');
+      expect(notifier.state.source, RegionSource.localeFallback);
+
+      final future = notifier.refreshFromDeviceIfAllowed();
+      expect(notifier.state.source, RegionSource.localeFallback);
+
+      completer.complete(
+        const DeviceCountry(
+          countryCode: 'IN',
+          countryName: 'India',
+          fromDeviceLocation: true,
+        ),
+      );
+      final refreshed = await future;
+      expect(refreshed.countryCode, 'IN');
+      expect(refreshed.currencyCode, 'INR');
+      expect(refreshed.source, RegionSource.deviceDetected);
+    },
+  );
+
   test('Firestore path strings remain correct', () {
     expect(FirestoreUserPaths.profile('abc'), 'users/abc/profile/main');
     expect(
@@ -174,6 +204,26 @@ void main() {
       'users/abc/settings/appPreferences',
     );
   });
+}
+
+class _CompleterDeviceCountryService
+    implements DeviceCountryService, PermissionAwareDeviceCountryService {
+  final Completer<DeviceCountry?> completer;
+  int calls = 0;
+
+  _CompleterDeviceCountryService(this.completer);
+
+  @override
+  Future<DeviceCountry?> detectCountry() async {
+    calls += 1;
+    return null;
+  }
+
+  @override
+  Future<DeviceCountry?> detectCountryIfPermissionGranted() async {
+    calls += 1;
+    return completer.future;
+  }
 }
 
 class _TestDeviceCountryService implements DeviceCountryService {

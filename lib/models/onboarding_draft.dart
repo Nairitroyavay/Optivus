@@ -800,6 +800,10 @@ class OnboardingDraft {
 
     // 6. Skin Care inputs / routine changes:
     final skinCareChanged =
+        baseTimeline.skinCareSetupStep !=
+            previous.baseTimeline.skinCareSetupStep ||
+        baseTimeline.skinCareStageContractVersion !=
+            previous.baseTimeline.skinCareStageContractVersion ||
         baseTimeline.skinCareSetupPath !=
             previous.baseTimeline.skinCareSetupPath ||
         baseTimeline.skinCareSkipped != previous.baseTimeline.skinCareSkipped ||
@@ -3566,6 +3570,19 @@ class BaseTimelineDraft {
         skinCareProductRecommendations.isEmpty) {
       return 'step_7_selected_products_invalid';
     }
+    final expectedCurrency = skinCareRecommendationCurrencyCode
+        ?.trim()
+        .toUpperCase();
+    for (final rec in skinCareProductRecommendations) {
+      if (expectedCurrency != null &&
+          expectedCurrency.isNotEmpty &&
+          rec.currencyCode.trim().toUpperCase() != expectedCurrency) {
+        return 'step_7_recommendation_currency_mismatch';
+      }
+      if (!isPriceMatchingCurrency(rec.estimatedPrice, rec.currencyCode)) {
+        return 'step_7_recommendation_price_currency_mismatch';
+      }
+    }
     return null;
   }
 
@@ -5419,4 +5436,79 @@ List<String> _normalizedSkinCareFingerprintList(Iterable<String> values) {
       .toList();
   normalized.sort();
   return normalized;
+}
+
+/// Verifies that an estimated price string does not contain an explicit currency
+/// code or symbol conflicting with the expected currency.
+bool isPriceMatchingCurrency(
+  String estimatedPrice,
+  String expectedCurrencyCode,
+) {
+  final price = estimatedPrice.trim().toUpperCase();
+  final expected = expectedCurrencyCode.trim().toUpperCase();
+  if (price.isEmpty || expected.isEmpty) return false;
+  const knownCodes = {
+    'AED',
+    'AUD',
+    'BDT',
+    'BRL',
+    'CAD',
+    'CHF',
+    'CNY',
+    'CZK',
+    'DKK',
+    'EGP',
+    'EUR',
+    'GBP',
+    'HKD',
+    'IDR',
+    'INR',
+    'JPY',
+    'KRW',
+    'LKR',
+    'MYR',
+    'MXN',
+    'NGN',
+    'NOK',
+    'NPR',
+    'NZD',
+    'PHP',
+    'PKR',
+    'PLN',
+    'SAR',
+    'SEK',
+    'SGD',
+    'THB',
+    'TRY',
+    'TWD',
+    'USD',
+    'VND',
+    'ZAR',
+  };
+  for (final code in knownCodes) {
+    if (code != expected &&
+        RegExp('(^|[^A-Z])$code([^A-Z]|\$)').hasMatch(price)) {
+      return false;
+    }
+  }
+  if (price.contains('₹') && expected != 'INR') return false;
+  if (price.contains('€') && expected != 'EUR') return false;
+  if (price.contains('£') && expected != 'GBP') return false;
+  if (price.contains('¥') && expected != 'JPY' && expected != 'CNY') {
+    return false;
+  }
+  if (price.contains(r'$') &&
+      !const {
+        'USD',
+        'CAD',
+        'AUD',
+        'NZD',
+        'SGD',
+        'HKD',
+        'MXN',
+        'BRL',
+      }.contains(expected)) {
+    return false;
+  }
+  return true;
 }

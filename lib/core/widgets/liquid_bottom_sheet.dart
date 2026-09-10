@@ -50,8 +50,9 @@ Future<T?> showLiquidBottomSheet<T>(
                     width: 36,
                     height: 4,
                     decoration: BoxDecoration(
-                      color:
-                          OptivusColors.borderNeutral.withValues(alpha: 0.60),
+                      color: OptivusColors.borderNeutral.withValues(
+                        alpha: 0.60,
+                      ),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),

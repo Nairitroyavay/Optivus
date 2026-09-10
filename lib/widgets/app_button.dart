@@ -61,7 +61,9 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
       if (_interactionStrength > 0.01) {
         _smoothedPointer +=
             (_pointerPosition - _smoothedPointer) * 12.0 * delta;
-      } else if (!_isInteracting && !_isHandlingTap && !_hoverController.isAnimating) {
+      } else if (!_isInteracting &&
+          !_isHandlingTap &&
+          !_hoverController.isAnimating) {
         _ticker.stop();
         _lastElapsed = null;
         return;

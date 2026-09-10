@@ -147,8 +147,9 @@ class OnboardingScrollView extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final availableHeight =
-            constraints.maxHeight.isFinite ? constraints.maxHeight : 0.0;
+        final availableHeight = constraints.maxHeight.isFinite
+            ? constraints.maxHeight
+            : 0.0;
         final targetMinHeight = availableHeight > 0.0
             ? math.max(
                 0.0,
@@ -184,7 +185,6 @@ class OnboardingScrollView extends StatelessWidget {
     );
   }
 }
-
 
 class OnboardingGlassPanel extends StatelessWidget {
   final Widget child;

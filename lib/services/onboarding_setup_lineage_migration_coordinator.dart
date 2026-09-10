@@ -44,7 +44,8 @@ class OnboardingSetupLineageMigrationCoordinator {
     // Must have legacy lineage version on profile or draft.
     final hasLegacyProfile =
         profile.setupLineageVersion < UserProfile.currentSetupLineageVersion;
-    final hasLegacyDraft = snapshot.draft != null &&
+    final hasLegacyDraft =
+        snapshot.draft != null &&
         snapshot.draft!.setupLineageVersion <
             OnboardingDraft.currentSetupLineageVersion;
 
@@ -85,10 +86,12 @@ class OnboardingSetupLineageMigrationCoordinator {
 
     if (firestore != null) {
       final profileRef = firestore!.doc(FirestoreUserPaths.user(cleanUid));
-      final pointerRef =
-          firestore!.doc(FirestoreUserPaths.onboardingCurrentRun(cleanUid));
-      final draftRef =
-          firestore!.doc(FirestoreUserPaths.onboardingDraft(cleanUid));
+      final pointerRef = firestore!.doc(
+        FirestoreUserPaths.onboardingCurrentRun(cleanUid),
+      );
+      final draftRef = firestore!.doc(
+        FirestoreUserPaths.onboardingDraft(cleanUid),
+      );
 
       await firestore!.runTransaction((tx) async {
         final profileDoc = await tx.get(profileRef);
@@ -187,12 +190,12 @@ class OnboardingSetupLineageMigrationCoordinator {
 
 final onboardingSetupLineageMigrationCoordinatorProvider =
     Provider<OnboardingSetupLineageMigrationCoordinator>((ref) {
-  final firebaseMode = !ref.watch(fakeDataAllowedProvider);
-  final firebaseReady = firebaseMode && Firebase.apps.isNotEmpty;
-  return OnboardingSetupLineageMigrationCoordinator(
-    firestore: firebaseReady ? FirebaseFirestore.instance : null,
-    profileRepository: ref.watch(profileRepositoryProvider),
-    onboardingRepository: ref.watch(onboardingRepositoryProvider),
-    jobService: ref.watch(onboardingCompletionJobServiceProvider),
-  );
-});
+      final firebaseMode = !ref.watch(fakeDataAllowedProvider);
+      final firebaseReady = firebaseMode && Firebase.apps.isNotEmpty;
+      return OnboardingSetupLineageMigrationCoordinator(
+        firestore: firebaseReady ? FirebaseFirestore.instance : null,
+        profileRepository: ref.watch(profileRepositoryProvider),
+        onboardingRepository: ref.watch(onboardingRepositoryProvider),
+        jobService: ref.watch(onboardingCompletionJobServiceProvider),
+      );
+    });

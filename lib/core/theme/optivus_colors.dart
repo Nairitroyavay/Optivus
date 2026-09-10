@@ -13,14 +13,19 @@ class OptivusColors {
   // Canonical warm-neutral gray border tokens (AH-F022)
   /// Base warm-neutral gray for standard surface and control outlines.
   static const Color borderNeutral = Color(0xFFB8B4AC);
+
   /// Subtle border for standard glass cards and passive panels (alpha ~0.35)
   static const Color borderSubtle = Color(0x59B8B4AC);
+
   /// Standard border for interactive cards, text fields, and panels (alpha ~0.55)
   static const Color borderStandard = Color(0x8CB8B4AC);
+
   /// Strong border for elevated, active, or selected surfaces (alpha ~0.75)
   static const Color borderStrong = Color(0xBFB8B4AC);
+
   /// Disabled border (alpha ~0.20)
   static const Color borderDisabled = Color(0x33B8B4AC);
+
   /// Focus state border (outline remains gray while glow provides accent)
   static const Color borderFocus = Color(0xFFB8B4AC);
 

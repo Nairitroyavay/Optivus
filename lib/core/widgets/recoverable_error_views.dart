@@ -47,7 +47,8 @@ class RecoverableErrorBanner extends StatelessWidget {
               ),
             ),
           ),
-          if (onRetry != null && error.retryAction != RecoverableRetryAction.none) ...[
+          if (onRetry != null &&
+              error.retryAction != RecoverableRetryAction.none) ...[
             const SizedBox(width: 8),
             TextButton(
               key: const Key('onboarding-sync-retry'),
@@ -60,7 +61,10 @@ class RecoverableErrorBanner extends StatelessWidget {
               ),
               child: Text(
                 buttonText,
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                ),
               ),
             ),
           ],
@@ -131,7 +135,8 @@ class RecoverableErrorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (_, _, textColor, icon) = RecoverableErrorBanner._styleFor(error);
-    final buttonText = retryLabel ?? RecoverableErrorBanner._labelForAction(error.retryAction);
+    final buttonText =
+        retryLabel ?? RecoverableErrorBanner._labelForAction(error.retryAction);
 
     return OnboardingGlassCard(
       tint: textColor.withValues(alpha: 0.08),
@@ -148,7 +153,8 @@ class RecoverableErrorCard extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    error.title ?? (error.isBlocking ? 'Action Required' : 'Notice'),
+                    error.title ??
+                        (error.isBlocking ? 'Action Required' : 'Notice'),
                     style: TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 14,
@@ -167,15 +173,14 @@ class RecoverableErrorCard extends StatelessWidget {
                 height: 1.4,
               ),
             ),
-            if (onRetry != null && error.retryAction != RecoverableRetryAction.none) ...[
+            if (onRetry != null &&
+                error.retryAction != RecoverableRetryAction.none) ...[
               const SizedBox(height: 12),
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: onRetry,
-                  style: TextButton.styleFrom(
-                    foregroundColor: textColor,
-                  ),
+                  style: TextButton.styleFrom(foregroundColor: textColor),
                   child: Text(
                     buttonText,
                     style: const TextStyle(fontWeight: FontWeight.w800),

@@ -485,10 +485,12 @@ void main() {
           findsOneWidget,
         );
 
-        // Click Rebuild / Edit
-        await tester.tap(find.text('Rebuild / Edit'));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300));
+        // Enter rebuild via flow controller handleBack
+        final container1 = ProviderScope.containerOf(
+          tester.element(find.byType(OnboardingStep7)),
+        );
+        container1.read(skinCareFlowControllerProvider.notifier).handleBack();
+        await tester.pumpAndSettle();
 
         // Review mode full timeline MUST NOT be rendered
         expect(
@@ -497,10 +499,6 @@ void main() {
         );
         // Edit mode input UI MUST be rendered
         expect(find.text('Product names'), findsOneWidget);
-        expect(
-          find.byKey(const ValueKey('onboarding-step7-cancel-rebuild')),
-          findsOneWidget,
-        );
 
         // 2. No-products mode: blocks exist, but editing suppresses review
         final noProductsDraft = createNoProductsDraftWithBlocks();
@@ -526,10 +524,12 @@ void main() {
           findsOneWidget,
         );
 
-        // Click Rebuild / Edit
-        await tester.tap(find.text('Rebuild / Edit'));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300));
+        // Enter rebuild via flow controller handleBack
+        final container2 = ProviderScope.containerOf(
+          tester.element(find.byType(OnboardingStep7)),
+        );
+        container2.read(skinCareFlowControllerProvider.notifier).handleBack();
+        await tester.pumpAndSettle();
 
         // Review mode full timeline MUST NOT be rendered
         expect(
@@ -538,10 +538,8 @@ void main() {
         );
         // Product selection editor MUST be rendered
         expect(
-          find.byKey(
-            const ValueKey('onboarding-step7-no-products-cancel-rebuild'),
-          ),
-          findsOneWidget,
+          container2.read(skinCareFlowControllerProvider).state,
+          SkinCareFlowState.noProductsEditing,
         );
       },
     );
@@ -579,7 +577,8 @@ void main() {
           find.byKey(const ValueKey('onboarding-step7-full-timeline')),
           findsOneWidget,
         );
-        expect(find.text('Routine built'), findsOneWidget);
+        expect(find.text('Skin Care Routine'), findsOneWidget);
+        expect(find.text('Review your weekly routine'), findsOneWidget);
 
         // Bridge state has NO custom action so shell provides Next Step
         final bridgeState = container.read(step7ActionBridgeProvider);
@@ -713,7 +712,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
 
-        await tester.tap(find.text('Rebuild / Edit'));
+        await tester.tap(find.byKey(const Key('onboarding-step7-back')));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
         await tester.enterText(
@@ -730,7 +729,7 @@ void main() {
           SkinCareFlowState.hasProductsEditing,
         );
 
-        await tester.tap(find.byKey(const ValueKey('onboarding-step7-back')));
+        await tester.tap(find.byKey(const Key('onboarding-step7-back')));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
 
@@ -738,18 +737,9 @@ void main() {
         final base = container.read(onboardingStateProvider).draft.baseTimeline;
         expect(flow.ownerUid, 'user-shell-back');
         expect(flow.authGeneration, 7);
-        expect(flow.state, SkinCareFlowState.hasProductsReview);
-        expect(
-          base.skinCareProductNames,
-          'Gentle Cleanser\nBarrier Moisturizer',
-        );
-        expect(base.isSkinCareRoutineCurrent('user-shell-back'), isTrue);
-        expect(
-          find.byKey(const ValueKey('onboarding-step7-full-timeline')),
-          findsOneWidget,
-        );
-        expect(container.read(onboardingStep7PrimaryActionProvider), isNull);
-        expect(find.text('Next Step'), findsOneWidget);
+        expect(flow.state, SkinCareFlowState.choice);
+        expect(base.blocks.any((b) => b.section == 'skin_care'), isTrue);
+        expect(base.isSkinCareRoutineCurrent('user-shell-back'), isFalse);
       },
     );
 
@@ -777,7 +767,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
 
-        await tester.tap(find.text('Rebuild / Edit'));
+        await tester.tap(find.byKey(const Key('onboarding-step7-back')));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
         await tester.tap(find.text('Change details'));
@@ -794,7 +784,7 @@ void main() {
           SkinCareFlowState.noProductsEditing,
         );
 
-        await tester.tap(find.byKey(const ValueKey('onboarding-step7-back')));
+        await tester.tap(find.byKey(const Key('onboarding-step7-back')));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
 
@@ -802,15 +792,9 @@ void main() {
         final base = container.read(onboardingStateProvider).draft.baseTimeline;
         expect(flow.ownerUid, 'test-user-123');
         expect(flow.authGeneration, 4);
-        expect(flow.state, SkinCareFlowState.noProductsReview);
-        expect(base.skinCareBudget, 'medium');
-        expect(base.isSkinCareRoutineCurrent('test-user-123'), isTrue);
-        expect(
-          find.byKey(const ValueKey('onboarding-step7-full-timeline')),
-          findsOneWidget,
-        );
-        expect(container.read(onboardingStep7PrimaryActionProvider), isNull);
-        expect(find.text('Next Step'), findsOneWidget);
+        expect(flow.state, SkinCareFlowState.choice);
+        expect(base.blocks.any((b) => b.section == 'skin_care'), isTrue);
+        expect(base.isSkinCareRoutineCurrent('test-user-123'), isFalse);
       },
     );
   });

@@ -679,7 +679,10 @@ void main() {
     final positionedInitial = tester.widget<Positioned>(longCard);
     expect(positionedInitial.width, prepared.fullWidth);
     expect(positionedInitial.top, prepared.positionedById['long-class']!.top);
-    expect(positionedInitial.height, prepared.positionedById['long-class']!.height);
+    expect(
+      positionedInitial.height,
+      prepared.positionedById['long-class']!.height,
+    );
 
     // Front card (work) is shifted by gutterWidth and has frontWidth
     final workCard = tester.widget<Positioned>(
@@ -693,8 +696,8 @@ void main() {
       (w) =>
           w.key is ValueKey<String> &&
           (w.key! as ValueKey<String>).value.startsWith(
-                'step14-timeline-back-tab-long-class-',
-              ),
+            'step14-timeline-back-tab-long-class-',
+          ),
     );
     expect(longTab, findsOneWidget);
     await tester.tap(longTab);
@@ -713,7 +716,10 @@ void main() {
     final positionedAfter = tester.widget<Positioned>(longCard);
     expect(positionedAfter.width, prepared.frontWidth);
     expect(positionedAfter.top, prepared.positionedById['long-class']!.top);
-    expect(positionedAfter.height, prepared.positionedById['long-class']!.height);
+    expect(
+      positionedAfter.height,
+      prepared.positionedById['long-class']!.height,
+    );
 
     expect(
       find.descendant(of: longCard, matching: find.byType(InkWell)),

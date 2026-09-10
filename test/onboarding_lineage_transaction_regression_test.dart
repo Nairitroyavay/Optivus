@@ -11,31 +11,38 @@ import 'package:optivus/services/server_reconstructor.dart';
 
 void main() {
   const uid = 'lineage-transaction-owner';
-  test('Firestore migration repairs legacy draft beside modern profile', () async {
-    final profile = UserProfile.empty(uid: uid).copyWith(currentSetupGeneration: 1);
-    final draft = OnboardingDraft.freshForSetup(uid: uid, setupGeneration: 0)
-        .copyWith(setupLineageVersion: 0, patiencePledgeAccepted: true);
-    final database = _Database({
-      FirestoreUserPaths.user(uid): profile.toFirestoreMap(),
-      FirestoreUserPaths.onboardingDraft(uid): draft.toFirestoreMap(),
-    });
-    final source = _Source(database);
-    final coordinator = OnboardingSetupLineageMigrationCoordinator(
-      firestore: database,
-      profileRepository: FakeProfileRepository(),
-      onboardingRepository: FakeOnboardingRepository(),
-    );
-    final before = await source.load(uid);
-    expect(coordinator.shouldMigrate(before), isTrue);
-    final after = await coordinator.migrate(before, source: source);
-    expect(after.draft!.setupLineageVersion, 1);
-    expect(after.draft!.setupGeneration, 1);
-    expect(after.draft!.patiencePledgeAccepted, isTrue);
-    expect(coordinator.shouldMigrate(after), isFalse);
-    final writes = database.writes;
-    await coordinator.migrate(before, source: source);
-    expect(database.writes, writes, reason: 'response-loss retry is a no-op');
-  });
+  test(
+    'Firestore migration repairs legacy draft beside modern profile',
+    () async {
+      final profile = UserProfile.empty(
+        uid: uid,
+      ).copyWith(currentSetupGeneration: 1);
+      final draft = OnboardingDraft.freshForSetup(
+        uid: uid,
+        setupGeneration: 0,
+      ).copyWith(setupLineageVersion: 0, patiencePledgeAccepted: true);
+      final database = _Database({
+        FirestoreUserPaths.user(uid): profile.toFirestoreMap(),
+        FirestoreUserPaths.onboardingDraft(uid): draft.toFirestoreMap(),
+      });
+      final source = _Source(database);
+      final coordinator = OnboardingSetupLineageMigrationCoordinator(
+        firestore: database,
+        profileRepository: FakeProfileRepository(),
+        onboardingRepository: FakeOnboardingRepository(),
+      );
+      final before = await source.load(uid);
+      expect(coordinator.shouldMigrate(before), isTrue);
+      final after = await coordinator.migrate(before, source: source);
+      expect(after.draft!.setupLineageVersion, 1);
+      expect(after.draft!.setupGeneration, 1);
+      expect(after.draft!.patiencePledgeAccepted, isTrue);
+      expect(coordinator.shouldMigrate(after), isFalse);
+      final writes = database.writes;
+      await coordinator.migrate(before, source: source);
+      expect(database.writes, writes, reason: 'response-loss retry is a no-op');
+    },
+  );
 }
 
 class _Database implements FirebaseFirestore {
@@ -45,8 +52,10 @@ class _Database implements FirebaseFirestore {
   @override
   DocumentReference<Map<String, dynamic>> doc(String path) => _Document(path);
   @override
-  Future<T> runTransaction<T>(TransactionHandler<T> handler, {
-    Duration timeout = const Duration(seconds: 30), int maxAttempts = 5,
+  Future<T> runTransaction<T>(
+    TransactionHandler<T> handler, {
+    Duration timeout = const Duration(seconds: 30),
+    int maxAttempts = 5,
   }) async {
     final transaction = _Transaction(this);
     final result = await handler(transaction);
@@ -54,6 +63,7 @@ class _Database implements FirebaseFirestore {
     writes += transaction.pending.length;
     return result;
   }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -63,13 +73,15 @@ class _Transaction implements Transaction {
   final pending = <String, Map<String, dynamic>>{};
   _Transaction(this.database);
   @override
-  Future<DocumentSnapshot<T>> get<T extends Object?>(DocumentReference<T> ref) async =>
-      _Snapshot<T>(database.documents[ref.path] as T?);
+  Future<DocumentSnapshot<T>> get<T extends Object?>(
+    DocumentReference<T> ref,
+  ) async => _Snapshot<T>(database.documents[ref.path] as T?);
   @override
   Transaction set<T>(DocumentReference<T> ref, T data, [SetOptions? options]) {
     pending[ref.path] = Map<String, dynamic>.from(data as Map);
     return this;
   }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -97,14 +109,20 @@ class _Source implements ServerReconstructionSource {
   final _Database database;
   _Source(this.database);
   @override
-  Future<ServerReconstructionSnapshot> load(String uid, {
+  Future<ServerReconstructionSnapshot> load(
+    String uid, {
     void Function(UserProfile? profile)? onProfileLoaded,
   }) async => ServerReconstructionSnapshot(
-    profile: UserProfile.fromFirestoreMap(database.documents[FirestoreUserPaths.user(uid)]!),
-    draft: OnboardingDraft.fromMap(database.documents[FirestoreUserPaths.onboardingDraft(uid)]!),
+    profile: UserProfile.fromFirestoreMap(
+      database.documents[FirestoreUserPaths.user(uid)]!,
+    ),
+    draft: OnboardingDraft.fromMap(
+      database.documents[FirestoreUserPaths.onboardingDraft(uid)]!,
+    ),
     completionBundle: null,
     currentRun: const OnboardingCurrentRunSnapshot(hasPointer: false),
   );
   @override
-  Future<void> createProfileShell(UserProfile profile) async => throw UnimplementedError();
+  Future<void> createProfileShell(UserProfile profile) async =>
+      throw UnimplementedError();
 }

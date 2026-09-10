@@ -44,17 +44,18 @@ List<TimelineBlockDraft> _validGate2EatingBlocks({
           startMinute: slot == 'breakfast'
               ? 8 * 60
               : slot == 'lunch'
-                  ? 13 * 60
-                  : slot == 'afternoon_snack'
-                      ? 17 * 60
-                      : 20 * 60,
-          endMinute: (slot == 'breakfast'
+              ? 13 * 60
+              : slot == 'afternoon_snack'
+              ? 17 * 60
+              : 20 * 60,
+          endMinute:
+              (slot == 'breakfast'
                   ? 8 * 60
                   : slot == 'lunch'
-                      ? 13 * 60
-                      : slot == 'afternoon_snack'
-                          ? 17 * 60
-                          : 20 * 60) +
+                  ? 13 * 60
+                  : slot == 'afternoon_snack'
+                  ? 17 * 60
+                  : 20 * 60) +
               30,
           repeatDays: [day],
           dishes: switch (slot) {
@@ -75,7 +76,10 @@ BaseTimelineDraft _validGate2EatingTimeline({
   int mealsPerDay = 3,
   OnboardingDraft? draft,
 }) {
-  final blocks = _validGate2EatingBlocks(mealsPerDay: mealsPerDay, draft: draft);
+  final blocks = _validGate2EatingBlocks(
+    mealsPerDay: mealsPerDay,
+    draft: draft,
+  );
   final base = BaseTimelineDraft(
     eatingSetupPath: 'create',
     eatingSetupStep: 2,
@@ -87,7 +91,9 @@ BaseTimelineDraft _validGate2EatingTimeline({
     eatingGeneratedPlanVersion: BaseTimelineDraft.currentGate2EatingPlanVersion,
     blocks: blocks,
   );
-  final testDraft = (draft ?? const OnboardingDraft()).copyWith(baseTimeline: base);
+  final testDraft = (draft ?? const OnboardingDraft()).copyWith(
+    baseTimeline: base,
+  );
   final targets = testDraft.canonicalNutritionTargets();
   final inputs = testDraft.canonicalEatingGenerationInputs(targets: targets);
   return base.copyWith(

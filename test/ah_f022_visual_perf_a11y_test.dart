@@ -38,9 +38,18 @@ void main() {
       expect(OptivusColors.borderNeutral, const Color(0xFFB8B4AC));
 
       // Alpha variants derived from base neutral hue
-      expect(OptivusColors.borderSubtle.r, equals(OptivusColors.borderNeutral.r));
-      expect(OptivusColors.borderSubtle.g, equals(OptivusColors.borderNeutral.g));
-      expect(OptivusColors.borderSubtle.b, equals(OptivusColors.borderNeutral.b));
+      expect(
+        OptivusColors.borderSubtle.r,
+        equals(OptivusColors.borderNeutral.r),
+      );
+      expect(
+        OptivusColors.borderSubtle.g,
+        equals(OptivusColors.borderNeutral.g),
+      );
+      expect(
+        OptivusColors.borderSubtle.b,
+        equals(OptivusColors.borderNeutral.b),
+      );
       expect(OptivusColors.borderStandard.a, closeTo(0.55, 0.01));
       expect(OptivusColors.borderStrong.a, closeTo(0.75, 0.01));
       expect(OptivusColors.borderDisabled.a, closeTo(0.20, 0.01));
@@ -80,61 +89,69 @@ void main() {
   });
 
   group('AH-F022: Auth Screens Surface Continuity & No Redundant Docks', () {
-    testWidgets('LoginScreen has single continuous scroll surface and no detached lower dock', (
-      tester,
-    ) async {
-      await _setDeviceView(tester, width: 360, height: 800);
-      await tester.pumpWidget(_testApp(const LoginScreen()));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'LoginScreen has single continuous scroll surface and no detached lower dock',
+      (tester) async {
+        await _setDeviceView(tester, width: 360, height: 800);
+        await tester.pumpWidget(_testApp(const LoginScreen()));
+        await tester.pumpAndSettle();
 
-      // Verify no detached dock bar or cta dock present
-      expect(find.byKey(const Key('login-cta-dock')), findsNothing);
-      expect(find.byKey(const Key('login-scaffold-dock')), findsNothing);
+        // Verify no detached dock bar or cta dock present
+        expect(find.byKey(const Key('login-cta-dock')), findsNothing);
+        expect(find.byKey(const Key('login-scaffold-dock')), findsNothing);
 
-      // Enter text to reveal progressive submit button
-      final emailField = find.byType(TextField).at(0);
-      final passField = find.byType(TextField).at(1);
-      await tester.enterText(emailField, 'test@example.com');
-      await tester.enterText(passField, 'password123');
-      await tester.pumpAndSettle();
+        // Enter text to reveal progressive submit button
+        final emailField = find.byType(TextField).at(0);
+        final passField = find.byType(TextField).at(1);
+        await tester.enterText(emailField, 'test@example.com');
+        await tester.enterText(passField, 'password123');
+        await tester.pumpAndSettle();
 
-      // Verify primary submit button is directly in the scroll body
-      final submitButton = find.byKey(const Key('login-submit'));
-      expect(submitButton, findsOneWidget);
+        // Verify primary submit button is directly in the scroll body
+        final submitButton = find.byKey(const Key('login-submit'));
+        expect(submitButton, findsOneWidget);
 
-      // Verify root Scaffold exists and has proper background
-      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-      expect(scaffold.backgroundColor, equals(AuthLayout.authBackgroundColor));
+        // Verify root Scaffold exists and has proper background
+        final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+        expect(
+          scaffold.backgroundColor,
+          equals(AuthLayout.authBackgroundColor),
+        );
 
-      // Verify AnnotatedRegion owns authOverlayStyle
-      final annotated = tester.widget<AnnotatedRegion<SystemUiOverlayStyle>>(
-        find.byType(AnnotatedRegion<SystemUiOverlayStyle>).first,
-      );
-      expect(annotated.value, equals(OptivusTheme.authOverlayStyle));
-      expect(tester.takeException(), isNull);
-    });
+        // Verify AnnotatedRegion owns authOverlayStyle
+        final annotated = tester.widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+          find.byType(AnnotatedRegion<SystemUiOverlayStyle>).first,
+        );
+        expect(annotated.value, equals(OptivusTheme.authOverlayStyle));
+        expect(tester.takeException(), isNull);
+      },
+    );
 
-    testWidgets('SignupScreen has single continuous scroll surface and no detached lower dock', (
-      tester,
-    ) async {
-      await _setDeviceView(tester, width: 360, height: 800);
-      await tester.pumpWidget(_testApp(const SignupScreen()));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'SignupScreen has single continuous scroll surface and no detached lower dock',
+      (tester) async {
+        await _setDeviceView(tester, width: 360, height: 800);
+        await tester.pumpWidget(_testApp(const SignupScreen()));
+        await tester.pumpAndSettle();
 
-      // Verify no detached dock bar
-      expect(find.byKey(const Key('signup-dock')), findsNothing);
-      expect(find.byKey(const Key('signup-cta-dock')), findsNothing);
+        // Verify no detached dock bar
+        expect(find.byKey(const Key('signup-dock')), findsNothing);
+        expect(find.byKey(const Key('signup-cta-dock')), findsNothing);
 
-      // Verify root Scaffold exists
-      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-      expect(scaffold.backgroundColor, equals(AuthLayout.authBackgroundColor));
+        // Verify root Scaffold exists
+        final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+        expect(
+          scaffold.backgroundColor,
+          equals(AuthLayout.authBackgroundColor),
+        );
 
-      final annotated = tester.widget<AnnotatedRegion<SystemUiOverlayStyle>>(
-        find.byType(AnnotatedRegion<SystemUiOverlayStyle>).first,
-      );
-      expect(annotated.value, equals(OptivusTheme.authOverlayStyle));
-      expect(tester.takeException(), isNull);
-    });
+        final annotated = tester.widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+          find.byType(AnnotatedRegion<SystemUiOverlayStyle>).first,
+        );
+        expect(annotated.value, equals(OptivusTheme.authOverlayStyle));
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets('AuthChoiceScreen is continuous and sets auth overlay style', (
       tester,
@@ -168,31 +185,34 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('WelcomeScreen has continuous layout, auth overlay, and >=48dp login link target', (
-      tester,
-    ) async {
-      await _setDeviceView(tester, width: 360, height: 800);
-      await tester.pumpWidget(_testApp(const WelcomeScreen()));
-      await tester.pump(const Duration(milliseconds: 100));
+    testWidgets(
+      'WelcomeScreen has continuous layout, auth overlay, and >=48dp login link target',
+      (tester) async {
+        await _setDeviceView(tester, width: 360, height: 800);
+        await tester.pumpWidget(_testApp(const WelcomeScreen()));
+        await tester.pump(const Duration(milliseconds: 100));
 
-      final annotated = tester.widget<AnnotatedRegion<SystemUiOverlayStyle>>(
-        find.byType(AnnotatedRegion<SystemUiOverlayStyle>).first,
-      );
-      expect(annotated.value, equals(OptivusTheme.authOverlayStyle));
+        final annotated = tester.widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+          find.byType(AnnotatedRegion<SystemUiOverlayStyle>).first,
+        );
+        expect(annotated.value, equals(OptivusTheme.authOverlayStyle));
 
-      // Verify login link touch target
-      final loginLink = find.byKey(const Key('welcome-login-link'));
-      expect(loginLink, findsOneWidget);
-      final linkSize = tester.getSize(loginLink);
-      expect(linkSize.height, greaterThanOrEqualTo(48.0));
-      expect(tester.takeException(), isNull);
-    });
+        // Verify login link touch target
+        final loginLink = find.byKey(const Key('welcome-login-link'));
+        expect(loginLink, findsOneWidget);
+        final linkSize = tester.getSize(loginLink);
+        expect(linkSize.height, greaterThanOrEqualTo(48.0));
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets('LoadingScreen provides continuous layout and auth overlay', (
       tester,
     ) async {
       await _setDeviceView(tester, width: 360, height: 800);
-      await tester.pumpWidget(_testApp(const LoadingScreen(message: 'Loading...')));
+      await tester.pumpWidget(
+        _testApp(const LoadingScreen(message: 'Loading...')),
+      );
       await tester.pump(const Duration(milliseconds: 50));
 
       final annotated = tester.widget<AnnotatedRegion<SystemUiOverlayStyle>>(
@@ -202,33 +222,34 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('OnboardingRecoveryScreen provides continuous layout and auth overlay', (
-      tester,
-    ) async {
-      await _setDeviceView(tester, width: 360, height: 800);
-      await tester.pumpWidget(_testApp(const OnboardingRecoveryScreen()));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'OnboardingRecoveryScreen provides continuous layout and auth overlay',
+      (tester) async {
+        await _setDeviceView(tester, width: 360, height: 800);
+        await tester.pumpWidget(_testApp(const OnboardingRecoveryScreen()));
+        await tester.pumpAndSettle();
 
-      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-      expect(scaffold.backgroundColor, isNotNull);
+        final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+        expect(scaffold.backgroundColor, isNotNull);
 
-      final annotated = tester.widget<AnnotatedRegion<SystemUiOverlayStyle>>(
-        find.byType(AnnotatedRegion<SystemUiOverlayStyle>).first,
-      );
-      expect(annotated.value, equals(OptivusTheme.authOverlayStyle));
-      expect(tester.takeException(), isNull);
-    });
+        final annotated = tester.widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+          find.byType(AnnotatedRegion<SystemUiOverlayStyle>).first,
+        );
+        expect(annotated.value, equals(OptivusTheme.authOverlayStyle));
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 
   group('AH-F022: Standard Gray Structural Borders & Controls', () {
-    testWidgets('AuthBackButton has minimum touch target >=48dp', (tester) async {
+    testWidgets('AuthBackButton has minimum touch target >=48dp', (
+      tester,
+    ) async {
       await _setDeviceView(tester, width: 360, height: 800);
       await tester.pumpWidget(
         _testApp(
           Scaffold(
-            body: Center(
-              child: AuthBackButton(onTap: () {}),
-            ),
+            body: Center(child: AuthBackButton(onTap: () {})),
           ),
         ),
       );
@@ -241,395 +262,417 @@ void main() {
       expect(size.height, greaterThanOrEqualTo(48.0));
     });
 
-    testWidgets('AuthTextField has 48dp hit constraints on eye button and gray border', (
-      tester,
-    ) async {
-      final ctrl = TextEditingController();
-      final focus = FocusNode();
-      bool obscure = true;
+    testWidgets(
+      'AuthTextField has 48dp hit constraints on eye button and gray border',
+      (tester) async {
+        final ctrl = TextEditingController();
+        final focus = FocusNode();
+        bool obscure = true;
 
-      await _setDeviceView(tester, width: 360, height: 800);
-      await tester.pumpWidget(
-        _testApp(
-          StatefulBuilder(
-            builder: (context, setState) {
-              return Scaffold(
-                body: Center(
-                  child: AuthTextField(
-                    controller: ctrl,
-                    focusNode: focus,
-                    hint: 'Password',
-                    icon: Icons.lock_outline,
-                    obscure: obscure,
-                    suffix: AuthEyeButton(
+        await _setDeviceView(tester, width: 360, height: 800);
+        await tester.pumpWidget(
+          _testApp(
+            StatefulBuilder(
+              builder: (context, setState) {
+                return Scaffold(
+                  body: Center(
+                    child: AuthTextField(
+                      controller: ctrl,
+                      focusNode: focus,
+                      hint: 'Password',
+                      icon: Icons.lock_outline,
                       obscure: obscure,
-                      onToggle: () => setState(() => obscure = !obscure),
+                      suffix: AuthEyeButton(
+                        obscure: obscure,
+                        onToggle: () => setState(() => obscure = !obscure),
+                      ),
                     ),
                   ),
-                ),
-              );
-            },
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      final eyeButton = find.byType(AuthEyeButton);
-      expect(eyeButton, findsOneWidget);
-      final eyeSize = tester.getSize(eyeButton);
-      expect(eyeSize.width, greaterThanOrEqualTo(48.0));
-      expect(eyeSize.height, greaterThanOrEqualTo(44.0));
-
-      // Toggle password visibility
-      await tester.tap(eyeButton);
-      await tester.pumpAndSettle();
-      expect(obscure, isFalse);
-    });
-
-    testWidgets('TimelineBlockCard renders with high-performance styling and without per-block BackdropFilter', (
-      tester,
-    ) async {
-      final entry = TimelineEntry(
-        id: 'test-event-1',
-        sourceId: 'test-source-1',
-        startMinute: 540,
-        endMinute: 600,
-        repeatDays: const [1, 2, 3, 4, 5],
-        title: 'Morning Standup',
-        category: TimelineCategory.work,
-        isEditable: true,
-      );
-
-      final positioned = PositionedTimelineEntry(
-        entry: entry,
-        top: 100,
-        left: 20,
-        width: 300,
-        height: 60,
-        column: 0,
-        columnCount: 1,
-      );
-
-      final style = TimelineEntryStyle.defaultForCategory(TimelineCategory.work);
-
-      await _setDeviceView(tester, width: 360, height: 800);
-      await tester.pumpWidget(
-        _testApp(
-          Scaffold(
-            body: Center(
-              child: SizedBox(
-                width: 300,
-                height: 60,
-                child: TimelineBlockCard(
-                  positioned: positioned,
-                  style: style,
-                  onTap: () {},
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Card is rendered
-      expect(find.byKey(const ValueKey('timeline-block-test-event-1')), findsOneWidget);
-
-      // Verify NO BackdropFilter inside TimelineBlockCard for 60fps scrolling efficiency
-      final blockCardFinder = find.byKey(const ValueKey('timeline-block-test-event-1'));
-      final backdropFiltersInsideCard = find.descendant(
-        of: blockCardFinder,
-        matching: find.byType(BackdropFilter),
-      );
-      expect(backdropFiltersInsideCard, findsNothing);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('TimelineDayChips uses borderNeutral and allows 1-indexed day selection', (
-      tester,
-    ) async {
-      int selectedDay = 1;
-
-      await _setDeviceView(tester, width: 360, height: 800);
-      await tester.pumpWidget(
-        _testApp(
-          StatefulBuilder(
-            builder: (context, setState) {
-              return Scaffold(
-                body: TimelineDayChips(
-                  selectedDay: selectedDay,
-                  onDayChanged: (day) => setState(() => selectedDay = day),
-                ),
-              );
-            },
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // 7 days rendered (Mon-Sun)
-      for (int i = 1; i <= 7; i++) {
-        expect(find.byKey(ValueKey('timeline-day-chip-$i')), findsOneWidget);
-      }
-
-      // Tap Wednesday (day 3)
-      await tester.tap(find.byKey(const ValueKey('timeline-day-chip-3')));
-      await tester.pumpAndSettle();
-      expect(selectedDay, equals(3));
-    });
-
-    testWidgets('TimelineEditSheetShell has 28dp top radius and >=48dp touch targets', (
-      tester,
-    ) async {
-      await _setDeviceView(tester, width: 360, height: 800);
-      await tester.pumpWidget(
-        _testApp(
-          Scaffold(
-            body: Builder(
-              builder: (context) {
-                return ElevatedButton(
-                  key: const Key('open-sheet'),
-                  onPressed: () {
-                    TimelineEditSheetShell.show<void>(
-                      context: context,
-                      title: 'Edit Activity',
-                      builder: (ctx) => const Text('Sheet Content'),
-                    );
-                  },
-                  child: const Text('Open'),
                 );
               },
             ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
+        );
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('open-sheet')));
-      await tester.pumpAndSettle();
+        final eyeButton = find.byType(AuthEyeButton);
+        expect(eyeButton, findsOneWidget);
+        final eyeSize = tester.getSize(eyeButton);
+        expect(eyeSize.width, greaterThanOrEqualTo(48.0));
+        expect(eyeSize.height, greaterThanOrEqualTo(44.0));
 
-      final cancelBtn = find.byKey(const Key('timeline-edit-cancel-button'));
-      final saveBtn = find.byKey(const Key('timeline-edit-save-button'));
+        // Toggle password visibility
+        await tester.tap(eyeButton);
+        await tester.pumpAndSettle();
+        expect(obscure, isFalse);
+      },
+    );
 
-      expect(cancelBtn, findsOneWidget);
-      expect(saveBtn, findsOneWidget);
+    testWidgets(
+      'TimelineBlockCard renders with high-performance styling and without per-block BackdropFilter',
+      (tester) async {
+        final entry = TimelineEntry(
+          id: 'test-event-1',
+          sourceId: 'test-source-1',
+          startMinute: 540,
+          endMinute: 600,
+          repeatDays: const [1, 2, 3, 4, 5],
+          title: 'Morning Standup',
+          category: TimelineCategory.work,
+          isEditable: true,
+        );
 
-      final cancelSize = tester.getSize(cancelBtn);
-      final saveSize = tester.getSize(saveBtn);
+        final positioned = PositionedTimelineEntry(
+          entry: entry,
+          top: 100,
+          left: 20,
+          width: 300,
+          height: 60,
+          column: 0,
+          columnCount: 1,
+        );
 
-      expect(cancelSize.height, greaterThanOrEqualTo(48.0));
-      expect(saveSize.height, greaterThanOrEqualTo(48.0));
+        final style = TimelineEntryStyle.defaultForCategory(
+          TimelineCategory.work,
+        );
 
-      // Dismiss sheet
-      await tester.tap(cancelBtn);
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('timeline-edit-cancel-button')), findsNothing);
-    });
-  });
-
-  group('AH-F022: Accessibility, TalkBack Semantics & Text Scaling', () {
-    testWidgets('Text scaling up to 1.6x renders without overflow in AuthChoiceScreen', (
-      tester,
-    ) async {
-      await _setDeviceView(tester, width: 360, height: 800);
-      await tester.pumpWidget(
-        _testApp(
-          const AuthChoiceScreen(),
-          textScaleFactor: 1.6,
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const Key('auth-choice-background')), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('OnboardingGlassWidgets render with proper semantics and gray border tokens', (
-      tester,
-    ) async {
-      await _setDeviceView(tester, width: 360, height: 800);
-      await tester.pumpWidget(
-        _testApp(
-          Scaffold(
-            body: SingleChildScrollView(
-              child: Column(
-                children: [
-                  const OnboardingGlassCard(
-                    child: Text('Card Content'),
-                  ),
-                  OnboardingChip(
-                    label: 'Morning',
-                    selected: false,
+        await _setDeviceView(tester, width: 360, height: 800);
+        await tester.pumpWidget(
+          _testApp(
+            Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 300,
+                  height: 60,
+                  child: TimelineBlockCard(
+                    positioned: positioned,
+                    style: style,
                     onTap: () {},
                   ),
-                  OnboardingChip(
-                    label: 'Evening',
-                    selected: true,
-                    onTap: () {},
-                  ),
-                  OnboardingActionPill(
-                    label: 'Add Item',
-                    icon: Icons.add,
-                    onTap: () {},
-                  ),
-                  OnboardingIconPill(
-                    icon: Icons.star,
-                    onTap: () {},
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('Card Content'), findsOneWidget);
-      expect(find.text('Morning'), findsOneWidget);
-      expect(find.text('Evening'), findsOneWidget);
-      expect(find.text('Add Item'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('TimelineDayChips keeps gray border token in both selected and unselected states', (
-      tester,
-    ) async {
-      await _setDeviceView(tester, width: 360, height: 800);
-      await tester.pumpWidget(
-        _testApp(
-          Scaffold(
-            body: TimelineDayChips(
-              selectedDay: 2,
-              onDayChanged: (_) {},
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Check AnimatedContainers for day chips
-      final selectedContainer = tester.widget<AnimatedContainer>(
-        find.descendant(
-          of: find.byKey(const ValueKey('timeline-day-chip-2')),
-          matching: find.byType(AnimatedContainer),
-        ),
-      );
-      final unselectedContainer = tester.widget<AnimatedContainer>(
-        find.descendant(
-          of: find.byKey(const ValueKey('timeline-day-chip-1')),
-          matching: find.byType(AnimatedContainer),
-        ),
-      );
-
-      final selectedBox = selectedContainer.decoration as BoxDecoration;
-      final unselectedBox = unselectedContainer.decoration as BoxDecoration;
-
-      // Both must use OptivusColors.borderNeutral base hue (not accent)
-      final selectedBorder = selectedBox.border as Border;
-      final unselectedBorder = unselectedBox.border as Border;
-
-      expect(selectedBorder.top.color.r, equals(OptivusColors.borderNeutral.r));
-      expect(selectedBorder.top.color.g, equals(OptivusColors.borderNeutral.g));
-      expect(selectedBorder.top.color.b, equals(OptivusColors.borderNeutral.b));
-
-      expect(unselectedBorder.top.color.r, equals(OptivusColors.borderNeutral.r));
-      expect(unselectedBorder.top.color.g, equals(OptivusColors.borderNeutral.g));
-      expect(unselectedBorder.top.color.b, equals(OptivusColors.borderNeutral.b));
-    });
-
-    testWidgets('SignupScreen has no nested BackdropFilter in password rules panel or banners', (
-      tester,
-    ) async {
-      await _setDeviceView(tester, width: 360, height: 800);
-      await tester.pumpWidget(_testApp(const SignupScreen()));
-      await tester.pumpAndSettle();
-
-      // Enter password to reveal rules panel
-      final passField = find.byType(TextField).at(2);
-      await tester.enterText(passField, 'Pass123!');
-      await tester.pumpAndSettle();
-
-      final rulesPanel = find.byKey(const Key('signup-password-guidance-success'));
-      expect(rulesPanel, findsOneWidget);
-
-      final nestedBlurs = find.descendant(
-        of: rulesPanel,
-        matching: find.byType(BackdropFilter),
-      );
-      expect(nestedBlurs, findsNothing);
-    });
-
-    testWidgets('AppButton scales text gracefully up to 2.0x without overflow', (
-      tester,
-    ) async {
-      await _setDeviceView(tester, width: 360, height: 800);
-      await tester.pumpWidget(
-        _testApp(
-          Scaffold(
-            body: Center(
-              child: SizedBox(
-                width: 300,
-                child: AppButton(
-                  text: 'Enter Optivus Long Action',
-                  onPressed: () {},
                 ),
               ),
             ),
           ),
-          textScaleFactor: 2.0,
-        ),
-      );
-      await tester.pumpAndSettle();
+        );
+        await tester.pumpAndSettle();
 
-      expect(find.text('Enter Optivus Long Action'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
+        // Card is rendered
+        expect(
+          find.byKey(const ValueKey('timeline-block-test-event-1')),
+          findsOneWidget,
+        );
 
-    testWidgets('OptivusMotion.isReducedMotion responds to MediaQuery disableAnimations', (
-      tester,
-    ) async {
-      late bool reducedMotion;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => MediaQuery(
-              data: MediaQuery.of(context).copyWith(
-                disableAnimations: true,
-              ),
-              child: Builder(
-                builder: (innerContext) {
-                  reducedMotion = OptivusMotion.isReducedMotion(innerContext);
-                  return const SizedBox.shrink();
+        // Verify NO BackdropFilter inside TimelineBlockCard for 60fps scrolling efficiency
+        final blockCardFinder = find.byKey(
+          const ValueKey('timeline-block-test-event-1'),
+        );
+        final backdropFiltersInsideCard = find.descendant(
+          of: blockCardFinder,
+          matching: find.byType(BackdropFilter),
+        );
+        expect(backdropFiltersInsideCard, findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'TimelineDayChips uses borderNeutral and allows 1-indexed day selection',
+      (tester) async {
+        int selectedDay = 1;
+
+        await _setDeviceView(tester, width: 360, height: 800);
+        await tester.pumpWidget(
+          _testApp(
+            StatefulBuilder(
+              builder: (context, setState) {
+                return Scaffold(
+                  body: TimelineDayChips(
+                    selectedDay: selectedDay,
+                    onDayChanged: (day) => setState(() => selectedDay = day),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // 7 days rendered (Mon-Sun)
+        for (int i = 1; i <= 7; i++) {
+          expect(find.byKey(ValueKey('timeline-day-chip-$i')), findsOneWidget);
+        }
+
+        // Tap Wednesday (day 3)
+        await tester.tap(find.byKey(const ValueKey('timeline-day-chip-3')));
+        await tester.pumpAndSettle();
+        expect(selectedDay, equals(3));
+      },
+    );
+
+    testWidgets(
+      'TimelineEditSheetShell has 28dp top radius and >=48dp touch targets',
+      (tester) async {
+        await _setDeviceView(tester, width: 360, height: 800);
+        await tester.pumpWidget(
+          _testApp(
+            Scaffold(
+              body: Builder(
+                builder: (context) {
+                  return ElevatedButton(
+                    key: const Key('open-sheet'),
+                    onPressed: () {
+                      TimelineEditSheetShell.show<void>(
+                        context: context,
+                        title: 'Edit Activity',
+                        builder: (ctx) => const Text('Sheet Content'),
+                      );
+                    },
+                    child: const Text('Open'),
+                  );
                 },
               ),
             ),
           ),
-        ),
-      );
-      expect(reducedMotion, isTrue);
-    });
+        );
+        await tester.pumpAndSettle();
 
-    testWidgets('Text scaling up to 1.6x renders without overflow in LoginScreen and SignupScreen', (
-      tester,
-    ) async {
-      await _setDeviceView(tester, width: 360, height: 800);
-      await tester.pumpWidget(
-        _testApp(
-          const LoginScreen(),
-          textScaleFactor: 1.6,
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
+        await tester.tap(find.byKey(const Key('open-sheet')));
+        await tester.pumpAndSettle();
 
-      await tester.pumpWidget(
-        _testApp(
-          const SignupScreen(),
-          textScaleFactor: 1.6,
-        ),
-      );
-      await tester.pumpAndSettle();
-    });
+        final cancelBtn = find.byKey(const Key('timeline-edit-cancel-button'));
+        final saveBtn = find.byKey(const Key('timeline-edit-save-button'));
+
+        expect(cancelBtn, findsOneWidget);
+        expect(saveBtn, findsOneWidget);
+
+        final cancelSize = tester.getSize(cancelBtn);
+        final saveSize = tester.getSize(saveBtn);
+
+        expect(cancelSize.height, greaterThanOrEqualTo(48.0));
+        expect(saveSize.height, greaterThanOrEqualTo(48.0));
+
+        // Dismiss sheet
+        await tester.tap(cancelBtn);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('timeline-edit-cancel-button')),
+          findsNothing,
+        );
+      },
+    );
+  });
+
+  group('AH-F022: Accessibility, TalkBack Semantics & Text Scaling', () {
+    testWidgets(
+      'Text scaling up to 1.6x renders without overflow in AuthChoiceScreen',
+      (tester) async {
+        await _setDeviceView(tester, width: 360, height: 800);
+        await tester.pumpWidget(
+          _testApp(const AuthChoiceScreen(), textScaleFactor: 1.6),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('auth-choice-background')), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'OnboardingGlassWidgets render with proper semantics and gray border tokens',
+      (tester) async {
+        await _setDeviceView(tester, width: 360, height: 800);
+        await tester.pumpWidget(
+          _testApp(
+            Scaffold(
+              body: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    const OnboardingGlassCard(child: Text('Card Content')),
+                    OnboardingChip(
+                      label: 'Morning',
+                      selected: false,
+                      onTap: () {},
+                    ),
+                    OnboardingChip(
+                      label: 'Evening',
+                      selected: true,
+                      onTap: () {},
+                    ),
+                    OnboardingActionPill(
+                      label: 'Add Item',
+                      icon: Icons.add,
+                      onTap: () {},
+                    ),
+                    OnboardingIconPill(icon: Icons.star, onTap: () {}),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Card Content'), findsOneWidget);
+        expect(find.text('Morning'), findsOneWidget);
+        expect(find.text('Evening'), findsOneWidget);
+        expect(find.text('Add Item'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'TimelineDayChips keeps gray border token in both selected and unselected states',
+      (tester) async {
+        await _setDeviceView(tester, width: 360, height: 800);
+        await tester.pumpWidget(
+          _testApp(
+            Scaffold(
+              body: TimelineDayChips(selectedDay: 2, onDayChanged: (_) {}),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Check AnimatedContainers for day chips
+        final selectedContainer = tester.widget<AnimatedContainer>(
+          find.descendant(
+            of: find.byKey(const ValueKey('timeline-day-chip-2')),
+            matching: find.byType(AnimatedContainer),
+          ),
+        );
+        final unselectedContainer = tester.widget<AnimatedContainer>(
+          find.descendant(
+            of: find.byKey(const ValueKey('timeline-day-chip-1')),
+            matching: find.byType(AnimatedContainer),
+          ),
+        );
+
+        final selectedBox = selectedContainer.decoration as BoxDecoration;
+        final unselectedBox = unselectedContainer.decoration as BoxDecoration;
+
+        // Both must use OptivusColors.borderNeutral base hue (not accent)
+        final selectedBorder = selectedBox.border as Border;
+        final unselectedBorder = unselectedBox.border as Border;
+
+        expect(
+          selectedBorder.top.color.r,
+          equals(OptivusColors.borderNeutral.r),
+        );
+        expect(
+          selectedBorder.top.color.g,
+          equals(OptivusColors.borderNeutral.g),
+        );
+        expect(
+          selectedBorder.top.color.b,
+          equals(OptivusColors.borderNeutral.b),
+        );
+
+        expect(
+          unselectedBorder.top.color.r,
+          equals(OptivusColors.borderNeutral.r),
+        );
+        expect(
+          unselectedBorder.top.color.g,
+          equals(OptivusColors.borderNeutral.g),
+        );
+        expect(
+          unselectedBorder.top.color.b,
+          equals(OptivusColors.borderNeutral.b),
+        );
+      },
+    );
+
+    testWidgets(
+      'SignupScreen has no nested BackdropFilter in password rules panel or banners',
+      (tester) async {
+        await _setDeviceView(tester, width: 360, height: 800);
+        await tester.pumpWidget(_testApp(const SignupScreen()));
+        await tester.pumpAndSettle();
+
+        // Enter password to reveal rules panel
+        final passField = find.byType(TextField).at(2);
+        await tester.enterText(passField, 'Pass123!');
+        await tester.pumpAndSettle();
+
+        final rulesPanel = find.byKey(
+          const Key('signup-password-guidance-success'),
+        );
+        expect(rulesPanel, findsOneWidget);
+
+        final nestedBlurs = find.descendant(
+          of: rulesPanel,
+          matching: find.byType(BackdropFilter),
+        );
+        expect(nestedBlurs, findsNothing);
+      },
+    );
+
+    testWidgets(
+      'AppButton scales text gracefully up to 2.0x without overflow',
+      (tester) async {
+        await _setDeviceView(tester, width: 360, height: 800);
+        await tester.pumpWidget(
+          _testApp(
+            Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 300,
+                  child: AppButton(
+                    text: 'Enter Optivus Long Action',
+                    onPressed: () {},
+                  ),
+                ),
+              ),
+            ),
+            textScaleFactor: 2.0,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Enter Optivus Long Action'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'OptivusMotion.isReducedMotion responds to MediaQuery disableAnimations',
+      (tester) async {
+        late bool reducedMotion;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(disableAnimations: true),
+                child: Builder(
+                  builder: (innerContext) {
+                    reducedMotion = OptivusMotion.isReducedMotion(innerContext);
+                    return const SizedBox.shrink();
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+        expect(reducedMotion, isTrue);
+      },
+    );
+
+    testWidgets(
+      'Text scaling up to 1.6x renders without overflow in LoginScreen and SignupScreen',
+      (tester) async {
+        await _setDeviceView(tester, width: 360, height: 800);
+        await tester.pumpWidget(
+          _testApp(const LoginScreen(), textScaleFactor: 1.6),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        await tester.pumpWidget(
+          _testApp(const SignupScreen(), textScaleFactor: 1.6),
+        );
+        await tester.pumpAndSettle();
+      },
+    );
   });
 }
 
@@ -639,7 +682,10 @@ Future<void> _setDeviceView(
   required double height,
   double devicePixelRatio = 3.0,
 }) async {
-  tester.view.physicalSize = Size(width * devicePixelRatio, height * devicePixelRatio);
+  tester.view.physicalSize = Size(
+    width * devicePixelRatio,
+    height * devicePixelRatio,
+  );
   tester.view.devicePixelRatio = devicePixelRatio;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);

@@ -45,21 +45,23 @@ void main() {
       }
     });
 
-    test('generatedPlan produces clean meal plan copy for empty/failed candidates', () {
-      final message = onboarding5FriendlyAiMessage(
-        null,
-        ['no_blocks_generated'],
-        operation: Onboarding5AiOperation.generatedPlan,
-      );
-      expect(message, 'AI could not generate your meal routine. Please try again.');
-    });
+    test(
+      'generatedPlan produces clean meal plan copy for empty/failed candidates',
+      () {
+        final message = onboarding5FriendlyAiMessage(null, [
+          'no_blocks_generated',
+        ], operation: Onboarding5AiOperation.generatedPlan);
+        expect(
+          message,
+          'AI could not generate your meal routine. Please try again.',
+        );
+      },
+    );
 
     test('uploadedMenu produces photo-specific instructions', () {
-      final message = onboarding5FriendlyAiMessage(
-        null,
-        ['no_blocks_generated'],
-        operation: Onboarding5AiOperation.uploadedMenu,
-      );
+      final message = onboarding5FriendlyAiMessage(null, [
+        'no_blocks_generated',
+      ], operation: Onboarding5AiOperation.uploadedMenu);
       expect(message, contains('photo'));
     });
 
@@ -69,7 +71,10 @@ void main() {
         [],
         operation: Onboarding5AiOperation.generatedPlan,
       );
-      expect(message, 'AI could not generate this meal routine. Please try again.');
+      expect(
+        message,
+        'AI could not generate this meal routine. Please try again.',
+      );
     });
   });
 }

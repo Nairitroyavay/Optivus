@@ -203,8 +203,7 @@ class UserProfile {
       onboardingStep: map['onboardingStep'] as int? ?? 0,
       currentSetupGeneration:
           (map['currentSetupGeneration'] as num?)?.toInt() ?? 0,
-      setupLineageVersion:
-          (map['setupLineageVersion'] as num?)?.toInt() ?? 0,
+      setupLineageVersion: (map['setupLineageVersion'] as num?)?.toInt() ?? 0,
       lastResetOperationId: map['lastResetOperationId'] as String?,
       lifeRole: map['lifeRole'] as String? ?? '',
       workingExtra: map['workingExtra'] as String?,

@@ -114,7 +114,8 @@ class TimelineTimeRailBackground extends StatelessWidget {
           Builder(
             builder: (context) {
               final top = scale.yForMinute(minute);
-              final showLabel = minute % 60 != 0 &&
+              final showLabel =
+                  minute % 60 != 0 &&
                   top - lastBoundaryLabelY >= minimumBoundaryLabelSpacing;
               if (showLabel) lastBoundaryLabelY = top;
               return _BoundaryMinuteIndicator(

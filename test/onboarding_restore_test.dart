@@ -1556,7 +1556,8 @@ class _PersistentRepositoryReconstructionSource
   }) async {
     final profile = await profiles.fetchUserProfile(uid);
     onProfileLoaded?.call(profile);
-    final currentRun = currentRunOverride ??
+    final currentRun =
+        currentRunOverride ??
         (await jobService?.loadCurrentRunSnapshot(uid)) ??
         const OnboardingCurrentRunSnapshot.none();
     return ServerReconstructionSnapshot(

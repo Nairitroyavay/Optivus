@@ -65,10 +65,9 @@ void main() {
 
     test('returns false when onboarding is already completed', () {
       final snapshot = ServerReconstructionSnapshot(
-        profile: UserProfile.empty(uid: uid).copyWith(
-          onboardingCompleted: true,
-          setupLineageVersion: 0,
-        ),
+        profile: UserProfile.empty(
+          uid: uid,
+        ).copyWith(onboardingCompleted: true, setupLineageVersion: 0),
         draft: null,
         completionBundle: null,
         currentRun: const OnboardingCurrentRunSnapshot(hasPointer: false),
@@ -76,25 +75,32 @@ void main() {
       expect(migrationCoordinator.shouldMigrate(snapshot), isFalse);
     });
 
-    test('returns false when both profile and draft already have current lineage', () {
-      final snapshot = ServerReconstructionSnapshot(
-        profile: UserProfile.empty(uid: uid).copyWith(
-          setupLineageVersion: UserProfile.currentSetupLineageVersion,
-        ),
-        draft: _validDraftAtStep(
-          uid,
-          3,
-          setupGeneration: 1,
-          setupLineageVersion: OnboardingDraft.currentSetupLineageVersion,
-        ),
-        completionBundle: null,
-        currentRun: const OnboardingCurrentRunSnapshot(hasPointer: false),
-      );
-      expect(migrationCoordinator.shouldMigrate(snapshot), isFalse);
-    });
+    test(
+      'returns false when both profile and draft already have current lineage',
+      () {
+        final snapshot = ServerReconstructionSnapshot(
+          profile: UserProfile.empty(uid: uid).copyWith(
+            setupLineageVersion: UserProfile.currentSetupLineageVersion,
+          ),
+          draft: _validDraftAtStep(
+            uid,
+            3,
+            setupGeneration: 1,
+            setupLineageVersion: OnboardingDraft.currentSetupLineageVersion,
+          ),
+          completionBundle: null,
+          currentRun: const OnboardingCurrentRunSnapshot(hasPointer: false),
+        );
+        expect(migrationCoordinator.shouldMigrate(snapshot), isFalse);
+      },
+    );
 
     test('returns false when draft is already a final completed draft', () {
-      final finalDraft = _finalDraft(uid, setupGeneration: 0, setupLineageVersion: 0);
+      final finalDraft = _finalDraft(
+        uid,
+        setupGeneration: 0,
+        setupLineageVersion: 0,
+      );
       final snapshot = ServerReconstructionSnapshot(
         profile: UserProfile.empty(uid: uid).copyWith(setupLineageVersion: 0),
         draft: finalDraft,
@@ -104,27 +110,43 @@ void main() {
       expect(migrationCoordinator.shouldMigrate(snapshot), isFalse);
     });
 
-    test('returns true when profile has legacy lineage (0) and draft is partial', () {
-      final snapshot = ServerReconstructionSnapshot(
-        profile: UserProfile.empty(uid: uid).copyWith(setupLineageVersion: 0),
-        draft: _validDraftAtStep(uid, 3, setupGeneration: 0, setupLineageVersion: 0),
-        completionBundle: null,
-        currentRun: const OnboardingCurrentRunSnapshot(hasPointer: false),
-      );
-      expect(migrationCoordinator.shouldMigrate(snapshot), isTrue);
-    });
+    test(
+      'returns true when profile has legacy lineage (0) and draft is partial',
+      () {
+        final snapshot = ServerReconstructionSnapshot(
+          profile: UserProfile.empty(uid: uid).copyWith(setupLineageVersion: 0),
+          draft: _validDraftAtStep(
+            uid,
+            3,
+            setupGeneration: 0,
+            setupLineageVersion: 0,
+          ),
+          completionBundle: null,
+          currentRun: const OnboardingCurrentRunSnapshot(hasPointer: false),
+        );
+        expect(migrationCoordinator.shouldMigrate(snapshot), isTrue);
+      },
+    );
 
-    test('returns true when draft has legacy lineage (0) even if profile was bumped', () {
-      final snapshot = ServerReconstructionSnapshot(
-        profile: UserProfile.empty(uid: uid).copyWith(
-          setupLineageVersion: UserProfile.currentSetupLineageVersion,
-        ),
-        draft: _validDraftAtStep(uid, 2, setupGeneration: 0, setupLineageVersion: 0),
-        completionBundle: null,
-        currentRun: const OnboardingCurrentRunSnapshot(hasPointer: false),
-      );
-      expect(migrationCoordinator.shouldMigrate(snapshot), isTrue);
-    });
+    test(
+      'returns true when draft has legacy lineage (0) even if profile was bumped',
+      () {
+        final snapshot = ServerReconstructionSnapshot(
+          profile: UserProfile.empty(uid: uid).copyWith(
+            setupLineageVersion: UserProfile.currentSetupLineageVersion,
+          ),
+          draft: _validDraftAtStep(
+            uid,
+            2,
+            setupGeneration: 0,
+            setupLineageVersion: 0,
+          ),
+          completionBundle: null,
+          currentRun: const OnboardingCurrentRunSnapshot(hasPointer: false),
+        );
+        expect(migrationCoordinator.shouldMigrate(snapshot), isTrue);
+      },
+    );
   });
 
   group('Migration Coordinator - Physical Defect Resolution', () {
@@ -192,25 +214,28 @@ void main() {
       },
     );
 
-    test('Form B: Fresh pre-lineage account migrates and returns ReconstructionFresh', () async {
-      final profile = UserProfile.empty(uid: uid).copyWith(
-        setupLineageVersion: 0,
-        currentSetupGeneration: 0,
-        onboardingCompleted: false,
-        onboardingStep: 0,
-      );
-      await profileRepo.saveUserProfile(profile);
+    test(
+      'Form B: Fresh pre-lineage account migrates and returns ReconstructionFresh',
+      () async {
+        final profile = UserProfile.empty(uid: uid).copyWith(
+          setupLineageVersion: 0,
+          currentSetupGeneration: 0,
+          onboardingCompleted: false,
+          onboardingStep: 0,
+        );
+        await profileRepo.saveUserProfile(profile);
 
-      final result = await reconstructor.reconstruct(uid: uid);
+        final result = await reconstructor.reconstruct(uid: uid);
 
-      expect(result, isA<ReconstructionFresh>());
-      expect(result.profile.setupLineageVersion, 1);
-      expect(result.profile.currentSetupGeneration, 1);
+        expect(result, isA<ReconstructionFresh>());
+        expect(result.profile.setupLineageVersion, 1);
+        expect(result.profile.currentSetupGeneration, 1);
 
-      final updatedProfile = await profileRepo.fetchUserProfile(uid);
-      expect(updatedProfile!.setupLineageVersion, 1);
-      expect(updatedProfile.currentSetupGeneration, 1);
-    });
+        final updatedProfile = await profileRepo.fetchUserProfile(uid);
+        expect(updatedProfile!.setupLineageVersion, 1);
+        expect(updatedProfile.currentSetupGeneration, 1);
+      },
+    );
 
     test(
       'Draft Content Integrity: Step data and answers preserved 100% during migration',
@@ -222,41 +247,42 @@ void main() {
         );
         await profileRepo.saveUserProfile(profile);
 
-        final draft = _validDraftAtStep(
-          uid,
-          7,
-          setupGeneration: 0,
-          setupLineageVersion: 0,
-          revision: 5,
-        ).copyWith(
-          lifeRole: const LifeRoleDraft(
-            lifeRole: 'student',
-            exerciseLevel: 'vigorous',
-            waterIntake: 'high',
-            stressLevel: 'low',
-            sleepQuality: 'excellent',
-          ),
-          bodyBasics: const BodyBasicsDraft(
-            ageRange: '20-24',
-            heightCm: 185,
-            weightKg: 80,
-            gender: 'female',
-          ),
-          badHabits: const [
-            BadHabitDraft(
-              id: 'bh1',
-              habitKey: 'late_eating',
-              displayName: 'Late eating',
-            ),
-          ],
-          goodHabits: const [
-            GoodHabitDraft(
-              id: 'gh1',
-              habitKey: 'read_daily',
-              displayName: 'Daily reading',
-            ),
-          ],
-        );
+        final draft =
+            _validDraftAtStep(
+              uid,
+              7,
+              setupGeneration: 0,
+              setupLineageVersion: 0,
+              revision: 5,
+            ).copyWith(
+              lifeRole: const LifeRoleDraft(
+                lifeRole: 'student',
+                exerciseLevel: 'vigorous',
+                waterIntake: 'high',
+                stressLevel: 'low',
+                sleepQuality: 'excellent',
+              ),
+              bodyBasics: const BodyBasicsDraft(
+                ageRange: '20-24',
+                heightCm: 185,
+                weightKg: 80,
+                gender: 'female',
+              ),
+              badHabits: const [
+                BadHabitDraft(
+                  id: 'bh1',
+                  habitKey: 'late_eating',
+                  displayName: 'Late eating',
+                ),
+              ],
+              goodHabits: const [
+                GoodHabitDraft(
+                  id: 'gh1',
+                  habitKey: 'read_daily',
+                  displayName: 'Daily reading',
+                ),
+              ],
+            );
         await onboardingRepo.saveDraft(draft);
 
         final result = await reconstructor.reconstruct(uid: uid);
@@ -277,40 +303,47 @@ void main() {
       },
     );
 
-    test('Migration idempotency: running migration multiple times is stable', () async {
-      final profile = UserProfile.empty(uid: uid).copyWith(
-        setupLineageVersion: 0,
-        currentSetupGeneration: 0,
-        onboardingCompleted: false,
-      );
-      await profileRepo.saveUserProfile(profile);
-      final draft = _validDraftAtStep(uid, 3, setupGeneration: 0, setupLineageVersion: 0);
-      await onboardingRepo.saveDraft(draft);
+    test(
+      'Migration idempotency: running migration multiple times is stable',
+      () async {
+        final profile = UserProfile.empty(uid: uid).copyWith(
+          setupLineageVersion: 0,
+          currentSetupGeneration: 0,
+          onboardingCompleted: false,
+        );
+        await profileRepo.saveUserProfile(profile);
+        final draft = _validDraftAtStep(
+          uid,
+          3,
+          setupGeneration: 0,
+          setupLineageVersion: 0,
+        );
+        await onboardingRepo.saveDraft(draft);
 
-      final firstResult = await reconstructor.reconstruct(uid: uid);
-      expect(firstResult, isA<ReconstructionIncomplete>());
-      expect(firstResult.profile.setupLineageVersion, 1);
-      expect(firstResult.profile.currentSetupGeneration, 1);
+        final firstResult = await reconstructor.reconstruct(uid: uid);
+        expect(firstResult, isA<ReconstructionIncomplete>());
+        expect(firstResult.profile.setupLineageVersion, 1);
+        expect(firstResult.profile.currentSetupGeneration, 1);
 
-      // Second reconstruct call
-      final secondResult = await reconstructor.reconstruct(uid: uid);
-      expect(secondResult, isA<ReconstructionIncomplete>());
-      expect(secondResult.profile.setupLineageVersion, 1);
-      expect(secondResult.profile.currentSetupGeneration, 1);
-      expect(
-        (secondResult as ReconstructionIncomplete).draft.setupGeneration,
-        1,
-      );
-    });
+        // Second reconstruct call
+        final secondResult = await reconstructor.reconstruct(uid: uid);
+        expect(secondResult, isA<ReconstructionIncomplete>());
+        expect(secondResult.profile.setupLineageVersion, 1);
+        expect(secondResult.profile.currentSetupGeneration, 1);
+        expect(
+          (secondResult as ReconstructionIncomplete).draft.setupGeneration,
+          1,
+        );
+      },
+    );
 
     test(
       'True Same-Lineage Mismatch: Returns ReconstructionRecovery(completion_run_input_mismatch)',
       () {
         // Modern generation 1, lineage 1
-        final profile = UserProfile.empty(uid: uid).copyWith(
-          currentSetupGeneration: 1,
-          setupLineageVersion: 1,
-        );
+        final profile = UserProfile.empty(
+          uid: uid,
+        ).copyWith(currentSetupGeneration: 1, setupLineageVersion: 1);
         final draft = _validDraftAtStep(
           uid,
           3,
@@ -358,44 +391,51 @@ void main() {
       },
     );
 
-    test('Completed legacy account is not migrated and returns ReconstructionCompleted', () async {
-      final profile = UserProfile.empty(uid: uid).copyWith(
-        onboardingCompleted: true,
-        setupLineageVersion: 0,
-        currentSetupGeneration: 0,
-      );
-      await profileRepo.saveUserProfile(profile);
+    test(
+      'Completed legacy account is not migrated and returns ReconstructionCompleted',
+      () async {
+        final profile = UserProfile.empty(uid: uid).copyWith(
+          onboardingCompleted: true,
+          setupLineageVersion: 0,
+          currentSetupGeneration: 0,
+        );
+        await profileRepo.saveUserProfile(profile);
 
-      final draft = _finalDraft(uid, setupGeneration: 0, setupLineageVersion: 0);
-      await onboardingRepo.saveDraft(draft);
+        final draft = _finalDraft(
+          uid,
+          setupGeneration: 0,
+          setupLineageVersion: 0,
+        );
+        await onboardingRepo.saveDraft(draft);
 
-      final bundle = _bundleForDraft(
-        draft,
-        setupGeneration: 0,
-        setupLineageVersion: 0,
-        runId: 'run-legacy-completed',
-      );
-      await onboardingRepo.saveCompletionBundle(bundle);
+        final bundle = _bundleForDraft(
+          draft,
+          setupGeneration: 0,
+          setupLineageVersion: 0,
+          runId: 'run-legacy-completed',
+        );
+        await onboardingRepo.saveCompletionBundle(bundle);
 
-      memoryStore.currentRunIds[uid] = 'run-legacy-completed';
-      memoryStore.currentRunStatuses[uid] = 'completed';
-      memoryStore.jobs['$uid:run-legacy-completed'] = OnboardingCompletionJob(
-        jobId: 'run-legacy-completed',
-        ownerUid: uid,
-        status: OnboardingJobStatus.completed,
-        stage: OnboardingCompletionStage.completed,
-        draftRevision: draft.revision,
-        sourceFingerprint: draft.effectiveSourceFingerprint,
-        setupGeneration: 0,
-        setupLineageVersion: 0,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
+        memoryStore.currentRunIds[uid] = 'run-legacy-completed';
+        memoryStore.currentRunStatuses[uid] = 'completed';
+        memoryStore.jobs['$uid:run-legacy-completed'] = OnboardingCompletionJob(
+          jobId: 'run-legacy-completed',
+          ownerUid: uid,
+          status: OnboardingJobStatus.completed,
+          stage: OnboardingCompletionStage.completed,
+          draftRevision: draft.revision,
+          sourceFingerprint: draft.effectiveSourceFingerprint,
+          setupGeneration: 0,
+          setupLineageVersion: 0,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
 
-      final result = await reconstructor.reconstruct(uid: uid);
-      expect(result, isA<ReconstructionCompleted>());
-      expect(result.profile.setupLineageVersion, 0); // Not mutated!
-    });
+        final result = await reconstructor.reconstruct(uid: uid);
+        expect(result, isA<ReconstructionCompleted>());
+        expect(result.profile.setupLineageVersion, 0); // Not mutated!
+      },
+    );
   });
 }
 
@@ -490,7 +530,8 @@ OnboardingCompletionBundle _bundleForDraft(
   final now = DateTime.now();
   return OnboardingCompletionBundle(
     uid: draft.uid,
-    runId: runId ??
+    runId:
+        runId ??
         stableOnboardingRunId(
           ownerUid: draft.uid,
           sourceFingerprint: draft.effectiveSourceFingerprint,

@@ -2523,4 +2523,375 @@ describe("Skin-care Worker", () => {
     expect(json.timelineBlocks[0].title).toBe("Night Skin Care");
     expect(json.timelineBlocks[0].title).not.toBe("Bad Compatibility");
   });
+
+  describe("Section 11 — Currency Contract and Test Matrix (Cases A-K)", () => {
+    const key = "users/uid-1/onboarding/skin_face/face.jpg";
+    const env = makeEnv({ [key]: { contentType: "image/jpeg" } }) as any;
+
+    test("Case A: requested INR + valid INR response is accepted", async () => {
+      const calls: FetchCall[] = [];
+      const products = completeIndianRecommendationProducts();
+      stubGemini(JSON.stringify({
+        recommendedProducts: products,
+        warnings: [],
+      }), calls);
+
+      const response = await worker.fetch(
+        jsonRequest("/v1/skin-care/routine/generate", {
+          recommendationOnly: true,
+          facePhotoR2Key: key,
+          skinType: "oily",
+          skinConcerns: ["pimples"],
+          budget: "low",
+          countryCode: "IN",
+          currencyCode: "INR",
+        }),
+        env,
+      );
+      const json = await response.json() as any;
+      expect(response.status).toBe(200);
+      expect(calls).toHaveLength(1);
+      expect(json.recommendedProducts).toHaveLength(products.length);
+      expect(json.recommendedProducts.every((p: any) => p.currencyCode === "INR")).toBe(true);
+      expect(json.warnings).not.toContain("ai_recommendation_currency_conflict");
+    });
+
+    test("Case B: requested INR + model USD triggers repair attempt", async () => {
+      const calls: FetchCall[] = [];
+      const usdProducts = completeIndianRecommendationProducts().map((p) => ({
+        ...p,
+        currencyCode: "USD",
+        estimatedPrice: "$15",
+      }));
+      const inrRepair = completeIndianRecommendationProducts();
+      stubGeminiResponses([
+        geminiSuccess(JSON.stringify({ recommendedProducts: usdProducts, warnings: [] })),
+        geminiSuccess(JSON.stringify({ recommendedProducts: inrRepair, warnings: [] })),
+      ], calls);
+
+      const response = await worker.fetch(
+        jsonRequest("/v1/skin-care/routine/generate", {
+          recommendationOnly: true,
+          facePhotoR2Key: key,
+          skinType: "oily",
+          skinConcerns: ["pimples"],
+          budget: "low",
+          countryCode: "IN",
+          currencyCode: "INR",
+        }),
+        env,
+      );
+      const json = await response.json() as any;
+      expect(response.status).toBe(200);
+      expect(calls).toHaveLength(2);
+      expect(json.warnings).toContain("ai_recommendation_currency_conflict");
+      expect(json.warnings).toContain("ai_product_recommendations_repaired");
+    });
+
+    test("Case C: requested INR + currencyCode INR but estimatedPrice explicitly says '$12 USD' triggers conflict repair", async () => {
+      const calls: FetchCall[] = [];
+      const conflictProducts = completeIndianRecommendationProducts();
+      conflictProducts[0] = {
+        ...conflictProducts[0],
+        estimatedPrice: "$12 USD",
+        currencyCode: "INR",
+      };
+      stubGeminiResponses([
+        geminiSuccess(JSON.stringify({ recommendedProducts: conflictProducts, warnings: [] })),
+        geminiSuccess(JSON.stringify({
+          recommendedProducts: [{
+            name: "Fixed Cleanser",
+            brand: "Minimalist",
+            category: "cleanser",
+            estimatedPrice: "₹299",
+            currencyCode: "INR",
+            reason: "Safe cleanser",
+          }],
+          warnings: [],
+        })),
+      ], calls);
+
+      const response = await worker.fetch(
+        jsonRequest("/v1/skin-care/routine/generate", {
+          recommendationOnly: true,
+          facePhotoR2Key: key,
+          skinType: "oily",
+          skinConcerns: ["pimples"],
+          budget: "low",
+          countryCode: "IN",
+          currencyCode: "INR",
+        }),
+        env,
+      );
+      const json = await response.json() as any;
+      expect(response.status).toBe(200);
+      expect(calls).toHaveLength(2);
+      expect(json.warnings).toContain("ai_recommendation_currency_conflict");
+      expect(json.recommendedProducts.every((p: any) => !p.estimatedPrice.includes("USD") && !p.estimatedPrice.includes("$"))).toBe(true);
+    });
+
+    test("Case D: requested INR + model empty currencyCode with INR price normalizes safely", async () => {
+      const calls: FetchCall[] = [];
+      const emptyCurrencyProducts = completeIndianRecommendationProducts().map((p) => ({
+        ...p,
+        currencyCode: "",
+      }));
+      stubGemini(JSON.stringify({
+        recommendedProducts: emptyCurrencyProducts,
+        warnings: [],
+      }), calls);
+
+      const response = await worker.fetch(
+        jsonRequest("/v1/skin-care/routine/generate", {
+          recommendationOnly: true,
+          facePhotoR2Key: key,
+          skinType: "oily",
+          skinConcerns: ["pimples"],
+          budget: "low",
+          countryCode: "IN",
+          currencyCode: "INR",
+        }),
+        env,
+      );
+      const json = await response.json() as any;
+      expect(response.status).toBe(200);
+      expect(calls).toHaveLength(1);
+      expect(json.recommendedProducts.every((p: any) => p.currencyCode === "INR")).toBe(true);
+      expect(json.warnings).not.toContain("ai_recommendation_currency_conflict");
+    });
+
+    test("Case E: repair returns INR -> accepted", async () => {
+      const calls: FetchCall[] = [];
+      const bad = completeIndianRecommendationProducts();
+      bad[0] = { ...bad[0], estimatedPrice: "€15", currencyCode: "EUR" };
+      stubGeminiResponses([
+        geminiSuccess(JSON.stringify({ recommendedProducts: bad, warnings: [] })),
+        geminiSuccess(JSON.stringify({
+          recommendedProducts: [{
+            name: "INR Cleanser",
+            brand: "Simple",
+            category: "cleanser",
+            estimatedPrice: "₹300",
+            currencyCode: "INR",
+            reason: "Gentle cleanser",
+          }],
+          warnings: [],
+        })),
+      ], calls);
+
+      const response = await worker.fetch(
+        jsonRequest("/v1/skin-care/routine/generate", {
+          recommendationOnly: true,
+          facePhotoR2Key: key,
+          skinType: "oily",
+          skinConcerns: ["pimples"],
+          budget: "low",
+          countryCode: "IN",
+          currencyCode: "INR",
+        }),
+        env,
+      );
+      const json = await response.json() as any;
+      expect(response.status).toBe(200);
+      expect(json.warnings).toContain("ai_product_recommendations_repaired");
+      expect(json.recommendedProducts.some((p: any) => p.name === "INR Cleanser")).toBe(true);
+      expect(json.recommendedProducts.every((p: any) => p.currencyCode === "INR")).toBe(true);
+    });
+
+    test("Case F: repair STILL returns USD/wrong symbol -> invalid item must not survive", async () => {
+      const calls: FetchCall[] = [];
+      const bad = completeIndianRecommendationProducts();
+      bad[0] = { ...bad[0], estimatedPrice: "$12 USD", currencyCode: "USD" };
+      stubGeminiResponses([
+        geminiSuccess(JSON.stringify({ recommendedProducts: bad, warnings: [] })),
+        geminiSuccess(JSON.stringify({
+          recommendedProducts: [{
+            name: "Still USD Cleanser",
+            brand: "Example",
+            category: "cleanser",
+            estimatedPrice: "$14 USD",
+            currencyCode: "USD",
+            reason: "Wrong currency",
+          }],
+          warnings: [],
+        })),
+      ], calls);
+
+      const response = await worker.fetch(
+        jsonRequest("/v1/skin-care/routine/generate", {
+          recommendationOnly: true,
+          facePhotoR2Key: key,
+          skinType: "oily",
+          skinConcerns: ["pimples"],
+          budget: "low",
+          countryCode: "IN",
+          currencyCode: "INR",
+        }),
+        env,
+      );
+      const json = await response.json() as any;
+      expect(response.status).toBe(200);
+      expect(json.recommendedProducts.every((p: any) => p.currencyCode === "INR" && !p.estimatedPrice.includes("USD"))).toBe(true);
+      expect(json.recommendedProducts.some((p: any) => p.name === "Still USD Cleanser")).toBe(false);
+    });
+
+    test("Case G: mixed response has USD item removed/repaired so final result has no mixed currencies", async () => {
+      const calls: FetchCall[] = [];
+      const mixed = [
+        { name: "C1", brand: "B1", category: "cleanser", estimatedPrice: "₹299", currencyCode: "INR", reason: "Good" },
+        { name: "M1", brand: "B2", category: "moisturizer", estimatedPrice: "$15 USD", currencyCode: "USD", reason: "Wrong" },
+        { name: "S1", brand: "B3", category: "sunscreen", estimatedPrice: "₹399", currencyCode: "INR", reason: "Good" },
+      ];
+      stubGeminiResponses([
+        geminiSuccess(JSON.stringify({ recommendedProducts: mixed, warnings: [] })),
+        geminiSuccess(JSON.stringify({
+          recommendedProducts: [{
+            name: "M2",
+            brand: "B2",
+            category: "moisturizer",
+            estimatedPrice: "₹350",
+            currencyCode: "INR",
+            reason: "Repaired",
+          }],
+          warnings: [],
+        })),
+      ], calls);
+
+      const response = await worker.fetch(
+        jsonRequest("/v1/skin-care/routine/generate", {
+          recommendationOnly: true,
+          facePhotoR2Key: key,
+          skinType: "oily",
+          skinConcerns: ["pimples"],
+          budget: "low",
+          countryCode: "IN",
+          currencyCode: "INR",
+        }),
+        env,
+      );
+      const json = await response.json() as any;
+      expect(response.status).toBe(200);
+      expect(json.recommendedProducts.every((p: any) => p.currencyCode === "INR")).toBe(true);
+      expect(json.recommendedProducts.some((p: any) => p.name === "M1")).toBe(false);
+      expect(json.recommendedProducts.some((p: any) => p.name === "M2")).toBe(true);
+    });
+
+    test("Case H: repair cannot restore all essential categories -> client/server contract fails safely", async () => {
+      const calls: FetchCall[] = [];
+      const bad = [
+        { name: "C1", brand: "B1", category: "cleanser", estimatedPrice: "$15 USD", currencyCode: "USD", reason: "Bad" },
+      ];
+      stubGeminiResponses([
+        geminiSuccess(JSON.stringify({ recommendedProducts: bad, warnings: [] })),
+        { status: 500, body: { error: "Server error" } },
+      ], calls);
+
+      const response = await worker.fetch(
+        jsonRequest("/v1/skin-care/routine/generate", {
+          recommendationOnly: true,
+          facePhotoR2Key: key,
+          skinType: "oily",
+          skinConcerns: ["pimples"],
+          budget: "low",
+          countryCode: "IN",
+          currencyCode: "INR",
+        }),
+        env,
+      );
+      const json = await response.json() as any;
+      expect(response.status).toBe(200);
+      expect(json.recommendedProducts).toEqual([]);
+      expect(json.warnings).toContain("ai_returned_no_product_recommendations");
+    });
+
+    test("Case I: requested EUR -> valid EUR works", async () => {
+      const eurProducts = [
+        { name: "Cleanser", brand: "La Roche-Posay", category: "cleanser", estimatedPrice: "€14", currencyCode: "EUR", reason: "Gentle" },
+        { name: "Moisturizer", brand: "Avene", category: "moisturizer", estimatedPrice: "€18", currencyCode: "EUR", reason: "Hydrating" },
+        { name: "Sunscreen", brand: "La Roche-Posay", category: "sunscreen", estimatedPrice: "€21", currencyCode: "EUR", reason: "High protection" },
+      ];
+      stubGemini(JSON.stringify({
+        recommendedProducts: eurProducts,
+        warnings: [],
+      }));
+
+      const response = await worker.fetch(
+        jsonRequest("/v1/skin-care/routine/generate", {
+          recommendationOnly: true,
+          facePhotoR2Key: key,
+          skinType: "sensitive",
+          skinConcerns: ["redness"],
+          budget: "medium",
+          countryCode: "FR",
+          currencyCode: "EUR",
+        }),
+        env,
+      );
+      const json = await response.json() as any;
+      expect(response.status).toBe(200);
+      expect(json.recommendedProducts).toHaveLength(3);
+      expect(json.recommendedProducts.every((p: any) => p.currencyCode === "EUR")).toBe(true);
+      expect(json.warnings).not.toContain("ai_recommendation_currency_conflict");
+    });
+
+    test("Case J: requested GBP -> valid GBP works", async () => {
+      const gbpProducts = [
+        { name: "Cleanser", brand: "Simple", category: "cleanser", estimatedPrice: "£4.50", currencyCode: "GBP", reason: "Gentle" },
+        { name: "Moisturizer", brand: "Simple", category: "moisturizer", estimatedPrice: "£5.00", currencyCode: "GBP", reason: "Hydrating" },
+        { name: "Sunscreen", brand: "Boots", category: "sunscreen", estimatedPrice: "£8.00", currencyCode: "GBP", reason: "High protection" },
+      ];
+      stubGemini(JSON.stringify({
+        recommendedProducts: gbpProducts,
+        warnings: [],
+      }));
+
+      const response = await worker.fetch(
+        jsonRequest("/v1/skin-care/routine/generate", {
+          recommendationOnly: true,
+          facePhotoR2Key: key,
+          skinType: "normal",
+          skinConcerns: ["hydration"],
+          budget: "low",
+          countryCode: "GB",
+          currencyCode: "GBP",
+        }),
+        env,
+      );
+      const json = await response.json() as any;
+      expect(response.status).toBe(200);
+      expect(json.recommendedProducts).toHaveLength(3);
+      expect(json.recommendedProducts.every((p: any) => p.currencyCode === "GBP")).toBe(true);
+      expect(json.warnings).not.toContain("ai_recommendation_currency_conflict");
+    });
+
+    test("Case K: requested JPY -> valid JPY works", async () => {
+      const jpyProducts = [
+        { name: "Cleanser", brand: "Hada Labo", category: "cleanser", estimatedPrice: "¥800", currencyCode: "JPY", reason: "Hydrating wash" },
+        { name: "Moisturizer", brand: "Hada Labo", category: "moisturizer", estimatedPrice: "¥1200", currencyCode: "JPY", reason: "Rich lotion" },
+        { name: "Sunscreen", brand: "Biore", category: "sunscreen", estimatedPrice: "¥900", currencyCode: "JPY", reason: "Water essence" },
+      ];
+      stubGemini(JSON.stringify({
+        recommendedProducts: jpyProducts,
+        warnings: [],
+      }));
+
+      const response = await worker.fetch(
+        jsonRequest("/v1/skin-care/routine/generate", {
+          recommendationOnly: true,
+          facePhotoR2Key: key,
+          skinType: "dry",
+          skinConcerns: ["hydration"],
+          budget: "low",
+          countryCode: "JP",
+          currencyCode: "JPY",
+        }),
+        env,
+      );
+      const json = await response.json() as any;
+      expect(response.status).toBe(200);
+      expect(json.recommendedProducts).toHaveLength(3);
+      expect(json.recommendedProducts.every((p: any) => p.currencyCode === "JPY")).toBe(true);
+      expect(json.warnings).not.toContain("ai_recommendation_currency_conflict");
+    });
+  });
 });

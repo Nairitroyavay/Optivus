@@ -180,8 +180,7 @@ class OnboardingCompletionBundle {
       sourceFingerprint: map['sourceFingerprint'] as String? ?? '',
       draftRevision: (map['draftRevision'] as num?)?.toInt() ?? 1,
       setupGeneration: (map['setupGeneration'] as num?)?.toInt() ?? 0,
-      setupLineageVersion:
-          (map['setupLineageVersion'] as num?)?.toInt() ?? 0,
+      setupLineageVersion: (map['setupLineageVersion'] as num?)?.toInt() ?? 0,
       createdAt: createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
       updatedAt:
           updatedAt ?? createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),

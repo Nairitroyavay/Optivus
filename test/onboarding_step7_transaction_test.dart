@@ -98,7 +98,9 @@ void main() {
     setUp(() {
       final initialBase = const BaseTimelineDraft().copyWith(
         skinCareSetupPath: 'no_products',
-        skinCareSetupStep: 1,
+        skinCareSetupStep: 2,
+        skinCareStageContractVersion:
+            BaseTimelineDraft.currentSkinCareStageContractVersion,
         skinCareSkinType: 'oily',
         skinCareProblems: const ['pimples'],
         skinCareBudget: 'medium',
@@ -110,6 +112,8 @@ void main() {
         skinCareFacePhotoCreatedAt: DateTime.utc(2026, 6, 15, 10),
         skinCareFacePhotoUpdatedAt: DateTime.utc(2026, 6, 15, 10),
         skinCareProductRecommendations: _testRecs,
+        skinCareRecommendationCurrencyCode: 'USD',
+        skinCareRecommendationCountryCode: 'US',
         skinCareSelectedProductNames: _testSelected,
         skinCareSuggestedProducts: _testSelected,
       );
@@ -272,7 +276,7 @@ void main() {
     );
 
     test(
-      'handleBack during edit mode restores Plan A snapshot and keeps routine current',
+      'handleBack during edit mode restores Plan A snapshot and returns to choice',
       () {
         final controller = container.read(
           skinCareFlowControllerProvider.notifier,
@@ -283,6 +287,15 @@ void main() {
             .baseTimeline;
 
         controller.startEditing(baseBefore);
+        expect(
+          container.read(skinCareFlowControllerProvider).noProductsEditStage,
+          NoProductsEditStage.productSelection,
+        );
+        expect(controller.handleBack(), isTrue);
+        expect(
+          container.read(skinCareFlowControllerProvider).noProductsEditStage,
+          NoProductsEditStage.details,
+        );
 
         // Mutate inputs during edit
         container
@@ -296,7 +309,7 @@ void main() {
               ),
             );
 
-        // Shell top-left back button triggers handleBack
+        // Shell top-left back button triggers handleBack from details
         final handled = controller.handleBack();
         expect(handled, isTrue);
 
@@ -306,10 +319,10 @@ void main() {
             .baseTimeline;
         expect(restoredBase.skinCareBudget, 'medium');
         expect(restoredBase.skinCareDesiredApplicationsPerDay, 2);
-        expect(restoredBase.isSkinCareRoutineCurrent(testUid), isTrue);
+        expect(restoredBase.skinCareSetupStep, 0);
         expect(
           container.read(skinCareFlowControllerProvider).state,
-          SkinCareFlowState.noProductsReview,
+          SkinCareFlowState.choice,
         );
       },
     );

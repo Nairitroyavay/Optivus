@@ -839,75 +839,7 @@ List<SkinCareProductRecommendation> onboarding7NormalizeRecommendations(
 bool onboarding7PriceMatchesCurrency(
   String estimatedPrice,
   String expectedCurrencyCode,
-) {
-  final price = estimatedPrice.trim().toUpperCase();
-  final expected = expectedCurrencyCode.trim().toUpperCase();
-  if (price.isEmpty || expected.isEmpty) return false;
-  const knownCodes = {
-    'AED',
-    'AUD',
-    'BDT',
-    'BRL',
-    'CAD',
-    'CHF',
-    'CNY',
-    'CZK',
-    'DKK',
-    'EGP',
-    'EUR',
-    'GBP',
-    'HKD',
-    'IDR',
-    'INR',
-    'JPY',
-    'KRW',
-    'LKR',
-    'MYR',
-    'MXN',
-    'NGN',
-    'NOK',
-    'NPR',
-    'NZD',
-    'PHP',
-    'PKR',
-    'PLN',
-    'SAR',
-    'SEK',
-    'SGD',
-    'THB',
-    'TRY',
-    'TWD',
-    'USD',
-    'VND',
-    'ZAR',
-  };
-  for (final code in knownCodes) {
-    if (code != expected &&
-        RegExp('(^|[^A-Z])$code([^A-Z]|\$)').hasMatch(price)) {
-      return false;
-    }
-  }
-  if (price.contains('₹') && expected != 'INR') return false;
-  if (price.contains('€') && expected != 'EUR') return false;
-  if (price.contains('£') && expected != 'GBP') return false;
-  if (price.contains('¥') && expected != 'JPY' && expected != 'CNY') {
-    return false;
-  }
-  if (price.contains(r'$') &&
-      !const {
-        'USD',
-        'CAD',
-        'AUD',
-        'NZD',
-        'SGD',
-        'HKD',
-        'MXN',
-        'BRL',
-      }.contains(expected)) {
-    return false;
-  }
-  return true;
-}
+) => isPriceMatchingCurrency(estimatedPrice, expectedCurrencyCode);
 
 /// Normalizes currency and estimated price display strings to prevent duplicated
 /// prefixes (such as "INR INR 300-400" or "\$ \$15").

@@ -127,11 +127,21 @@ class _DummyR2Client implements R2UploadClient {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-class _TestDeviceCountryService implements DeviceCountryService {
+class _TestDeviceCountryService
+    implements DeviceCountryService, PermissionAwareDeviceCountryService {
   final DeviceCountry? result;
-  const _TestDeviceCountryService(this.result);
+  const _TestDeviceCountryService([this.result]);
   @override
-  Future<DeviceCountry?> detectCountry() async => result;
+  Future<DeviceCountry?> detectCountry() async =>
+      result ??
+      const DeviceCountry(
+        countryCode: 'IN',
+        countryName: 'India',
+        fromDeviceLocation: true,
+      );
+  @override
+  Future<DeviceCountry?> detectCountryIfPermissionGranted() async =>
+      detectCountry();
 }
 
 class _TestUploadInteractionController extends UploadInteractionController {
@@ -246,6 +256,7 @@ OnboardingDraft buildInitialDraft({String uid = 'user-seq-test'}) {
     skinCareFacePhotoStatus: 'uploaded',
     skinCareFacePhotoCreatedAt: DateTime.utc(2026, 6, 15, 10),
     skinCareFacePhotoUpdatedAt: DateTime.utc(2026, 6, 15, 10),
+    skinCareRecommendationCurrencyCode: 'INR',
     eatingSetupPath: 'skip',
     eatingSetupStep: 1,
     skinCareProductNames:
@@ -1269,7 +1280,8 @@ void main() {
         );
         expect(find.text('Morning Skin Care'), findsOneWidget);
         expect(find.text('Night Skin Care'), findsOneWidget);
-        expect(find.text('Routine built'), findsOneWidget);
+        expect(find.text('Skin Care Routine'), findsOneWidget);
+        expect(find.text('Review your weekly routine'), findsOneWidget);
         final container = ProviderScope.containerOf(
           tester.element(find.byType(OnboardingStep7)),
         );
@@ -1332,10 +1344,8 @@ void main() {
         expect(tester.takeException(), isNull);
         expect(titleField, findsNothing);
 
-        // 5. Rebuild / Edit
-        final rebuildBtn = find.text('Rebuild / Edit');
-        expect(rebuildBtn, findsOneWidget);
-        await tester.tap(rebuildBtn);
+        // 5. Rebuild / Edit via flow controller handleBack
+        container.read(skinCareFlowControllerProvider.notifier).handleBack();
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
 
@@ -1389,12 +1399,8 @@ void main() {
         await ensureAllProductsSelected(tester);
         expect(tester.takeException(), isNull);
 
-        // 13. Close editor / Back
-        final closeEditorBtn = find.byKey(
-          const ValueKey('onboarding-step7-no-products-cancel-rebuild'),
-        );
-        expect(closeEditorBtn, findsOneWidget);
-        await tester.tap(closeEditorBtn);
+        // 13. Cancel editing to restore Plan A review
+        container.read(skinCareFlowControllerProvider.notifier).cancelEditing();
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
 
@@ -1405,7 +1411,8 @@ void main() {
         );
         expect(find.text('Morning Glow Care'), findsOneWidget);
         expect(find.text('Night Skin Care'), findsOneWidget);
-        expect(find.text('Routine built'), findsOneWidget);
+        expect(find.text('Skin Care Routine'), findsOneWidget);
+        expect(find.text('Review your weekly routine'), findsOneWidget);
         final containerAfterCancel = ProviderScope.containerOf(
           tester.element(find.byType(OnboardingStep7)),
         );
@@ -1440,12 +1447,14 @@ void main() {
         );
         expect(find.text('Morning Skin Care'), findsOneWidget);
         expect(find.text('Night Skin Care'), findsOneWidget);
-        expect(find.text('Routine built'), findsOneWidget);
+        expect(find.text('Skin Care Routine'), findsOneWidget);
+        expect(find.text('Review your weekly routine'), findsOneWidget);
 
-        // 1. Rebuild / Edit
-        final rebuildBtn = find.text('Rebuild / Edit');
-        expect(rebuildBtn, findsOneWidget);
-        await tester.tap(rebuildBtn);
+        // 1. Rebuild via flow controller handleBack
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(OnboardingStep7)),
+        );
+        container.read(skinCareFlowControllerProvider.notifier).handleBack();
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
 
@@ -1483,7 +1492,8 @@ void main() {
         );
         expect(find.text('Before-bed Skin Care'), findsOneWidget);
         expect(find.textContaining('Skin Care'), findsWidgets);
-        expect(find.text('Routine built'), findsOneWidget);
+        expect(find.text('Skin Care Routine'), findsOneWidget);
+        expect(find.text('Review your weekly routine'), findsOneWidget);
         final containerPlanB = ProviderScope.containerOf(
           tester.element(find.byType(OnboardingStep7)),
         );
@@ -1517,10 +1527,8 @@ void main() {
         expect(find.text('Morning Skin Care'), findsOneWidget);
         expect(find.text('Next Step'), findsOneWidget);
 
-        // 2. Rebuild / Edit
-        final rebuildBtn = find.text('Rebuild / Edit');
-        expect(rebuildBtn, findsOneWidget);
-        await tester.tap(rebuildBtn);
+        // 2. Rebuild via Shell Back
+        await tester.tap(find.byKey(const Key('onboarding-step7-back')));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
         expect(tester.takeException(), isNull);

@@ -57,8 +57,9 @@ final serverReconstructorProvider = Provider<ServerReconstructor>((ref) {
       onboardingRepository: ref.watch(onboardingRepositoryProvider),
       completionJobService: ref.watch(onboardingCompletionJobServiceProvider),
     ),
-    migrationCoordinator:
-        ref.watch(onboardingSetupLineageMigrationCoordinatorProvider),
+    migrationCoordinator: ref.watch(
+      onboardingSetupLineageMigrationCoordinatorProvider,
+    ),
   );
 });
 

@@ -60,9 +60,7 @@ class OnboardingSetupResetCoordinator {
     final now = DateTime.now();
 
     if (firestore != null) {
-      final profileRef = firestore!.doc(
-        FirestoreUserPaths.user(cleanUid),
-      );
+      final profileRef = firestore!.doc(FirestoreUserPaths.user(cleanUid));
       final pointerRef = firestore!.doc(
         FirestoreUserPaths.onboardingCurrentRun(cleanUid),
       );

@@ -69,9 +69,7 @@ class OnboardingState {
         );
     final nextStepDirty =
         stepDirty ??
-        List<bool>.from(
-          draftChanged ? nextDraft.stepDirty : this.stepDirty,
-        );
+        List<bool>.from(draftChanged ? nextDraft.stepDirty : this.stepDirty);
     final nextStepLoading =
         stepLoading ??
         List<bool>.from(
@@ -125,8 +123,9 @@ class OnboardingState {
 
       final isDirty = index < dirty.length && dirty[index];
       final isCompleted = index < completed.length && completed[index];
-      final currentStatus =
-          index < current.length ? current[index] : SaveSyncStatus.clean;
+      final currentStatus = index < current.length
+          ? current[index]
+          : SaveSyncStatus.clean;
 
       if (currentStatus == SaveSyncStatus.failed && isDirty) {
         return SaveSyncStatus.failed;

@@ -17,12 +17,7 @@ enum RecoverableErrorCategory {
 }
 
 /// Presentation/attention severity level (independent from retryability).
-enum RecoverableErrorSeverity {
-  info,
-  warning,
-  error,
-  critical,
-}
+enum RecoverableErrorSeverity { info, warning, error, critical }
 
 /// Semantic action describing how a failure can be addressed or retried.
 enum RecoverableRetryAction {
@@ -111,16 +106,16 @@ class RecoverableError {
 
   @override
   int get hashCode => Object.hash(
-        category,
-        publicMessage,
-        severity,
-        isBlocking,
-        retryAction,
-        retrySafe,
-        diagnosticCode,
-        title,
-        supportHint,
-      );
+    category,
+    publicMessage,
+    severity,
+    isBlocking,
+    retryAction,
+    retrySafe,
+    diagnosticCode,
+    title,
+    supportHint,
+  );
 
   @override
   String toString() =>

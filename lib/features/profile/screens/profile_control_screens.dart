@@ -2050,14 +2050,18 @@ void _showResetSetupDialog(BuildContext context, WidgetRef ref) {
       return StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
           title: const Text('Re-run setup?'),
           content: const Text(
             'Future setup will be rebuilt from onboarding. Past routine, goal, tracker, coach, and money history stays intact. Generated systems may refresh after setup. This resets the frontend setup draft and sends you to onboarding.',
           ),
           actions: [
             TextButton(
-              onPressed: isResetting ? null : () => Navigator.of(dialogContext).pop(),
+              onPressed: isResetting
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(),
               child: const Text('Cancel'),
             ),
             ElevatedButton(

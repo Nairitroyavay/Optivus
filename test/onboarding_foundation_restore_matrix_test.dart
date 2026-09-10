@@ -793,6 +793,14 @@ void main() {
                 ],
               ),
             ),
+            (
+              'skinCareSetupStep',
+              (base) => base.copyWith(skinCareSetupStep: 1),
+            ),
+            (
+              'skinCareStageContractVersion',
+              (base) => base.copyWith(skinCareStageContractVersion: 2),
+            ),
           ];
       for (final mutation in mutations) {
         final updated = initial.copyWith(
@@ -1078,6 +1086,325 @@ void main() {
       },
     );
   });
+
+  group(
+    'Section 3 & 4: Step 7 Process-Death, Rebuild Invalidation & Currency Restore Matrix',
+    () {
+      OnboardingDraft createDraftWithPlanA({
+        required int stage,
+        bool step7Completed = true,
+        bool todayReadyCompleted = true,
+      }) {
+        var base = _validBaseTimeline().copyWith(
+          skinCareSkipped: false,
+          skinCareSetupPath: 'has_products',
+          skinCareSetupStep: stage,
+          skinCareStageContractVersion: 1,
+          skinCareDesiredApplicationsPerDay: 2,
+          skinCareProductNames: 'Gentle Cleanser',
+          skinCareReviewedProducts: const [
+            SkinCareDetectedProduct(name: 'Gentle Cleanser'),
+          ],
+        );
+        final fp = base.computeSkinCareRoutineFingerprint();
+        final skinBlocks = [
+          TimelineBlockDraft(
+            id: 'skincare-am',
+            section: 'skin_care',
+            title: 'AM Routine',
+            startMinute: 470,
+            endMinute: 485,
+            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+            source: 'ai_generated_skin_care_setup',
+            blockType: TimelineBlockDraft.softBlockKey,
+            skincareProducts: const ['Gentle Cleanser'],
+            skincareSteps: const ['Apply and rinse'],
+            provenanceSourceIds: ['skin-care-generation:$fp'],
+          ),
+          TimelineBlockDraft(
+            id: 'skincare-pm',
+            section: 'skin_care',
+            title: 'PM Routine',
+            startMinute: 1260,
+            endMinute: 1275,
+            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+            source: 'ai_generated_skin_care_setup',
+            blockType: TimelineBlockDraft.softBlockKey,
+            skincareProducts: const ['Gentle Cleanser'],
+            skincareSteps: const ['Apply and rinse'],
+            provenanceSourceIds: ['skin-care-generation:$fp'],
+          ),
+        ];
+        base = base.copyWith(
+          skinCareRoutineFingerprint: fp,
+          blocks: [...base.blocks, ...skinBlocks],
+        );
+        final draft = _validDraftAt(testUid, 14).copyWith(
+          baseTimeline: base,
+          stepCompleted: List<bool>.generate(OnboardingDraft.stepCount, (i) {
+            if (i == OnboardingStepId.skinCare.index) {
+              return step7Completed;
+            }
+            if (i == OnboardingStepId.todayReady.index) {
+              return todayReadyCompleted;
+            }
+            return true;
+          }),
+          incrementRevision: false,
+        );
+        return draft;
+      }
+
+      test(
+        'Review -> Back enters rebuild (stage 1), clears stepCompleted[7], invalidates Today Ready, and across serialization/reconstruction resumeStep is 7',
+        () {
+          final stage2Draft = createDraftWithPlanA(
+            stage: 2,
+            step7Completed: true,
+            todayReadyCompleted: true,
+          );
+
+          // Simulates startEditing() changing stage 2 -> 1
+          final stage1Draft = stage2Draft.copyWith(
+            baseTimeline: stage2Draft.baseTimeline.copyWith(
+              skinCareSetupStep: 1,
+            ),
+            incrementRevision: false,
+          );
+          final invalidated = stage1Draft.invalidateDownstreamDependencies(
+            stage2Draft,
+          );
+
+          expect(invalidated.baseTimeline.skinCareSetupStep, 1);
+          // Retains Plan A blocks
+          expect(
+            invalidated.baseTimeline.blocks
+                .where((b) => b.section == 'skin_care')
+                .length,
+            2,
+          );
+          expect(
+            invalidated.stepCompleted[OnboardingStepId.skinCare.index],
+            isFalse,
+          );
+          expect(
+            invalidated.stepDirty[OnboardingStepId.skinCare.index],
+            isTrue,
+          );
+          expect(
+            invalidated.stepCompleted[OnboardingStepId.todayReady.index],
+            isFalse,
+          );
+
+          // Serialize and reconstruct across simulated process death
+          final map = invalidated.toMap();
+          final reconstructed = OnboardingDraft.fromMap(map);
+
+          final validation = validateOnboardingResume(reconstructed);
+          expect(validation.resumeStep, OnboardingStepId.skinCare.index);
+          expect(
+            validation.reason,
+            OnboardingResumeValidationReason.durableCompletionNotRecorded,
+          );
+        },
+      );
+
+      test(
+        'Stage 1 -> successful Plan B -> Stage 2 -> Next Step save advances resume beyond Step 7',
+        () {
+          final stage1Draft = createDraftWithPlanA(
+            stage: 1,
+            step7Completed: false,
+            todayReadyCompleted: false,
+          );
+
+          // Plan B succeeds -> stage 2 review candidate
+          final stage2Candidate = stage1Draft.copyWith(
+            baseTimeline: stage1Draft.baseTimeline.copyWith(
+              skinCareSetupStep: 2,
+            ),
+            incrementRevision: false,
+          );
+          // Next Step saved
+          final savedDraft = stage2Candidate.copyWith(
+            stepCompleted: [
+              for (var i = 0; i < OnboardingDraft.stepCount; i++)
+                if (i == OnboardingStepId.skinCare.index)
+                  true
+                else
+                  stage2Candidate.stepCompleted[i],
+            ],
+            stepDirty: [
+              for (var i = 0; i < OnboardingDraft.stepCount; i++)
+                if (i == OnboardingStepId.skinCare.index)
+                  false
+                else
+                  stage2Candidate.stepDirty[i],
+            ],
+            incrementRevision: false,
+          );
+
+          final map = savedDraft.toMap();
+          final reconstructed = OnboardingDraft.fromMap(map);
+          final validation = validateOnboardingResume(reconstructed);
+          // Advances beyond step 7 to todayReady (which is incomplete)
+          expect(validation.resumeStep, OnboardingStepId.todayReady.index);
+        },
+      );
+
+      test('Process death at has-products stage 1 resumes at Step 7', () {
+        final draft = createDraftWithPlanA(stage: 1, step7Completed: false);
+        final reconstructed = OnboardingDraft.fromMap(draft.toMap());
+        expect(
+          validateOnboardingResume(reconstructed).resumeStep,
+          OnboardingStepId.skinCare.index,
+        );
+      });
+
+      test('Process death at no-products details resumes at Step 7', () {
+        final draft = _validDraftAt(testUid, 7).copyWith(
+          baseTimeline: _validBaseTimeline().copyWith(
+            skinCareSkipped: false,
+            skinCareSetupPath: 'no_products',
+            skinCareSetupStep: 1,
+            skinCareSkinType: 'oily',
+            skinCareProblems: const ['pimples'],
+          ),
+          incrementRevision: false,
+        );
+        final reconstructed = OnboardingDraft.fromMap(draft.toMap());
+        expect(
+          validateOnboardingResume(reconstructed).resumeStep,
+          OnboardingStepId.skinCare.index,
+        );
+      });
+
+      test(
+        'Process death at no-products product-selection resumes at Step 7',
+        () {
+          final draft = _validDraftAt(testUid, 7).copyWith(
+            baseTimeline: _validBaseTimeline().copyWith(
+              skinCareSkipped: false,
+              skinCareSetupPath: 'no_products',
+              skinCareSetupStep: 1,
+              skinCareSkinType: 'oily',
+              skinCareProblems: const ['pimples'],
+              skinCareBudget: 'low',
+              skinCareProductRecommendations: const [
+                SkinCareProductRecommendationDraft(
+                  name: 'Cleanser',
+                  brand: 'Simple',
+                  category: 'cleanser',
+                  estimatedPrice: '₹300',
+                  currencyCode: 'INR',
+                  reason: 'Gentle',
+                ),
+              ],
+            ),
+            incrementRevision: false,
+          );
+          final reconstructed = OnboardingDraft.fromMap(draft.toMap());
+          expect(
+            validateOnboardingResume(reconstructed).resumeStep,
+            OnboardingStepId.skinCare.index,
+          );
+        },
+      );
+
+      test(
+        'Process death at stage 2 review before Next Step save resumes at Step 7',
+        () {
+          final draft = createDraftWithPlanA(stage: 2, step7Completed: false);
+          final reconstructed = OnboardingDraft.fromMap(draft.toMap());
+          expect(
+            validateOnboardingResume(reconstructed).resumeStep,
+            OnboardingStepId.skinCare.index,
+          );
+        },
+      );
+
+      test(
+        'Section 12: Durable restore validation rejects malformed recommendation currency mismatch',
+        () {
+          const rec = SkinCareProductRecommendationDraft(
+            name: 'Cleanser',
+            brand: 'Minimalist',
+            category: 'cleanser',
+            estimatedPrice: r'$12 USD',
+            currencyCode: 'INR',
+            reason: 'Gentle cleanser',
+          );
+          var base = _validBaseTimeline().copyWith(
+            skinCareSkipped: false,
+            skinCareSetupPath: 'no_products',
+            skinCareDesiredApplicationsPerDay: 2,
+            skinCareSkinType: 'oily',
+            skinCareProblems: const ['pimples'],
+            skinCareBudget: 'low',
+            skinCareProductRecommendations: const [rec],
+            skinCareSelectedProductNames: const ['Cleanser'],
+            skinCareRecommendationCurrencyCode: 'INR',
+            skinCareRecommendationCountryCode: 'IN',
+            skinCareFacePhotoAssetId: 'face-asset',
+            skinCareFacePhotoR2Key:
+                'users/$testUid/onboarding/skin_face/face-asset.jpg',
+            skinCareFacePhotoStatus: 'uploaded',
+          );
+          final recFp = base.computeSkinCareRecommendationFingerprintV1();
+          final routineFp = base.computeSkinCareRoutineFingerprintV1();
+          base = base.copyWith(
+            skinCareRecommendationFingerprint: recFp,
+            skinCareRoutineFingerprint: routineFp,
+            blocks: [
+              ...base.blocks,
+              TimelineBlockDraft(
+                id: 'skincare-am',
+                section: 'skin_care',
+                title: 'AM Routine',
+                startMinute: 470,
+                endMinute: 485,
+                repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+                source: 'ai_generated_skin_care_setup',
+                blockType: TimelineBlockDraft.softBlockKey,
+                skincareProducts: const ['Cleanser'],
+                skincareSteps: const ['Apply and rinse'],
+                provenanceSourceIds: ['skin-care-generation:$routineFp'],
+              ),
+              TimelineBlockDraft(
+                id: 'skincare-pm',
+                section: 'skin_care',
+                title: 'PM Routine',
+                startMinute: 1260,
+                endMinute: 1275,
+                repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+                source: 'ai_generated_skin_care_setup',
+                blockType: TimelineBlockDraft.softBlockKey,
+                skincareProducts: const ['Cleanser'],
+                skincareSteps: const ['Apply and rinse'],
+                provenanceSourceIds: ['skin-care-generation:$routineFp'],
+              ),
+            ],
+          );
+
+          final error = base.validateDurableSkinCareRestoreV1(testUid);
+          expect(error, 'step_7_recommendation_price_currency_mismatch');
+        },
+      );
+
+      test(
+        'isPriceMatchingCurrency accurately accepts matching and rejects conflicting currencies',
+        () {
+          expect(isPriceMatchingCurrency('₹299', 'INR'), isTrue);
+          expect(isPriceMatchingCurrency(r'$12 USD', 'INR'), isFalse);
+          expect(isPriceMatchingCurrency('€14', 'EUR'), isTrue);
+          expect(isPriceMatchingCurrency('£10', 'GBP'), isTrue);
+          expect(isPriceMatchingCurrency('¥1500', 'JPY'), isTrue);
+          expect(isPriceMatchingCurrency('€15', 'INR'), isFalse);
+          expect(isPriceMatchingCurrency(r'$15', 'INR'), isFalse);
+        },
+      );
+    },
+  );
 }
 
 // Helpers

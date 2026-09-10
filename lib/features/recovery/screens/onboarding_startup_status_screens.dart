@@ -35,7 +35,8 @@ class _FinishingOnboardingScreenState
   Widget build(BuildContext context) {
     final activeJobNotifier = ref.watch(activeOnboardingCompletionJobProvider);
     final activeJob = activeJobNotifier.value;
-    final currentStage = activeJob?.stage ?? OnboardingCompletionStage.validateInput;
+    final currentStage =
+        activeJob?.stage ?? OnboardingCompletionStage.validateInput;
     final jobStatus = activeJob?.status ?? OnboardingJobStatus.running;
 
     final stageProjections = CompletionStageProjection.projectAll(
@@ -90,7 +91,9 @@ class _FinishingOnboardingScreenState
                     const SizedBox(height: 28),
                     for (final stage in stageProjections) ...[
                       Row(
-                        key: ValueKey('step14-finishing-stage-${stage.stageId.id}'),
+                        key: ValueKey(
+                          'step14-finishing-stage-${stage.stageId.id}',
+                        ),
                         children: [
                           _buildStageIcon(stage.status),
                           const SizedBox(width: 12),
@@ -99,11 +102,16 @@ class _FinishingOnboardingScreenState
                               stage.publicLabel,
                               style: TextStyle(
                                 fontSize: 13.5,
-                                fontWeight: stage.status == CompletionStageStatus.active
+                                fontWeight:
+                                    stage.status == CompletionStageStatus.active
                                     ? FontWeight.w800
                                     : FontWeight.w600,
-                                color: stage.status == CompletionStageStatus.pending
-                                    ? OptivusColors.textSecondary.withValues(alpha: 0.5)
+                                color:
+                                    stage.status ==
+                                        CompletionStageStatus.pending
+                                    ? OptivusColors.textSecondary.withValues(
+                                        alpha: 0.5,
+                                      )
                                     : OptivusColors.textPrimary,
                               ),
                             ),
@@ -125,44 +133,44 @@ class _FinishingOnboardingScreenState
   Widget _buildStageIcon(CompletionStageStatus status) {
     return switch (status) {
       CompletionStageStatus.completed => const Icon(
-          Icons.check_circle_rounded,
-          size: 18,
-          color: OptivusColors.success,
-        ),
+        Icons.check_circle_rounded,
+        size: 18,
+        color: OptivusColors.success,
+      ),
       CompletionStageStatus.active => Container(
-          width: 18,
-          height: 18,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: OptivusColors.brandAccent.withValues(alpha: 0.2),
-          ),
-          child: Center(
-            child: Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: OptivusColors.brandAccent,
-              ),
+        width: 18,
+        height: 18,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: OptivusColors.brandAccent.withValues(alpha: 0.2),
+        ),
+        child: Center(
+          child: Container(
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: OptivusColors.brandAccent,
             ),
           ),
         ),
+      ),
       CompletionStageStatus.pending => Container(
-          width: 18,
-          height: 18,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: OptivusColors.textSecondary.withValues(alpha: 0.35),
-              width: 1.5,
-            ),
+        width: 18,
+        height: 18,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: OptivusColors.textSecondary.withValues(alpha: 0.35),
+            width: 1.5,
           ),
         ),
+      ),
       CompletionStageStatus.failed => const Icon(
-          Icons.error_rounded,
-          size: 18,
-          color: OptivusColors.danger,
-        ),
+        Icons.error_rounded,
+        size: 18,
+        color: OptivusColors.danger,
+      ),
     };
   }
 }

@@ -26,9 +26,7 @@ void main() {
       final database = FakeRoutineDatabase();
       final routineRepo = FakeRoutineRepository(database: database);
       final container = ProviderContainer(
-        overrides: [
-          routineRepositoryProvider.overrideWithValue(routineRepo),
-        ],
+        overrides: [routineRepositoryProvider.overrideWithValue(routineRepo)],
       );
       addTearDown(container.dispose);
 
@@ -64,8 +62,9 @@ void main() {
       final updateResult = await notifier.updateItem(updated);
       expect(updateResult.outcome, RoutineWriteOutcome.saved);
 
-      final storedAfterUpdate =
-          await routineRepo.fetchRoutineItems('user-g7-crud');
+      final storedAfterUpdate = await routineRepo.fetchRoutineItems(
+        'user-g7-crud',
+      );
       expect(storedAfterUpdate.first.title, 'Morning Deep Work (Focused)');
 
       // 4. Delete item
@@ -73,8 +72,9 @@ void main() {
       expect(deleteResult.outcome, RoutineWriteOutcome.saved);
       expect(container.read(routineNotifierProvider).items, isEmpty);
 
-      final storedAfterDelete =
-          await routineRepo.fetchRoutineItems('user-g7-crud');
+      final storedAfterDelete = await routineRepo.fetchRoutineItems(
+        'user-g7-crud',
+      );
       expect(storedAfterDelete, isEmpty);
     });
 
@@ -106,9 +106,7 @@ void main() {
       await notifier.addItem(item);
 
       // 1. Mark completed
-      final completeResult = await notifier.markCompleted(
-        'routine_item_occ',
-      );
+      final completeResult = await notifier.markCompleted('routine_item_occ');
       expect(completeResult.outcome, RoutineWriteOutcome.saved);
 
       final state = container.read(routineNotifierProvider);
@@ -125,95 +123,106 @@ void main() {
       final skipResult = await notifier.markSkipped('routine_item_occ');
       expect(skipResult.outcome, RoutineWriteOutcome.saved);
 
-      final occurrencesAfterSkip =
-          container.read(routineNotifierProvider).occurrences;
-      expect(
-        occurrencesAfterSkip.first.status,
-        RoutineStatus.skipped,
-      );
+      final occurrencesAfterSkip = container
+          .read(routineNotifierProvider)
+          .occurrences;
+      expect(occurrencesAfterSkip.first.status, RoutineStatus.skipped);
 
       // 3. Mark missed
       final missResult = await notifier.markMissed('routine_item_occ');
       expect(missResult.outcome, RoutineWriteOutcome.saved);
 
-      final occurrencesAfterMiss =
-          container.read(routineNotifierProvider).occurrences;
+      final occurrencesAfterMiss = container
+          .read(routineNotifierProvider)
+          .occurrences;
       expect(occurrencesAfterMiss.first.status, RoutineStatus.missed);
     });
 
-    test('Routine -> Tracker boundary: Firebase mode prevents unbacked mock mutations', () async {
-      final database = FakeRoutineDatabase();
-      final routineRepo = FakeRoutineRepository(database: database);
-      final historyRepo = FakeRoutineHistoryRepository();
-      final transactionRepo = FakeRoutineTransactionRepository();
+    test(
+      'Routine -> Tracker boundary: Firebase mode prevents unbacked mock mutations',
+      () async {
+        final database = FakeRoutineDatabase();
+        final routineRepo = FakeRoutineRepository(database: database);
+        final historyRepo = FakeRoutineHistoryRepository();
+        final transactionRepo = FakeRoutineTransactionRepository();
 
-      // Explicitly set Firebase mode (fakeDataAllowed = false)
-      final container = ProviderContainer(
-        overrides: [
-          routineRepositoryProvider.overrideWithValue(routineRepo),
-          routineHistoryRepositoryProvider.overrideWithValue(historyRepo),
-          routineTransactionRepositoryProvider.overrideWithValue(transactionRepo),
-          fakeBackendPolicyProvider.overrideWithValue(
-            const FakeBackendPolicy(
-              isDebugBuild: false,
-              backendMode: OptivusBackendMode.firebase,
+        // Explicitly set Firebase mode (fakeDataAllowed = false)
+        final container = ProviderContainer(
+          overrides: [
+            routineRepositoryProvider.overrideWithValue(routineRepo),
+            routineHistoryRepositoryProvider.overrideWithValue(historyRepo),
+            routineTransactionRepositoryProvider.overrideWithValue(
+              transactionRepo,
             ),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
+            fakeBackendPolicyProvider.overrideWithValue(
+              const FakeBackendPolicy(
+                isDebugBuild: false,
+                backendMode: OptivusBackendMode.firebase,
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
 
-      expect(container.read(fakeDataAllowedProvider), isFalse);
+        expect(container.read(fakeDataAllowedProvider), isFalse);
 
-      final notifier = container.read(routineNotifierProvider.notifier);
-      await notifier.loadForOwner('user-g7-tracker-boundary');
+        final notifier = container.read(routineNotifierProvider.notifier);
+        await notifier.loadForOwner('user-g7-tracker-boundary');
 
-      final moneyTask = RoutineItem(
-        id: 'money_task_1',
-        userId: 'user-g7-tracker-boundary',
-        title: 'Review Daily Savings',
-        startMinute: 19 * 60,
-        endMinute: 19 * 60 + 15,
-        blockType: RoutineBlockType.moneyTask,
-      );
-      await notifier.addItem(moneyTask);
+        final moneyTask = RoutineItem(
+          id: 'money_task_1',
+          userId: 'user-g7-tracker-boundary',
+          title: 'Review Daily Savings',
+          startMinute: 19 * 60,
+          endMinute: 19 * 60 + 15,
+          blockType: RoutineBlockType.moneyTask,
+        );
+        await notifier.addItem(moneyTask);
 
-      // Initial mock tracker savings entries count
-      final initialSavings =
-          container.read(mockTrackerProvider).savingsEntries.length;
+        // Initial mock tracker savings entries count
+        final initialSavings = container
+            .read(mockTrackerProvider)
+            .savingsEntries
+            .length;
 
-      // Execute alreadySaved in Firebase mode
-      final result = await notifier.alreadySaved('money_task_1', amount: 25.0);
-      expect(result.outcome, RoutineWriteOutcome.saved);
+        // Execute alreadySaved in Firebase mode
+        final result = await notifier.alreadySaved(
+          'money_task_1',
+          amount: 25.0,
+        );
+        expect(result.outcome, RoutineWriteOutcome.saved);
 
-      // MockTrackerProvider should NOT have been mutated in Firebase mode
-      final postSavings =
-          container.read(mockTrackerProvider).savingsEntries.length;
-      expect(
-        postSavings,
-        initialSavings,
-        reason:
-            'In Firebase mode, Routine must not mutate unbacked mock tracker state',
-      );
+        // MockTrackerProvider should NOT have been mutated in Firebase mode
+        final postSavings = container
+            .read(mockTrackerProvider)
+            .savingsEntries
+            .length;
+        expect(
+          postSavings,
+          initialSavings,
+          reason:
+              'In Firebase mode, Routine must not mutate unbacked mock tracker state',
+        );
 
-      // But the routine occurrence itself is successfully completed
-      expect(
-        container.read(routineNotifierProvider).occurrences.first.status,
-        RoutineStatus.completed,
-      );
+        // But the routine occurrence itself is successfully completed
+        expect(
+          container.read(routineNotifierProvider).occurrences.first.status,
+          RoutineStatus.completed,
+        );
 
-      // Execute markSkipped on money task in Firebase mode
-      final skipResult = await notifier.markSkipped('money_task_1');
-      expect(skipResult.outcome, RoutineWriteOutcome.saved);
-      expect(
-        container.read(mockTrackerProvider).savingsEntries.length,
-        initialSavings,
-      );
-      expect(
-        container.read(routineNotifierProvider).occurrences.first.status,
-        RoutineStatus.skipped,
-      );
-    });
+        // Execute markSkipped on money task in Firebase mode
+        final skipResult = await notifier.markSkipped('money_task_1');
+        expect(skipResult.outcome, RoutineWriteOutcome.saved);
+        expect(
+          container.read(mockTrackerProvider).savingsEntries.length,
+          initialSavings,
+        );
+        expect(
+          container.read(routineNotifierProvider).occurrences.first.status,
+          RoutineStatus.skipped,
+        );
+      },
+    );
 
     test('Habit Systems persistence, update, archive, and restore', () async {
       final habitRepo = FakeHabitSystemsRepository();
@@ -224,8 +233,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      final controller =
-          container.read(habitSystemsNotifierProvider.notifier);
+      final controller = container.read(habitSystemsNotifierProvider.notifier);
       await controller.loadForOwner('user-g7-habits');
 
       // 1. Create habit system
@@ -238,7 +246,10 @@ void main() {
       expect(createRes, isTrue);
       expect(container.read(habitSystemsNotifierProvider).systems.length, 1);
 
-      final created = container.read(habitSystemsNotifierProvider).systems.first;
+      final created = container
+          .read(habitSystemsNotifierProvider)
+          .systems
+          .first;
       expect(created.title, 'Daily Reading Habit');
 
       // 2. Update habit system
@@ -264,47 +275,56 @@ void main() {
       );
     });
 
-    test('Projection receipts: deterministic identity, idempotency, and codec serialization', () {
-      const codec = RoutineProjectionReceiptFirestoreCodec();
-      final receiptA = RoutineProjectionReceipt(
-        id: 'rcpt_100',
-        ownerUid: 'user-g7-receipt',
-        slot: 'onboarding-initial',
-        revision: 1,
-        source: 'onboarding',
-        sourceBundleSchemaVersion: 1,
-        sourceBundleId: 'bundle_100',
-        sourceBundleFingerprint: 'a' * 64,
-        projectedItemIds: const ['item_1', 'item_2', 'item_3'],
-        createdAt: DateTime.utc(2026, 9, 9, 10, 0),
-        updatedAt: DateTime.utc(2026, 9, 9, 10, 0),
-      );
+    test(
+      'Projection receipts: deterministic identity, idempotency, and codec serialization',
+      () {
+        const codec = RoutineProjectionReceiptFirestoreCodec();
+        final receiptA = RoutineProjectionReceipt(
+          id: 'rcpt_100',
+          ownerUid: 'user-g7-receipt',
+          slot: 'onboarding-initial',
+          revision: 1,
+          source: 'onboarding',
+          sourceBundleSchemaVersion: 1,
+          sourceBundleId: 'bundle_100',
+          sourceBundleFingerprint: 'a' * 64,
+          projectedItemIds: const ['item_1', 'item_2', 'item_3'],
+          createdAt: DateTime.utc(2026, 9, 9, 10, 0),
+          updatedAt: DateTime.utc(2026, 9, 9, 10, 0),
+        );
 
-      final map = codec.toFirestore(receiptA);
-      expect(map['id'], 'rcpt_100');
-      expect(map['ownerUid'], 'user-g7-receipt');
-      expect(map['sourceBundleFingerprint'], 'a' * 64);
-      expect(map['projectedItemIds'], ['item_1', 'item_2', 'item_3']);
+        final map = codec.toFirestore(receiptA);
+        expect(map['id'], 'rcpt_100');
+        expect(map['ownerUid'], 'user-g7-receipt');
+        expect(map['sourceBundleFingerprint'], 'a' * 64);
+        expect(map['projectedItemIds'], ['item_1', 'item_2', 'item_3']);
 
-      final receiptB = codec.fromFirestore(documentId: 'rcpt_100', data: map);
-      expect(receiptB.id, receiptA.id);
-      expect(receiptB.ownerUid, receiptA.ownerUid);
-      expect(receiptB.sourceBundleFingerprint, receiptA.sourceBundleFingerprint);
-      expect(receiptB.projectedItemIds, receiptA.projectedItemIds);
-    });
+        final receiptB = codec.fromFirestore(documentId: 'rcpt_100', data: map);
+        expect(receiptB.id, receiptA.id);
+        expect(receiptB.ownerUid, receiptA.ownerUid);
+        expect(
+          receiptB.sourceBundleFingerprint,
+          receiptA.sourceBundleFingerprint,
+        );
+        expect(receiptB.projectedItemIds, receiptA.projectedItemIds);
+      },
+    );
 
     test('User isolation & UID boundary clearance on account switch', () async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      final resetCoordinator =
-          container.read(authSessionResetCoordinatorProvider);
+      final resetCoordinator = container.read(
+        authSessionResetCoordinatorProvider,
+      );
 
       // Populate User A routine state
       await container
           .read(routineNotifierProvider.notifier)
           .loadForOwner('user-A');
-      await container.read(routineNotifierProvider.notifier).addItem(
+      await container
+          .read(routineNotifierProvider.notifier)
+          .addItem(
             RoutineItem(
               id: 'user_a_item',
               userId: 'user-A',
@@ -316,7 +336,10 @@ void main() {
           );
 
       expect(container.read(routineNotifierProvider).items, isNotEmpty);
-      expect(container.read(routineNotifierProvider.notifier).ownerUid, 'user-A');
+      expect(
+        container.read(routineNotifierProvider.notifier).ownerUid,
+        'user-A',
+      );
 
       // Trigger session reset boundary (User A -> User B)
       resetCoordinator.resetIdentityBoundary();
@@ -330,7 +353,10 @@ void main() {
           .read(routineNotifierProvider.notifier)
           .loadForOwner('user-B');
       expect(container.read(routineNotifierProvider).items, isEmpty);
-      expect(container.read(routineNotifierProvider.notifier).ownerUid, 'user-B');
+      expect(
+        container.read(routineNotifierProvider.notifier).ownerUid,
+        'user-B',
+      );
     });
 
     test(
@@ -344,14 +370,13 @@ void main() {
           completer: aCompleter,
         );
         final container = ProviderContainer(
-          overrides: [
-            routineRepositoryProvider.overrideWithValue(routineRepo),
-          ],
+          overrides: [routineRepositoryProvider.overrideWithValue(routineRepo)],
         );
         addTearDown(container.dispose);
 
-        final resetCoordinator =
-            container.read(authSessionResetCoordinatorProvider);
+        final resetCoordinator = container.read(
+          authSessionResetCoordinatorProvider,
+        );
         final notifier = container.read(routineNotifierProvider.notifier);
 
         // Start slow Account A load
@@ -434,7 +459,10 @@ void main() {
         final deleteResult = await notifier.deleteItem(itemToDelete.id);
         expect(deleteResult.outcome, RoutineWriteOutcome.saved);
         expect(
-          container.read(routineNotifierProvider).items.any((i) => i.id == itemToDelete.id),
+          container
+              .read(routineNotifierProvider)
+              .items
+              .any((i) => i.id == itemToDelete.id),
           isFalse,
         );
 
@@ -447,10 +475,7 @@ void main() {
 
         // Verify no StateError thrown and item was NOT resurrected
         final postRestoreItems = container.read(routineNotifierProvider).items;
-        expect(
-          postRestoreItems.any((i) => i.id == itemToDelete.id),
-          isFalse,
-        );
+        expect(postRestoreItems.any((i) => i.id == itemToDelete.id), isFalse);
       },
     );
   });

@@ -200,7 +200,7 @@ Routine development must not begin until the current repository demonstrates, wi
 * usable success works
 * zero-plan response fails safely
 * retry works
-* review → Back returns to choice
+* review → Back enters the selected path's rebuild/setup state while retaining the previous valid routine until a valid replacement succeeds (with subsequent Back returning to choice)
 * valid review CTA is `Next Step`
 * stale `Build skin routine` CTA does not survive
 * failed regeneration does not incorrectly replace a valid routine

@@ -27,8 +27,7 @@ class UploadInteractionShell extends StatelessWidget {
     this.cardKey,
   });
 
-  bool get _isHydrating =>
-      slotStates.values.any((s) => s.isHydrating);
+  bool get _isHydrating => slotStates.values.any((s) => s.isHydrating);
 
   @override
   Widget build(BuildContext context) {
@@ -66,7 +65,10 @@ class UploadInteractionShell extends StatelessWidget {
                 ),
                 if (config.requirementMode == UploadRequirementMode.required)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: accent.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(6),
@@ -82,7 +84,10 @@ class UploadInteractionShell extends StatelessWidget {
                   )
                 else
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: OptivusColors.textSecondary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(6),
@@ -199,11 +204,9 @@ class UploadInteractionShell extends StatelessWidget {
   }
 
   Widget _buildSlotItem(BuildContext context, UploadSlotConfig slot) {
-    final state = slotStates[slot.key] ??
-        UploadSlotRuntimeState(
-          slotKey: slot.key,
-          purpose: slot.purpose,
-        );
+    final state =
+        slotStates[slot.key] ??
+        UploadSlotRuntimeState(slotKey: slot.key, purpose: slot.purpose);
 
     return UploadSlotTile(
       config: slot,
@@ -223,9 +226,7 @@ class UploadInteractionShell extends StatelessWidget {
       decoration: BoxDecoration(
         color: OptivusColors.warning.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: OptivusColors.warning.withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: OptivusColors.warning.withValues(alpha: 0.3)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -458,8 +459,8 @@ class UploadSlotTile extends StatelessWidget {
               state.phase == UploadInteractionPhase.preparing
                   ? 'Preparing'
                   : state.phase == UploadInteractionPhase.processing
-                      ? 'Processing'
-                      : 'Uploading',
+                  ? 'Processing'
+                  : 'Uploading',
               style: TextStyle(
                 fontSize: 8,
                 fontWeight: FontWeight.w900,
@@ -493,11 +494,7 @@ class UploadSlotTile extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(
-          config.icon,
-          color: accentColor,
-          size: 22,
-        ),
+        Icon(config.icon, color: accentColor, size: 22),
         const SizedBox(height: 3),
         Text(
           config.placeholderPrompt ?? 'Add photo',
@@ -532,7 +529,10 @@ class UploadSlotTile extends StatelessWidget {
             const Text(
               'Loading preview…',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 6.5, color: OptivusColors.textSecondary),
+              style: TextStyle(
+                fontSize: 6.5,
+                color: OptivusColors.textSecondary,
+              ),
             ),
         ],
       ),
@@ -671,7 +671,11 @@ class UploadImageAndNamesCard extends StatelessWidget {
           // Header with count badge
           Row(
             children: [
-              Icon(Icons.face_retouching_natural_rounded, color: accentColor, size: 20),
+              Icon(
+                Icons.face_retouching_natural_rounded,
+                color: accentColor,
+                size: 20,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -685,7 +689,10 @@ class UploadImageAndNamesCard extends StatelessWidget {
               ),
               if (countBadgeNumber > 0)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: accentColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),

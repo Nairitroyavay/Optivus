@@ -75,13 +75,7 @@ class TimelineBlockCard extends StatelessWidget {
                 horizontal: tiny ? 8 : (isNarrow ? 8 : 12),
                 vertical: tiny ? 3 : (compact ? 6 : 10),
               ),
-              child: _buildContent(
-                context,
-                tiny,
-                compact,
-                isNarrow,
-                timeLabel,
-              ),
+              child: _buildContent(context, tiny, compact, isNarrow, timeLabel),
             ),
           ),
         ),
@@ -256,8 +250,9 @@ class TimelineBlockCard extends StatelessWidget {
                       color: Colors.white.withValues(alpha: 0.55),
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
-                        color:
-                            OptivusColors.borderNeutral.withValues(alpha: 0.40),
+                        color: OptivusColors.borderNeutral.withValues(
+                          alpha: 0.40,
+                        ),
                         width: 0.8,
                       ),
                     ),

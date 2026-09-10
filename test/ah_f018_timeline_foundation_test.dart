@@ -1494,7 +1494,8 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('Your Routine'), findsOneWidget);
+        expect(find.text('Skin Care Routine'), findsOneWidget);
+        expect(find.text('Review your weekly routine'), findsOneWidget);
         expect(
           find.byKey(
             const ValueKey('onboarding-step7-special-care-notes-button'),

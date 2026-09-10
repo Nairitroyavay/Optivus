@@ -830,8 +830,11 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
   Widget _buildPreparedTimeline(Step14PreparedTimelineLayout prepared) {
     final cardLeftOffsetByMinute = <int, double>{};
     final itemsForRail = List<Step14FinalTimelineItem>.from(prepared.items)
-      ..sort((a, b) => (_isFrontItem(prepared, a) ? 1 : 0)
-          .compareTo(_isFrontItem(prepared, b) ? 1 : 0));
+      ..sort(
+        (a, b) => (_isFrontItem(prepared, a) ? 1 : 0).compareTo(
+          _isFrontItem(prepared, b) ? 1 : 0,
+        ),
+      );
     for (final item in itemsForRail) {
       final isFront = _isFrontItem(prepared, item);
       final isFrontOverlap =
@@ -904,8 +907,9 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
     if (!overlaps) return true;
 
     final componentId = prepared.componentIdByEntryId[item.entry.id];
-    final focusedId =
-        componentId == null ? null : _focusedEntryByComponent[componentId];
+    final focusedId = componentId == null
+        ? null
+        : _focusedEntryByComponent[componentId];
 
     if (focusedId != null) {
       if (item.entry.id == focusedId) return true;
@@ -954,8 +958,7 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
     final isFrontCard = overlaps && isFront;
     final cardLeft =
         prepared.leftOffset + (isFrontCard ? prepared.gutterWidth : 0);
-    final cardWidth =
-        isFrontCard ? prepared.frontWidth : prepared.fullWidth;
+    final cardWidth = isFrontCard ? prepared.frontWidth : prepared.fullWidth;
 
     void handleTap() {
       final componentId = prepared.componentIdByEntryId[item.entry.id];
@@ -1056,8 +1059,9 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
         final firstRegion = firstRegionByItemId[item.entry.id]!;
         final regionKey = firstRegion.keyForDay(prepared.selectedDay);
         final tabHeight = prepared.tabHeightByRegionKey[regionKey] ?? 44.0;
-        final startY =
-            prepared.layout.scale.yForMinute(firstRegion.startMinute);
+        final startY = prepared.layout.scale.yForMinute(
+          firstRegion.startMinute,
+        );
 
         if (lastStartY >= 0 && (startY - lastStartY).abs() < 4.0) {
           stackIndex++;
@@ -1101,8 +1105,6 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
     return widgets;
   }
 }
-
-
 
 Step14FinalTimelineItem _defaultFront(
   List<Step14FinalTimelineItem> candidates,
@@ -1230,8 +1232,7 @@ class Step14FinalTimelineCard extends StatelessWidget {
           lineCount++;
           currentLineWidth = chipWidth;
         } else {
-          currentLineWidth +=
-              (currentLineWidth > 0 ? spacing : 0) + chipWidth;
+          currentLineWidth += (currentLineWidth > 0 ? spacing : 0) + chipWidth;
         }
       }
       return lineCount * maxChipHeight + (lineCount - 1) * runSpacing;
@@ -1293,7 +1294,9 @@ class Step14FinalTimelineCard extends StatelessWidget {
       }
 
       final categoryKey = _normalizedMealLabel(category);
-      if (category != null && categoryKey != titleKey && categoryKey != slotKey) {
+      if (category != null &&
+          categoryKey != titleKey &&
+          categoryKey != slotKey) {
         height += 6.0;
         height += measure(category, detailStyle);
       }
@@ -1308,10 +1311,12 @@ class Step14FinalTimelineCard extends StatelessWidget {
       if (nutrition.isNotEmpty) {
         height += 8.0;
         final nutritionText = nutrition.join(' • ');
-        height += measure(
-          nutritionText,
-          const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
-        ) + 8.0;
+        height +=
+            measure(
+              nutritionText,
+              const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+            ) +
+            8.0;
       }
 
       final dishes = block.dishes
@@ -1454,10 +1459,7 @@ class Step14FinalTimelineCard extends StatelessWidget {
     }
 
     final cleanDishes = block.section == 'eating'
-        ? block.dishes
-            .map((v) => v.trim())
-            .where((v) => v.isNotEmpty)
-            .toList()
+        ? block.dishes.map((v) => v.trim()).where((v) => v.isNotEmpty).toList()
         : const <String>[];
 
     final slot = block.section == 'eating'
@@ -1472,16 +1474,16 @@ class Step14FinalTimelineCard extends StatelessWidget {
 
     final titleKey = _normalizedMealLabel(block.title);
     final slotKey = _normalizedMealLabel(slot);
-    final showSlot = slot != null &&
+    final showSlot =
+        slot != null &&
         slot.isNotEmpty &&
         slotKey != titleKey &&
         (block.section != 'skin_care' ||
             slot.toLowerCase() != block.title.trim().toLowerCase());
 
     final categoryKey = _normalizedMealLabel(category);
-    final showCategory = category != null &&
-        categoryKey != titleKey &&
-        categoryKey != slotKey;
+    final showCategory =
+        category != null && categoryKey != titleKey && categoryKey != slotKey;
 
     final continuation = switch (item.continuation) {
       Step14Continuation.none => null,
@@ -1498,11 +1500,7 @@ class Step14FinalTimelineCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                item.identity.icon,
-                size: 18,
-                color: item.identity.accent,
-              ),
+              Icon(item.identity.icon, size: 18, color: item.identity.accent),
               const SizedBox(width: 7),
               Expanded(
                 child: Text(
@@ -1542,10 +1540,7 @@ class Step14FinalTimelineCard extends StatelessWidget {
           if (nutrition.isNotEmpty) ...[
             const SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 4,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.85),
                 borderRadius: BorderRadius.circular(8),
@@ -1600,9 +1595,7 @@ class Step14FinalTimelineCard extends StatelessWidget {
             if (block.skincareSteps.isNotEmpty) ...[
               const SizedBox(height: 9),
               const Text('STEPS', style: headingStyle),
-              for (var index = 0;
-                  index < block.skincareSteps.length;
-                  index++)
+              for (var index = 0; index < block.skincareSteps.length; index++)
                 if (block.skincareSteps[index].trim().isNotEmpty) ...[
                   const SizedBox(height: 3),
                   Text(
@@ -1686,11 +1679,7 @@ Widget _buildBackTabStrip({
                     width: 1,
                   ),
                 ),
-                child: Icon(
-                  item.identity.icon,
-                  color: baseColor,
-                  size: 11,
-                ),
+                child: Icon(item.identity.icon, color: baseColor, size: 11),
               ),
               const SizedBox(width: 5),
               Expanded(
@@ -1878,13 +1867,16 @@ class Step14RichTimeRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final boundaryMinutes = (<int>{
-      for (final item in items) ...[
-        item.entry.startMinute,
-        item.entry.endMinute,
-      ],
-    }.where((m) => m >= scale.startMinute && m <= scale.endMinute).toList())
-      ..sort();
+    final boundaryMinutes =
+        (<int>{
+                for (final item in items) ...[
+                  item.entry.startMinute,
+                  item.entry.endMinute,
+                ],
+              }
+              .where((m) => m >= scale.startMinute && m <= scale.endMinute)
+              .toList())
+          ..sort();
 
     return TimelineTimeRailBackground(
       scale: scale,

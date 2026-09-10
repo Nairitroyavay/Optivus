@@ -263,7 +263,10 @@ class ServerReconstructor {
         debugPrint(
           '[Reconstruction] legacy lineage detected for uid=${_safeUid(uid)}, migrating...',
         );
-        snapshot = await migrationCoordinator!.migrate(snapshot, source: source);
+        snapshot = await migrationCoordinator!.migrate(
+          snapshot,
+          source: source,
+        );
         profile = snapshot.profile;
       }
       final result = classifyServerReconstruction(
@@ -393,7 +396,8 @@ ReconstructionResult classifyServerReconstruction({
 
   // A run is superseded if its generation or lineage version is older than the profile's,
   // or if its pointer status was explicitly marked 'superseded'.
-  final isRunSuperseded = currentRun.hasPointer &&
+  final isRunSuperseded =
+      currentRun.hasPointer &&
       (currentRun.setupGeneration < currentSetupGeneration ||
           currentRun.setupLineageVersion < profile.setupLineageVersion ||
           currentRun.pointerStatus == 'superseded');
@@ -446,10 +450,10 @@ ReconstructionResult classifyServerReconstruction({
   final effectivePointerStatus = isRunSuperseded
       ? null
       : (currentRun.pointerStatus ??
-          (job?.status == OnboardingJobStatus.completed &&
-                  job?.stage == OnboardingCompletionStage.completed
-              ? 'completed'
-              : 'active'));
+            (job?.status == OnboardingJobStatus.completed &&
+                    job?.stage == OnboardingCompletionStage.completed
+                ? 'completed'
+                : 'active'));
 
   if (job != null) {
     if (job.setupGeneration != currentSetupGeneration ||
@@ -471,7 +475,8 @@ ReconstructionResult classifyServerReconstruction({
   }
 
   // Bundle lineage check: if bundle exists from older setup or older lineage, it is superseded.
-  final isBundleSuperseded = completionBundle != null &&
+  final isBundleSuperseded =
+      completionBundle != null &&
       (completionBundle.setupGeneration < currentSetupGeneration ||
           completionBundle.setupLineageVersion < profile.setupLineageVersion);
   final effectiveBundle = isBundleSuperseded ? null : completionBundle;
@@ -561,7 +566,8 @@ ReconstructionResult classifyServerReconstruction({
     );
   }
   if (draft == null) {
-    if (effectiveBundle != null || (currentRun.hasPointer && !isRunSuperseded)) {
+    if (effectiveBundle != null ||
+        (currentRun.hasPointer && !isRunSuperseded)) {
       return recovery(
         ReconstructionRecoveryReason.durableStateConflict,
         'completion_state_without_draft',

@@ -56,8 +56,8 @@ abstract final class AiErrorMapper {
     final retryAction = error.canRetry
         ? RecoverableRetryAction.retryGeneration
         : (category == RecoverableErrorCategory.authentication
-            ? RecoverableRetryAction.reauthenticate
-            : RecoverableRetryAction.none);
+              ? RecoverableRetryAction.reauthenticate
+              : RecoverableRetryAction.none);
 
     final safeMessage = _isCleanPublicMessage(error.message)
         ? error.message
@@ -92,23 +92,23 @@ abstract final class AiErrorMapper {
   }
 
   static String _timeoutCode(String? op) => switch (op) {
-        'nutrition' => DiagnosticCodes.aiNutritionTimeout,
-        'skin-care' => DiagnosticCodes.aiSkinCareTimeout,
-        'coach' => DiagnosticCodes.aiCoachTimeout,
-        _ => DiagnosticCodes.aiRoutineTimeout,
-      };
+    'nutrition' => DiagnosticCodes.aiNutritionTimeout,
+    'skin-care' => DiagnosticCodes.aiSkinCareTimeout,
+    'coach' => DiagnosticCodes.aiCoachTimeout,
+    _ => DiagnosticCodes.aiRoutineTimeout,
+  };
 
   static String _quotaCode(String? op) => switch (op) {
-        'nutrition' => DiagnosticCodes.aiNutritionQuota,
-        'skin-care' => DiagnosticCodes.aiSkinCareQuota,
-        'coach' => DiagnosticCodes.aiCoachQuota,
-        _ => DiagnosticCodes.aiRoutineQuota,
-      };
+    'nutrition' => DiagnosticCodes.aiNutritionQuota,
+    'skin-care' => DiagnosticCodes.aiSkinCareQuota,
+    'coach' => DiagnosticCodes.aiCoachQuota,
+    _ => DiagnosticCodes.aiRoutineQuota,
+  };
 
   static String _responseInvalidCode(String? op) => switch (op) {
-        'nutrition' => DiagnosticCodes.aiNutritionResponseInvalid,
-        'skin-care' => DiagnosticCodes.aiSkinCareResponseInvalid,
-        'coach' => DiagnosticCodes.aiCoachResponseInvalid,
-        _ => DiagnosticCodes.aiRoutineResponseInvalid,
-      };
+    'nutrition' => DiagnosticCodes.aiNutritionResponseInvalid,
+    'skin-care' => DiagnosticCodes.aiSkinCareResponseInvalid,
+    'coach' => DiagnosticCodes.aiCoachResponseInvalid,
+    _ => DiagnosticCodes.aiRoutineResponseInvalid,
+  };
 }

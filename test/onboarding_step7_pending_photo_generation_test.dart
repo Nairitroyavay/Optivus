@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_setup.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
 import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_controller.dart';
+import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_state.dart';
 import 'package:optivus/features/uploads/controllers/upload_interaction_controller.dart';
 import 'package:optivus/features/uploads/models/upload_interaction_models.dart';
 import 'package:optivus/features/uploads/providers/onboarding_upload_interaction_provider.dart';
@@ -17,6 +18,7 @@ import 'package:optivus/repositories/uploaded_asset_repository.dart';
 import 'package:optivus/services/cloudflare/cloudflare_clients.dart';
 import 'package:optivus/services/skin_care_ai_client.dart';
 import 'package:optivus/services/uploads/image_prepare_service.dart';
+import 'package:optivus/services/device_country_service.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/upload_state.dart';
@@ -729,13 +731,8 @@ void main() {
         await tester.tap(generateBtn);
         await tester.pumpAndSettle();
 
-        // Tap "Close editor" to cancel
-        final cancelBtn = find.byKey(
-          const ValueKey('onboarding-step7-cancel-rebuild'),
-        );
-        expect(cancelBtn, findsOneWidget);
-        await tester.ensureVisible(cancelBtn);
-        await tester.tap(cancelBtn);
+        // Shell Back cancels rebuild and returns to choice
+        harness.flowController.handleBack();
         await tester.pumpAndSettle();
 
         // Photo B cleaned up
@@ -745,10 +742,18 @@ void main() {
         expect(assetRepo.deletedAssetIds, contains('asset-photo-b'));
         expect(r2Client.deletedObjectKeys, contains(photoB.r2Key));
 
-        // Plan A restored and valid
+        // Plan A restored: Photo A retained, Plan A blocks retained, controller at choice
         final draft = harness.currentDraft;
         expect(draft.baseTimeline.skinCareProductPhotoAssetId, 'asset-photo-a');
-        expect(draft.baseTimeline.isSkinCareRoutineCurrent(testUid), isTrue);
+        expect(
+          draft.baseTimeline.blocks.any((b) => b.section == 'skin_care'),
+          isTrue,
+        );
+        expect(
+          harness.flowController.currentFlowState,
+          SkinCareFlowState.choice,
+        );
+        expect(draft.baseTimeline.isSkinCareRoutineCurrent(testUid), isFalse);
       },
     );
 
@@ -1119,6 +1124,9 @@ class _TestHarness {
         r2UploadClientProvider.overrideWithValue(r2Client),
         imagePrepareServiceProvider.overrideWithValue(imageService),
         skinCareAiClientProvider.overrideWithValue(aiClient),
+        deviceCountryServiceProvider.overrideWithValue(
+          const _FakeDeviceCountryService(),
+        ),
       ],
     );
 
@@ -1382,4 +1390,20 @@ class _PendingTestAiClient implements SkinCareAiClient {
     }
     return routineResult;
   }
+}
+
+class _FakeDeviceCountryService
+    implements DeviceCountryService, PermissionAwareDeviceCountryService {
+  const _FakeDeviceCountryService();
+
+  @override
+  Future<DeviceCountry?> detectCountry() async => const DeviceCountry(
+    countryCode: 'IN',
+    countryName: 'India',
+    fromDeviceLocation: true,
+  );
+
+  @override
+  Future<DeviceCountry?> detectCountryIfPermissionGranted() async =>
+      detectCountry();
 }

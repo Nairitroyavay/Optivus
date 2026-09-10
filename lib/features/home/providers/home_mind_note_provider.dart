@@ -14,7 +14,9 @@ class HomeMindNoteNotifier extends StateNotifier<List<HomeMindNote>> {
                   visibility: MindNoteVisibility.private,
                   content:
                       'I keep thinking about whether I should rewrite the backend in Go or stick to Node.js.',
-                  createdAt: DateTime.now().subtract(const Duration(minutes: 45)),
+                  createdAt: DateTime.now().subtract(
+                    const Duration(minutes: 45),
+                  ),
                 ),
               ]
             : const [],

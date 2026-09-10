@@ -19,8 +19,7 @@ abstract final class UploadErrorMapper {
     if (isMetadataPersistenceFailure) {
       return RecoverableError(
         category: RecoverableErrorCategory.cloudPersistence,
-        publicMessage:
-            'Photo upload could not be saved yet. Please try again.',
+        publicMessage: 'Photo upload could not be saved yet. Please try again.',
         severity: isRequiredSlot
             ? RecoverableErrorSeverity.error
             : RecoverableErrorSeverity.warning,
@@ -47,7 +46,8 @@ abstract final class UploadErrorMapper {
           diagnosticCode: DiagnosticCodes.uploadImageTooLarge,
         );
       }
-      final defaultMessage = 'That image couldn’t be read. Choose another photo.';
+      final defaultMessage =
+          'That image couldn’t be read. Choose another photo.';
       final safeMessage = _isCleanPublicMessage(error.message)
           ? error.message
           : defaultMessage;
@@ -67,8 +67,7 @@ abstract final class UploadErrorMapper {
     if (error is R2UploadExpiredUrlException) {
       return RecoverableError(
         category: RecoverableErrorCategory.upload,
-        publicMessage:
-            'Upload session expired. Tap retry to get a fresh link.',
+        publicMessage: 'Upload session expired. Tap retry to get a fresh link.',
         severity: isRequiredSlot
             ? RecoverableErrorSeverity.error
             : RecoverableErrorSeverity.warning,
@@ -79,8 +78,7 @@ abstract final class UploadErrorMapper {
       );
     }
 
-    if (error is R2UploadNetworkException ||
-        error is SocketException) {
+    if (error is R2UploadNetworkException || error is SocketException) {
       return RecoverableError(
         category: RecoverableErrorCategory.network,
         publicMessage:
@@ -123,7 +121,8 @@ abstract final class UploadErrorMapper {
     final raw = error.toString().toLowerCase();
 
     if (raw.contains('permission') || raw.contains('denied')) {
-      final isPermanent = raw.contains('permanently') || raw.contains('restricted');
+      final isPermanent =
+          raw.contains('permanently') || raw.contains('restricted');
       return RecoverableError(
         category: RecoverableErrorCategory.permission,
         publicMessage: 'Camera or photo access is needed to select a photo.',
@@ -171,9 +170,7 @@ abstract final class UploadErrorMapper {
   }
 
   /// Special mapper for remote preview loading failure (always non-blocking).
-  static RecoverableError previewUnavailable({
-    bool isNetworkFailure = false,
-  }) {
+  static RecoverableError previewUnavailable({bool isNetworkFailure = false}) {
     return RecoverableError(
       category: isNetworkFailure
           ? RecoverableErrorCategory.network

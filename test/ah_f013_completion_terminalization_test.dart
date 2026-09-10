@@ -367,19 +367,21 @@ void main() {
 
       // Save an incomplete receipt (cursor != totalCount)
       final plan = RoutineOnboardingProjection.build(fixture.bundle);
-      db.receiptsByUid.putIfAbsent(uid, () => {})[plan.projectionId] =
-          RoutineProjectionReceipt(
-            id: plan.projectionId,
-            ownerUid: uid,
-            sourceBundleId: fixture.bundle.runId,
-            sourceBundleSchemaVersion: fixture.bundle.version,
-            sourceBundleFingerprint: plan.fingerprint,
-            status: 'pending',
-            cursor: 0,
-            totalCount: plan.items.length,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          );
+      db.receiptsByUid.putIfAbsent(
+        uid,
+        () => {},
+      )[plan.projectionId] = RoutineProjectionReceipt(
+        id: plan.projectionId,
+        ownerUid: uid,
+        sourceBundleId: fixture.bundle.runId,
+        sourceBundleSchemaVersion: fixture.bundle.version,
+        sourceBundleFingerprint: plan.fingerprint,
+        status: 'pending',
+        cursor: 0,
+        totalCount: plan.items.length,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
 
       expect(
         () => service.runCompletionJob(
@@ -421,19 +423,21 @@ void main() {
 
       // Save a valid routine receipt and items but omit history records
       final plan = RoutineOnboardingProjection.build(fixture.bundle);
-      db.receiptsByUid.putIfAbsent(uid, () => {})[plan.projectionId] =
-          RoutineProjectionReceipt(
-            id: plan.projectionId,
-            ownerUid: uid,
-            sourceBundleId: fixture.bundle.runId,
-            sourceBundleSchemaVersion: fixture.bundle.version,
-            sourceBundleFingerprint: plan.fingerprint,
-            status: 'completed',
-            cursor: plan.items.length,
-            totalCount: plan.items.length,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          );
+      db.receiptsByUid.putIfAbsent(
+        uid,
+        () => {},
+      )[plan.projectionId] = RoutineProjectionReceipt(
+        id: plan.projectionId,
+        ownerUid: uid,
+        sourceBundleId: fixture.bundle.runId,
+        sourceBundleSchemaVersion: fixture.bundle.version,
+        sourceBundleFingerprint: plan.fingerprint,
+        status: 'completed',
+        cursor: plan.items.length,
+        totalCount: plan.items.length,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
       for (final item in plan.items) {
         db.itemsByUid.putIfAbsent(uid, () => {})[item.id] = item.copyWith(
           userId: uid,
@@ -481,28 +485,28 @@ void main() {
 
       // Save valid routine receipt and valid history but omit habit systems
       final plan = RoutineOnboardingProjection.build(fixture.bundle);
-      db.receiptsByUid.putIfAbsent(uid, () => {})[plan.projectionId] =
-          RoutineProjectionReceipt(
-            id: plan.projectionId,
-            ownerUid: uid,
-            sourceBundleId: fixture.bundle.runId,
-            sourceBundleSchemaVersion: fixture.bundle.version,
-            sourceBundleFingerprint: plan.fingerprint,
-            status: 'completed',
-            cursor: plan.items.length,
-            totalCount: plan.items.length,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          );
+      db.receiptsByUid.putIfAbsent(
+        uid,
+        () => {},
+      )[plan.projectionId] = RoutineProjectionReceipt(
+        id: plan.projectionId,
+        ownerUid: uid,
+        sourceBundleId: fixture.bundle.runId,
+        sourceBundleSchemaVersion: fixture.bundle.version,
+        sourceBundleFingerprint: plan.fingerprint,
+        status: 'completed',
+        cursor: plan.items.length,
+        totalCount: plan.items.length,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
       for (final item in plan.items) {
         db.itemsByUid.putIfAbsent(uid, () => {})[item.id] = item.copyWith(
           userId: uid,
         );
       }
-      final expectedHistory =
-          const RoutineOnboardingEventProjector().computeExpectedEventIds(
-            fixture.bundle,
-          );
+      final expectedHistory = const RoutineOnboardingEventProjector()
+          .computeExpectedEventIds(fixture.bundle);
       for (final id in expectedHistory) {
         await history.appendHistory(
           uid,
@@ -539,30 +543,31 @@ void main() {
       }
     });
 
-    test('account switch mid-run isolates state and cancels stale job', () async {
-      const userA = 'user-a';
-      const userB = 'user-b';
-      final onboarding = FakeOnboardingRepository();
-      final profiles = FakeProfileRepository();
-      final service = OnboardingCompletionJobService(
-        onboardingRepository: onboarding,
-        profileRepository: profiles,
-      );
+    test(
+      'account switch mid-run isolates state and cancels stale job',
+      () async {
+        const userA = 'user-a';
+        const userB = 'user-b';
+        final onboarding = FakeOnboardingRepository();
+        final profiles = FakeProfileRepository();
+        final service = OnboardingCompletionJobService(
+          onboardingRepository: onboarding,
+          profileRepository: profiles,
+        );
 
-      final container = ProviderContainer(
-        overrides: [
-          authGenerationProvider.overrideWith((ref) => 1),
-        ],
-      );
+        final container = ProviderContainer(
+          overrides: [authGenerationProvider.overrideWith((ref) => 1)],
+        );
 
-      service.cancelOwner(userA);
+        service.cancelOwner(userA);
 
-      final snapshotA = await service.loadCurrentRunSnapshot(userA);
-      expect(snapshotA.hasPointer, isFalse);
-      final snapshotB = await service.loadCurrentRunSnapshot(userB);
-      expect(snapshotB.hasPointer, isFalse);
-      container.dispose();
-    });
+        final snapshotA = await service.loadCurrentRunSnapshot(userA);
+        expect(snapshotA.hasPointer, isFalse);
+        final snapshotB = await service.loadCurrentRunSnapshot(userB);
+        expect(snapshotB.hasPointer, isFalse);
+        container.dispose();
+      },
+    );
 
     test('fatally failed job cannot be terminalized', () async {
       const uid = _Fixture.uid;
@@ -695,9 +700,7 @@ void main() {
           ownerUid: _Fixture.uid,
           pointerSchemaVersion: 1,
           pointerStatus: 'active',
-          job: fixture.job.copyWith(
-            status: OnboardingJobStatus.fatalFailure,
-          ),
+          job: fixture.job.copyWith(status: OnboardingJobStatus.fatalFailure),
         ),
       );
       expect(fatal, isA<ReconstructionRecovery>());

@@ -386,8 +386,7 @@ class OnboardingCompletionJob {
       draftRevision: (map['draftRevision'] as num?)?.toInt() ?? 1,
       retryCount: (map['retryCount'] as num?)?.toInt() ?? 0,
       setupGeneration: (map['setupGeneration'] as num?)?.toInt() ?? 0,
-      setupLineageVersion:
-          (map['setupLineageVersion'] as num?)?.toInt() ?? 0,
+      setupLineageVersion: (map['setupLineageVersion'] as num?)?.toInt() ?? 0,
       lastError: map['lastError'] as String?,
       lastFailureCode:
           map['failureCode'] as String? ?? map['lastFailureCode'] as String?,

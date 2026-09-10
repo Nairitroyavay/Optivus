@@ -43,6 +43,7 @@ void main() {
     TestUploadController? uploadController,
     TestUploadInteractionController? interactionController,
     DeviceCountry? detectedCountry,
+    DeviceCountryService? countryService,
     RegionSettings? regionSettings,
     UploadedAssetRepository? assetRepository,
     ValueNotifier<bool>? showStep,
@@ -75,12 +76,13 @@ void main() {
         if (assetRepository != null)
           uploadedAssetRepositoryProvider.overrideWithValue(assetRepository),
         deviceCountryServiceProvider.overrideWithValue(
-          TestDeviceCountryService(detectedCountry),
+          countryService ?? TestDeviceCountryService(detectedCountry),
         ),
         if (regionSettings != null)
           regionSettingsProvider.overrideWith((ref) {
             final notifier = RegionSettingsNotifier(
               ref.read(regionSettingsRepositoryProvider),
+              ref.read(deviceCountryServiceProvider),
             );
             notifier.loadSettings(regionSettings);
             return notifier;
@@ -129,6 +131,13 @@ void main() {
         await tester.pumpAndSettle();
       }
     }
+  }
+
+  void triggerRebuild(WidgetTester tester) {
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(OnboardingStep7)),
+    );
+    container.read(skinCareFlowControllerProvider.notifier).handleBack();
   }
 
   Future<void> chooseSkinPhotoFromGallery(WidgetTester tester) async {
@@ -202,15 +211,17 @@ void main() {
         );
         await tester.pumpWidget(buildTestWidget(draft: stale));
         await tester.pumpAndSettle();
-        expect(find.text('Routine built'), findsNothing);
-        expect(find.text('Changes not applied yet'), findsOneWidget);
+        expect(onboarding7CanContinue(stale.baseTimeline, stale.uid), isFalse);
         await tester.pumpWidget(const SizedBox());
         await tester.pumpWidget(
           buildTestWidget(draft: OnboardingDraft.fromMap(stale.toMap())),
         );
         await tester.pumpAndSettle();
-        expect(find.text('Changes not applied yet'), findsOneWidget);
-        expect(onboarding7CanContinue(stale.baseTimeline, stale.uid), isFalse);
+        final reconstructed = OnboardingDraft.fromMap(stale.toMap());
+        expect(
+          onboarding7CanContinue(reconstructed.baseTimeline, reconstructed.uid),
+          isFalse,
+        );
       },
     );
   }
@@ -253,7 +264,7 @@ void main() {
         client.generateCalls.single.containsKey('facePhotoR2Key'),
         isFalse,
       );
-      expect(find.text('Changes not applied yet'), findsNothing);
+      expect(find.text('Skin Care Routine'), findsOneWidget);
     },
   );
 
@@ -305,21 +316,22 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('onboarding-step7-selected-products-button')),
+      expect(find.text('Skin Care Routine'), findsOneWidget);
+      expect(find.text('Review your weekly routine'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('onboarding-step7-full-timeline')),
+        findsOneWidget,
       );
-      await tester.pumpAndSettle();
-      expect(find.text(products.first.displayName), findsWidgets);
       expect(tester.takeException(), isNull);
-      Navigator.of(tester.element(find.text('Selected products').last)).pop();
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Rebuild / Edit'));
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      );
+      container.read(skinCareFlowControllerProvider.notifier).handleBack();
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text(products.first.displayName));
       await tester.tap(find.text(products.first.displayName));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      expect(find.text('Close editor'), findsOneWidget);
     });
   }
 
@@ -1629,7 +1641,8 @@ void main() {
       find.byKey(const ValueKey('onboarding-step7-full-timeline')),
       findsOneWidget,
     );
-    expect(find.text('Your Routine'), findsOneWidget);
+    expect(find.text('Skin Care Routine'), findsOneWidget);
+    expect(find.text('Review your weekly routine'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('onboarding-step7-special-care-notes-button')),
       findsNothing,
@@ -1734,8 +1747,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // With the new UX, the setup card is hidden when a routine exists.
-    // We must tap 'Rebuild' first to clear the old routine.
-    await tester.tap(find.text('Rebuild / Edit'));
+    // We trigger rebuild first to enter edit mode.
+    triggerRebuild(tester);
     await tester.pumpAndSettle();
 
     await tester.enterText(
@@ -4764,13 +4777,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Routine built'), findsNothing);
-      expect(find.text('Changes not applied yet'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('onboarding-step7-full-timeline')),
+        findsOneWidget,
+      );
+      expect(find.text('Skin Care Routine'), findsOneWidget);
+      expect(find.text('Review your weekly routine'), findsOneWidget);
       expect(tester.takeException(), isNull);
-
-      expect(find.text('2 routines per day'), findsOneWidget);
-      expect(find.text('Rebuild / Edit'), findsOneWidget);
-      // Removed takeException
     },
   );
 
@@ -4827,7 +4840,8 @@ void main() {
       );
       expect(find.textContaining('Error'), findsNothing);
       expect(find.textContaining('too large'), findsNothing);
-      expect(find.text('Routine built'), findsOneWidget);
+      expect(find.text('Skin Care Routine'), findsOneWidget);
+      expect(find.text('Review your weekly routine'), findsOneWidget);
     },
   );
 
@@ -5183,7 +5197,7 @@ void main() {
 
       expect(find.textContaining('Suggested:'), findsNothing);
 
-      await tester.tap(find.text('Rebuild / Edit'));
+      triggerRebuild(tester);
       await tester.pumpAndSettle();
       base = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
@@ -5873,34 +5887,12 @@ void main() {
       expect(base.skinCareFacePhotoSkipped, isFalse);
       expect(client.generateCalls.last, isNot(contains('facePhotoR2Key')));
       expect(client.lastGenerateParams?['desiredApplicationsPerDay'], 2);
-      final selectedProductsButton = find.byKey(
-        const ValueKey('onboarding-step7-selected-products-button'),
-      );
-      expect(selectedProductsButton, findsOneWidget);
-      expect(find.text('Selected products'), findsNothing);
-      expect(find.text('Routine built'), findsOneWidget);
-      expect(find.text('Rebuild / Edit'), findsOneWidget);
+      expect(find.text('Skin Care Routine'), findsOneWidget);
+      expect(find.text('Review your weekly routine'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('onboarding-step7-full-timeline')),
         findsOneWidget,
       );
-
-      await tester.tap(selectedProductsButton);
-      await tester.pumpAndSettle();
-      expect(find.text('Selected products'), findsOneWidget);
-      expect(
-        find.descendant(
-          of: find.byKey(
-            const ValueKey('onboarding-step7-selected-products-list'),
-          ),
-          matching: find.text('Minimalist SPF 50 Sunscreen'),
-        ),
-        findsOneWidget,
-      );
-      await tester.tap(
-        find.byKey(const ValueKey('onboarding-step7-selected-products-close')),
-      );
-      await tester.pumpAndSettle();
       expect(onboarding7CanContinue(base, 'uid-1'), isTrue);
     },
   );
@@ -5941,7 +5933,7 @@ void main() {
     expect(base.skinCareSelectedProductNames, isEmpty);
     expect(base.confirmedBlocksForSection('skin_care'), isEmpty);
     expect(find.text('Build skin routine'), findsOneWidget);
-    expect(find.text('Routine built'), findsNothing);
+    expect(find.text('Skin Care Routine'), findsNothing);
 
     await _selectCoreRecommendedProducts(tester);
     await tester.tap(find.text('Build skin routine'));
@@ -5953,7 +5945,8 @@ void main() {
     expect(client.generateCalls, hasLength(2));
     expect(base.skinCareSelectedProductNames, hasLength(3));
     expect(base.confirmedBlocksForSection('skin_care'), isNotEmpty);
-    expect(find.text('Routine built'), findsOneWidget);
+    expect(find.text('Skin Care Routine'), findsOneWidget);
+    expect(find.text('Review your weekly routine'), findsOneWidget);
   });
 
   testWidgets(
@@ -6018,7 +6011,8 @@ void main() {
         ),
         hasLength(1),
       );
-      expect(find.text('Routine built'), findsOneWidget);
+      expect(find.text('Skin Care Routine'), findsOneWidget);
+      expect(find.text('Review your weekly routine'), findsOneWidget);
     },
   );
 
@@ -6059,14 +6053,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(client.generateCalls, hasLength(2));
     expect(find.text('Build skin routine'), findsOneWidget);
-    expect(find.text('Routine built'), findsNothing);
+    expect(find.text('Skin Care Routine'), findsNothing);
 
     await _selectCoreRecommendedProducts(tester);
     await tester.tap(find.text('Build skin routine'));
     await tester.pumpAndSettle();
 
     expect(client.generateCalls, hasLength(3));
-    expect(find.text('Routine built'), findsOneWidget);
+    expect(find.text('Skin Care Routine'), findsOneWidget);
+    expect(find.text('Review your weekly routine'), findsOneWidget);
   });
 
   testWidgets(
@@ -6114,7 +6109,7 @@ void main() {
       ).read(onboardingStateProvider).draft.baseTimeline;
       expect(base.skinCareFacePhotoSkipped, isFalse);
 
-      await tester.tap(find.text('Rebuild / Edit'));
+      triggerRebuild(tester);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Change details'));
       await tester.pumpAndSettle();
@@ -6175,7 +6170,7 @@ void main() {
           .map((block) => block.id)
           .toList();
 
-      await tester.tap(find.text('Rebuild / Edit'));
+      triggerRebuild(tester);
       await tester.pumpAndSettle();
       final editingBase = container
           .read(onboardingStateProvider)
@@ -6190,18 +6185,11 @@ void main() {
       );
       expect(editingBase.skinCareSuggestedProducts, hasLength(3));
       expect(editingBase.skinCareSelectedProductNames, hasLength(3));
-      expect(onboarding7CanContinue(editingBase, 'uid-1'), isTrue);
 
-      await tester.tap(
-        find.byKey(
-          const ValueKey('onboarding-step7-no-products-cancel-rebuild'),
-        ),
-      );
+      container.read(skinCareFlowControllerProvider.notifier).cancelEditing();
       await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('onboarding-step7-selected-products-button')),
-        findsOneWidget,
-      );
+      expect(find.text('Skin Care Routine'), findsOneWidget);
+      expect(find.text('Review your weekly routine'), findsOneWidget);
     },
   );
 
@@ -6345,7 +6333,7 @@ void main() {
         tester.element(find.byType(OnboardingStep7)),
       );
 
-      await tester.tap(find.text('Rebuild / Edit'));
+      triggerRebuild(tester);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Change details'));
       await tester.pumpAndSettle();
@@ -6357,17 +6345,11 @@ void main() {
       expect(base.confirmedBlocksForSection('skin_care'), isNotEmpty);
       expect(onboarding7CanContinue(base, 'uid-1'), isFalse);
 
-      await tester.tap(
-        find.byKey(
-          const ValueKey('onboarding-step7-no-products-cancel-rebuild'),
-        ),
-      );
+      container.read(skinCareFlowControllerProvider.notifier).cancelEditing();
       await tester.pumpAndSettle();
       base = container.read(onboardingStateProvider).draft.baseTimeline;
-      expect(
-        find.byKey(const ValueKey('onboarding-step7-selected-products-button')),
-        findsOneWidget,
-      );
+      expect(find.text('Skin Care Routine'), findsOneWidget);
+      expect(find.text('Review your weekly routine'), findsOneWidget);
       expect(onboarding7CanContinue(base, 'uid-1'), isTrue);
       expect(base.isSkinCareRoutineCurrent('uid-1'), isTrue);
     },
@@ -6417,13 +6399,13 @@ void main() {
 
     expect(find.textContaining('Skin Care AI'), findsOneWidget);
     expect(
-      find.text('Finding useful products available in United States'),
+      find.text('Finding useful products available in India'),
       findsOneWidget,
     );
 
     await tester.pumpAndSettle();
     expect(find.text('Build skin routine'), findsOneWidget);
-    expect(find.text('Routine built'), findsNothing);
+    expect(find.text('Skin Care Routine'), findsNothing);
   });
 
   testWidgets('69. Final no-products build reuses the routine loading state', (
@@ -6469,10 +6451,8 @@ void main() {
 
     completer.complete(_selectedProductRoutineResult());
     await tester.pumpAndSettle();
-    expect(
-      find.byKey(const ValueKey('onboarding-step7-selected-products-button')),
-      findsOneWidget,
-    );
+    expect(find.text('Skin Care Routine'), findsOneWidget);
+    expect(find.text('Review your weekly routine'), findsOneWidget);
   });
 
   testWidgets(
@@ -6608,7 +6588,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      await tester.tap(find.text('Rebuild / Edit'));
+      await tester.tap(find.byKey(const Key('onboarding-step7-back')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       final buildButton = find.byKey(
@@ -6716,7 +6696,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      await tester.tap(find.text('Rebuild / Edit'));
+      await tester.tap(find.byKey(const Key('onboarding-step7-back')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.text('Change details'));
@@ -6806,7 +6786,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      await tester.tap(find.text('Rebuild / Edit'));
+      await tester.tap(find.byKey(const Key('onboarding-step7-back')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       final buildButton = find.byKey(
@@ -6901,7 +6881,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      await tester.tap(find.text('Rebuild / Edit'));
+      await tester.tap(find.byKey(const Key('onboarding-step7-back')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.text('Add photo').first);
@@ -6926,7 +6906,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       expect(
         container.read(skinCareFlowControllerProvider).state,
-        SkinCareFlowState.hasProductsReview,
+        SkinCareFlowState.choice,
       );
 
       upload.complete();
@@ -6993,7 +6973,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      await tester.tap(find.text('Rebuild / Edit'));
+      await tester.tap(find.byKey(const Key('onboarding-step7-back')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.text('Change details'));
@@ -7077,7 +7057,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      await tester.tap(find.text('Rebuild / Edit'));
+      await tester.tap(find.byKey(const Key('onboarding-step7-back')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(
@@ -7231,7 +7211,8 @@ void main() {
 
     expect(client.generateCalls, hasLength(2));
     expect(client.generateCalls.last['desiredApplicationsPerDay'], 3);
-    expect(find.text('Routine built'), findsOneWidget);
+    expect(find.text('Skin Care Routine'), findsOneWidget);
+    expect(find.text('Review your weekly routine'), findsOneWidget);
   });
 
   testWidgets('72. Rebuild frequency stays transactional until AI succeeds', (
@@ -7268,7 +7249,7 @@ void main() {
       tester.element(find.byType(OnboardingStep7)),
     );
 
-    await tester.tap(find.text('Rebuild / Edit'));
+    triggerRebuild(tester);
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Change details'));
     await tester.tap(find.text('Change details'));
@@ -7285,14 +7266,12 @@ void main() {
     expect(base.skinCareDesiredApplicationsPerDay, 2);
     expect(onboarding7CanContinue(base, 'uid-1'), isFalse);
 
-    await tester.tap(
-      find.byKey(const ValueKey('onboarding-step7-no-products-cancel-rebuild')),
-    );
+    container.read(skinCareFlowControllerProvider.notifier).cancelEditing();
     await tester.pumpAndSettle();
     base = container.read(onboardingStateProvider).draft.baseTimeline;
     expect(base.skinCareDesiredApplicationsPerDay, 2);
     expect(onboarding7CanContinue(base, 'uid-1'), isTrue);
-    expect(find.text('Routine built'), findsOneWidget);
+    expect(find.text('Skin Care Routine'), findsOneWidget);
     expect(find.text('Changes not applied yet'), findsNothing);
     final saved = container.read(onboardingStateProvider).draft;
     await tester.pumpWidget(const SizedBox());
@@ -7301,7 +7280,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Changes not applied yet'), findsNothing);
-    expect(find.text('Routine built'), findsOneWidget);
+    expect(find.text('Skin Care Routine'), findsOneWidget);
   });
 
   testWidgets(
@@ -7639,6 +7618,58 @@ void main() {
       isEmpty,
     );
   });
+
+  testWidgets(
+    '77. Delayed region detection suppresses repeated taps and dispatches only one AI request',
+    (tester) async {
+      useAndroidWidth(tester);
+      final completer = Completer<DeviceCountry?>();
+      final client = TestSkinCareAiClient(
+        routineResultsQueue: [_productRecommendationResult()],
+      );
+      final countryService = _DelayedCompleterDeviceCountryService(completer);
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _noProductsDraft(
+            skinType: 'oily',
+            problems: const ['pimples'],
+            budget: 'medium',
+            withPhoto: true,
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+          countryService: countryService,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final findProductsBtn = find.text('Find products');
+      expect(findProductsBtn, findsOneWidget);
+
+      // First tap enters preflight
+      await tester.tap(findProductsBtn);
+      await tester.pump();
+
+      // Repeated tap while preflight is busy
+      await tester.tap(findProductsBtn, warnIfMissed: false);
+      await tester.pump();
+
+      // Complete delayed location resolution
+      completer.complete(
+        const DeviceCountry(
+          countryCode: 'IN',
+          countryName: 'India',
+          fromDeviceLocation: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify only a single AI generation request was dispatched
+      expect(client.generateCalls, hasLength(1));
+      expect(client.generateCalls.first['recommendationOnly'], isTrue);
+      expect(find.text('Build skin routine'), findsOneWidget);
+    },
+  );
 }
 
 OnboardingDraft _hasProductsDraft({
@@ -7771,6 +7802,9 @@ OnboardingDraft _noProductsDraft({
     skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
     skinCareSuggestedProducts: effectiveSuggestedProducts,
     skinCareProductRecommendations: recommendations,
+    skinCareRecommendationCurrencyCode: recommendations.isNotEmpty
+        ? recommendations.first.currencyCode
+        : 'INR',
     skinCareSelectedProductNames: effectiveSelectedProducts,
     skinCareFacePhotoAssetId:
         photoAssetId ?? (effectiveWithPhoto ? 'skin-asset' : null),
@@ -8288,13 +8322,38 @@ Future<void> _selectCoreRecommendedProducts(WidgetTester tester) async {
   }
 }
 
-class TestDeviceCountryService implements DeviceCountryService {
+class TestDeviceCountryService
+    implements DeviceCountryService, PermissionAwareDeviceCountryService {
   final DeviceCountry? result;
 
-  const TestDeviceCountryService(this.result);
+  const TestDeviceCountryService([this.result]);
 
   @override
-  Future<DeviceCountry?> detectCountry() async => result;
+  Future<DeviceCountry?> detectCountry() async =>
+      result ??
+      const DeviceCountry(
+        countryCode: 'IN',
+        countryName: 'India',
+        fromDeviceLocation: true,
+      );
+
+  @override
+  Future<DeviceCountry?> detectCountryIfPermissionGranted() async =>
+      detectCountry();
+}
+
+class _DelayedCompleterDeviceCountryService
+    implements DeviceCountryService, PermissionAwareDeviceCountryService {
+  final Completer<DeviceCountry?> completer;
+
+  _DelayedCompleterDeviceCountryService(this.completer);
+
+  @override
+  Future<DeviceCountry?> detectCountry() async => completer.future;
+
+  @override
+  Future<DeviceCountry?> detectCountryIfPermissionGranted() async =>
+      completer.future;
 }
 
 class TestUploadInteractionController extends UploadInteractionController {

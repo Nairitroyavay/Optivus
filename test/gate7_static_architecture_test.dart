@@ -3,33 +3,30 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('Gate 7: Static Architecture & Boundary Enforcement', () {
-    test(
-      'zero mockRoutineProvider usages across all of lib/',
-      () {
-        final libDir = Directory('lib');
-        expect(libDir.existsSync(), isTrue);
+    test('zero mockRoutineProvider usages across all of lib/', () {
+      final libDir = Directory('lib');
+      expect(libDir.existsSync(), isTrue);
 
-        final dartFiles = libDir
-            .listSync(recursive: true)
-            .whereType<File>()
-            .where((f) => f.path.endsWith('.dart'));
+      final dartFiles = libDir
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.dart'));
 
-        final violations = <String>[];
-        for (final file in dartFiles) {
-          final content = file.readAsStringSync();
-          if (content.contains('mockRoutineProvider')) {
-            violations.add('${file.path}: references mockRoutineProvider');
-          }
+      final violations = <String>[];
+      for (final file in dartFiles) {
+        final content = file.readAsStringSync();
+        if (content.contains('mockRoutineProvider')) {
+          violations.add('${file.path}: references mockRoutineProvider');
         }
+      }
 
-        expect(
-          violations,
-          isEmpty,
-          reason:
-              'Production code must never reference mockRoutineProvider anywhere in lib/',
-        );
-      },
-    );
+      expect(
+        violations,
+        isEmpty,
+        reason:
+            'Production code must never reference mockRoutineProvider anywhere in lib/',
+      );
+    });
 
     test('habitRepositoryProvider has zero active callers in lib/', () {
       final libDir = Directory('lib');
@@ -61,8 +58,9 @@ void main() {
     test(
       'routineNotifierProvider is the authoritative provider used in lib/features/routine/',
       () {
-        final viewportFile =
-            File('lib/features/routine/widgets/routine_timeline_viewport.dart');
+        final viewportFile = File(
+          'lib/features/routine/widgets/routine_timeline_viewport.dart',
+        );
         final tabFile = File('lib/features/routine/routine_tab.dart');
 
         expect(viewportFile.existsSync(), isTrue);
@@ -74,7 +72,8 @@ void main() {
         expect(
           viewportContent.contains('routineNotifierProvider'),
           isTrue,
-          reason: 'RoutineTimelineViewport must consume routineNotifierProvider',
+          reason:
+              'RoutineTimelineViewport must consume routineNotifierProvider',
         );
         expect(
           tabContent.contains('routineNotifierProvider'),
@@ -85,8 +84,9 @@ void main() {
     );
 
     test('habitSystemsNotifierProvider is the authoritative habit provider', () {
-      final habitScreen =
-          File('lib/features/routine/screens/routine_habit_systems_screen.dart');
+      final habitScreen = File(
+        'lib/features/routine/screens/routine_habit_systems_screen.dart',
+      );
       expect(habitScreen.existsSync(), isTrue);
 
       final content = habitScreen.readAsStringSync();

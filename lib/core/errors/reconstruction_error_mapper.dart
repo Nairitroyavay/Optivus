@@ -50,8 +50,7 @@ abstract final class ReconstructionErrorMapper {
       ReconstructionBootstrapFailureReason.permissionDenied =>
         const RecoverableError(
           category: RecoverableErrorCategory.authentication,
-          publicMessage:
-              'Your session has expired. Please sign in again.',
+          publicMessage: 'Your session has expired. Please sign in again.',
           severity: RecoverableErrorSeverity.critical,
           isBlocking: true,
           retryAction: RecoverableRetryAction.reauthenticate,
@@ -59,28 +58,26 @@ abstract final class ReconstructionErrorMapper {
           diagnosticCode: DiagnosticCodes.authSessionExpired,
         ),
       ReconstructionBootstrapFailureReason.backendUnavailable ||
-      ReconstructionBootstrapFailureReason.timeout =>
-        const RecoverableError(
-          category: RecoverableErrorCategory.network,
-          publicMessage:
-              'We couldn’t connect right now. Check your connection and try again.',
-          severity: RecoverableErrorSeverity.error,
-          isBlocking: true,
-          retryAction: RecoverableRetryAction.retry,
-          retrySafe: true,
-          diagnosticCode: DiagnosticCodes.networkUnavailable,
-        ),
-      ReconstructionBootstrapFailureReason.unknown =>
-        const RecoverableError(
-          category: RecoverableErrorCategory.network,
-          publicMessage:
-              'We couldn’t connect right now. Check your connection and try again.',
-          severity: RecoverableErrorSeverity.error,
-          isBlocking: true,
-          retryAction: RecoverableRetryAction.retry,
-          retrySafe: true,
-          diagnosticCode: DiagnosticCodes.networkUnavailable,
-        ),
+      ReconstructionBootstrapFailureReason.timeout => const RecoverableError(
+        category: RecoverableErrorCategory.network,
+        publicMessage:
+            'We couldn’t connect right now. Check your connection and try again.',
+        severity: RecoverableErrorSeverity.error,
+        isBlocking: true,
+        retryAction: RecoverableRetryAction.retry,
+        retrySafe: true,
+        diagnosticCode: DiagnosticCodes.networkUnavailable,
+      ),
+      ReconstructionBootstrapFailureReason.unknown => const RecoverableError(
+        category: RecoverableErrorCategory.network,
+        publicMessage:
+            'We couldn’t connect right now. Check your connection and try again.',
+        severity: RecoverableErrorSeverity.error,
+        isBlocking: true,
+        retryAction: RecoverableRetryAction.retry,
+        retrySafe: true,
+        diagnosticCode: DiagnosticCodes.networkUnavailable,
+      ),
     };
   }
 }

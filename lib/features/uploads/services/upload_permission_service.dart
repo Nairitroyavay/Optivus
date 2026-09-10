@@ -2,17 +2,18 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
-enum UploadPermissionStatus {
-  granted,
-  denied,
-  permanentlyDenied,
-  restricted,
-}
+enum UploadPermissionStatus { granted, denied, permanentlyDenied, restricted }
 
 abstract interface class UploadPermissionService {
   Future<UploadPermissionStatus> checkOrRequest(ImageSource source);
-  UploadPermissionStatus mapPickerException(Object exception, ImageSource source);
-  String permissionGuidanceMessage(ImageSource source, {bool isPermanent = false});
+  UploadPermissionStatus mapPickerException(
+    Object exception,
+    ImageSource source,
+  );
+  String permissionGuidanceMessage(
+    ImageSource source, {
+    bool isPermanent = false,
+  });
 }
 
 class DefaultUploadPermissionService implements UploadPermissionService {
@@ -72,6 +73,8 @@ class DefaultUploadPermissionService implements UploadPermissionService {
   }
 }
 
-final uploadPermissionServiceProvider = Provider<UploadPermissionService>((ref) {
+final uploadPermissionServiceProvider = Provider<UploadPermissionService>((
+  ref,
+) {
   return const DefaultUploadPermissionService();
 });

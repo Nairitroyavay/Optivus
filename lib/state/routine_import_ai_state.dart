@@ -20,32 +20,26 @@ class RoutineImportAiState {
     this.errorMessage,
   });
 
-  const RoutineImportAiState.extracting({
-    this.result,
-    this.errorMessage,
-  }) : lifecycle = const AiGenerationState(
-         phase: AiGenerationPhase.generating,
-         operationId: 'legacy-extracting',
-         attempt: 1,
-       );
+  const RoutineImportAiState.extracting({this.result, this.errorMessage})
+    : lifecycle = const AiGenerationState(
+        phase: AiGenerationPhase.generating,
+        operationId: 'legacy-extracting',
+        attempt: 1,
+      );
 
-  const RoutineImportAiState.extracted({
-    this.result,
-    this.errorMessage,
-  }) : lifecycle = const AiGenerationState(
-         phase: AiGenerationPhase.success,
-         operationId: 'legacy-extracted',
-         attempt: 1,
-       );
+  const RoutineImportAiState.extracted({this.result, this.errorMessage})
+    : lifecycle = const AiGenerationState(
+        phase: AiGenerationPhase.success,
+        operationId: 'legacy-extracted',
+        attempt: 1,
+      );
 
-  const RoutineImportAiState.failed({
-    this.result,
-    this.errorMessage,
-  }) : lifecycle = const AiGenerationState(
-         phase: AiGenerationPhase.error,
-         operationId: 'legacy-failed',
-         attempt: 1,
-       );
+  const RoutineImportAiState.failed({this.result, this.errorMessage})
+    : lifecycle = const AiGenerationState(
+        phase: AiGenerationPhase.error,
+        operationId: 'legacy-failed',
+        attempt: 1,
+      );
 
   RoutineImportAiStatus get status => switch (lifecycle.phase) {
     AiGenerationPhase.idle => RoutineImportAiStatus.idle,
