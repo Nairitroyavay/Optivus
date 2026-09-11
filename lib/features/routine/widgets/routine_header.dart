@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/utils/timeline_utils.dart';
 
 /// Routine header: date label (left) + AI / Add / Settings actions (right).
 ///
@@ -74,13 +75,8 @@ class RoutineHeader extends ConsumerWidget {
   }
 
   String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final isToday =
-        date.year == now.year && date.month == now.month && date.day == now.day;
-    final isTomorrow =
-        date.year == now.year &&
-        date.month == now.month &&
-        date.day == now.day + 1;
+    final isToday = TimelineUtils.isToday(date);
+    final isTomorrow = TimelineUtils.isTomorrow(date);
 
     const daysStr = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
     const mos = [

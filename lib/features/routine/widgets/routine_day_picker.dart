@@ -1,9 +1,9 @@
-import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/theme/optivus_motion.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/routine_glass_filter.dart';
@@ -26,17 +26,22 @@ class _RoutineDayPickerButtonState extends ConsumerState<RoutineDayPickerButton>
     with SingleTickerProviderStateMixin {
   OverlayEntry? _overlay;
   late final AnimationController _anim;
-  late final Animation<double> _fade;
+  late final Animation<double> _scaleAnim;
+  late final Animation<double> _fadeAnim;
   final LayerLink _link = LayerLink();
+  bool _isClosing = false;
 
   @override
   void initState() {
     super.initState();
     _anim = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 240),
+      duration: const Duration(milliseconds: 220),
     );
-    _fade = CurvedAnimation(parent: _anim, curve: Curves.easeOutCubic);
+    _scaleAnim = Tween<double>(begin: 0.96, end: 1.0).animate(
+      CurvedAnimation(parent: _anim, curve: OptivusMotion.enterCurve),
+    );
+    _fadeAnim = CurvedAnimation(parent: _anim, curve: OptivusMotion.enterCurve);
   }
 
   @override
@@ -55,6 +60,7 @@ class _RoutineDayPickerButtonState extends ConsumerState<RoutineDayPickerButton>
   }
 
   void _openPicker() {
+    if (_overlay != null || _isClosing) return;
     final selectedDay = ref.read(routineNotifierProvider).selectedDay;
 
     _overlay = OverlayEntry(
@@ -70,9 +76,27 @@ class _RoutineDayPickerButtonState extends ConsumerState<RoutineDayPickerButton>
                 targetAnchor: Alignment.bottomLeft,
                 followerAnchor: Alignment.topLeft,
                 offset: const Offset(0, 8),
-                child: ScaleTransition(
-                  scale: _fade,
-                  alignment: Alignment.topLeft,
+                child: AnimatedBuilder(
+                  animation: _anim,
+                  builder: (context, child) {
+                    final isReduced = OptivusMotion.isReducedMotion(context);
+                    final opacity = isReduced ? 1.0 : _fadeAnim.value;
+                    final scale = isReduced ? 1.0 : _scaleAnim.value;
+                    final translateY =
+                        isReduced ? 0.0 : (1.0 - _fadeAnim.value) * -3.0;
+
+                    return Opacity(
+                      opacity: opacity.clamp(0.0, 1.0),
+                      child: Transform.translate(
+                        offset: Offset(0, translateY),
+                        child: Transform.scale(
+                          scale: scale,
+                          alignment: Alignment.topLeft,
+                          child: child,
+                        ),
+                      ),
+                    );
+                  },
                   child: _RoutineDayWheelPopover(
                     initialSelectedDay: selectedDay,
                     onDateSelected: _onDateSelected,
@@ -91,12 +115,14 @@ class _RoutineDayPickerButtonState extends ConsumerState<RoutineDayPickerButton>
   }
 
   void _closePicker({bool immediate = false}) async {
-    if (_overlay == null) return;
+    if (_overlay == null || _isClosing) return;
+    _isClosing = true;
     if (!immediate && mounted) {
       await _anim.reverse();
     }
     _overlay?.remove();
     _overlay = null;
+    _isClosing = false;
   }
 
   @override
@@ -134,97 +160,113 @@ class _RoutineDayPickerButtonState extends ConsumerState<RoutineDayPickerButton>
     final semanticLabel =
         'Selected date, $weekdayName $monthName ${selectedDay.day}. Tap to change date.';
 
-    return CompositedTransformTarget(
-      link: _link,
-      child: Semantics(
-        button: true,
-        label: semanticLabel,
-        child: GestureDetector(
-          onTap: () => _overlay == null ? _openPicker() : _closePicker(),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-              child: Container(
-                height: 40,
-                width: 50,
-                decoration: BoxDecoration(
+    return PopScope(
+      canPop: _overlay == null,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _overlay != null) {
+          _closePicker();
+        }
+      },
+      child: CompositedTransformTarget(
+        link: _link,
+        child: Semantics(
+          button: true,
+          label: semanticLabel,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _overlay == null ? _openPicker() : _closePicker(),
+            child: SizedBox(
+              height: 48,
+              width: 50,
+              child: Center(
+                child: ClipRRect(
                   borderRadius: BorderRadius.circular(14),
-                  color: Colors.white.withValues(alpha: 0.58),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    width: 1.2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.06),
-                      blurRadius: 14,
-                      offset: const Offset(0, 5),
-                    ),
-                    BoxShadow(
-                      color: Colors.white.withValues(alpha: 0.75),
-                      blurRadius: 6,
-                      offset: const Offset(0, -1),
-                    ),
-                  ],
-                ),
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    // Specular gloss reflection at top
-                    Positioned(
-                      top: 0,
-                      left: 3,
-                      right: 3,
-                      height: 10,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(12),
-                            bottom: Radius.circular(6),
-                          ),
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.white.withValues(alpha: 0.90),
-                              Colors.white.withValues(alpha: 0.0),
-                            ],
-                          ),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                    child: Container(
+                      height: 40,
+                      width: 50,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        color: Colors.white.withValues(alpha: 0.58),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.85),
+                          width: 1.2,
                         ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.06),
+                            blurRadius: 14,
+                            offset: const Offset(0, 5),
+                          ),
+                          BoxShadow(
+                            color: Colors.white.withValues(alpha: 0.75),
+                            blurRadius: 6,
+                            offset: const Offset(0, -1),
+                          ),
+                        ],
                       ),
-                    ),
-                    Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
+                      child: Stack(
+                        clipBehavior: Clip.none,
                         children: [
-                          Text(
-                            weekdayAbbr,
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w900,
-                              color: OptivusColors.ink.withValues(alpha: 0.62),
-                              letterSpacing: 0.8,
-                              height: 1.0,
-                              decoration: TextDecoration.none,
+                          // Specular gloss reflection at top
+                          Positioned(
+                            top: 0,
+                            left: 3,
+                            right: 3,
+                            height: 10,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(12),
+                                  bottom: Radius.circular(6),
+                                ),
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Colors.white.withValues(alpha: 0.90),
+                                    Colors.white.withValues(alpha: 0.0),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${selectedDay.day}',
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w900,
-                              color: OptivusColors.ink,
-                              height: 1.05,
-                              decoration: TextDecoration.none,
+                          Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  weekdayAbbr,
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w900,
+                                    color: OptivusColors.ink
+                                        .withValues(alpha: 0.62),
+                                    letterSpacing: 0.8,
+                                    height: 1.0,
+                                    decoration: TextDecoration.none,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${selectedDay.day}',
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w900,
+                                    color: OptivusColors.ink,
+                                    height: 1.05,
+                                    decoration: TextDecoration.none,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -255,15 +297,14 @@ class _RoutineDayWheelPopover extends StatefulWidget {
 class _RoutineDayWheelPopoverState extends State<_RoutineDayWheelPopover> {
   late final List<DateTime> _dates;
   late final int _initialIndex;
-  late final FixedExtentScrollController _scrollController;
-  late final ValueNotifier<int> _centeredIndexNotifier;
+  late final PageController _scrollController;
+  late final DateTime _today;
 
   int _lastHapticIndex = -1;
-  Timer? _debounceTimer;
 
-  static const double _popoverWidth = 158.0;
-  static const double _popoverHeight = 240.0;
-  static const double _itemExtent = 48.0;
+  static const double _popoverWidth = 120.0;
+  static const double _popoverHeight = 220.0;
+  static const double _itemExtent = 44.0;
   static const double _outerR = 22.0;
   static const double _rim = 8.0;
   static const double _innerR = _outerR - _rim + 2;
@@ -272,19 +313,19 @@ class _RoutineDayWheelPopoverState extends State<_RoutineDayWheelPopover> {
   void initState() {
     super.initState();
     final now = DateTime.now();
-    final today = TimelineUtils.dateOnly(now);
+    _today = TimelineUtils.dateOnly(now);
     final selectedDay = widget.initialSelectedDay;
 
     // Generate supported Routine date window (at least -30 to +90 days, extended if needed)
-    final pastDays = selectedDay.isBefore(today)
-        ? (today.difference(selectedDay).inDays + 14).clamp(30, 365)
+    final pastDays = selectedDay.isBefore(_today)
+        ? (_today.difference(selectedDay).inDays + 14).clamp(30, 365)
         : 30;
-    final futureDays = selectedDay.isAfter(today)
-        ? (selectedDay.difference(today).inDays + 30).clamp(90, 365)
+    final futureDays = selectedDay.isAfter(_today)
+        ? (selectedDay.difference(_today).inDays + 30).clamp(90, 365)
         : 90;
 
-    final startDate = today.subtract(Duration(days: pastDays));
-    final endDate = today.add(Duration(days: futureDays));
+    final startDate = _today.subtract(Duration(days: pastDays));
+    final endDate = _today.add(Duration(days: futureDays));
 
     _dates = List.generate(
       endDate.difference(startDate).inDays + 1,
@@ -295,34 +336,30 @@ class _RoutineDayWheelPopoverState extends State<_RoutineDayWheelPopover> {
       (d) => DateUtils.isSameDay(d, selectedDay),
     );
     _initialIndex = matchIndex >= 0 ? matchIndex : pastDays;
-    _centeredIndexNotifier = ValueNotifier<int>(_initialIndex);
     _lastHapticIndex = _initialIndex;
 
-    _scrollController = FixedExtentScrollController(
-      initialItem: _initialIndex,
+    _scrollController = PageController(
+      initialPage: _initialIndex,
+      viewportFraction: 0.20,
     );
   }
 
   @override
   void dispose() {
-    _debounceTimer?.cancel();
-    _centeredIndexNotifier.dispose();
+    if (_scrollController.hasClients) {
+      final currentPage =
+          _scrollController.page?.round() ?? _scrollController.initialPage;
+      _commitSelection(currentPage);
+    }
     _scrollController.dispose();
     super.dispose();
   }
 
-  void _onSelectedItemChanged(int index) {
+  void _onPageChanged(int index) {
     if (index != _lastHapticIndex) {
       _lastHapticIndex = index;
-      // High-tactility impact that feels crisp, physical, and premium
-      HapticFeedback.lightImpact();
+      HapticFeedback.selectionClick();
     }
-    _centeredIndexNotifier.value = index;
-
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 100), () {
-      _commitSelection(index);
-    });
   }
 
   void _commitSelection(int index) {
@@ -333,25 +370,6 @@ class _RoutineDayWheelPopoverState extends State<_RoutineDayWheelPopover> {
 
   @override
   Widget build(BuildContext context) {
-    const weekdays = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-    const months = [
-      'JAN',
-      'FEB',
-      'MAR',
-      'APR',
-      'MAY',
-      'JUN',
-      'JUL',
-      'AUG',
-      'SEP',
-      'OCT',
-      'NOV',
-      'DEC',
-    ];
-
-    final now = DateTime.now();
-    final today = TimelineUtils.dateOnly(now);
-
     return Material(
       color: Colors.transparent,
       child: Container(
@@ -361,7 +379,7 @@ class _RoutineDayWheelPopoverState extends State<_RoutineDayWheelPopover> {
           borderRadius: BorderRadius.circular(_outerR),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.14),
+              color: Colors.black.withValues(alpha: 0.12),
               blurRadius: 24,
               offset: const Offset(0, 8),
             ),
@@ -373,45 +391,53 @@ class _RoutineDayWheelPopoverState extends State<_RoutineDayWheelPopover> {
             filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
             child: Stack(
               children: [
-                // Frosted glass background fill
+                // 1. Transparent frosted glass tint matching Filter (0.06 alpha)
                 Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(_outerR),
-                      color: Colors.white.withValues(alpha: 0.88),
-                    ),
-                  ),
-                ),
-
-                // Centered glass selection lens indicator
-                Positioned(
-                  top: (_popoverHeight - _itemExtent) / 2 + 2,
-                  left: 10,
-                  right: 10,
-                  height: _itemExtent - 4,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.72),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.95),
-                        width: 1.5,
+                  child: IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(_outerR),
+                        color: Colors.white.withValues(alpha: 0.06),
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
                     ),
                   ),
                 ),
 
-                // Smooth snapping wheel with edge gradient mask
-                NotificationListener<ScrollEndNotification>(
-                  onNotification: (notif) {
-                    _commitSelection(_centeredIndexNotifier.value);
+                // 2. Translucent center selection lane indicator (behind date items)
+                Positioned(
+                  top: (_popoverHeight - _itemExtent) / 2,
+                  left: 8,
+                  right: 8,
+                  height: _itemExtent,
+                  child: IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.40),
+                          width: 1.0,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.03),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // 3. Smooth vertical PageView with edge gradient mask
+                NotificationListener<ScrollNotification>(
+                  onNotification: (notification) {
+                    if (notification is ScrollEndNotification) {
+                      final page = _scrollController.page?.round() ??
+                          _scrollController.initialPage;
+                      _commitSelection(page);
+                    }
                     return false;
                   },
                   child: ShaderMask(
@@ -429,168 +455,22 @@ class _RoutineDayWheelPopoverState extends State<_RoutineDayWheelPopover> {
                       ).createShader(rect);
                     },
                     blendMode: BlendMode.dstIn,
-                    child: ListWheelScrollView.useDelegate(
+                    child: PageView.builder(
                       controller: _scrollController,
-                      itemExtent: _itemExtent,
+                      scrollDirection: Axis.vertical,
+                      itemCount: _dates.length,
                       physics: const BouncingScrollPhysics(
-                        parent: FixedExtentScrollPhysics(),
+                        parent: PageScrollPhysics(),
                       ),
-                      perspective: 0.0025,
-                      diameterRatio: 1.35,
-                      squeeze: 1.08,
-                      useMagnifier: true,
-                      magnification: 1.12,
-                      onSelectedItemChanged: _onSelectedItemChanged,
-                      childDelegate: ListWheelChildBuilderDelegate(
-                        childCount: _dates.length,
-                        builder: (context, index) {
-                          final date = _dates[index];
-                          final isToday = DateUtils.isSameDay(date, today);
-
-                          final weekdayStr =
-                              weekdays[(date.weekday - 1).clamp(0, 6)];
-                          final monthStr = months[(date.month - 1).clamp(0, 11)];
-
-                          return ValueListenableBuilder<int>(
-                            valueListenable: _centeredIndexNotifier,
-                            builder: (context, centeredIndex, _) {
-                              final isCentered = index == centeredIndex;
-                              final distance = (index - centeredIndex).abs();
-
-                              final double opacity = switch (distance) {
-                                0 => 1.0,
-                                1 => 0.45,
-                                2 => 0.18,
-                                _ => 0.06,
-                              };
-
-                              final double scale = switch (distance) {
-                                0 => 1.0,
-                                1 => 0.90,
-                                _ => 0.80,
-                              };
-
-                              return GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: () {
-                                  if (isCentered) {
-                                    _commitSelection(index);
-                                    widget.onClose();
-                                  } else {
-                                    _scrollController.animateToItem(
-                                      index,
-                                      duration: const Duration(milliseconds: 220),
-                                      curve: Curves.easeOutCubic,
-                                    );
-                                  }
-                                },
-                                child: Transform.scale(
-                                  scale: scale,
-                                  child: Opacity(
-                                    opacity: opacity,
-                                    child: Center(
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.center,
-                                        children: [
-                                          Column(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.end,
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Text(
-                                                    weekdayStr,
-                                                    style: TextStyle(
-                                                      fontSize:
-                                                          isCentered ? 11 : 10,
-                                                      fontWeight: FontWeight.w900,
-                                                      color: OptivusColors.ink,
-                                                      letterSpacing: 0.6,
-                                                      decoration:
-                                                          TextDecoration.none,
-                                                    ),
-                                                  ),
-                                                  if (isToday) ...[
-                                                    const SizedBox(width: 4),
-                                                    Container(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                        horizontal: 4,
-                                                        vertical: 1,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        color: OptivusColors
-                                                            .routineAccent
-                                                            .withValues(
-                                                              alpha: 0.28,
-                                                            ),
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                                4),
-                                                      ),
-                                                      child: const Text(
-                                                        'TODAY',
-                                                        style: TextStyle(
-                                                          fontSize: 7.5,
-                                                          fontWeight:
-                                                              FontWeight.w900,
-                                                          color:
-                                                              OptivusColors.ink,
-                                                          letterSpacing: 0.3,
-                                                          decoration:
-                                                              TextDecoration.none,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ],
-                                              ),
-                                              Text(
-                                                monthStr,
-                                                style: TextStyle(
-                                                  fontSize: 8.5,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: OptivusColors.sub
-                                                      .withValues(alpha: 0.85),
-                                                  letterSpacing: 0.4,
-                                                  decoration:
-                                                      TextDecoration.none,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(width: 10),
-                                          Text(
-                                            '${date.day}',
-                                            style: TextStyle(
-                                              fontSize: isCentered ? 21 : 16,
-                                              fontWeight: FontWeight.w900,
-                                              color: OptivusColors.ink,
-                                              decoration: TextDecoration.none,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
+                      onPageChanged: _onPageChanged,
+                      itemBuilder: (context, index) {
+                        return _buildDateItem(context, index);
+                      },
                     ),
                   ),
                 ),
 
-                // Glass highlight rim painter
+                // 4. Glass highlight rim painter on top
                 Positioned.fill(
                   child: IgnorePointer(
                     child: CustomPaint(
@@ -607,6 +487,120 @@ class _RoutineDayWheelPopoverState extends State<_RoutineDayWheelPopover> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildDateItem(BuildContext context, int index) {
+    final date = _dates[index];
+    final isToday = DateUtils.isSameDay(date, _today);
+
+    const weekdays = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+    final weekdayStr = weekdays[(date.weekday - 1).clamp(0, 6)];
+
+    return AnimatedBuilder(
+      animation: _scrollController,
+      builder: (context, child) {
+        double page = _initialIndex.toDouble();
+        if (_scrollController.hasClients &&
+            _scrollController.position.hasContentDimensions) {
+          page = _scrollController.page ?? page;
+        }
+        final distance = (page - index).abs();
+
+        // Continuous scale and opacity interpolation
+        final double scale;
+        final double opacity;
+        if (distance <= 1.0) {
+          scale = 1.0 - (0.12 * distance);
+          opacity = 1.0 - (0.45 * distance);
+        } else if (distance <= 2.0) {
+          final t = distance - 1.0;
+          scale = 0.88 - (0.10 * t);
+          opacity = 0.55 - (0.33 * t);
+        } else {
+          scale = 0.78;
+          opacity = (0.22 - (0.07 * (distance - 2.0))).clamp(0.05, 0.22);
+        }
+
+        final isCenter = distance < 0.5;
+
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            final currentPage = _scrollController.page?.round() ??
+                _scrollController.initialPage;
+            if (index == currentPage) {
+              _commitSelection(index);
+              widget.onClose();
+            } else {
+              _scrollController
+                  .animateToPage(
+                    index,
+                    duration: OptivusMotion.duration(
+                      context,
+                      const Duration(milliseconds: 200),
+                    ),
+                    curve: OptivusMotion.enterCurve,
+                  )
+                  .then((_) {
+                if (mounted) {
+                  _commitSelection(index);
+                  widget.onClose();
+                }
+              });
+            }
+          },
+          child: Center(
+            child: Transform.scale(
+              scale: scale,
+              child: Opacity(
+                opacity: opacity.clamp(0.0, 1.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      weekdayStr,
+                      style: TextStyle(
+                        fontSize: isCenter ? 12 : 11,
+                        fontWeight:
+                            isCenter ? FontWeight.w800 : FontWeight.w700,
+                        color: OptivusColors.ink,
+                        letterSpacing: 0.4,
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                    if (isToday) ...[
+                      const SizedBox(width: 5),
+                      Container(
+                        width: 4,
+                        height: 4,
+                        decoration: const BoxDecoration(
+                          color: OptivusColors.routineAccent,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                    ] else ...[
+                      const SizedBox(width: 8),
+                    ],
+                    Text(
+                      '${date.day}',
+                      style: TextStyle(
+                        fontSize: isCenter ? 18 : 15,
+                        fontWeight: FontWeight.w900,
+                        color: OptivusColors.ink,
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

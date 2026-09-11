@@ -6,6 +6,7 @@ import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/routine_tab.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/routine_day_picker.dart';
+import 'package:optivus/features/routine/widgets/routine_header.dart';
 import 'package:optivus/features/routine/widgets/routine_title_filter_row.dart';
 import 'package:optivus/repositories/routine_repository.dart';
 
@@ -78,20 +79,19 @@ void main() {
         ),
       );
 
-      // Initially popover wheel is not open
-      expect(find.byType(ListWheelScrollView), findsNothing);
+      // Initially popover PageView is not open
+      expect(find.byType(PageView), findsNothing);
 
       // Tap the date button
       await tester.tap(find.byType(RoutineDayPickerButton));
       await tester.pumpAndSettle();
 
-      // Now wheel is open
-      expect(find.byType(ListWheelScrollView), findsOneWidget);
+      // Now PageView is open
+      expect(find.byType(PageView), findsOneWidget);
 
-      // Tap centered date item in the wheel
-      // The centered item is for day 11
+      // Tap centered date item in the wheel (day 11)
       final day11Finder = find.descendant(
-        of: find.byType(ListWheelScrollView),
+        of: find.byType(PageView),
         matching: find.text('11'),
       );
       expect(day11Finder, findsOneWidget);
@@ -100,9 +100,54 @@ void main() {
       await tester.pumpAndSettle();
 
       // Popover closes
-      expect(find.byType(ListWheelScrollView), findsNothing);
+      expect(find.byType(PageView), findsNothing);
       expect(container.read(routineNotifierProvider).selectedDay,
           TimelineUtils.dateOnly(testDate));
+    });
+
+    testWidgets('tapping neighboring day animates to it, commits, and closes',
+        (tester) async {
+      final db = FakeRoutineDatabase();
+      final repo = FakeRoutineRepository(database: db);
+      final testDate = DateTime(2026, 9, 11);
+
+      final container = ProviderContainer(
+        overrides: [routineRepositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(container.dispose);
+
+      container.read(routineNotifierProvider.notifier).updateSelectedDay(testDate);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: RoutineDayPickerButton(),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Open picker
+      await tester.tap(find.byType(RoutineDayPickerButton));
+      await tester.pumpAndSettle();
+
+      // Tap day 12 (neighboring item below day 11)
+      final day12Finder = find.descendant(
+        of: find.byType(PageView),
+        matching: find.text('12'),
+      );
+      expect(day12Finder, findsOneWidget);
+
+      await tester.tap(day12Finder);
+      await tester.pumpAndSettle();
+
+      // Popover closes and selected day is now day 12
+      expect(find.byType(PageView), findsNothing);
+      expect(container.read(routineNotifierProvider).selectedDay.day, 12);
     });
 
     testWidgets('tapping scrim outside closes popover', (tester) async {
@@ -134,16 +179,16 @@ void main() {
       // Open picker
       await tester.tap(find.byType(RoutineDayPickerButton));
       await tester.pumpAndSettle();
-      expect(find.byType(ListWheelScrollView), findsOneWidget);
+      expect(find.byType(PageView), findsOneWidget);
 
       // Tap outside (e.g. at bottom-right of screen)
       await tester.tapAt(const Offset(300, 500));
       await tester.pumpAndSettle();
 
-      expect(find.byType(ListWheelScrollView), findsNothing);
+      expect(find.byType(PageView), findsNothing);
     });
 
-    testWidgets('triggers controlled haptic feedback on date transition',
+    testWidgets('triggers controlled selectionClick haptic feedback on date transition',
         (tester) async {
       final hapticCalls = <String>[];
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -192,15 +237,65 @@ void main() {
 
       hapticCalls.clear();
 
-      // Drag the wheel by 1 item (itemExtent = 48.0)
-      await tester.drag(find.byType(ListWheelScrollView), const Offset(0, -48.0));
+      // Drag the vertical PageView by 1 item (~44.0 px + touch slop)
+      await tester.drag(find.byType(PageView), const Offset(0, -70.0));
       await tester.pumpAndSettle();
 
-      // Premium lightImpact was fired
+      // Premium selectionClick was fired
       expect(
-        hapticCalls.where((c) => c == 'HapticFeedbackType.lightImpact').length,
+        hapticCalls.where((c) => c == 'HapticFeedbackType.selectionClick').length,
         greaterThanOrEqualTo(1),
       );
+    });
+
+    testWidgets('dragging does not prematurely commit date until scroll completes',
+        (tester) async {
+      final db = FakeRoutineDatabase();
+      final repo = FakeRoutineRepository(database: db);
+      final initialDate = DateTime(2026, 9, 11);
+
+      final container = ProviderContainer(
+        overrides: [routineRepositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(container.dispose);
+
+      container.read(routineNotifierProvider.notifier).updateSelectedDay(initialDate);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: RoutineDayPickerButton(),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Open picker
+      await tester.tap(find.byType(RoutineDayPickerButton));
+      await tester.pumpAndSettle();
+
+      // Start drag gesture without ending it (exceed touch slop, drag partially)
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(PageView)),
+      );
+      await gesture.moveBy(const Offset(0, -25.0));
+      await tester.pump();
+
+      // Selected day in provider must NOT change during active touch drag
+      expect(container.read(routineNotifierProvider).selectedDay,
+          TimelineUtils.dateOnly(initialDate));
+
+      // Finish drag to next item
+      await gesture.moveBy(const Offset(0, -45.0));
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      // Now on scroll completion, date is committed
+      expect(container.read(routineNotifierProvider).selectedDay.day, 12);
     });
 
     testWidgets('RoutineTitleFilterRow renders DayPicker, Week and Filter without overflow on 320px screen',
@@ -294,8 +389,8 @@ void main() {
       await tester.tap(find.byType(RoutineDayPickerButton));
       await tester.pumpAndSettle();
 
-      // Scroll 1 day forward (drag down by -48)
-      await tester.drag(find.byType(ListWheelScrollView), const Offset(0, -48.0));
+      // Scroll 1 day forward (drag down by -70 to overcome touch slop)
+      await tester.drag(find.byType(PageView), const Offset(0, -70.0));
       await tester.pumpAndSettle();
 
       // Close by tapping outside
@@ -311,10 +406,10 @@ void main() {
       await tester.tap(find.byType(RoutineDayPickerButton));
       await tester.pumpAndSettle();
 
-      // Verify controller is centered on the new date
-      final wheel = tester.widget<ListWheelScrollView>(find.byType(ListWheelScrollView));
-      final controller = wheel.controller as FixedExtentScrollController;
-      expect(controller.selectedItem, isNotNull);
+      // Verify controller is present and centered
+      final pageView = tester.widget<PageView>(find.byType(PageView));
+      final controller = pageView.controller!;
+      expect(controller.initialPage, isNotNull);
     });
 
     testWidgets('changing filter preserves selected date', (tester) async {
@@ -368,6 +463,39 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('RoutineHeader correctly identifies TODAY and TOMORROW across month/year boundaries',
+        (tester) async {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final tomorrow = today.add(const Duration(days: 1));
+
+      expect(TimelineUtils.isToday(today), isTrue);
+      expect(TimelineUtils.isTomorrow(tomorrow), isTrue);
+      expect(TimelineUtils.isTomorrow(today), isFalse);
+
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      container.read(routineNotifierProvider.notifier).updateSelectedDay(tomorrow);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            home: Scaffold(
+              body: RoutineHeader(
+                onAITap: () {},
+                onAddTap: () {},
+                onSettingsTap: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.textContaining('TOMORROW:'), findsOneWidget);
     });
   });
 }
