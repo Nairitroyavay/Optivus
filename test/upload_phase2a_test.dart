@@ -665,6 +665,13 @@ class _RecordingR2UploadClient implements R2UploadClient {
   }) async {
     deletedObjectKey = objectKey;
   }
+
+  @override
+  Future<String> getPreviewUrl({
+    required String objectKey,
+    required String idToken,
+  }) async =>
+      'https://preview.local/$objectKey';
 }
 
 class _FailingUploadedAssetRepository implements UploadedAssetRepository {

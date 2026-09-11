@@ -36,6 +36,7 @@ class RoutineTemplateFirestoreCodec {
     'proteinEstimate',
     'hardBlock',
     'allowedConflicts',
+    'baseTimelineSection',
     'onboardingProjectionId',
     'onboardingSourceItemId',
     'createdAt',
@@ -78,6 +79,8 @@ class RoutineTemplateFirestoreCodec {
       'trackerType': item.trackerType.name,
       if (_notBlank(item.notes)) 'notes': item.notes!.trim(),
       if (_notBlank(item.bestTime)) 'bestTime': item.bestTime!.trim(),
+      if (_notBlank(item.baseTimelineSection))
+        'baseTimelineSection': item.baseTimelineSection!.trim(),
       if (item.subtasks != null) 'subtasks': List<String>.from(item.subtasks!),
       if (item.steps != null) 'steps': List<String>.from(item.steps!),
       if (_notBlank(item.mealCategory))
@@ -206,6 +209,7 @@ class RoutineTemplateFirestoreCodec {
       isTrackerLinked: data['isTrackerLinked'] as bool? ?? false,
       notes: _optionalString(data['notes']),
       bestTime: _optionalString(data['bestTime']),
+      baseTimelineSection: _optionalString(data['baseTimelineSection']),
       subtasks: _readStringList(data['subtasks']),
       steps:
           _readStringList(data['steps']) ??

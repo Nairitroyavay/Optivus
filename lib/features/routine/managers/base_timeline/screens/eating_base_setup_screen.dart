@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -6,15 +5,17 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/meal_timeline_adapter.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
+import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/eating_domain_engine.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_ai_thinking_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
-import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/repositories/base_timeline_setup_repository.dart';
-import 'package:optivus/services/nutrition_target_service.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
 
@@ -35,6 +36,12 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
   bool _isDirty = false;
   bool _isExtracting = false;
   String? _errorMessage;
+  String _aiActionTitle = 'Processing meal plan...';
+  List<String> _aiProgressMessages = const [
+    'Analyzing nutritional targets...',
+    'Distributing meal timing and macros...',
+    'Balancing weekly variety...',
+  ];
 
   // Working setup state
   late List<TimelineBlockDraft> _workingBlocks;
@@ -84,7 +91,9 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
             child: const Text('Keep Editing'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: OptivusColors.danger),
+            style: FilledButton.styleFrom(
+              backgroundColor: OptivusColors.danger,
+            ),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Discard'),
           ),
@@ -92,6 +101,54 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       ),
     );
     return res ?? false;
+  }
+
+  void _showPhotoSourceSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: OptivusColors.backgroundBottom,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(
+                  Icons.camera_alt_rounded,
+                  color: Colors.white,
+                ),
+                title: const Text(
+                  'Take Photo',
+                  style: TextStyle(color: Colors.white),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickAndUploadPhoto(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.photo_library_rounded,
+                  color: Colors.white,
+                ),
+                title: const Text(
+                  'Choose from Gallery',
+                  style: TextStyle(color: Colors.white),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickAndUploadPhoto(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _pickAndUploadPhoto(ImageSource source) async {
@@ -103,15 +160,20 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     setState(() {
       _isExtracting = true;
       _errorMessage = null;
+      _aiActionTitle = 'Analyzing meal plan photo...';
+      _aiProgressMessages = const [
+        'Uploading high-resolution image...',
+        'Extracting meals and schedule timings...',
+        'Formatting timeline entries...',
+      ];
     });
 
     try {
-      final asset = await uploadNotifier.uploadImage(
+      final asset = await uploadNotifier.startUpload(
         uid: uid,
         sourceFeature: 'routine_base_timeline',
-        purpose: UploadedAssetPurpose.mealPlan,
+        purpose: UploadedAssetPurpose.eatingMenu,
         source: source,
-        allowSimulationInTests: true,
       );
 
       if (asset == null) {
@@ -124,9 +186,10 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       _workingSetupPath = 'has_routine';
 
       final reviewDraft = RoutineImportReviewDraft(
-        reviewId: 'rev_${asset.assetId}',
+        id: 'rev_${asset.assetId}',
         uid: uid,
         source: RoutineImportReviewSource.eating,
+        status: RoutineImportReviewStatus.draft,
         sourceLabel: 'Eating',
         uploadedAssetId: asset.assetId,
         uploadedAssetR2Key: asset.r2Key,
@@ -145,7 +208,9 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
             title: c.title,
             startMinute: c.startMinute,
             endMinute: c.endMinute,
-            repeatDays: c.repeatDays.isEmpty ? const [1, 2, 3, 4, 5, 6, 7] : c.repeatDays,
+            repeatDays: c.repeatDays.isEmpty
+                ? const [1, 2, 3, 4, 5, 6, 7]
+                : c.repeatDays,
             section: 'eating',
             blockType: TimelineBlockDraft.softBlockKey,
             mealCategory: c.title,
@@ -164,7 +229,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         if (mounted) {
           setState(() {
             _isExtracting = false;
-            _errorMessage = result?.warnings.firstOrNull ??
+            _errorMessage =
+                result?.warnings.firstOrNull ??
                 'No meals detected. You can add meals manually.';
           });
         }
@@ -179,58 +245,81 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     }
   }
 
-  void _generateDefaultPlan() {
-    final count = _workingMealsPerDay ?? 3;
-    final newBlocks = <TimelineBlockDraft>[];
+  Future<void> _generateBalancedPlan() async {
+    final uid = ref.read(userProfileProvider).uid;
+    if (uid.trim().isEmpty) return;
 
-    // Canonical meal slots based on count
-    final slots = switch (count) {
-      2 => [
-          (title: 'Brunch', start: 10 * 60, end: 10 * 60 + 40, dishes: ['Eggs & Avocado Toast']),
-          (title: 'Dinner', start: 18 * 60 + 30, end: 19 * 60 + 15, dishes: ['Grilled Chicken & Quinoa Bowl']),
-        ],
-      4 => [
-          (title: 'Breakfast', start: 7 * 60 + 30, end: 8 * 60, dishes: ['Greek Yogurt & Berries']),
-          (title: 'Lunch', start: 12 * 60 + 30, end: 13 * 60 + 10, dishes: ['Turkey & Veggie Wrap']),
-          (title: 'Snack', start: 16 * 60, end: 16 * 60 + 20, dishes: ['Protein Shake & Almonds']),
-          (title: 'Dinner', start: 19 * 60 + 30, end: 20 * 60 + 15, dishes: ['Salmon, Brown Rice & Broccoli']),
-        ],
-      5 => [
-          (title: 'Breakfast', start: 7 * 60, end: 7 * 60 + 30, dishes: ['Oatmeal & Protein Scoop']),
-          (title: 'Morning Snack', start: 10 * 60 + 30, end: 10 * 60 + 50, dishes: ['Apple & Peanut Butter']),
-          (title: 'Lunch', start: 13 * 60, end: 13 * 60 + 40, dishes: ['Chicken Rice Bowl']),
-          (title: 'Afternoon Snack', start: 16 * 60 + 30, end: 16 * 60 + 50, dishes: ['Cottage Cheese & Walnuts']),
-          (title: 'Dinner', start: 20 * 60, end: 20 * 60 + 40, dishes: ['Steak & Roasted Sweet Potato']),
-        ],
-      _ => [
-          (title: 'Breakfast', start: 8 * 60, end: 8 * 60 + 35, dishes: ['Eggs, Toast & Fruit']),
-          (title: 'Lunch', start: 12 * 60 + 45, end: 13 * 60 + 25, dishes: ['Chicken Bowl with Greens']),
-          (title: 'Dinner', start: 19 * 60 + 30, end: 20 * 60 + 15, dishes: ['Salmon, Rice & Asparagus']),
-        ],
-    };
+    final idToken =
+        await ref.read(authRepositoryProvider).currentIdToken() ?? '';
+    final engine = ref.read(eatingDomainEngineProvider);
+    final profile = ref.read(userProfileProvider);
+    final setupAsync = ref.read(baseTimelineSetupNotifierProvider);
+    final currentSetup =
+        setupAsync.value ??
+        BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
 
-    for (var i = 0; i < slots.length; i++) {
-      final s = slots[i];
-      newBlocks.add(
-        TimelineBlockDraft(
-          id: 'meal_slot_${i + 1}',
-          title: s.title,
-          startMinute: s.start,
-          endMinute: s.end,
-          repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-          section: 'eating',
-          blockType: TimelineBlockDraft.softBlockKey,
-          mealCategory: s.title,
-          dishes: s.dishes,
-        ),
-      );
-    }
+    final workingSetup = currentSetup.copyWith(
+      mealPlanningGoal: _workingGoal,
+      mealsPerDay: _workingMealsPerDay,
+      foodType: _workingFoodType,
+      targetCalories: _workingTargetCalories,
+      targetProtein: _workingTargetProtein,
+    );
 
     setState(() {
-      _workingBlocks = newBlocks;
-      _workingSetupPath = 'create';
-      _isDirty = true;
+      _isExtracting = true;
+      _errorMessage = null;
+      _aiActionTitle = 'Generating balanced meal plan...';
+      _aiProgressMessages = const [
+        'Calculating canonical macro targets...',
+        'Structuring breakfast, lunch, and dinner slots...',
+        'Ensuring daily and weekly meal diversity...',
+      ];
     });
+
+    try {
+      final targets = engine.calculateTargets(
+        profile: profile,
+        setup: workingSetup,
+      );
+      final inputs = engine.buildInputs(
+        profile: profile,
+        setup: workingSetup,
+        targets: targets,
+      );
+
+      final blocks = await engine.generateEatingRoutine(
+        uid: uid,
+        idToken: idToken,
+        inputs: inputs,
+        targets: targets,
+        baseTimeline: workingSetup.toBaseTimelineDraft(),
+      );
+
+      if (mounted) {
+        setState(() {
+          _workingBlocks = blocks;
+          _workingSetupPath = 'create';
+          _workingTargetCalories = targets.targetCalories;
+          _workingTargetProtein = targets.proteinTarget?.round();
+          // Clear photo provenance when switching to generated mode
+          _workingAssetId = null;
+          _workingR2Key = null;
+          _isDirty = true;
+          _isExtracting = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isExtracting = false;
+          _errorMessage = e
+              .toString()
+              .replaceAll('Exception: ', '')
+              .replaceAll('StateError: ', '');
+        });
+      }
+    }
   }
 
   void _addMealBlock() {
@@ -341,10 +430,14 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Failed to load setup', style: TextStyle(color: OptivusColors.textPrimary)),
+              const Text(
+                'Failed to load setup',
+                style: TextStyle(color: OptivusColors.textPrimary),
+              ),
               const SizedBox(height: 8),
               FilledButton(
-                onPressed: () => ref.read(baseTimelineSetupNotifierProvider.notifier).load(),
+                onPressed: () =>
+                    ref.read(baseTimelineSetupNotifierProvider.notifier).load(),
                 child: const Text('Retry'),
               ),
             ],
@@ -356,7 +449,9 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         const adapter = MealTimelineAdapter(accent: OptivusColors.roseAccent);
 
         if (_isEditing) {
-          final entries = _workingBlocks.expand((b) => adapter.toEntries(b)).toList();
+          final entries = _workingBlocks
+              .expand((b) => adapter.toEntries(b))
+              .toList();
 
           return PopScope(
             canPop: !_isDirty,
@@ -375,18 +470,26 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                   children: [
                     // Top Bar
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       child: Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.close_rounded, color: OptivusColors.textPrimary),
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              color: OptivusColors.textPrimary,
+                            ),
                             onPressed: () async {
                               if (await _confirmDiscard()) {
                                 setState(() => _isEditing = false);
                               }
                             },
                             style: IconButton.styleFrom(
-                              backgroundColor: Colors.white.withValues(alpha: 0.1),
+                              backgroundColor: Colors.white.withValues(
+                                alpha: 0.1,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -403,17 +506,31 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                           FilledButton(
                             style: FilledButton.styleFrom(
                               backgroundColor: OptivusColors.roseAccent,
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             onPressed: _isSaving ? null : _saveWorkingSetup,
                             child: _isSaving
                                 ? const SizedBox(
                                     width: 16,
                                     height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
                                   )
-                                : const Text('Save', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white)),
+                                : const Text(
+                                    'Save',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
                           ),
                         ],
                       ),
@@ -421,40 +538,68 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
 
                     // Setup Path Actions
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
                       child: Row(
                         children: [
                           Expanded(
                             child: OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(
-                                side: BorderSide(color: OptivusColors.roseAccent.withValues(alpha: 0.5)),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                side: BorderSide(
+                                  color: OptivusColors.roseAccent.withValues(
+                                    alpha: 0.5,
+                                  ),
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                               ),
-                              icon: const Icon(Icons.auto_awesome_rounded, size: 16),
+                              icon: const Icon(
+                                Icons.auto_awesome_rounded,
+                                size: 16,
+                              ),
                               label: const Text('Build Balanced Plan'),
-                              onPressed: _isExtracting ? null : _generateDefaultPlan,
+                              onPressed: _isExtracting
+                                  ? null
+                                  : _generateBalancedPlan,
                             ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(
-                                side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                side: BorderSide(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                               ),
-                              icon: const Icon(Icons.camera_alt_outlined, size: 16),
+                              icon: const Icon(
+                                Icons.camera_alt_outlined,
+                                size: 16,
+                              ),
                               label: const Text('Scan Photo'),
                               onPressed: _isExtracting
                                   ? null
-                                  : () => _pickAndUploadPhoto(ImageSource.gallery),
+                                  : _showPhotoSourceSheet,
                             ),
                           ),
                           const SizedBox(width: 8),
                           IconButton.outlined(
-                            icon: const Icon(Icons.add_rounded, color: Colors.white),
+                            icon: const Icon(
+                              Icons.add_rounded,
+                              color: Colors.white,
+                            ),
                             style: IconButton.styleFrom(
-                              side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              side: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.2),
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             onPressed: _isExtracting ? null : _addMealBlock,
                           ),
@@ -464,34 +609,38 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
 
                     if (_errorMessage != null)
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                        child: Text(_errorMessage!, style: const TextStyle(color: OptivusColors.danger, fontSize: 12)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 4,
+                        ),
+                        child: Text(
+                          _errorMessage!,
+                          style: const TextStyle(
+                            color: OptivusColors.danger,
+                            fontSize: 12,
+                          ),
+                        ),
                       ),
 
                     // Interactive Timeline View
                     Expanded(
                       child: _isExtracting
-                          ? const Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  CircularProgressIndicator(),
-                                  SizedBox(height: 14),
-                                  Text(
-                                    'Extracting meal plan...',
-                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                                  ),
-                                ],
-                              ),
+                          ? BaseTimelineAiThinkingView(
+                              initialMessage: _aiActionTitle,
+                              progressMessages: _aiProgressMessages,
                             )
                           : FullScreenTimelineScaffold(
                               entries: entries,
                               selectedDay: _selectedDay,
-                              onDayChanged: (day) => setState(() => _selectedDay = day),
-                              styleBuilder: (entry) => adapter.styleForEntry(entry),
+                              onDayChanged: (day) =>
+                                  setState(() => _selectedDay = day),
+                              styleBuilder: (entry) =>
+                                  adapter.styleForEntry(entry),
                               accent: OptivusColors.roseAccent,
                               onEntryTapped: (entry) {
-                                final block = _workingBlocks.where((b) => b.id == entry.sourceId).firstOrNull;
+                                final block = _workingBlocks
+                                    .where((b) => b.id == entry.sourceId)
+                                    .firstOrNull;
                                 if (block != null) {
                                   _editMealBlock(block);
                                 }
@@ -507,7 +656,9 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         }
 
         // Current Setup View
-        final entries = setup.eatingBlocks.expand((b) => adapter.toEntries(b)).toList();
+        final entries = setup.eatingBlocks
+            .expand((b) => adapter.toEntries(b))
+            .toList();
 
         return Scaffold(
           backgroundColor: Colors.transparent,
@@ -518,11 +669,17 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
               children: [
                 // Top Nav Header
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   child: Row(
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.arrow_back_rounded, color: OptivusColors.textPrimary),
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: OptivusColors.textPrimary,
+                        ),
                         onPressed: widget.onBack,
                         style: IconButton.styleFrom(
                           backgroundColor: Colors.white.withValues(alpha: 0.1),
@@ -556,7 +713,10 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                         label: const Text('Change setup'),
                         style: FilledButton.styleFrom(
                           backgroundColor: OptivusColors.roseAccent,
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -575,13 +735,18 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
 
                 // Targets card
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.1),
+                      ),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -598,11 +763,18 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                             ),
                             const Text(
                               'Daily Target',
-                              style: TextStyle(fontSize: 11, color: OptivusColors.textSecondary),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: OptivusColors.textSecondary,
+                              ),
                             ),
                           ],
                         ),
-                        Container(height: 24, width: 1, color: Colors.white.withValues(alpha: 0.15)),
+                        Container(
+                          height: 24,
+                          width: 1,
+                          color: Colors.white.withValues(alpha: 0.15),
+                        ),
                         Column(
                           children: [
                             Text(
@@ -615,11 +787,18 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                             ),
                             const Text(
                               'Protein',
-                              style: TextStyle(fontSize: 11, color: OptivusColors.textSecondary),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: OptivusColors.textSecondary,
+                              ),
                             ),
                           ],
                         ),
-                        Container(height: 24, width: 1, color: Colors.white.withValues(alpha: 0.15)),
+                        Container(
+                          height: 24,
+                          width: 1,
+                          color: Colors.white.withValues(alpha: 0.15),
+                        ),
                         Column(
                           children: [
                             Text(
@@ -632,7 +811,10 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                             ),
                             const Text(
                               'Frequency',
-                              style: TextStyle(fontSize: 11, color: OptivusColors.textSecondary),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: OptivusColors.textSecondary,
+                              ),
                             ),
                           ],
                         ),

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:optivus/config/upload_config.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/onboarding_draft.dart';
@@ -477,7 +478,8 @@ class RestoredUploadsController extends StateNotifier<RestoredUploadsState> {
     } catch (_) {
       uri = null;
     }
-    if (sessionGeneration != _sessionGeneration ||
+    if (!mounted ||
+        sessionGeneration != _sessionGeneration ||
         _previewGenerations[purpose] != previewGeneration ||
         state.uid != uid) {
       return;
@@ -610,6 +612,7 @@ class UploadController extends StateNotifier<UploadState> {
     required String uid,
     required UploadedAssetPurpose purpose,
     required String sourceFeature,
+    ImageSource source = ImageSource.gallery,
   }) async {
     if (state.isBusy) return null;
     final currentAuthUser = _authRepository.currentUser;
@@ -662,7 +665,7 @@ class UploadController extends StateNotifier<UploadState> {
         clearAsset: true,
         clearError: true,
       );
-      final pickedFile = await _imagePrepareService.pickImageFile();
+      final pickedFile = await _imagePrepareService.pickImageFile(source: source);
       if (!_isCurrentOperation(uid, operationGeneration)) return null;
       if (pickedFile == null) {
         state = state.copyWith(status: UploadFlowStatus.idle, clearError: true);

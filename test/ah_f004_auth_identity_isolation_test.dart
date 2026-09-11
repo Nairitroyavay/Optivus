@@ -736,4 +736,11 @@ class _FakeR2Client implements R2UploadClient {
     required String objectKey,
     required String idToken,
   }) async {}
+
+  @override
+  Future<String> getPreviewUrl({
+    required String objectKey,
+    required String idToken,
+  }) async =>
+      'https://preview.local/$objectKey';
 }

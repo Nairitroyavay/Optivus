@@ -949,6 +949,21 @@ describe("Firestore Rules for Routine durability", () => {
       })));
     });
 
+    it("accepts routine template with source 'baseTimeline' and baseTimelineSection", async () => {
+      const owner = ownerDb("user123", true);
+      const baseTimelineItemRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-bt-1");
+      await assertSucceeds(baseTimelineItemRef.set(routineItemData("user123", "routine-bt-1", {
+        source: "baseTimeline",
+        baseTimelineSection: "classes",
+      })));
+
+      const invalidSectionRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-bt-invalid");
+      await assertFails(invalidSectionRef.set(routineItemData("user123", "routine-bt-invalid", {
+        source: "baseTimeline",
+        baseTimelineSection: 12345,
+      })));
+    });
+
     it("validates routine occurrence action and enforces immutable occurrence fields", async () => {
       const owner = ownerDb("user123", true);
       const validOccRef = owner.collection("users").doc("user123").collection("routineHistory").doc("occ-valid");

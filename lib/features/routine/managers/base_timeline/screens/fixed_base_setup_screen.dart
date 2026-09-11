@@ -93,25 +93,6 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
     return res ?? false;
   }
 
-  Future<void> _selectTime({
-    required BuildContext context,
-    required int initialMinute,
-    required ValueChanged<int> onTimePicked,
-  }) async {
-    final initialTime = TimeOfDay(
-      hour: initialMinute ~/ 60,
-      minute: initialMinute % 60,
-    );
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: initialTime,
-    );
-    if (picked != null) {
-      final minute = picked.hour * 60 + picked.minute;
-      onTimePicked(minute);
-    }
-  }
-
   void _addCustomBlock() {
     final newBlock = TimelineBlockDraft(
       id: 'fixed_${DateTime.now().millisecondsSinceEpoch}',
@@ -151,16 +132,6 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
         return true;
       },
     );
-  }
-
-  void _deleteBlock(String id) {
-    if (id == BaseTimelineDraft.fixedSleepId || id == BaseTimelineDraft.fixedBathId) {
-      return; // Required core blocks
-    }
-    setState(() {
-      _workingBlocks.removeWhere((b) => b.id == id);
-      _isDirty = true;
-    });
   }
 
   Future<void> _saveWorkingBlocks() async {
@@ -218,10 +189,14 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Failed to load setup', style: TextStyle(color: OptivusColors.textPrimary)),
+              const Text(
+                'Failed to load setup',
+                style: TextStyle(color: OptivusColors.textPrimary),
+              ),
               const SizedBox(height: 8),
               FilledButton(
-                onPressed: () => ref.read(baseTimelineSetupNotifierProvider.notifier).load(),
+                onPressed: () =>
+                    ref.read(baseTimelineSetupNotifierProvider.notifier).load(),
                 child: const Text('Retry'),
               ),
             ],
@@ -230,13 +205,20 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
       ),
       data: (setup) {
         final snapshot = setup.snapshotFor(BaseTimelineSection.fixed);
-        const adapter = FixedTimelineAdapter(accent: OptivusColors.purpleAccent);
+        const adapter = FixedTimelineAdapter(
+          accent: OptivusColors.purpleAccent,
+        );
 
         if (_isEditing) {
-          final entries = _workingBlocks.expand((b) => adapter.toEntries(b)).toList();
-          final sleepBlock = _workingBlocks.where((b) => b.id == BaseTimelineDraft.fixedSleepId).firstOrNull;
-          final bathBlock = _workingBlocks.where((b) => b.id == BaseTimelineDraft.fixedBathId).firstOrNull;
-          final customBlocks = _workingBlocks.where((b) => b.id != BaseTimelineDraft.fixedSleepId && b.id != BaseTimelineDraft.fixedBathId).toList();
+          final entries = _workingBlocks
+              .expand((b) => adapter.toEntries(b))
+              .toList();
+          final sleepBlock = _workingBlocks
+              .where((b) => b.id == BaseTimelineDraft.fixedSleepId)
+              .firstOrNull;
+          final bathBlock = _workingBlocks
+              .where((b) => b.id == BaseTimelineDraft.fixedBathId)
+              .firstOrNull;
 
           return PopScope(
             canPop: !_isDirty,
@@ -255,18 +237,26 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
                   children: [
                     // Top Bar
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       child: Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.close_rounded, color: OptivusColors.textPrimary),
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              color: OptivusColors.textPrimary,
+                            ),
                             onPressed: () async {
                               if (await _confirmDiscard()) {
                                 setState(() => _isEditing = false);
                               }
                             },
                             style: IconButton.styleFrom(
-                              backgroundColor: Colors.white.withValues(alpha: 0.1),
+                              backgroundColor: Colors.white.withValues(
+                                alpha: 0.1,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -283,17 +273,31 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
                           FilledButton(
                             style: FilledButton.styleFrom(
                               backgroundColor: OptivusColors.purpleAccent,
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             onPressed: _isSaving ? null : _saveWorkingBlocks,
                             child: _isSaving
                                 ? const SizedBox(
                                     width: 16,
                                     height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
                                   )
-                                : const Text('Save', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white)),
+                                : const Text(
+                                    'Save',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
                           ),
                         ],
                       ),
@@ -301,7 +305,10 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
 
                     // Sleep and Bath Quick Editors
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
                       child: Row(
                         children: [
                           if (sleepBlock != null)
@@ -311,16 +318,29 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
                                 decoration: BoxDecoration(
                                   color: Colors.white.withValues(alpha: 0.08),
                                   borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.1),
+                                  ),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     const Row(
                                       children: [
-                                        Icon(Icons.bedtime_rounded, size: 16, color: OptivusColors.purpleAccent),
+                                        Icon(
+                                          Icons.bedtime_rounded,
+                                          size: 16,
+                                          color: OptivusColors.purpleAccent,
+                                        ),
                                         SizedBox(width: 6),
-                                        Text('Sleep', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 13)),
+                                        Text(
+                                          'Sleep',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
+                                            fontSize: 13,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                     const SizedBox(height: 6),
@@ -328,7 +348,11 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
                                       onTap: () => _editBlock(sleepBlock),
                                       child: Text(
                                         '${TimelineUtils.formatMinute(sleepBlock.startMinute)} – ${TimelineUtils.formatMinute(sleepBlock.endMinute)}',
-                                        style: const TextStyle(color: OptivusColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+                                        style: const TextStyle(
+                                          color: OptivusColors.textSecondary,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -343,16 +367,29 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
                                 decoration: BoxDecoration(
                                   color: Colors.white.withValues(alpha: 0.08),
                                   borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.1),
+                                  ),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     const Row(
                                       children: [
-                                        Icon(Icons.bathtub_rounded, size: 16, color: OptivusColors.purpleAccent),
+                                        Icon(
+                                          Icons.bathtub_rounded,
+                                          size: 16,
+                                          color: OptivusColors.purpleAccent,
+                                        ),
                                         SizedBox(width: 6),
-                                        Text('Bath', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 13)),
+                                        Text(
+                                          'Bath',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
+                                            fontSize: 13,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                     const SizedBox(height: 6),
@@ -360,7 +397,11 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
                                       onTap: () => _editBlock(bathBlock),
                                       child: Text(
                                         '${TimelineUtils.formatMinute(bathBlock.startMinute)} – ${TimelineUtils.formatMinute(bathBlock.endMinute)}',
-                                        style: const TextStyle(color: OptivusColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+                                        style: const TextStyle(
+                                          color: OptivusColors.textSecondary,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -373,11 +414,18 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
 
                     // Add Custom Block Button
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
                       child: OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.2),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                         icon: const Icon(Icons.add_rounded, size: 18),
                         label: const Text('Add Custom Fixed Block'),
@@ -390,11 +438,14 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
                       child: FullScreenTimelineScaffold(
                         entries: entries,
                         selectedDay: _selectedDay,
-                        onDayChanged: (day) => setState(() => _selectedDay = day),
+                        onDayChanged: (day) =>
+                            setState(() => _selectedDay = day),
                         styleBuilder: (entry) => adapter.styleForEntry(entry),
                         accent: OptivusColors.purpleAccent,
                         onEntryTapped: (entry) {
-                          final block = _workingBlocks.where((b) => b.id == entry.sourceId).firstOrNull;
+                          final block = _workingBlocks
+                              .where((b) => b.id == entry.sourceId)
+                              .firstOrNull;
                           if (block != null) {
                             _editBlock(block);
                           }
@@ -410,7 +461,9 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
         }
 
         // Current Setup View
-        final entries = setup.fixedBlocks.expand((b) => adapter.toEntries(b)).toList();
+        final entries = setup.fixedBlocks
+            .expand((b) => adapter.toEntries(b))
+            .toList();
 
         return Scaffold(
           backgroundColor: Colors.transparent,
@@ -421,11 +474,17 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
               children: [
                 // Top Nav Header
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   child: Row(
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.arrow_back_rounded, color: OptivusColors.textPrimary),
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: OptivusColors.textPrimary,
+                        ),
                         onPressed: widget.onBack,
                         style: IconButton.styleFrom(
                           backgroundColor: Colors.white.withValues(alpha: 0.1),
@@ -459,7 +518,10 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
                         label: const Text('Change setup'),
                         style: FilledButton.styleFrom(
                           backgroundColor: OptivusColors.purpleAccent,
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),

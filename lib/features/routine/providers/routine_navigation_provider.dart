@@ -3,14 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 enum RoutineDetailView {
   none,
   baseTimeline,
-  @Deprecated('Use baseTimeline instead')
-  baseTimelineManager,
   classesSetup,
   workSetup,
   eatingSetup,
   fixedSetup,
   skinCareSetup,
-  importReview,
   routineSettings,
   habitSystems,
   routineHistory,
@@ -28,7 +25,6 @@ class RoutineDetailTarget {
 
   bool get isBaseTimelineRelated =>
       view == RoutineDetailView.baseTimeline ||
-      view == RoutineDetailView.baseTimelineManager ||
       view == RoutineDetailView.classesSetup ||
       view == RoutineDetailView.workSetup ||
       view == RoutineDetailView.eatingSetup ||

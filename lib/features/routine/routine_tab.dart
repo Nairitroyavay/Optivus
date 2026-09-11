@@ -88,7 +88,19 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
       setState(() => _detailStack.clear());
       return;
     }
-    setState(() => _detailStack.add(target));
+    setState(() {
+      if (_detailStack.isEmpty &&
+          (target.view == RoutineDetailView.classesSetup ||
+              target.view == RoutineDetailView.workSetup ||
+              target.view == RoutineDetailView.eatingSetup ||
+              target.view == RoutineDetailView.fixedSetup ||
+              target.view == RoutineDetailView.skinCareSetup)) {
+        _detailStack.add(
+          const RoutineDetailTarget(view: RoutineDetailView.baseTimeline),
+        );
+      }
+      _detailStack.add(target);
+    });
   }
 
   void _closeDetail() {
@@ -240,9 +252,7 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
 
   Widget _buildDetail() {
     return switch (_activeDetail.view) {
-      RoutineDetailView.baseTimeline ||
-      RoutineDetailView.baseTimelineManager =>
-        BaseTimelineScreen(
+      RoutineDetailView.baseTimeline => BaseTimelineScreen(
           onBack: _closeDetail,
           onOpenDetail: _openDetail,
         ),
@@ -261,7 +271,6 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
       RoutineDetailView.skinCareSetup => SkinCareBaseSetupScreen(
           onBack: _closeDetail,
         ),
-      RoutineDetailView.importReview => const SizedBox.shrink(),
       RoutineDetailView.routineSettings => _RoutineSettingsInline(
           onBack: _closeDetail,
           onOpenDetail: _openDetail,

@@ -198,6 +198,7 @@ service cloud.firestore {
         "proteinEstimate",
         "hardBlock",
         "allowedConflicts",
+        "baseTimelineSection",
         "onboardingProjectionId",
         "onboardingSourceItemId",
         "createdByOperationId",
@@ -254,7 +255,8 @@ service cloud.firestore {
         || value == "manual"
         || value == "aiSuggestion"
         || value == "tracker"
-        || value == "imported";
+        || value == "imported"
+        || value == "baseTimeline";
     }
 
     function validRoutineTrackerType(value) {
@@ -428,6 +430,8 @@ service cloud.firestore {
           || (data.createdByOperationId is string && data.createdByOperationId.size() > 0 && data.createdByOperationId.size() <= 128))
         && (!data.keys().hasAny(["lastMutationOperationId"])
           || (data.lastMutationOperationId is string && data.lastMutationOperationId.size() > 0 && data.lastMutationOperationId.size() <= 128))
+        && (!data.keys().hasAny(["baseTimelineSection"])
+          || (data.baseTimelineSection is string && data.baseTimelineSection.size() > 0 && data.baseTimelineSection.size() <= 50))
         && data.createdAt is timestamp
         && data.updatedAt is timestamp
         && data.schemaVersion == 1;

@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -6,12 +5,12 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/class_timeline_adapter.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/work_timeline_adapter.dart';
-import 'package:optivus/features/onboarding/timeline/models/timeline_entry.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
 
@@ -24,7 +23,8 @@ class ScheduleSetupFlow extends ConsumerStatefulWidget {
     List<TimelineBlockDraft> blocks,
     String? assetId,
     String? r2Key,
-  ) onSave;
+  )
+  onSave;
   final VoidCallback onCancel;
 
   const ScheduleSetupFlow({
@@ -106,6 +106,18 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
 
   void _handleCancel() async {
     if (await _confirmDiscard()) {
+      if (_r2Key != null && _r2Key != widget.initialR2Key) {
+        try {
+          final idToken = await ref
+              .read(authRepositoryProvider)
+              .currentIdToken();
+          if (idToken != null) {
+            await ref
+                .read(r2UploadClientProvider)
+                .deleteUpload(objectKey: _r2Key!, idToken: idToken);
+          }
+        } catch (_) {}
+      }
       widget.onCancel();
     }
   }
@@ -129,6 +141,7 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
         uid: uid,
         purpose: purpose,
         sourceFeature: 'routine_base_timeline',
+        source: source,
       );
 
       if (asset == null) {
@@ -169,7 +182,9 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
             professor: '',
             startMinute: c.startMinute,
             endMinute: c.endMinute,
-            repeatDays: c.repeatDays.isEmpty ? const [1, 2, 3, 4, 5] : c.repeatDays,
+            repeatDays: c.repeatDays.isEmpty
+                ? const [1, 2, 3, 4, 5]
+                : c.repeatDays,
           );
         }).toList();
 
@@ -184,7 +199,8 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
         if (mounted) {
           setState(() {
             _isExtracting = false;
-            _errorMessage = result?.warnings.firstOrNull ??
+            _errorMessage =
+                result?.warnings.firstOrNull ??
                 'No blocks detected. You can add blocks manually.';
           });
         }
@@ -222,16 +238,28 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
               ),
               const SizedBox(height: 16),
               ListTile(
-                leading: const Icon(Icons.photo_library_rounded, color: OptivusColors.aquaAccent),
-                title: const Text('Choose from Gallery', style: TextStyle(color: OptivusColors.textPrimary)),
+                leading: const Icon(
+                  Icons.photo_library_rounded,
+                  color: OptivusColors.aquaAccent,
+                ),
+                title: const Text(
+                  'Choose from Gallery',
+                  style: TextStyle(color: OptivusColors.textPrimary),
+                ),
                 onTap: () {
                   Navigator.of(ctx).pop();
                   _pickAndUploadPhoto(ImageSource.gallery);
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.camera_alt_rounded, color: OptivusColors.aquaAccent),
-                title: const Text('Take a Photo', style: TextStyle(color: OptivusColors.textPrimary)),
+                leading: const Icon(
+                  Icons.camera_alt_rounded,
+                  color: OptivusColors.aquaAccent,
+                ),
+                title: const Text(
+                  'Take a Photo',
+                  style: TextStyle(color: OptivusColors.textPrimary),
+                ),
                 onTap: () {
                   Navigator.of(ctx).pop();
                   _pickAndUploadPhoto(ImageSource.camera);
@@ -329,11 +357,17 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
             children: [
               // ── Header Bar ──
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.close_rounded, color: OptivusColors.textPrimary),
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: OptivusColors.textPrimary,
+                      ),
                       onPressed: _handleCancel,
                       style: IconButton.styleFrom(
                         backgroundColor: Colors.white.withValues(alpha: 0.1),
@@ -365,13 +399,21 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
                     FilledButton(
                       style: FilledButton.styleFrom(
                         backgroundColor: widget.config.accent,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       onPressed: _handleSave,
                       child: const Text(
                         'Save',
-                        style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ],
@@ -380,14 +422,21 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
 
               // ── Action Buttons ──
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
                 child: Row(
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: widget.config.accent.withValues(alpha: 0.5)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          side: BorderSide(
+                            color: widget.config.accent.withValues(alpha: 0.5),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           padding: const EdgeInsets.symmetric(vertical: 10),
                         ),
                         icon: const Icon(Icons.camera_alt_outlined, size: 18),
@@ -399,8 +448,12 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
                     Expanded(
                       child: OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.25),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           padding: const EdgeInsets.symmetric(vertical: 10),
                         ),
                         icon: const Icon(Icons.add_rounded, size: 18),
@@ -414,10 +467,16 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
 
               if (_errorMessage != null)
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
                   child: Text(
                     _errorMessage!,
-                    style: const TextStyle(color: OptivusColors.danger, fontSize: 12),
+                    style: const TextStyle(
+                      color: OptivusColors.danger,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
 
@@ -443,16 +502,20 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
                     : FullScreenTimelineScaffold(
                         entries: entries,
                         selectedDay: _selectedDay,
-                        onDayChanged: (day) => setState(() => _selectedDay = day),
+                        onDayChanged: (day) =>
+                            setState(() => _selectedDay = day),
                         styleBuilder: (entry) => adapter.styleForEntry(entry),
                         onEntryTapped: (entry) {
-                          final block = _blocks.where((b) => b.id == entry.sourceId).firstOrNull;
+                          final block = _blocks
+                              .where((b) => b.id == entry.sourceId)
+                              .firstOrNull;
                           if (block != null) {
                             _editBlock(block);
                           }
                         },
                         accent: widget.config.accent,
-                        emptyDayMessage: 'No ${widget.config.sectionLabel.toLowerCase()} on this day.',
+                        emptyDayMessage:
+                            'No ${widget.config.sectionLabel.toLowerCase()} on this day.',
                       ),
               ),
             ],

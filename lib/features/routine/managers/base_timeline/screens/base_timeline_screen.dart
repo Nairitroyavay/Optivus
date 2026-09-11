@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
@@ -12,11 +11,7 @@ class BaseTimelineScreen extends ConsumerWidget {
   final VoidCallback? onBack;
   final ValueChanged<RoutineDetailTarget>? onOpenDetail;
 
-  const BaseTimelineScreen({
-    super.key,
-    this.onBack,
-    this.onOpenDetail,
-  });
+  const BaseTimelineScreen({super.key, this.onBack, this.onOpenDetail});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -30,12 +25,7 @@ class BaseTimelineScreen extends ConsumerWidget {
       body: SafeArea(
         bottom: false,
         child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            16,
-            20,
-            bottomReserve,
-          ),
+          padding: EdgeInsets.fromLTRB(20, 16, 20, bottomReserve),
           children: [
             // Top Nav Header
             Row(
@@ -110,14 +100,17 @@ class BaseTimelineScreen extends ConsumerWidget {
                 ),
               ),
               data: (setup) {
-                final classSnap =
-                    setup.snapshotFor(BaseTimelineSection.classes);
+                final classSnap = setup.snapshotFor(
+                  BaseTimelineSection.classes,
+                );
                 final workSnap = setup.snapshotFor(BaseTimelineSection.work);
-                final eatingSnap =
-                    setup.snapshotFor(BaseTimelineSection.eating);
+                final eatingSnap = setup.snapshotFor(
+                  BaseTimelineSection.eating,
+                );
                 final fixedSnap = setup.snapshotFor(BaseTimelineSection.fixed);
-                final skinSnap =
-                    setup.snapshotFor(BaseTimelineSection.skinCare);
+                final skinSnap = setup.snapshotFor(
+                  BaseTimelineSection.skinCare,
+                );
 
                 return LiquidGlassPanel(
                   padding: const EdgeInsets.symmetric(

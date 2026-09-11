@@ -8,7 +8,6 @@ import 'package:optivus/features/routine/managers/base_timeline/models/base_time
 import 'package:optivus/features/routine/managers/base_timeline/screens/schedule_setup_flow.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
-import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/repositories/base_timeline_setup_repository.dart';
 import 'package:optivus/state/app_state.dart';
 
@@ -26,7 +25,6 @@ class _ClassesBaseSetupScreenState
     extends ConsumerState<ClassesBaseSetupScreen> {
   bool _isEditing = false;
   int _selectedDay = 1;
-  bool _isSaving = false;
 
   @override
   Widget build(BuildContext context) {
@@ -43,10 +41,14 @@ class _ClassesBaseSetupScreenState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Failed to load setup', style: TextStyle(color: OptivusColors.textPrimary)),
+              const Text(
+                'Failed to load setup',
+                style: TextStyle(color: OptivusColors.textPrimary),
+              ),
               const SizedBox(height: 8),
               FilledButton(
-                onPressed: () => ref.read(baseTimelineSetupNotifierProvider.notifier).load(),
+                onPressed: () =>
+                    ref.read(baseTimelineSetupNotifierProvider.notifier).load(),
                 child: const Text('Retry'),
               ),
             ],
@@ -64,11 +66,12 @@ class _ClassesBaseSetupScreenState
             initialR2Key: setup.classLogicalAssetR2Key,
             onCancel: () => setState(() => _isEditing = false),
             onSave: (newBlocks, assetId, r2Key) async {
-              setState(() => _isSaving = true);
+              final messenger = ScaffoldMessenger.of(context);
               try {
                 final uid = ref.read(userProfileProvider).uid;
-                final coordinator =
-                    ref.read(baseTimelineTransactionCoordinatorProvider);
+                final coordinator = ref.read(
+                  baseTimelineTransactionCoordinatorProvider,
+                );
                 await coordinator.replaceSection(
                   uid: uid,
                   section: BaseTimelineSection.classes,
@@ -84,10 +87,9 @@ class _ClassesBaseSetupScreenState
                 );
                 if (mounted) {
                   setState(() {
-                    _isSaving = false;
                     _isEditing = false;
                   });
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  messenger.showSnackBar(
                     const SnackBar(
                       content: Text('Classes schedule updated successfully'),
                       duration: Duration(seconds: 2),
@@ -96,8 +98,7 @@ class _ClassesBaseSetupScreenState
                 }
               } catch (err) {
                 if (mounted) {
-                  setState(() => _isSaving = false);
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  messenger.showSnackBar(
                     SnackBar(
                       content: Text('Failed to update classes: $err'),
                       backgroundColor: OptivusColors.danger,
@@ -119,11 +120,15 @@ class _ClassesBaseSetupScreenState
             professor: '',
             startMinute: b.startMinute,
             endMinute: b.endMinute,
-            repeatDays: b.repeatDays.isEmpty ? const [1, 2, 3, 4, 5] : b.repeatDays,
+            repeatDays: b.repeatDays.isEmpty
+                ? const [1, 2, 3, 4, 5]
+                : b.repeatDays,
           );
         }).toList();
 
-        final entries = routineBlocks.expand((b) => adapter.toEntries(b)).toList();
+        final entries = routineBlocks
+            .expand((b) => adapter.toEntries(b))
+            .toList();
 
         return Scaffold(
           backgroundColor: Colors.transparent,
@@ -134,11 +139,17 @@ class _ClassesBaseSetupScreenState
               children: [
                 // Top Nav Header
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   child: Row(
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.arrow_back_rounded, color: OptivusColors.textPrimary),
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: OptivusColors.textPrimary,
+                        ),
                         onPressed: widget.onBack,
                         style: IconButton.styleFrom(
                           backgroundColor: Colors.white.withValues(alpha: 0.1),
@@ -172,7 +183,10 @@ class _ClassesBaseSetupScreenState
                         label: const Text('Change setup'),
                         style: FilledButton.styleFrom(
                           backgroundColor: OptivusColors.blueAccent,
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),

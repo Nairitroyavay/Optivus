@@ -21,8 +21,8 @@ class AuthenticatedR2PreviewResolver implements UploadedAssetPreviewResolver {
     required String uid,
     required UploadedAsset asset,
   }) async {
-    final r2Key = asset.r2Key?.trim();
-    if (r2Key == null || r2Key.isEmpty) {
+    final r2Key = asset.r2Key.trim();
+    if (r2Key.isEmpty) {
       return null;
     }
     return resolveR2Key(uid: uid, r2Key: r2Key);

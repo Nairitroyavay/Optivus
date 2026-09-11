@@ -2,8 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/skin_care_product_draft.dart';
-
 
 /// Durable runtime Base Timeline configuration stored at
 /// `users/{uid}/baseTimelineSetup/current`.
@@ -13,6 +13,13 @@ class BaseTimelineSetup {
   final String uid;
   final DateTime updatedAt;
   final int schemaVersion;
+
+  // ── Tracked Routine Item IDs ──────────────────────────────────
+  final List<String> classRoutineItemIds;
+  final List<String> workRoutineItemIds;
+  final List<String> eatingRoutineItemIds;
+  final List<String> fixedRoutineItemIds;
+  final List<String> skinCareRoutineItemIds;
 
   // ── Classes ──────────────────────────────────────────────────
   final String? classLogicalAssetId;
@@ -70,6 +77,11 @@ class BaseTimelineSetup {
     required this.uid,
     required this.updatedAt,
     this.schemaVersion = currentSchemaVersion,
+    this.classRoutineItemIds = const [],
+    this.workRoutineItemIds = const [],
+    this.eatingRoutineItemIds = const [],
+    this.fixedRoutineItemIds = const [],
+    this.skinCareRoutineItemIds = const [],
     this.classLogicalAssetId,
     this.classLogicalAssetR2Key,
     this.classBlocks = const [],
@@ -114,6 +126,46 @@ class BaseTimelineSetup {
     this.skinCareSpecialCareNotes = const [],
   });
 
+  List<TimelineBlockDraft> get allBlocks => [
+    ...classBlocks,
+    ...workBlocks,
+    ...eatingBlocks,
+    ...fixedBlocks,
+    ...skinCareBlocks,
+  ];
+
+  BaseTimelineDraft toBaseTimelineDraft() {
+    return BaseTimelineDraft(
+      blocks: allBlocks,
+      mealsPerDay: mealsPerDay,
+      mealPlanningGoal: mealPlanningGoal,
+      foodType: foodType,
+      eatingMode: eatingMode,
+      foodStyleCustomText: foodStyleCustomText,
+      mealBudget: mealBudget,
+      cookingAbility: cookingAbility,
+      breakfastMinute: breakfastMinute,
+      lunchMinute: lunchMinute,
+      dinnerMinute: dinnerMinute,
+      snackMinute: snackMinute,
+      extraSnackMinute: extraSnackMinute,
+      skinCareSetupPath: skinCareSetupPath,
+      skinCareSkipped: skinCareSkipped,
+      skinCareProductNames: skinCareProductNames,
+      skinCareSkinType: skinCareSkinType,
+      skinCareProblems: skinCareProblems,
+      skinCareBudget: skinCareBudget,
+      skinCarePreference: skinCarePreference,
+      skinCareReviewedProducts: skinCareReviewedProducts,
+      skinCareSelectedProductNames: skinCareSelectedProductNames,
+      skinCareProductRecommendations: skinCareProductRecommendations,
+      skinCareSpecialCareNotes: skinCareSpecialCareNotes,
+      skinCareFacePhotoAssetId: skinCareFacePhotoAssetId,
+      skinCareFacePhotoR2Key: skinCareFacePhotoR2Key,
+      skinCareFacePhotoSkipped: skinCareFacePhotoSkipped,
+    );
+  }
+
   BaseTimelineSectionSnapshot snapshotFor(BaseTimelineSection section) {
     return switch (section) {
       BaseTimelineSection.classes => _classesSnapshot(),
@@ -126,13 +178,14 @@ class BaseTimelineSetup {
 
   BaseTimelineSectionSnapshot _classesSnapshot() {
     final configured = classBlocks.isNotEmpty;
-    final origin = (classLogicalAssetId != null || classLogicalAssetR2Key != null)
+    final origin =
+        (classLogicalAssetId != null || classLogicalAssetR2Key != null)
         ? BaseSetupOrigin.photo
         : (configured ? BaseSetupOrigin.manual : BaseSetupOrigin.notConfigured);
     final summary = configured
         ? (origin == BaseSetupOrigin.photo
-            ? 'Timetable photo · ${classBlocks.length} blocks'
-            : '${classBlocks.length} weekly blocks')
+              ? 'Timetable photo · ${classBlocks.length} blocks'
+              : '${classBlocks.length} weekly blocks')
         : 'Not set up';
     return BaseTimelineSectionSnapshot(
       section: BaseTimelineSection.classes,
@@ -152,8 +205,8 @@ class BaseTimelineSetup {
         : (configured ? BaseSetupOrigin.manual : BaseSetupOrigin.notConfigured);
     final summary = configured
         ? (origin == BaseSetupOrigin.photo
-            ? 'Schedule photo · ${workBlocks.length} blocks'
-            : '${workBlocks.length} weekly blocks')
+              ? 'Schedule photo · ${workBlocks.length} blocks'
+              : '${workBlocks.length} weekly blocks')
         : 'Not set up';
     return BaseTimelineSectionSnapshot(
       section: BaseTimelineSection.work,
@@ -168,14 +221,17 @@ class BaseTimelineSetup {
 
   BaseTimelineSectionSnapshot _eatingSnapshot() {
     final configured = eatingBlocks.isNotEmpty;
-    final isPhoto = eatingSetupPath == 'has_routine' || eatingPhotoAssetId != null;
+    final isPhoto =
+        eatingSetupPath == 'has_routine' || eatingPhotoAssetId != null;
     final origin = !configured
         ? BaseSetupOrigin.notConfigured
-        : (isPhoto ? BaseSetupOrigin.photo : BaseSetupOrigin.generatedFromAnswers);
+        : (isPhoto
+              ? BaseSetupOrigin.photo
+              : BaseSetupOrigin.generatedFromAnswers);
     final summary = configured
         ? (origin == BaseSetupOrigin.photo
-            ? 'Imported from meal plan · ${mealsPerDay ?? _distinctMealCount(eatingBlocks)} meals/day'
-            : 'Built for me · ${mealsPerDay ?? _distinctMealCount(eatingBlocks)} meals/day')
+              ? 'Imported from meal plan · ${mealsPerDay ?? _distinctMealCount(eatingBlocks)} meals/day'
+              : 'Built for me · ${mealsPerDay ?? _distinctMealCount(eatingBlocks)} meals/day')
         : 'Not set up';
     return BaseTimelineSectionSnapshot(
       section: BaseTimelineSection.eating,
@@ -213,12 +269,20 @@ class BaseTimelineSetup {
 
   BaseTimelineSectionSnapshot _fixedSnapshot() {
     final configured = fixedBlocks.isNotEmpty;
-    final origin = configured ? BaseSetupOrigin.manual : BaseSetupOrigin.notConfigured;
-    final nonRequiredCount = fixedBlocks.where(
-      (b) => b.id != BaseTimelineDraft.fixedSleepId && b.id != BaseTimelineDraft.fixedBathId,
-    ).length;
+    final origin = configured
+        ? BaseSetupOrigin.manual
+        : BaseSetupOrigin.notConfigured;
+    final nonRequiredCount = fixedBlocks
+        .where(
+          (b) =>
+              b.id != BaseTimelineDraft.fixedSleepId &&
+              b.id != BaseTimelineDraft.fixedBathId,
+        )
+        .length;
     final summary = configured
-        ? (nonRequiredCount > 0 ? 'Sleep, Bath + $nonRequiredCount' : 'Sleep, Bath')
+        ? (nonRequiredCount > 0
+              ? 'Sleep, Bath + $nonRequiredCount'
+              : 'Sleep, Bath')
         : 'Not set up';
     return BaseTimelineSectionSnapshot(
       section: BaseTimelineSection.fixed,
@@ -249,8 +313,11 @@ class BaseTimelineSetup {
         summary: 'Not set up',
       );
     }
-    final isProducts = skinCareSetupPath == 'products' || skinCareProductPhotoAssetId != null;
-    final origin = isProducts ? BaseSetupOrigin.photo : BaseSetupOrigin.generatedFromAnswers;
+    final isProducts =
+        skinCareSetupPath == 'products' || skinCareProductPhotoAssetId != null;
+    final origin = isProducts
+        ? BaseSetupOrigin.photo
+        : BaseSetupOrigin.generatedFromAnswers;
     final summary = isProducts
         ? 'Using my products'
         : 'Built for you · ${skinCareSelectedProductNames.length} products';
@@ -259,15 +326,20 @@ class BaseTimelineSetup {
       origin: origin,
       configured: true,
       blocks: skinCareBlocks,
-      sourceAssetId: isProducts ? skinCareProductPhotoAssetId : skinCareFacePhotoAssetId,
-      sourceR2Key: isProducts ? skinCareProductPhotoR2Key : skinCareFacePhotoR2Key,
+      sourceAssetId: isProducts
+          ? skinCareProductPhotoAssetId
+          : skinCareFacePhotoAssetId,
+      sourceR2Key: isProducts
+          ? skinCareProductPhotoR2Key
+          : skinCareFacePhotoR2Key,
       sourceDetails: {
         if (skinCareSkinType != null) 'skinType': skinCareSkinType,
         if (skinCareProblems.isNotEmpty) 'problems': skinCareProblems,
         if (skinCareBudget != null) 'budget': skinCareBudget,
         if (skinCarePreference != null) 'preference': skinCarePreference,
         if (skinCareProductNames != null) 'productNames': skinCareProductNames,
-        if (skinCareSelectedProductNames.isNotEmpty) 'selectedProducts': skinCareSelectedProductNames,
+        if (skinCareSelectedProductNames.isNotEmpty)
+          'selectedProducts': skinCareSelectedProductNames,
       },
       summary: summary,
     );
@@ -277,6 +349,11 @@ class BaseTimelineSetup {
     String? uid,
     DateTime? updatedAt,
     int? schemaVersion,
+    List<String>? classRoutineItemIds,
+    List<String>? workRoutineItemIds,
+    List<String>? eatingRoutineItemIds,
+    List<String>? fixedRoutineItemIds,
+    List<String>? skinCareRoutineItemIds,
     String? classLogicalAssetId,
     bool clearClassLogicalAssetId = false,
     String? classLogicalAssetR2Key,
@@ -334,11 +411,25 @@ class BaseTimelineSetup {
       uid: uid ?? this.uid,
       updatedAt: updatedAt ?? this.updatedAt,
       schemaVersion: schemaVersion ?? this.schemaVersion,
-      classLogicalAssetId: clearClassLogicalAssetId ? null : (classLogicalAssetId ?? this.classLogicalAssetId),
-      classLogicalAssetR2Key: clearClassLogicalAssetR2Key ? null : (classLogicalAssetR2Key ?? this.classLogicalAssetR2Key),
+      classRoutineItemIds: classRoutineItemIds ?? this.classRoutineItemIds,
+      workRoutineItemIds: workRoutineItemIds ?? this.workRoutineItemIds,
+      eatingRoutineItemIds: eatingRoutineItemIds ?? this.eatingRoutineItemIds,
+      fixedRoutineItemIds: fixedRoutineItemIds ?? this.fixedRoutineItemIds,
+      skinCareRoutineItemIds:
+          skinCareRoutineItemIds ?? this.skinCareRoutineItemIds,
+      classLogicalAssetId: clearClassLogicalAssetId
+          ? null
+          : (classLogicalAssetId ?? this.classLogicalAssetId),
+      classLogicalAssetR2Key: clearClassLogicalAssetR2Key
+          ? null
+          : (classLogicalAssetR2Key ?? this.classLogicalAssetR2Key),
       classBlocks: classBlocks ?? this.classBlocks,
-      workLogicalAssetId: clearWorkLogicalAssetId ? null : (workLogicalAssetId ?? this.workLogicalAssetId),
-      workLogicalAssetR2Key: clearWorkLogicalAssetR2Key ? null : (workLogicalAssetR2Key ?? this.workLogicalAssetR2Key),
+      workLogicalAssetId: clearWorkLogicalAssetId
+          ? null
+          : (workLogicalAssetId ?? this.workLogicalAssetId),
+      workLogicalAssetR2Key: clearWorkLogicalAssetR2Key
+          ? null
+          : (workLogicalAssetR2Key ?? this.workLogicalAssetR2Key),
       workBlocks: workBlocks ?? this.workBlocks,
       eatingSetupPath: eatingSetupPath ?? this.eatingSetupPath,
       eatingBlocks: eatingBlocks ?? this.eatingBlocks,
@@ -356,26 +447,43 @@ class BaseTimelineSetup {
       extraSnackMinute: extraSnackMinute ?? this.extraSnackMinute,
       targetCalories: targetCalories ?? this.targetCalories,
       targetProtein: targetProtein ?? this.targetProtein,
-      eatingPhotoAssetId: clearEatingPhotoAssetId ? null : (eatingPhotoAssetId ?? this.eatingPhotoAssetId),
-      eatingPhotoR2Key: clearEatingPhotoR2Key ? null : (eatingPhotoR2Key ?? this.eatingPhotoR2Key),
+      eatingPhotoAssetId: clearEatingPhotoAssetId
+          ? null
+          : (eatingPhotoAssetId ?? this.eatingPhotoAssetId),
+      eatingPhotoR2Key: clearEatingPhotoR2Key
+          ? null
+          : (eatingPhotoR2Key ?? this.eatingPhotoR2Key),
       fixedBlocks: fixedBlocks ?? this.fixedBlocks,
       skinCareSetupPath: skinCareSetupPath ?? this.skinCareSetupPath,
       skinCareSkipped: skinCareSkipped ?? this.skinCareSkipped,
       skinCareBlocks: skinCareBlocks ?? this.skinCareBlocks,
       skinCareProductNames: skinCareProductNames ?? this.skinCareProductNames,
-      skinCareProductPhotoAssetId: clearSkinCareProductPhotoAssetId ? null : (skinCareProductPhotoAssetId ?? this.skinCareProductPhotoAssetId),
-      skinCareProductPhotoR2Key: clearSkinCareProductPhotoR2Key ? null : (skinCareProductPhotoR2Key ?? this.skinCareProductPhotoR2Key),
-      skinCareReviewedProducts: skinCareReviewedProducts ?? this.skinCareReviewedProducts,
-      skinCareFacePhotoAssetId: clearSkinCareFacePhotoAssetId ? null : (skinCareFacePhotoAssetId ?? this.skinCareFacePhotoAssetId),
-      skinCareFacePhotoR2Key: clearSkinCareFacePhotoR2Key ? null : (skinCareFacePhotoR2Key ?? this.skinCareFacePhotoR2Key),
-      skinCareFacePhotoSkipped: skinCareFacePhotoSkipped ?? this.skinCareFacePhotoSkipped,
+      skinCareProductPhotoAssetId: clearSkinCareProductPhotoAssetId
+          ? null
+          : (skinCareProductPhotoAssetId ?? this.skinCareProductPhotoAssetId),
+      skinCareProductPhotoR2Key: clearSkinCareProductPhotoR2Key
+          ? null
+          : (skinCareProductPhotoR2Key ?? this.skinCareProductPhotoR2Key),
+      skinCareReviewedProducts:
+          skinCareReviewedProducts ?? this.skinCareReviewedProducts,
+      skinCareFacePhotoAssetId: clearSkinCareFacePhotoAssetId
+          ? null
+          : (skinCareFacePhotoAssetId ?? this.skinCareFacePhotoAssetId),
+      skinCareFacePhotoR2Key: clearSkinCareFacePhotoR2Key
+          ? null
+          : (skinCareFacePhotoR2Key ?? this.skinCareFacePhotoR2Key),
+      skinCareFacePhotoSkipped:
+          skinCareFacePhotoSkipped ?? this.skinCareFacePhotoSkipped,
       skinCareSkinType: skinCareSkinType ?? this.skinCareSkinType,
       skinCareProblems: skinCareProblems ?? this.skinCareProblems,
       skinCareBudget: skinCareBudget ?? this.skinCareBudget,
       skinCarePreference: skinCarePreference ?? this.skinCarePreference,
-      skinCareSelectedProductNames: skinCareSelectedProductNames ?? this.skinCareSelectedProductNames,
-      skinCareProductRecommendations: skinCareProductRecommendations ?? this.skinCareProductRecommendations,
-      skinCareSpecialCareNotes: skinCareSpecialCareNotes ?? this.skinCareSpecialCareNotes,
+      skinCareSelectedProductNames:
+          skinCareSelectedProductNames ?? this.skinCareSelectedProductNames,
+      skinCareProductRecommendations:
+          skinCareProductRecommendations ?? this.skinCareProductRecommendations,
+      skinCareSpecialCareNotes:
+          skinCareSpecialCareNotes ?? this.skinCareSpecialCareNotes,
     );
   }
 
@@ -384,6 +492,11 @@ class BaseTimelineSetup {
       'uid': uid,
       'updatedAt': Timestamp.fromDate(updatedAt),
       'schemaVersion': schemaVersion,
+      'classRoutineItemIds': classRoutineItemIds,
+      'workRoutineItemIds': workRoutineItemIds,
+      'eatingRoutineItemIds': eatingRoutineItemIds,
+      'fixedRoutineItemIds': fixedRoutineItemIds,
+      'skinCareRoutineItemIds': skinCareRoutineItemIds,
       'classLogicalAssetId': classLogicalAssetId,
       'classLogicalAssetR2Key': classLogicalAssetR2Key,
       'classBlocks': classBlocks.map((b) => b.toMap()).toList(),
@@ -415,7 +528,9 @@ class BaseTimelineSetup {
       'skinCareProductNames': skinCareProductNames,
       'skinCareProductPhotoAssetId': skinCareProductPhotoAssetId,
       'skinCareProductPhotoR2Key': skinCareProductPhotoR2Key,
-      'skinCareReviewedProducts': skinCareReviewedProducts.map((p) => p.toMap()).toList(),
+      'skinCareReviewedProducts': skinCareReviewedProducts
+          .map((p) => p.toMap())
+          .toList(),
       'skinCareFacePhotoAssetId': skinCareFacePhotoAssetId,
       'skinCareFacePhotoR2Key': skinCareFacePhotoR2Key,
       'skinCareFacePhotoSkipped': skinCareFacePhotoSkipped,
@@ -424,12 +539,17 @@ class BaseTimelineSetup {
       'skinCareBudget': skinCareBudget,
       'skinCarePreference': skinCarePreference,
       'skinCareSelectedProductNames': skinCareSelectedProductNames,
-      'skinCareProductRecommendations': skinCareProductRecommendations.map((r) => r.toMap()).toList(),
+      'skinCareProductRecommendations': skinCareProductRecommendations
+          .map((r) => r.toMap())
+          .toList(),
       'skinCareSpecialCareNotes': skinCareSpecialCareNotes,
     };
   }
 
-  factory BaseTimelineSetup.fromMap(Map<String, dynamic> map, {required String uid}) {
+  factory BaseTimelineSetup.fromMap(
+    Map<String, dynamic> map, {
+    required String uid,
+  }) {
     DateTime updated = DateTime.now();
     final rawUpdated = map['updatedAt'];
     if (rawUpdated is Timestamp) {
@@ -447,9 +567,37 @@ class BaseTimelineSetup {
     }
 
     return BaseTimelineSetup(
-      uid: (map['uid'] as String?)?.trim().isNotEmpty == true ? map['uid'] as String : uid,
+      uid: (map['uid'] as String?)?.trim().isNotEmpty == true
+          ? map['uid'] as String
+          : uid,
       updatedAt: updated,
-      schemaVersion: (map['schemaVersion'] as num?)?.toInt() ?? currentSchemaVersion,
+      schemaVersion:
+          (map['schemaVersion'] as num?)?.toInt() ?? currentSchemaVersion,
+      classRoutineItemIds:
+          (map['classRoutineItemIds'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      workRoutineItemIds:
+          (map['workRoutineItemIds'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      eatingRoutineItemIds:
+          (map['eatingRoutineItemIds'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      fixedRoutineItemIds:
+          (map['fixedRoutineItemIds'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      skinCareRoutineItemIds:
+          (map['skinCareRoutineItemIds'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
       classLogicalAssetId: map['classLogicalAssetId'] as String?,
       classLogicalAssetR2Key: map['classLogicalAssetR2Key'] as String?,
       classBlocks: parseBlocks(map['classBlocks']),
@@ -479,27 +627,51 @@ class BaseTimelineSetup {
       skinCareSkipped: map['skinCareSkipped'] as bool? ?? false,
       skinCareBlocks: parseBlocks(map['skinCareBlocks']),
       skinCareProductNames: map['skinCareProductNames'] as String?,
-      skinCareProductPhotoAssetId: map['skinCareProductPhotoAssetId'] as String?,
+      skinCareProductPhotoAssetId:
+          map['skinCareProductPhotoAssetId'] as String?,
       skinCareProductPhotoR2Key: map['skinCareProductPhotoR2Key'] as String?,
-      skinCareReviewedProducts: (map['skinCareReviewedProducts'] as List?)
+      skinCareReviewedProducts:
+          (map['skinCareReviewedProducts'] as List?)
               ?.whereType<Map>()
-              .map((m) => SkinCareDetectedProduct.fromMap(Map<String, dynamic>.from(m)))
+              .map(
+                (m) => SkinCareDetectedProduct.fromMap(
+                  Map<String, dynamic>.from(m),
+                ),
+              )
               .toList() ??
           const [],
       skinCareFacePhotoAssetId: map['skinCareFacePhotoAssetId'] as String?,
       skinCareFacePhotoR2Key: map['skinCareFacePhotoR2Key'] as String?,
-      skinCareFacePhotoSkipped: map['skinCareFacePhotoSkipped'] as bool? ?? false,
+      skinCareFacePhotoSkipped:
+          map['skinCareFacePhotoSkipped'] as bool? ?? false,
       skinCareSkinType: map['skinCareSkinType'] as String?,
-      skinCareProblems: (map['skinCareProblems'] as List?)?.map((e) => e.toString()).toList() ?? const [],
-      skinCareBudget: map['skinCareBudget'] as String?,
-      skinCarePreference: map['skinCarePreference'] as String?,
-      skinCareSelectedProductNames: (map['skinCareSelectedProductNames'] as List?)?.map((e) => e.toString()).toList() ?? const [],
-      skinCareProductRecommendations: (map['skinCareProductRecommendations'] as List?)
-              ?.whereType<Map>()
-              .map((m) => SkinCareProductRecommendationDraft.fromMap(Map<String, dynamic>.from(m)))
+      skinCareProblems:
+          (map['skinCareProblems'] as List?)
+              ?.map((e) => e.toString())
               .toList() ??
           const [],
-      skinCareSpecialCareNotes: (map['skinCareSpecialCareNotes'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      skinCareBudget: map['skinCareBudget'] as String?,
+      skinCarePreference: map['skinCarePreference'] as String?,
+      skinCareSelectedProductNames:
+          (map['skinCareSelectedProductNames'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      skinCareProductRecommendations:
+          (map['skinCareProductRecommendations'] as List?)
+              ?.whereType<Map>()
+              .map(
+                (m) => SkinCareProductRecommendationDraft.fromMap(
+                  Map<String, dynamic>.from(m),
+                ),
+              )
+              .toList() ??
+          const [],
+      skinCareSpecialCareNotes:
+          (map['skinCareSpecialCareNotes'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
     );
   }
 
@@ -509,43 +681,76 @@ class BaseTimelineSetup {
   ) {
     final base = draft.baseTimeline;
     final blocks = base.blocks;
-    final classBlocks = blocks.where((b) => b.section.toLowerCase().contains('class')).toList();
-    final workBlocks = blocks.where((b) => b.section.toLowerCase().contains('job') || b.section.toLowerCase().contains('work')).toList();
-    final eatingBlocks = blocks.where((b) => b.section.toLowerCase().contains('eat') || b.section.toLowerCase().contains('meal')).toList();
-    final fixedBlocks = blocks.where((b) => b.section.toLowerCase().contains('fixed') || b.section.toLowerCase().contains('sleep') || b.section.toLowerCase().contains('bath')).toList();
-    final skinCareBlocks = blocks.where((b) => b.section.toLowerCase().contains('skin')).toList();
+    final classBlocks = blocks
+        .where((b) => b.section.toLowerCase().contains('class'))
+        .toList();
+    final workBlocks = blocks
+        .where(
+          (b) =>
+              b.section.toLowerCase().contains('job') ||
+              b.section.toLowerCase().contains('work'),
+        )
+        .toList();
+    final eatingBlocks = blocks
+        .where(
+          (b) =>
+              b.section.toLowerCase().contains('eat') ||
+              b.section.toLowerCase().contains('meal'),
+        )
+        .toList();
+    final fixedBlocks = blocks
+        .where(
+          (b) =>
+              b.section.toLowerCase().contains('fixed') ||
+              b.section.toLowerCase().contains('sleep') ||
+              b.section.toLowerCase().contains('bath'),
+        )
+        .toList();
+    final skinCareBlocks = blocks
+        .where((b) => b.section.toLowerCase().contains('skin'))
+        .toList();
 
-    String? classAssetId;
-    String? classR2Key;
-    String? classLocalPath;
-    String? workAssetId;
-    String? workR2Key;
-    String? workLocalPath;
+    String? classAssetId = base.classLogicalAssetId;
+    String? classR2Key = base.classLogicalAssetR2Key;
+    String? workAssetId = base.workLogicalAssetId;
+    String? workR2Key = base.workLogicalAssetR2Key;
+    String? eatingAssetId;
+    String? eatingR2Key;
 
     for (final imp in base.pendingFutureImports) {
       final s = imp.section.toLowerCase();
       if (s.contains('class')) {
-        classAssetId = imp.uploadedAssetId;
-        classR2Key = imp.uploadedAssetR2Key;
-        classLocalPath = imp.uploadPlaceholderPath;
+        classAssetId ??= imp.uploadedAssetId;
+        classR2Key ??= imp.uploadedAssetR2Key;
       } else if (s.contains('job') || s.contains('work')) {
-        workAssetId = imp.uploadedAssetId;
-        workR2Key = imp.uploadedAssetR2Key;
-        workLocalPath = imp.uploadPlaceholderPath;
+        workAssetId ??= imp.uploadedAssetId;
+        workR2Key ??= imp.uploadedAssetR2Key;
+      } else if (s.contains('eat') || s.contains('meal')) {
+        eatingAssetId ??= imp.uploadedAssetId;
+        eatingR2Key ??= imp.uploadedAssetR2Key;
       }
     }
+
+    final targets = draft.canonicalNutritionTargets();
 
     return BaseTimelineSetup(
       uid: uid,
       updatedAt: draft.updatedAt ?? DateTime.now(),
       schemaVersion: currentSchemaVersion,
+      classRoutineItemIds: classBlocks.map((b) => b.id).toList(),
+      workRoutineItemIds: workBlocks.map((b) => b.id).toList(),
+      eatingRoutineItemIds: eatingBlocks.map((b) => b.id).toList(),
+      fixedRoutineItemIds: fixedBlocks.map((b) => b.id).toList(),
+      skinCareRoutineItemIds: skinCareBlocks.map((b) => b.id).toList(),
       classLogicalAssetId: classAssetId,
       classLogicalAssetR2Key: classR2Key,
       classBlocks: classBlocks,
       workLogicalAssetId: workAssetId,
       workLogicalAssetR2Key: workR2Key,
       workBlocks: workBlocks,
-      eatingSetupPath: base.eatingSetupPath,
+      eatingSetupPath:
+          base.eatingSetupPath ??
+          (eatingAssetId != null ? 'has_routine' : 'create'),
       eatingBlocks: eatingBlocks,
       mealPlanningGoal: base.mealPlanningGoal,
       mealsPerDay: base.mealsPerDay,
@@ -559,6 +764,10 @@ class BaseTimelineSetup {
       dinnerMinute: base.dinnerMinute,
       snackMinute: base.snackMinute,
       extraSnackMinute: base.extraSnackMinute,
+      targetCalories: targets.targetCalories,
+      targetProtein: targets.proteinTarget?.round(),
+      eatingPhotoAssetId: eatingAssetId,
+      eatingPhotoR2Key: eatingR2Key,
       fixedBlocks: fixedBlocks,
       skinCareSetupPath: base.skinCareSetupPath,
       skinCareSkipped: base.skinCareSkipped,
@@ -566,6 +775,7 @@ class BaseTimelineSetup {
       skinCareProductNames: base.skinCareProductNames,
       skinCareProductPhotoAssetId: base.skinCareProductPhotoAssetId,
       skinCareProductPhotoR2Key: base.skinCareProductPhotoR2Key,
+      skinCareReviewedProducts: base.skinCareReviewedProducts,
       skinCareFacePhotoAssetId: base.skinCareFacePhotoAssetId,
       skinCareFacePhotoR2Key: base.skinCareFacePhotoR2Key,
       skinCareFacePhotoSkipped: base.skinCareFacePhotoSkipped,
@@ -573,6 +783,9 @@ class BaseTimelineSetup {
       skinCareProblems: base.skinCareProblems,
       skinCareBudget: base.skinCareBudget,
       skinCarePreference: base.skinCarePreference,
+      skinCareSelectedProductNames: base.skinCareSelectedProductNames,
+      skinCareProductRecommendations: base.skinCareProductRecommendations,
+      skinCareSpecialCareNotes: base.skinCareSpecialCareNotes,
     );
   }
 
@@ -581,11 +794,34 @@ class BaseTimelineSetup {
     OnboardingCompletionBundle bundle,
   ) {
     final blocks = bundle.baseTimelineBlocks;
-    final classBlocks = blocks.where((b) => b.section.toLowerCase().contains('class')).toList();
-    final workBlocks = blocks.where((b) => b.section.toLowerCase().contains('job') || b.section.toLowerCase().contains('work')).toList();
-    final eatingBlocks = blocks.where((b) => b.section.toLowerCase().contains('eat') || b.section.toLowerCase().contains('meal')).toList();
-    final fixedBlocks = blocks.where((b) => b.section.toLowerCase().contains('fixed') || b.section.toLowerCase().contains('sleep') || b.section.toLowerCase().contains('bath')).toList();
-    final skinCareBlocks = blocks.where((b) => b.section.toLowerCase().contains('skin')).toList();
+    final classBlocks = blocks
+        .where((b) => b.section.toLowerCase().contains('class'))
+        .toList();
+    final workBlocks = blocks
+        .where(
+          (b) =>
+              b.section.toLowerCase().contains('job') ||
+              b.section.toLowerCase().contains('work'),
+        )
+        .toList();
+    final eatingBlocks = blocks
+        .where(
+          (b) =>
+              b.section.toLowerCase().contains('eat') ||
+              b.section.toLowerCase().contains('meal'),
+        )
+        .toList();
+    final fixedBlocks = blocks
+        .where(
+          (b) =>
+              b.section.toLowerCase().contains('fixed') ||
+              b.section.toLowerCase().contains('sleep') ||
+              b.section.toLowerCase().contains('bath'),
+        )
+        .toList();
+    final skinCareBlocks = blocks
+        .where((b) => b.section.toLowerCase().contains('skin'))
+        .toList();
 
     String? classAssetId;
     String? classR2Key;
@@ -620,10 +856,72 @@ class BaseTimelineSetup {
       }
     }
 
+    final classRoutineItemIds = bundle.routineItemsForApp
+        .where(
+          (item) =>
+              classBlocks.any((b) => b.id == item.id) ||
+              item.baseTimelineSection == 'classes' ||
+              item.category == RoutineCategory.classBlock,
+        )
+        .map((e) => e.id)
+        .toList();
+    final workRoutineItemIds = bundle.routineItemsForApp
+        .where(
+          (item) =>
+              workBlocks.any((b) => b.id == item.id) ||
+              item.baseTimelineSection == 'work' ||
+              item.category == RoutineCategory.job,
+        )
+        .map((e) => e.id)
+        .toList();
+    final eatingRoutineItemIds = bundle.routineItemsForApp
+        .where(
+          (item) =>
+              eatingBlocks.any((b) => b.id == item.id) ||
+              item.baseTimelineSection == 'eating' ||
+              item.category == RoutineCategory.eating,
+        )
+        .map((e) => e.id)
+        .toList();
+    final fixedRoutineItemIds = bundle.routineItemsForApp
+        .where(
+          (item) =>
+              fixedBlocks.any((b) => b.id == item.id) ||
+              item.baseTimelineSection == 'fixed' ||
+              item.category == RoutineCategory.fixed ||
+              item.category == RoutineCategory.sleep,
+        )
+        .map((e) => e.id)
+        .toList();
+    final skinCareRoutineItemIds = bundle.routineItemsForApp
+        .where(
+          (item) =>
+              skinCareBlocks.any((b) => b.id == item.id) ||
+              item.baseTimelineSection == 'skinCare' ||
+              item.category == RoutineCategory.skinCare,
+        )
+        .map((e) => e.id)
+        .toList();
+
     return BaseTimelineSetup(
       uid: uid,
       updatedAt: bundle.updatedAt,
       schemaVersion: currentSchemaVersion,
+      classRoutineItemIds: classRoutineItemIds.isNotEmpty
+          ? classRoutineItemIds
+          : classBlocks.map((b) => b.id).toList(),
+      workRoutineItemIds: workRoutineItemIds.isNotEmpty
+          ? workRoutineItemIds
+          : workBlocks.map((b) => b.id).toList(),
+      eatingRoutineItemIds: eatingRoutineItemIds.isNotEmpty
+          ? eatingRoutineItemIds
+          : eatingBlocks.map((b) => b.id).toList(),
+      fixedRoutineItemIds: fixedRoutineItemIds.isNotEmpty
+          ? fixedRoutineItemIds
+          : fixedBlocks.map((b) => b.id).toList(),
+      skinCareRoutineItemIds: skinCareRoutineItemIds.isNotEmpty
+          ? skinCareRoutineItemIds
+          : skinCareBlocks.map((b) => b.id).toList(),
       classLogicalAssetId: classAssetId,
       classLogicalAssetR2Key: classR2Key,
       classBlocks: classBlocks,
@@ -643,4 +941,3 @@ class BaseTimelineSetup {
     );
   }
 }
-

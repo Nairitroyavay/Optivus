@@ -20,6 +20,7 @@ type VerifiedUser = {
 };
 
 type ObjectKeyInfo = {
+  sourceFeature: string;
   purpose: string;
   assetId: string;
   extension: string;
@@ -108,8 +109,11 @@ async function handleSignUpload(request: Request, env: Env): Promise<Response> {
   if (!approvedPurposes.has(purpose)) {
     throw new HttpError(400, "invalid_purpose", "Upload purpose is not allowed.");
   }
-  if (sourceFeature !== "onboarding") {
-    throw new HttpError(400, "invalid_source", "Only onboarding uploads are enabled in Phase 2A.");
+  if (sourceFeature !== "onboarding" && sourceFeature !== "routine_base_timeline") {
+    throw new HttpError(400, "invalid_source", "Upload source is not allowed.");
+  }
+  if (sourceFeature === "routine_base_timeline" && !routineImportPurposes.has(purpose)) {
+    throw new HttpError(400, "invalid_purpose", "Purpose is not allowed for routine base timeline uploads.");
   }
   if (!isAllowedContentTypeForPurpose(purpose, contentType)) {
     throw new HttpError(400, "invalid_content_type", contentTypeErrorMessage(purpose));
@@ -124,7 +128,7 @@ async function handleSignUpload(request: Request, env: Env): Promise<Response> {
   }
 
   const assetId = crypto.randomUUID();
-  const objectKey = buildObjectKey(user.uid, purpose, assetId, contentType);
+  const objectKey = buildObjectKey(user.uid, sourceFeature, purpose, assetId, contentType);
   const expiresIn = numberEnv(env.UPLOAD_URL_EXPIRES_SECONDS, 900);
   const uploadUrl = await getSignedUrl(
     r2Client(env),
@@ -265,15 +269,17 @@ function r2Client(env: Env): S3Client {
 
 function buildObjectKey(
   uid: string,
+  sourceFeature: string,
   purpose: string,
   assetId: string,
   contentType: string,
 ): string {
   const safeUid = safeSegment(uid, "uid");
+  const safeSourceFeature = safeSegment(sourceFeature, "sourceFeature");
   const safePurpose = safeSegment(purpose, "purpose");
   const safeAssetId = safeSegment(assetId, "assetId");
   const extension = extensionForContentType(contentType);
-  return `users/${safeUid}/onboarding/${safePurpose}/${safeAssetId}.${extension}`;
+  return `users/${safeUid}/${safeSourceFeature}/${safePurpose}/${safeAssetId}.${extension}`;
 }
 
 function assertOwnedObjectKey(
@@ -291,17 +297,23 @@ function assertOwnedObjectKey(
   }
 
   const parts = objectKey.split("/");
-  const validPurpose =
-    approvedPurposes.has(parts[3]) ||
-    (allowLegacyDelete && parts[3] === "skin_care");
+  if (parts.length !== 5 || parts[0] !== "users" || parts[1] !== safeUid) {
+    throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
+  }
 
-  if (
-    parts.length !== 5 ||
-    parts[0] !== "users" ||
-    parts[1] !== safeUid ||
-    parts[2] !== "onboarding" ||
-    !validPurpose
-  ) {
+  const sourceFeature = parts[2];
+  let validPurpose = false;
+  if (sourceFeature === "onboarding") {
+    validPurpose =
+      approvedPurposes.has(parts[3]) ||
+      (allowLegacyDelete && parts[3] === "skin_care");
+  } else if (sourceFeature === "routine_base_timeline") {
+    validPurpose = routineImportPurposes.has(parts[3]);
+  } else {
+    throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
+  }
+
+  if (!validPurpose) {
     throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
   }
 
@@ -318,7 +330,7 @@ function assertOwnedObjectKey(
   if (!isSafeExtensionForPurpose(parts[3], extension)) {
     throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
   }
-  return { purpose: parts[3], assetId, extension };
+  return { sourceFeature, purpose: parts[3], assetId, extension };
 }
 
 async function readSmallJson(request: Request): Promise<Record<string, unknown>> {

@@ -397,4 +397,93 @@ describe("R2 Upload Worker request boundary", () => {
       "object_not_found",
     );
   });
+
+  test("signs upload for routine_base_timeline with allowed purposes", async () => {
+    const purposes = [
+      "class_timetable",
+      "work_schedule",
+      "eating_menu",
+      "skin_face",
+      "skin_products",
+    ];
+
+    for (const purpose of purposes) {
+      const response = await worker.fetch(
+        request(
+          "/v1/uploads/sign",
+          signBody({
+            sourceFeature: "routine_base_timeline",
+            purpose,
+          }),
+        ),
+        makeEnv() as never,
+      );
+      const json = await response.json() as Record<string, unknown>;
+
+      expect(response.status).toBe(200);
+      expect(typeof json.assetId).toBe("string");
+      expect(json.objectKey).toBe(
+        `users/uid-1/routine_base_timeline/${purpose}/${json.assetId}.jpg`,
+      );
+    }
+  });
+
+  test("rejects routine_base_timeline with profile_photo purpose", async () => {
+    const response = await worker.fetch(
+      request(
+        "/v1/uploads/sign",
+        signBody({
+          sourceFeature: "routine_base_timeline",
+          purpose: "profile_photo",
+        }),
+      ),
+      makeEnv() as never,
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json() as Record<string, unknown>).error).toBe(
+      "invalid_purpose",
+    );
+  });
+
+  test("completes, previews, and deletes routine_base_timeline upload", async () => {
+    const env = makeEnv();
+    vi.mocked(getSignedUrl).mockResolvedValue(
+      "https://signed-preview.example.test/routine-object",
+    );
+    const objectKey =
+      "users/uid-1/routine_base_timeline/class_timetable/asset-rt-1.jpg";
+
+    // Complete
+    const completeRes = await worker.fetch(
+      request("/v1/uploads/complete", {
+        assetId: "asset-rt-1",
+        objectKey,
+        sizeBytes: 128,
+      }),
+      env as never,
+    );
+    expect(completeRes.status).toBe(200);
+    expect((await completeRes.json() as Record<string, unknown>).ok).toBe(true);
+
+    // Preview
+    const previewRes = await worker.fetch(
+      request("/v1/uploads/preview", { objectKey }),
+      env as never,
+    );
+    expect(previewRes.status).toBe(200);
+    const previewJson = await previewRes.json() as Record<string, unknown>;
+    expect(previewJson.ok).toBe(true);
+    expect(previewJson.previewUrl).toBe(
+      "https://signed-preview.example.test/routine-object",
+    );
+
+    // Delete
+    const deleteRes = await worker.fetch(
+      request("/v1/uploads/delete", { objectKey }),
+      env as never,
+    );
+    expect(deleteRes.status).toBe(200);
+    expect((await deleteRes.json() as Record<string, unknown>).ok).toBe(true);
+  });
 });
+

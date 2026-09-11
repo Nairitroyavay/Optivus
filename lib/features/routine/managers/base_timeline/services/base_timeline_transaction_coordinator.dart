@@ -5,30 +5,52 @@ import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/repositories/base_timeline_setup_repository.dart';
-import 'package:optivus/repositories/routine_firestore_codec.dart';
 import 'package:optivus/repositories/routine_repository.dart';
+import 'package:optivus/repositories/routine_transaction_repository.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
 
 class BaseTimelineTransactionCoordinator {
   final RoutineRepository _routineRepo;
+  final RoutineTransactionRepository? _transactionRepo;
   final BaseTimelineSetupRepository _setupRepo;
   final Ref? _ref;
 
   BaseTimelineTransactionCoordinator({
     required RoutineRepository routineRepo,
+    RoutineTransactionRepository? transactionRepo,
     required BaseTimelineSetupRepository setupRepo,
     Ref? ref,
-  })  : _routineRepo = routineRepo,
-        _setupRepo = setupRepo,
-        _ref = ref;
+  }) : _routineRepo = routineRepo,
+       _transactionRepo = transactionRepo,
+       _setupRepo = setupRepo,
+       _ref = ref;
 
   static bool isSectionRoutineItem(
     RoutineItem item,
-    BaseTimelineSection section,
-  ) {
-    final isBaseSource = item.source == RoutineSource.onboarding ||
-        item.source == RoutineSource.imported;
-    if (!isBaseSource) return false;
+    BaseTimelineSection section, {
+    BaseTimelineSetup? setup,
+  }) {
+    // 1. Primary: explicitly tracked IDs in BaseTimelineSetup
+    if (setup != null) {
+      final trackedIds = switch (section) {
+        BaseTimelineSection.classes => setup.classRoutineItemIds,
+        BaseTimelineSection.work => setup.workRoutineItemIds,
+        BaseTimelineSection.eating => setup.eatingRoutineItemIds,
+        BaseTimelineSection.fixed => setup.fixedRoutineItemIds,
+        BaseTimelineSection.skinCare => setup.skinCareRoutineItemIds,
+      };
+      if (trackedIds.contains(item.id)) return true;
+    }
+
+    // 2. Explicit baseTimeline provenance
+    if (item.source == RoutineSource.baseTimeline &&
+        item.baseTimelineSection == section.name) {
+      return true;
+    }
+
+    // 3. Migration fallback: onboarding items belonging to this section
+    // STRICT RULE: Never delete RoutineSource.manual or RoutineSource.imported items!
+    if (item.source != RoutineSource.onboarding) return false;
 
     return switch (section) {
       BaseTimelineSection.classes =>
@@ -40,8 +62,7 @@ class BaseTimelineTransactionCoordinator {
             item.category == RoutineCategory.sleep ||
             item.id == BaseTimelineDraft.fixedSleepId ||
             item.id == BaseTimelineDraft.fixedBathId,
-      BaseTimelineSection.skinCare =>
-        item.category == RoutineCategory.skinCare,
+      BaseTimelineSection.skinCare => item.category == RoutineCategory.skinCare,
     };
   }
 
@@ -66,10 +87,11 @@ class BaseTimelineTransactionCoordinator {
       BaseTimelineSection.classes => RoutineCategory.classBlock,
       BaseTimelineSection.work => RoutineCategory.job,
       BaseTimelineSection.eating => RoutineCategory.eating,
-      BaseTimelineSection.fixed => (b.id == BaseTimelineDraft.fixedSleepId ||
-              b.title.trim().toLowerCase() == 'sleep')
-          ? RoutineCategory.sleep
-          : RoutineCategory.fixed,
+      BaseTimelineSection.fixed =>
+        (b.id == BaseTimelineDraft.fixedSleepId ||
+                b.title.trim().toLowerCase() == 'sleep')
+            ? RoutineCategory.sleep
+            : RoutineCategory.fixed,
       BaseTimelineSection.skinCare => RoutineCategory.skinCare,
     };
   }
@@ -92,16 +114,19 @@ class BaseTimelineTransactionCoordinator {
     required List<TimelineBlockDraft> newBlocks,
     required BaseTimelineSetup Function(BaseTimelineSetup current) updateSetup,
   }) async {
-    // 1. Fetch current routine items
+    // 1. Fetch current setup and routine items
+    final currentSetup = await _setupRepo.fetchSetup(uid);
     final allItems = await _routineRepo.fetchRoutineItems(uid);
 
-    // 2. Identify items belonging to this section from onboarding / import
-    // Note: manual user items, habits, trackers, and occurrences are STRICTLY preserved.
+    // 2. Identify items belonging to this section
+    // Note: manual user items, imported meal plans, habits, and trackers are STRICTLY preserved.
     final itemsToDelete = allItems
-        .where((item) => isSectionRoutineItem(item, section))
+        .where(
+          (item) => isSectionRoutineItem(item, section, setup: currentSetup),
+        )
         .toList(growable: false);
 
-    // 3. Convert newBlocks to RoutineItem
+    // 3. Convert newBlocks to RoutineItem with baseTimeline provenance
     final newRoutineItems = <RoutineItem>[];
     for (var index = 0; index < newBlocks.length; index++) {
       final b = newBlocks[index];
@@ -122,13 +147,15 @@ class BaseTimelineTransactionCoordinator {
         endMinute: b.endMinute,
         crossesMidnight: isOvernight,
         endsNextDay: isOvernight,
-        repeatDays: b.repeatDays.isEmpty
-            ? const [1, 2, 3, 4, 5, 6, 7]
-            : b.repeatDays.toSet().toList()
-          ..sort(),
+        repeatDays:
+            b.repeatDays.isEmpty
+                  ? const [1, 2, 3, 4, 5, 6, 7]
+                  : b.repeatDays.toSet().toList()
+              ..sort(),
         blockType: blockTypeForSection(section, b),
         category: categoryForSection(section, b),
-        source: RoutineSource.imported,
+        source: RoutineSource.baseTimeline,
+        baseTimelineSection: section.name,
         priority: priorityForSection(section),
         hardBlock: isHardBlockForSection(section),
         location: b.location,
@@ -147,26 +174,52 @@ class BaseTimelineTransactionCoordinator {
       newRoutineItems.add(item);
     }
 
-    // 4. Delete old section items
-    for (final oldItem in itemsToDelete) {
-      await _routineRepo.deleteRoutineItem(uid, oldItem.id);
+    // 4. Update BaseTimelineSetup with tracked IDs
+    final intermediateSetup = updateSetup(currentSetup);
+    final newIds = newRoutineItems.map((i) => i.id).toList();
+    final updatedSetup = switch (section) {
+      BaseTimelineSection.classes => intermediateSetup.copyWith(
+        classRoutineItemIds: newIds,
+      ),
+      BaseTimelineSection.work => intermediateSetup.copyWith(
+        workRoutineItemIds: newIds,
+      ),
+      BaseTimelineSection.eating => intermediateSetup.copyWith(
+        eatingRoutineItemIds: newIds,
+      ),
+      BaseTimelineSection.fixed => intermediateSetup.copyWith(
+        fixedRoutineItemIds: newIds,
+      ),
+      BaseTimelineSection.skinCare => intermediateSetup.copyWith(
+        skinCareRoutineItemIds: newIds,
+      ),
+    };
+
+    // 5. Commit atomically via RoutineTransactionRepository if available
+    if (_transactionRepo != null) {
+      await _transactionRepo.commitWrite(
+        uid: uid,
+        deleteItemIds: itemsToDelete.map((i) => i.id).toList(),
+        setItems: newRoutineItems,
+        setBaseTimelineSetupDoc: updatedSetup.toMap(),
+      );
+    } else {
+      // Fallback for isolated mocks without transaction repository
+      for (final oldItem in itemsToDelete) {
+        await _routineRepo.deleteRoutineItem(uid, oldItem.id);
+      }
+      for (final newItem in newRoutineItems) {
+        await _routineRepo.createRoutineItem(uid, newItem);
+      }
+      await _setupRepo.saveSetup(uid, updatedSetup);
     }
 
-    // 5. Create new section items
-    for (final newItem in newRoutineItems) {
-      await _routineRepo.createRoutineItem(uid, newItem);
-    }
-
-    // 6. Update BaseTimelineSetup
-    final currentSetup = await _setupRepo.fetchSetup(uid);
-    final updatedSetup = updateSetup(currentSetup);
-    await _setupRepo.saveSetup(uid, updatedSetup);
+    // 6. Update in-memory state
     if (_ref != null) {
       _ref
           .read(baseTimelineSetupNotifierProvider.notifier)
           .updateInMemory(updatedSetup);
 
-      // 7. Refresh in-memory RoutineNotifier so the changes are instantly visible
       try {
         await _ref.read(routineNotifierProvider.notifier).loadForOwner(uid);
       } catch (_) {}
@@ -176,9 +229,10 @@ class BaseTimelineTransactionCoordinator {
 
 final baseTimelineTransactionCoordinatorProvider =
     Provider<BaseTimelineTransactionCoordinator>((ref) {
-  return BaseTimelineTransactionCoordinator(
-    routineRepo: ref.watch(routineRepositoryProvider),
-    setupRepo: ref.watch(baseTimelineSetupRepositoryProvider),
-    ref: ref,
-  );
-});
+      return BaseTimelineTransactionCoordinator(
+        routineRepo: ref.watch(routineRepositoryProvider),
+        transactionRepo: ref.watch(routineTransactionRepositoryProvider),
+        setupRepo: ref.watch(baseTimelineSetupRepositoryProvider),
+        ref: ref,
+      );
+    });

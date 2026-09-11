@@ -8665,6 +8665,7 @@ class TestUploadController extends UploadController {
     required String uid,
     required UploadedAssetPurpose purpose,
     required String sourceFeature,
+    ImageSource source = ImageSource.gallery,
   }) async {
     startUploadCalls += 1;
     if (result == null) return null;

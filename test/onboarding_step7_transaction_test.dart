@@ -1197,6 +1197,13 @@ class _TxTestR2Client implements R2UploadClient {
   }) async {
     deletedObjectKeys.add(objectKey);
   }
+
+  @override
+  Future<String> getPreviewUrl({
+    required String objectKey,
+    required String idToken,
+  }) async =>
+      'https://preview.local/$objectKey';
 }
 
 class _TxTestImagePrepareService extends ImagePrepareService {

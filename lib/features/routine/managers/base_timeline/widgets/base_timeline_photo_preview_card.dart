@@ -103,7 +103,7 @@ class _BaseTimelinePhotoPreviewCardState
               child: Image.network(
                 uri.toString(),
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Center(
+                errorBuilder: (context, error, stackTrace) => const Center(
                   child: Icon(
                     Icons.broken_image_rounded,
                     color: Colors.white,
@@ -155,9 +155,7 @@ class _BaseTimelinePhotoPreviewCardState
             // Background blur / base
             BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: Container(
-                color: Colors.black.withValues(alpha: 0.25),
-              ),
+              child: Container(color: Colors.black.withValues(alpha: 0.25)),
             ),
 
             if (_loading)
@@ -185,7 +183,7 @@ class _BaseTimelinePhotoPreviewCardState
                   ],
                 ),
               )
-            else if (_previewUri != null)
+            else if (_previewUri != null && !_failed)
               GestureDetector(
                 onTap: () => _showFullImage(context, _previewUri!),
                 child: Stack(
@@ -194,7 +192,8 @@ class _BaseTimelinePhotoPreviewCardState
                     Image.network(
                       _previewUri.toString(),
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _buildFallbackContent(),
+                      errorBuilder: (context, error, stackTrace) =>
+                          _buildFallbackContent(),
                     ),
                     // Gradient overlay
                     Positioned(

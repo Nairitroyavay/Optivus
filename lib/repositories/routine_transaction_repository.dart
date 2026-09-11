@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
-import 'package:optivus/models/routine_event_record.dart';
+import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/models/conflict_acceptance.dart';
+import 'package:optivus/models/routine_event_record.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/routine_occurrence.dart';
 import 'package:optivus/models/routine_projection_receipt.dart';
+import 'package:optivus/repositories/base_timeline_setup_repository.dart';
 import 'package:optivus/repositories/firestore_paths.dart';
 import 'package:optivus/repositories/routine_firestore_codec.dart';
 import 'package:optivus/repositories/routine_history_repository.dart';
@@ -33,6 +35,8 @@ abstract class RoutineTransactionRepository {
     RoutineItem? setItem,
     List<RoutineItem>? setItems,
     String? deleteItemId,
+    List<String>? deleteItemIds,
+    Map<String, dynamic>? setBaseTimelineSetupDoc,
     RoutineOccurrenceRecord? setOccurrence,
     String? deleteOccurrenceId,
     RoutineEventRecord? addEvent,
@@ -100,6 +104,8 @@ class FirestoreRoutineTransactionRepository
     RoutineItem? setItem,
     List<RoutineItem>? setItems,
     String? deleteItemId,
+    List<String>? deleteItemIds,
+    Map<String, dynamic>? setBaseTimelineSetupDoc,
     RoutineOccurrenceRecord? setOccurrence,
     String? deleteOccurrenceId,
     RoutineEventRecord? addEvent,
@@ -155,11 +161,19 @@ class FirestoreRoutineTransactionRepository
         transaction.set(docRef, data);
       }
 
-      if (deleteItemId != null) {
+      final idsToDelete = [?deleteItemId, ...?deleteItemIds];
+      for (final id in idsToDelete) {
         final docRef = _firestore.doc(
-          FirestoreUserPaths.routineItem(uid, deleteItemId),
+          FirestoreUserPaths.routineItem(uid, id),
         );
         transaction.delete(docRef);
+      }
+
+      if (setBaseTimelineSetupDoc != null) {
+        final docRef = _firestore.doc(
+          FirestoreUserPaths.baseTimelineSetup(uid),
+        );
+        transaction.set(docRef, setBaseTimelineSetupDoc);
       }
 
       if (setOccurrence != null) {
@@ -307,6 +321,7 @@ class FirestoreRoutineTransactionRepository
 class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
   final RoutineRepository? _routineRepository;
   final RoutineHistoryRepository? _historyRepository;
+  final BaseTimelineSetupRepository? _setupRepository;
   final Map<String, List<RoutineEventRecord>> _events = {};
   final Map<String, StreamController<RoutineEventFeed>> _controllers = {};
   Future<void> _mutex = Future.value();
@@ -323,8 +338,10 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
   FakeRoutineTransactionRepository({
     RoutineRepository? routineRepository,
     RoutineHistoryRepository? historyRepository,
+    BaseTimelineSetupRepository? setupRepository,
   }) : _routineRepository = routineRepository,
-       _historyRepository = historyRepository;
+       _historyRepository = historyRepository,
+       _setupRepository = setupRepository;
 
   bool _deepEqual(dynamic a, dynamic b) {
     if (a is Map && b is Map) {
@@ -365,6 +382,8 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
     RoutineItem? setItem,
     List<RoutineItem>? setItems,
     String? deleteItemId,
+    List<String>? deleteItemIds,
+    Map<String, dynamic>? setBaseTimelineSetupDoc,
     RoutineOccurrenceRecord? setOccurrence,
     String? deleteOccurrenceId,
     RoutineEventRecord? addEvent,
@@ -388,6 +407,9 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
           ? await _historyRepository.fetchHistory(uid)
           : <RoutineOccurrenceRecord>[];
       final initialEvents = List<RoutineEventRecord>.from(_events[uid] ?? []);
+      final initialSetup = _setupRepository != null
+          ? await _setupRepository.fetchSetup(uid)
+          : null;
       final fakeDatabase = _routineRepository is FakeRoutineRepository
           ? (_routineRepository).database
           : null;
@@ -418,8 +440,18 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
         }
 
         final routineRepository = _routineRepository;
-        if (deleteItemId != null && routineRepository != null) {
-          futures.add(routineRepository.deleteRoutineItem(uid, deleteItemId));
+        final idsToDelete = [?deleteItemId, ...?deleteItemIds];
+        for (final id in idsToDelete) {
+          if (routineRepository != null) {
+            futures.add(routineRepository.deleteRoutineItem(uid, id));
+          }
+        }
+
+        if (setBaseTimelineSetupDoc != null && _setupRepository != null) {
+          futures.add(_setupRepository.saveSetup(
+            uid,
+            BaseTimelineSetup.fromMap(setBaseTimelineSetupDoc, uid: uid),
+          ));
         }
 
         final historyRepository = _historyRepository;
@@ -511,6 +543,13 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
 
           // Rollback events
           _publishEvents(uid, initialEvents);
+
+          // Rollback base timeline setup
+          if (initialSetup != null && _setupRepository != null) {
+            try {
+              await _setupRepository.saveSetup(uid, initialSetup);
+            } catch (_) {}
+          }
         }
 
         rethrow;
@@ -630,6 +669,7 @@ final routineTransactionRepositoryProvider =
             fake: () => FakeRoutineTransactionRepository(
               routineRepository: ref.watch(routineRepositoryProvider),
               historyRepository: ref.watch(routineHistoryRepositoryProvider),
+              setupRepository: ref.watch(baseTimelineSetupRepositoryProvider),
             ),
           );
     });

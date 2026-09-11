@@ -64,7 +64,14 @@ enum RoutineCategory {
 }
 
 // ── Source ───────────────────────────────────────────────────
-enum RoutineSource { onboarding, manual, aiSuggestion, tracker, imported }
+enum RoutineSource {
+  onboarding,
+  manual,
+  aiSuggestion,
+  tracker,
+  imported,
+  baseTimeline,
+}
 
 // ── Status ──────────────────────────────────────────────────
 enum RoutineStatus {
@@ -113,6 +120,7 @@ class RoutineItem {
   final TrackerType trackerType;
   final String? notes;
   final String? bestTime;
+  final String? baseTimelineSection;
 
   // Custom metadata based on types
   final List<String>? subtasks;
@@ -175,6 +183,7 @@ class RoutineItem {
     this.trackerType = TrackerType.none,
     this.notes,
     this.bestTime,
+    this.baseTimelineSection,
     this.subtasks,
     this.subtasksCompleted,
     this.steps,
@@ -308,6 +317,8 @@ class RoutineItem {
     TrackerType? trackerType,
     String? notes,
     String? bestTime,
+    String? baseTimelineSection,
+    bool clearBaseTimelineSection = false,
     List<String>? subtasks,
     List<bool>? subtasksCompleted,
     List<String>? steps,
@@ -360,6 +371,9 @@ class RoutineItem {
       trackerType: trackerType ?? this.trackerType,
       notes: notes ?? this.notes,
       bestTime: bestTime ?? this.bestTime,
+      baseTimelineSection: clearBaseTimelineSection
+          ? null
+          : (baseTimelineSection ?? this.baseTimelineSection),
       subtasks: subtasks ?? this.subtasks,
       subtasksCompleted: subtasksCompleted ?? this.subtasksCompleted,
       steps: steps ?? this.steps,
@@ -415,6 +429,7 @@ class RoutineItem {
       'trackerType': trackerType.name,
       'notes': notes,
       'bestTime': bestTime,
+      'baseTimelineSection': baseTimelineSection,
       'subtasks': subtasks,
       'subtasksCompleted': subtasksCompleted,
       'steps': steps,
@@ -468,6 +483,8 @@ class RoutineItem {
       if (notes != null && notes!.trim().isNotEmpty) 'notes': notes!.trim(),
       if (bestTime != null && bestTime!.trim().isNotEmpty)
         'bestTime': bestTime!.trim(),
+      if (baseTimelineSection != null && baseTimelineSection!.trim().isNotEmpty)
+        'baseTimelineSection': baseTimelineSection!.trim(),
       if (subtasks != null) 'subtasks': List<String>.from(subtasks!),
       if (steps != null) 'steps': List<String>.from(steps!),
       if (mealCategory != null && mealCategory!.trim().isNotEmpty)
@@ -556,6 +573,7 @@ class RoutineItem {
       ),
       notes: map['notes'] as String?,
       bestTime: map['bestTime'] as String?,
+      baseTimelineSection: map['baseTimelineSection'] as String?,
       subtasks: (map['subtasks'] as List?)?.cast<String>(),
       subtasksCompleted: (map['subtasksCompleted'] as List?)?.cast<bool>(),
       steps: (map['steps'] as List?)?.cast<String>(),

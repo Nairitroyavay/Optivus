@@ -2,8 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
-import 'package:optivus/models/onboarding_completion_bundle.dart';
+import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/models/conflict_acceptance.dart';
+import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/routine_projection_receipt.dart';
@@ -571,6 +572,10 @@ class FirestoreOnboardingRepository
           ),
           bundle.toFirestoreMap(),
         );
+        transaction.set(
+          _firestore.doc(FirestoreUserPaths.baseTimelineSetup(bundle.uid)),
+          BaseTimelineSetup.fromCompletionBundle(bundle.uid, bundle).toMap(),
+        );
         final intermediateProfilePatch =
             Map<String, dynamic>.from(bundle.userProfilePatch)
               ..removeWhere((_, value) => value == null)
@@ -812,6 +817,10 @@ class FirestoreOnboardingRepository
     final batch = _firestore.batch();
     batch.set(draftReference, finalDraft.toFirestoreMap());
     batch.set(bundleReference, bundle.toFirestoreMap());
+    batch.set(
+      _firestore.doc(FirestoreUserPaths.baseTimelineSetup(bundle.uid)),
+      BaseTimelineSetup.fromCompletionBundle(bundle.uid, bundle).toMap(),
+    );
     final profilePatch = Map<String, dynamic>.from(bundle.userProfilePatch)
       ..removeWhere((_, value) => value == null)
       ..remove('source')
