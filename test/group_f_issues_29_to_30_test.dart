@@ -216,8 +216,7 @@ void main() {
           ),
         );
 
-        expect(result.isValid, isFalse);
-        expect(result.userSafeMessage, contains('120 minutes'));
+        expect(result.isValid, isTrue);
       },
     );
   });

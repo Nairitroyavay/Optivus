@@ -262,7 +262,7 @@ class TimelineUtils {
             .where((i) => i.blockType == RoutineBlockType.checkIn)
             .toList();
       case 'conflicts':
-        return items.where((i) => i.hasConflict).toList();
+        return items;
       case 'completed':
         return items
             .where((i) => i.isCompleted || i.status == RoutineStatus.completed)

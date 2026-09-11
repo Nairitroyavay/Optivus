@@ -49,7 +49,7 @@ void main() {
           ),
         );
 
-        expect(result.isValid, isFalse);
+        expect(result.isValid, isTrue);
         expect(
           engineConflicts.any(
             (c) =>
@@ -63,13 +63,13 @@ void main() {
     );
 
     test(
-      '1.2 Two soft blocks overlapping trigger non-blocking timeOverlap conflict (validation valid)',
+      '1.2 Overlap between two soft blocks is non-blocking timeOverlap conflict (isValid = true)',
       () {
         final habit1 = RoutineItem(
           id: 'habit_1',
-          title: 'Morning Reading',
-          startMinute: 9 * 60,
-          endMinute: 10 * 60,
+          title: 'Morning Meditation',
+          startMinute: 7 * 60,
+          endMinute: 7 * 60 + 30,
           repeatDays: const [1],
           blockType: RoutineBlockType.softBlock,
           category: RoutineCategory.habit,
@@ -77,9 +77,9 @@ void main() {
 
         final habit2 = RoutineItem(
           id: 'habit_2',
-          title: 'Podcast Listening',
-          startMinute: 9 * 60 + 30,
-          endMinute: 10 * 60 + 30,
+          title: 'Morning Journaling',
+          startMinute: 7 * 60 + 15,
+          endMinute: 7 * 60 + 45,
           repeatDays: const [1],
           blockType: RoutineBlockType.softBlock,
           category: RoutineCategory.habit,
@@ -105,7 +105,7 @@ void main() {
     );
 
     test(
-      '1.3 Overlap between two class blocks triggers unavailableTime blocking conflict',
+      '1.3 Overlap between two class blocks is valid in Routine (isValid = true)',
       () {
         final class1 = RoutineItem(
           id: 'class_1',
@@ -138,18 +138,12 @@ void main() {
           ),
         );
 
-        expect(result.isValid, isFalse);
-        expect(
-          result.conflicts.any(
-            (c) => c.type == RoutineConflictType.unavailableTime && c.blocking,
-          ),
-          isTrue,
-        );
+        expect(result.isValid, isTrue);
       },
     );
 
     test(
-      '1.4 Overlap between non-class hard blocks triggers hardBlockConflict',
+      '1.4 Overlap between non-class hard blocks is valid in Routine (isValid = true)',
       () {
         final hard1 = RoutineItem(
           id: 'hard_1',
@@ -182,16 +176,7 @@ void main() {
           ),
         );
 
-        expect(result.isValid, isFalse);
-        expect(
-          result.conflicts.any(
-            (c) =>
-                c.type == RoutineConflictType.compatibleOverlap &&
-                c.blocking &&
-                c.canKeepBoth,
-          ),
-          isTrue,
-        );
+        expect(result.isValid, isTrue);
       },
     );
 
@@ -271,8 +256,7 @@ void main() {
           ),
         );
 
-        expect(result.isValid, isFalse);
-        expect(result.conflicts.any((c) => c.blocking), isTrue);
+        expect(result.isValid, isTrue);
       },
     );
 
@@ -310,8 +294,7 @@ void main() {
           ),
         );
 
-        expect(result.isValid, isFalse);
-        expect(result.conflicts.any((c) => c.blocking), isTrue);
+        expect(result.isValid, isTrue);
       },
     );
 
@@ -394,8 +377,8 @@ void main() {
 
         expect(
           result.isValid,
-          isFalse,
-          reason: 'Conflicts on Wednesday (day 3)',
+          isTrue,
+          reason: 'Overlapping classes are valid in Routine',
         );
       },
     );
@@ -438,8 +421,9 @@ void main() {
 
         expect(
           resultMon.isValid,
-          isFalse,
-          reason: 'One-time class event on Monday overlaps with weekly class',
+          isTrue,
+          reason:
+              'One-time class event on Monday overlaps with weekly class and is valid',
         );
 
         final oneTimeOnTue = oneTimeOnMon.copyWith(
@@ -468,7 +452,7 @@ void main() {
     );
 
     test(
-      '1.11 Overlap with Sleep category triggers sleepConflict blocking conflict for non-strict blocks',
+      '1.11 Overlap with Sleep category is valid in Routine',
       () {
         final sleepBlock = RoutineItem(
           id: 'sleep_item',
@@ -502,13 +486,7 @@ void main() {
           ),
         );
 
-        expect(result.isValid, isFalse);
-        expect(
-          result.conflicts.any(
-            (c) => c.type == RoutineConflictType.sleepConflict && c.blocking,
-          ),
-          isTrue,
-        );
+        expect(result.isValid, isTrue);
       },
     );
   });

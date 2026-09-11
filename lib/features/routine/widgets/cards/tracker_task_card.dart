@@ -35,7 +35,6 @@ class TrackerTaskCard extends ConsumerWidget {
       railColor: color,
       railHeight: railHeight,
       isCompleted: isComplete,
-      hasConflict: item.hasConflict,
       isNow: isNow,
       onTap: onTap,
       child: Column(

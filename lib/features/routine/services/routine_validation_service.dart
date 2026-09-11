@@ -1,10 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/routine_occurrence.dart';
-import 'package:optivus/features/routine/utils/routine_date_utils.dart';
 import 'package:optivus/features/routine/domain/routine_conflict.dart';
-import 'package:optivus/features/routine/services/routine_conflict_engine.dart';
-import 'package:optivus/features/routine/services/routine_materializer.dart';
 
 enum RoutineValidationErrorType {
   none,
@@ -270,75 +266,6 @@ class RoutineValidationService {
             affectedItemIds: [item.id],
           );
         }
-
-        dayMeals.sort((a, b) => a.startMinute.compareTo(b.startMinute));
-
-        for (int i = 0; i < dayMeals.length - 1; i++) {
-          final currentStart = dayMeals[i].startMinute;
-          final nextStart = dayMeals[i + 1].startMinute;
-          if (nextStart - currentStart < 120) {
-            return RoutineValidationResult.invalid(
-              errorType: RoutineValidationErrorType.invalidTime,
-              userSafeMessage:
-                  'Meals must be spaced at least 120 minutes apart.',
-              affectedItemIds: [item.id],
-            );
-          }
-        }
-      }
-    }
-
-    // 2. Conflict validation across all applicable dates
-    final datesToCheck = <DateTime>[routineDateOnly(context.evaluationDate)];
-    if (item.repeatDays.isNotEmpty) {
-      final monday = context.evaluationDate.subtract(
-        Duration(days: context.evaluationDate.weekday - 1),
-      );
-      for (final weekday in item.repeatDays) {
-        final dayDate = routineDateOnly(
-          monday.add(Duration(days: weekday - 1)),
-        );
-        if (!datesToCheck.any((d) => DateUtils.isSameDay(d, dayDate))) {
-          datesToCheck.add(dayDate);
-        }
-      }
-    }
-
-    // Include batch candidates into the template pool if it's a batch operation.
-    final effectiveTemplates = [
-      ...context.existingTemplates,
-      ...context.batchCandidates.where((b) => b.id != item.id), // Exclude self
-    ];
-
-    for (final checkDate in datesToCheck) {
-      // Use RoutineOccurrenceProjector directly since it considers overrides/moves/deletions.
-      final projectedDayItems = RoutineOccurrenceProjector.itemsForDay(
-        effectiveTemplates,
-        context.occurrences,
-        checkDate,
-      ).where((candidate) => candidate.id != item.id).toList(growable: false);
-
-      final conflicts =
-          RoutineConflictEngine.detect(
-                [...projectedDayItems, item],
-                checkDate,
-                now:
-                    context.explicitNow, // Explicit time for tracker evaluation
-              )
-              .where(
-                (conflict) =>
-                    conflict.itemId == item.id ||
-                    conflict.otherItemId == item.id,
-              )
-              .toList(growable: false);
-
-      if (conflicts.any((c) => c.blocking)) {
-        return RoutineValidationResult.invalid(
-          errorType: RoutineValidationErrorType.overlappingBlocking,
-          userSafeMessage: 'Blocking conflict detected.',
-          conflicts: conflicts,
-          affectedItemIds: [item.id],
-        );
       }
     }
 

@@ -571,7 +571,6 @@ Future<void> _seedAccountAState(ProviderContainer container) async {
       .read(mockPermissionProvider.notifier)
       .toggleNotificationPermission();
   container.read(aiRoutineSuggestionsEnabledProvider.notifier).state = false;
-  container.read(conflictResolverEnabledProvider.notifier).state = false;
   container.read(routineNotificationsEnabledProvider.notifier).state = false;
 }
 
@@ -629,7 +628,6 @@ void _expectUserStateCleared(ProviderContainer container) {
     PermissionConnectionState.notConnected,
   );
   expect(container.read(aiRoutineSuggestionsEnabledProvider), isTrue);
-  expect(container.read(conflictResolverEnabledProvider), isTrue);
   expect(container.read(routineNotificationsEnabledProvider), isTrue);
 }
 
@@ -695,6 +693,5 @@ void _expectAccountAStatePresent(ProviderContainer container) {
     PermissionConnectionState.mockConnected,
   );
   expect(container.read(aiRoutineSuggestionsEnabledProvider), isFalse);
-  expect(container.read(conflictResolverEnabledProvider), isFalse);
   expect(container.read(routineNotificationsEnabledProvider), isFalse);
 }

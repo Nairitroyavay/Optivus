@@ -58,7 +58,6 @@ class AuthSessionResetCoordinator {
     _ref.invalidate(onboardingUploadInteractionProvider);
     _ref.read(restoredUploadsProvider.notifier).resetForSignedOut();
     _ref.read(aiRoutineSuggestionsEnabledProvider.notifier).state = true;
-    _ref.read(conflictResolverEnabledProvider.notifier).state = true;
     _ref.read(routineNotificationsEnabledProvider.notifier).state = true;
     _ref.read(appNavigationProvider.notifier).resetForSignedOut();
     _ref.read(toastQueueProvider.notifier).resetForSignedOut();

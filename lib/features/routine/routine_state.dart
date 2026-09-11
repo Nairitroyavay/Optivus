@@ -133,7 +133,6 @@ class RoutineState {
   final TrackerLaunchIntent? activeTrackerLaunchIntent;
   final List<RoutineConflict> conflicts;
   final bool aiRoutineSuggestionsEnabled;
-  final bool conflictResolverEnabled;
   final bool routineNotificationsEnabled;
   final bool refreshing;
   final Set<String> pendingItemIds;
@@ -165,7 +164,6 @@ class RoutineState {
     this.activeTrackerLaunchIntent,
     this.conflicts = const [],
     this.aiRoutineSuggestionsEnabled = true,
-    this.conflictResolverEnabled = true,
     this.routineNotificationsEnabled = false,
     this.refreshing = false,
     this.pendingItemIds = const {},
@@ -200,7 +198,6 @@ class RoutineState {
     bool clearTrackerIntent = false,
     List<RoutineConflict>? conflicts,
     bool? aiRoutineSuggestionsEnabled,
-    bool? conflictResolverEnabled,
     bool? routineNotificationsEnabled,
     bool? refreshing,
     Set<String>? pendingItemIds,
@@ -237,8 +234,6 @@ class RoutineState {
       conflicts: conflicts ?? this.conflicts,
       aiRoutineSuggestionsEnabled:
           aiRoutineSuggestionsEnabled ?? this.aiRoutineSuggestionsEnabled,
-      conflictResolverEnabled:
-          conflictResolverEnabled ?? this.conflictResolverEnabled,
       routineNotificationsEnabled:
           routineNotificationsEnabled ?? this.routineNotificationsEnabled,
       refreshing: refreshing ?? this.refreshing,
@@ -272,7 +267,6 @@ const List<RoutineFilterOption> primaryFilters = [
   RoutineFilterOption('flexible_tasks', 'Flexible Tasks', 'Flex'),
   RoutineFilterOption('tracker_tasks', 'Tracker Tasks', 'Track'),
   RoutineFilterOption('check_ins', 'Check-ins', 'Check'),
-  RoutineFilterOption('conflicts', 'Conflicts', 'Warn'),
   RoutineFilterOption('completed', 'Completed', 'Done'),
   RoutineFilterOption('missed', 'Missed', 'Miss'),
 ];
@@ -510,7 +504,13 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           _ref.read(conflictAcceptanceRepositoryProvider).fetchForOwner(uid),
         ]);
         if (generation != _loadGeneration || _ownerUid != uid) return;
-        final remoteItems = results[0] as List<RoutineItem>;
+        final remoteItems = (results[0] as List<RoutineItem>)
+            .map(
+              (remote) => remote.hasConflict || remote.conflictMessage != null
+                  ? remote.copyWith(hasConflict: false, clearConflict: true)
+                  : remote,
+            )
+            .toList();
         final localActiveIds = state.pendingItemIds.union(
           state.failedIntentsByItemId.keys.toSet(),
         );
@@ -710,8 +710,6 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       state = state.copyWith(selectedCategoryFilter: filter);
   void toggleAiSuggestions(bool value) =>
       state = state.copyWith(aiRoutineSuggestionsEnabled: value);
-  void toggleConflictResolver(bool value) =>
-      state = state.copyWith(conflictResolverEnabled: value);
   void toggleNotifications(bool value) =>
       state = state.copyWith(routineNotificationsEnabled: value);
 
@@ -2379,51 +2377,15 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     ).where((candidate) => candidate.id != item.id).toList(growable: false);
     final snap = state.precisionMode ? 1 : 5;
     for (int start = 6 * 60; start + duration <= 23 * 60; start += snap) {
-      final candidate = item.copyWith(
-        startMinute: start,
-        endMinute: start + duration,
-        date: TimelineUtils.dateOnly(date),
-        repeatDays: const [],
-        clearConflict: true,
-      );
-      final conflicts = RoutineConflictEngine.detect([
-        ...dayItems,
-        candidate,
-      ], date);
-      final blocking = conflicts.any(
-        (conflict) =>
-            conflict.itemId == candidate.id ||
-            conflict.otherItemId == candidate.id,
-      );
-      if (!blocking) return start;
+      final end = start + duration;
+      final overlapsAny = dayItems.any((existing) {
+        final existingStart = existing.startMinute;
+        final existingEnd = TimelineUtils.normalizedEndMinute(existing);
+        return existingStart < end && existingEnd > start;
+      });
+      if (!overlapsAny) return start;
     }
     return null;
-  }
-
-  List<RoutineConflict> previewMove({
-    required RoutineItem item,
-    required DateTime date,
-    required int startMinute,
-    required int durationMinutes,
-  }) {
-    final dayItems = RoutineOccurrenceProjector.itemsForDay(
-      state.items,
-      state.occurrences,
-      date,
-    ).where((candidate) => candidate.id != item.id).toList(growable: false);
-    final candidate = item.copyWith(
-      date: TimelineUtils.dateOnly(date),
-      startMinute: startMinute,
-      endMinute: startMinute + durationMinutes,
-      repeatDays: const [],
-      clearConflict: true,
-    );
-    return RoutineConflictEngine.detect([...dayItems, candidate], date)
-        .where(
-          (conflict) =>
-              conflict.itemId == item.id || conflict.otherItemId == item.id,
-        )
-        .toList(growable: false);
   }
 
   Future<RoutineWriteResult> keepConflictPair(RoutineConflict conflict) async {
@@ -2663,18 +2625,12 @@ final selectedDayRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
     state.occurrences,
     day,
   );
-  final conflicts = state.conflicts;
-  final conflictItemIds = conflicts
-      .expand((conflict) => [conflict.itemId, conflict.otherItemId])
-      .whereType<String>()
-      .toSet();
 
   return materialized
       .map(
-        (item) => item.copyWith(
-          hasConflict: conflictItemIds.contains(item.id),
-          conflictMessage: _firstConflictMessage(item.id, conflicts),
-        ),
+        (item) => item.hasConflict || item.conflictMessage != null
+            ? item.copyWith(hasConflict: false, clearConflict: true)
+            : item,
       )
       .toList(growable: false)
     ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
@@ -2689,11 +2645,19 @@ final filteredRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
 
 final todayRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
   final state = ref.watch(routineNotifierProvider);
-  return RoutineOccurrenceProjector.itemsForDay(
+  final materialized = RoutineOccurrenceProjector.itemsForDay(
     state.items,
     state.occurrences,
     TimelineUtils.dateOnly(DateTime.now()),
   );
+  return materialized
+      .map(
+        (item) => item.hasConflict || item.conflictMessage != null
+            ? item.copyWith(hasConflict: false, clearConflict: true)
+            : item,
+      )
+      .toList(growable: false)
+    ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
 });
 
 final currentRoutineItemProvider = Provider<RoutineItem?>((ref) {
@@ -2752,25 +2716,6 @@ final routineCompletionSummaryProvider = Provider<RoutineCompletionSummary>((
   );
 });
 
-final routineConflictSummaryProvider = Provider<RoutineConflictSummary>((ref) {
-  final conflicts = ref.watch(
-    routineNotifierProvider.select((state) => state.conflicts),
-  );
-  return RoutineConflictSummary(
-    total: conflicts.length,
-    blocking: conflicts.where((conflict) => conflict.blocking).length,
-  );
-});
-
-String? _firstConflictMessage(String itemId, List<RoutineConflict> conflicts) {
-  for (final conflict in conflicts) {
-    if (conflict.itemId == itemId || conflict.otherItemId == itemId) {
-      return conflict.message;
-    }
-  }
-  return null;
-}
-
 class RoutineFilters {
   RoutineFilters._();
 
@@ -2817,7 +2762,6 @@ class RoutineFilters {
 
 // ── Generic Settings Providers ──
 final aiRoutineSuggestionsEnabledProvider = StateProvider<bool>((ref) => true);
-final conflictResolverEnabledProvider = StateProvider<bool>((ref) => true);
 final routineNotificationsEnabledProvider = StateProvider<bool>((ref) => true);
 
 class RoutineCompletionSummary {

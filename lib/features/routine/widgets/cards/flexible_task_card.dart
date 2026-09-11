@@ -33,7 +33,6 @@ class FlexibleTaskCard extends ConsumerWidget {
       railColor: color,
       railHeight: railHeight,
       isCompleted: item.isCompleted,
-      hasConflict: item.hasConflict,
       isNow: isNow,
       onTap: onTap,
       child: Column(

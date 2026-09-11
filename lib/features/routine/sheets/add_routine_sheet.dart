@@ -4,7 +4,6 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
-import 'package:optivus/features/routine/domain/routine_conflict.dart';
 import 'package:optivus/features/routine/models/routine_write_result.dart';
 
 void showAddRoutineSheet(
@@ -226,8 +225,6 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
 
   Widget _buildForm() {
     final mode = _mode!;
-    final preview = _conflictPreview();
-    final blockingConflict = preview.any((conflict) => conflict.blocking);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -314,8 +311,6 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
             maxLines: 4,
           ),
         ],
-        const SizedBox(height: 12),
-        _ConflictBox(conflicts: preview),
         if (_error != null) ...[
           const SizedBox(height: 10),
           Text(
@@ -353,7 +348,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
             const SizedBox(width: 10),
             Expanded(
               child: ElevatedButton(
-                onPressed: blockingConflict || _saving ? null : _save,
+                onPressed: _saving ? null : _save,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: OptivusColors.routineAccent,
                   disabledBackgroundColor: OptivusColors.disabled,
@@ -854,17 +849,6 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     );
   }
 
-  List<RoutineConflict> _conflictPreview() {
-    return ref
-        .read(routineNotifierProvider.notifier)
-        .previewMove(
-          item: _draftItem(),
-          date: _date,
-          startMinute: _startMinute,
-          durationMinutes: _durationMinutes,
-        );
-  }
-
   int get _startMinute => _startTime.hour * 60 + _startTime.minute;
 
   RoutineItem _draftItem() {
@@ -935,7 +919,11 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
           durationMinutes: _durationMinutes,
         );
     if (slot == null) {
-      setState(() => _error = 'No free slot found for this duration today.');
+      setState(
+        () =>
+            _error =
+                'No open slot found. You can still choose any time manually.',
+      );
       return;
     }
     setState(() {
@@ -985,19 +973,6 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     final endRaw = _startMinute + _durationMinutes;
     if (endRaw > 1440 && _fixedKind != 'Sleep') {
       return 'Only Sleep blocks typically cross midnight. Adjust the time or set type to Sleep.';
-    }
-    final conflicts = _conflictPreview();
-    final blocking = conflicts.where((conflict) => conflict.blocking).toList();
-    if (blocking.isNotEmpty) {
-      final isFlexibleOrTracker =
-          _blockTypeForMode(_mode ?? 'flexible') ==
-              RoutineBlockType.flexibleTask ||
-          _blockTypeForMode(_mode ?? 'flexible') ==
-              RoutineBlockType.trackerTask;
-      if (isFlexibleOrTracker) {
-        return 'Tasks cannot be saved into a hard block. Move it or make a tiny version.';
-      }
-      return 'This item has a blocking conflict. Adjust time or allow overlap if applicable.';
     }
     return null;
   }
@@ -1254,54 +1229,6 @@ class _InfoBox extends StatelessWidget {
           fontWeight: FontWeight.w700,
           color: OptivusColors.textBody,
         ),
-      ),
-    );
-  }
-}
-
-class _ConflictBox extends StatelessWidget {
-  final List<RoutineConflict> conflicts;
-
-  const _ConflictBox({required this.conflicts});
-
-  @override
-  Widget build(BuildContext context) {
-    if (conflicts.isEmpty) {
-      return const _InfoBox(text: 'No conflict detected for this slot.');
-    }
-    final conflict = conflicts.first;
-    final color = conflict.blocking
-        ? OptivusColors.danger
-        : OptivusColors.warning;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            conflict.blocking
-                ? Icons.block_rounded
-                : Icons.warning_amber_rounded,
-            size: 18,
-            color: color,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              conflict.message,
-              style: TextStyle(
-                fontSize: 12,
-                height: 1.25,
-                fontWeight: FontWeight.w800,
-                color: color,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

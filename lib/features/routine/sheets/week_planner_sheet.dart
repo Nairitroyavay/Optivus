@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/services/routine_materializer.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
-import 'package:optivus/features/routine/services/routine_conflict_engine.dart';
-import 'package:optivus/features/routine/services/routine_materializer.dart';
 
 void showRoutineWeekPlannerSheet(BuildContext context, WidgetRef ref) {
   showModalBottomSheet(
@@ -21,17 +20,23 @@ class _WeekPlannerSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selected = ref.watch(routineNotifierProvider).selectedDay;
-    final weekStart = TimelineUtils.weekStart(selected);
-    final allItems = ref.watch(routineNotifierProvider).items;
-    final days = List.generate(7, (index) {
-      return weekStart.add(Duration(days: index));
-    });
+    final state = ref.watch(routineNotifierProvider);
+    final allItems = state.items;
+    final selected = state.selectedDay;
+    final startOfWeek = selected.subtract(Duration(days: selected.weekday - 1));
+    final days = List.generate(
+      7,
+      (index) => DateTime(
+        startOfWeek.year,
+        startOfWeek.month,
+        startOfWeek.day + index,
+      ),
+    );
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.82,
-      minChildSize: 0.45,
-      maxChildSize: 0.95,
+      initialChildSize: 0.78,
+      minChildSize: 0.5,
+      maxChildSize: 0.94,
       builder: (context, scrollController) {
         return Container(
           decoration: const BoxDecoration(
@@ -60,27 +65,17 @@ class _WeekPlannerSheet extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              const Row(
-                children: [
-                  Icon(
-                    Icons.calendar_view_week_rounded,
-                    color: OptivusColors.routineAccent,
-                    size: 22,
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    'Week Planner',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: OptivusColors.textPrimary,
-                    ),
-                  ),
-                ],
+              const Text(
+                'Week Planner',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: OptivusColors.textPrimary,
+                ),
               ),
               const SizedBox(height: 6),
               Text(
-                'Monday to Sunday • ${_dateLabel(weekStart)} - ${_dateLabel(days.last)}',
+                'Monday to Sunday • ${_dateLabel(days.first)} - ${_dateLabel(days.last)}',
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -90,7 +85,6 @@ class _WeekPlannerSheet extends ConsumerWidget {
               const SizedBox(height: 16),
               ...days.map((day) {
                 final items = RoutineMaterializer.itemsForDay(allItems, day);
-                final conflicts = RoutineConflictEngine.detect(items, day);
                 final hardBlocks = items
                     .where((item) => item.isHardBlock)
                     .length;
@@ -117,7 +111,6 @@ class _WeekPlannerSheet extends ConsumerWidget {
                   hardBlocks: hardBlocks,
                   habits: habits,
                   freeMinutes: freeMinutes,
-                  conflicts: conflicts.length,
                   onTap: () {
                     ref
                         .read(routineNotifierProvider.notifier)
@@ -167,7 +160,6 @@ class _WeekDayCard extends StatelessWidget {
   final int hardBlocks;
   final int habits;
   final int freeMinutes;
-  final int conflicts;
   final VoidCallback onTap;
 
   const _WeekDayCard({
@@ -178,15 +170,12 @@ class _WeekDayCard extends StatelessWidget {
     required this.hardBlocks,
     required this.habits,
     required this.freeMinutes,
-    required this.conflicts,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = conflicts > 0
-        ? OptivusColors.danger
-        : OptivusColors.routineAccent;
+    const color = OptivusColors.routineAccent;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: GestureDetector(
@@ -227,9 +216,7 @@ class _WeekDayCard extends StatelessWidget {
                     ),
                   ),
                   Icon(
-                    conflicts > 0
-                        ? Icons.warning_amber_rounded
-                        : Icons.check_circle_rounded,
+                    Icons.check_circle_rounded,
                     size: 18,
                     color: selected ? Colors.white : color,
                   ),
@@ -247,7 +234,6 @@ class _WeekDayCard extends StatelessWidget {
                     '${TimelineUtils.formatDuration(freeMinutes)} free',
                     selected,
                   ),
-                  if (conflicts > 0) _chip('$conflicts conflicts', selected),
                 ],
               ),
             ],

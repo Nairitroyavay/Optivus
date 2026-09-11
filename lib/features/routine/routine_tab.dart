@@ -19,7 +19,6 @@ import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/routine_header.dart';
 import 'package:optivus/features/routine/widgets/routine_title_filter_row.dart';
 import 'package:optivus/features/routine/widgets/routine_timeline_viewport.dart';
-import 'package:optivus/features/routine/widgets/conflict_banner.dart';
 import 'package:optivus/features/routine/widgets/routine_write_status_banner.dart';
 import 'package:optivus/features/routine/sheets/add_routine_sheet.dart';
 import 'package:optivus/features/routine/sheets/ai_assistant_sheet.dart';
@@ -145,7 +144,6 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
     final showCurrentTimeLine = state.showCurrentTimeLine;
     final compactMode = state.compactMode;
     final isToday = TimelineUtils.isToday(selectedDay);
-    final conflicts = state.conflicts;
     final filteredItems = ref.watch(filteredRoutineItemsProvider);
 
     // Sort by start time
@@ -159,10 +157,6 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
       showMinuteTicks: showMinuteTicks,
       compactMode: compactMode,
     );
-
-    final conflictCount = conflicts
-        .where((conflict) => conflict.blocking)
-        .length;
 
     // ── Layout matches old: LiquidBg → Scaffold(transparent) → Stack ──
     return Scaffold(
@@ -188,17 +182,8 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                 const RoutineTitleFilterRow(),
                 const SizedBox(height: 12),
 
-                // ── Conflict Banner ──
-                ConflictBanner(
-                  conflictCount: conflictCount,
-                  onTap: () => showRoutineConflictResolverSheet(context, ref),
-                ),
-
                 // ── Write Status Banner ──
                 const RoutineWriteStatusBanner(),
-
-                // Add a small spacing if there are conflicts so timeline doesn't touch it
-                if (conflictCount > 0) const SizedBox(height: 12),
 
                 // ── Timeline or Empty State ──
                 Expanded(
@@ -223,17 +208,8 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                           layout: layout,
                           isToday: isToday,
                           showCurrentTimeLine: showCurrentTimeLine,
-                          onCardTap: (item) {
-                            if (item.hasConflict) {
-                              showRoutineConflictResolverSheet(
-                                context,
-                                ref,
-                                itemId: item.id,
-                              );
-                              return;
-                            }
-                            showRoutineDetailSheet(context, ref, item);
-                          },
+                          onCardTap: (item) =>
+                              showRoutineDetailSheet(context, ref, item),
                         ),
                 ),
               ],
@@ -407,11 +383,6 @@ class _RoutineSettingsInline extends ConsumerWidget {
               title: 'AI Suggestions',
               value: state.aiRoutineSuggestionsEnabled,
               onChanged: notifier.toggleAiSuggestions,
-            ),
-            _RoutineSwitch(
-              title: 'Conflict Resolver',
-              value: state.conflictResolverEnabled,
-              onChanged: notifier.toggleConflictResolver,
             ),
             _RoutineSwitch(
               title: 'Notifications',

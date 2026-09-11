@@ -147,41 +147,8 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
   List<_RoutineSuggestion> _buildSuggestions() {
     final day = ref.watch(routineNotifierProvider).selectedDay;
     final items = ref.watch(selectedDayRoutineItemsProvider);
-    final conflicts = ref.watch(routineNotifierProvider).conflicts;
     final controller = ref.read(routineNotifierProvider.notifier);
     final suggestions = <_RoutineSuggestion>[];
-
-    for (final conflict in conflicts.take(3)) {
-      final item = _itemById(items, conflict.itemId);
-      if (item == null) continue;
-      final freeSlot = controller.findFreeSlot(item: item, date: day);
-      suggestions.add(
-        _RoutineSuggestion(
-          id: 'fix-${conflict.id}',
-          icon: Icons.warning_amber_rounded,
-          color: conflict.blocking
-              ? OptivusColors.danger
-              : OptivusColors.warning,
-          title: 'Fix conflict',
-          body: freeSlot == null
-              ? '${conflict.message}\nSuggestion: make a tiny version or move it tomorrow.'
-              : '${conflict.message}\nSuggestion: move ${item.title} to ${TimelineUtils.formatMinute(freeSlot)}.',
-          accept: () {
-            if (freeSlot == null) {
-              controller.makeTinyVersion(item);
-            } else {
-              controller.moveItem(
-                itemId: item.id,
-                date: day,
-                startMinute: freeSlot,
-                durationMinutes: item.durationMinutes,
-              );
-            }
-          },
-          edit: () => showRoutineMoveSheet(context, ref, item),
-        ),
-      );
-    }
 
     final missed = items.where((item) {
       return item.status == RoutineStatus.missed || item.isMissed;
@@ -257,13 +224,6 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
     }
 
     return suggestions;
-  }
-
-  RoutineItem? _itemById(List<RoutineItem> items, String id) {
-    for (final item in items) {
-      if (item.id == id) return item;
-    }
-    return null;
   }
 
   _FreeGap _largestFreeGap(List<RoutineItem> items) {
@@ -425,7 +385,6 @@ class _OptionSummary extends StatelessWidget {
     const options = [
       'Improve today\'s plan',
       'Fill free time',
-      'Fix conflicts',
       'Create tiny version',
       'Suggest better task order',
       'Rebuild this week',

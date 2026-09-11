@@ -14,7 +14,6 @@ import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/features/routine/routine_state.dart';
-import 'package:optivus/features/routine/domain/routine_conflict.dart';
 
 /// Timeline viewport — scrollable stack with ruler, cards, and current time.
 ///
@@ -271,13 +270,6 @@ class _RoutineTimelineViewportState
                                 .contains(item.id);
                             final failedIntent =
                                 routineState.failedIntentsByItemId[item.id];
-                            final overlapAllowed = routineState.conflicts.any(
-                              (conflict) =>
-                                  conflict.resolution ==
-                                      RoutineConflictResolution.allowedByUser &&
-                                  (conflict.itemId == item.id ||
-                                      conflict.otherItemId == item.id),
-                            );
                             return Opacity(
                               opacity: isDragging || isPending ? 0.6 : 1.0,
                               child: Stack(
@@ -291,35 +283,6 @@ class _RoutineTimelineViewportState
                                         ? null
                                         : () => widget.onCardTap?.call(item),
                                   ),
-                                  if (overlapAllowed)
-                                    Positioned(
-                                      left: 10,
-                                      top: 8,
-                                      child: Semantics(
-                                        label: 'Overlap allowed by you',
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 7,
-                                            vertical: 3,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: OptivusColors.success
-                                                .withValues(alpha: 0.92),
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                          ),
-                                          child: const Text(
-                                            'Overlap allowed',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w900,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
                                   if (entry.hiddenOverlapCount > 0 &&
                                       entry.isFront)
                                     Positioned(

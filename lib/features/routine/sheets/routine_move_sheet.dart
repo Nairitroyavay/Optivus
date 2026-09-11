@@ -4,7 +4,6 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
-import 'package:optivus/features/routine/domain/routine_conflict.dart';
 import 'package:optivus/features/routine/models/routine_write_result.dart';
 
 void showRoutineMoveSheet(
@@ -48,15 +47,6 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
   Widget build(BuildContext context) {
     final precisionMode = ref.watch(routineNotifierProvider).precisionMode;
     final snap = precisionMode ? 1 : 5;
-    final conflicts = ref
-        .watch(routineNotifierProvider.notifier)
-        .previewMove(
-          item: widget.item,
-          date: _date,
-          startMinute: _startMinute,
-          durationMinutes: _duration,
-        );
-    final blockingConflict = conflicts.any((item) => item.blocking);
 
     return DraggableScrollableSheet(
       initialChildSize: 0.72,
@@ -168,8 +158,6 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
-              _ConflictPreview(conflicts: conflicts),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
@@ -233,7 +221,7 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                       borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                  onPressed: blockingConflict || _pending
+                  onPressed: _pending
                       ? null
                       : () => _runWrite(
                           () => ref
@@ -254,11 +242,9 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                             color: Colors.white,
                           ),
                         )
-                      : Text(
-                          blockingConflict
-                              ? 'Resolve blocking conflict'
-                              : 'Move task',
-                          style: const TextStyle(
+                      : const Text(
+                          'Move task',
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w900,
                           ),
@@ -309,7 +295,11 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
     if (start != null) {
       setState(() => _startMinute = start);
     } else {
-      setState(() => _error = 'No free slot found for this duration.');
+      setState(
+        () =>
+            _error =
+                'No open slot found. You can still choose any time manually.',
+      );
     }
   }
 
@@ -444,61 +434,6 @@ class _StepperTile extends StatelessWidget {
             onPressed: onPlus,
             icon: const Icon(Icons.add_circle_outline_rounded),
             color: OptivusColors.routineAccent,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ConflictPreview extends StatelessWidget {
-  final List<RoutineConflict> conflicts;
-
-  const _ConflictPreview({required this.conflicts});
-
-  @override
-  Widget build(BuildContext context) {
-    if (conflicts.isEmpty) {
-      return _previewBox(
-        icon: Icons.check_circle_rounded,
-        color: OptivusColors.success,
-        text: 'No conflicts in this slot.',
-      );
-    }
-    final first = conflicts.first;
-    return _previewBox(
-      icon: first.blocking ? Icons.block_rounded : Icons.warning_amber_rounded,
-      color: first.blocking ? OptivusColors.danger : OptivusColors.warning,
-      text: first.message,
-    );
-  }
-
-  Widget _previewBox({
-    required IconData icon,
-    required Color color,
-    required String text,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.24)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(
-                fontSize: 12,
-                height: 1.25,
-                fontWeight: FontWeight.w700,
-                color: color,
-              ),
-            ),
           ),
         ],
       ),

@@ -15,7 +15,6 @@ class RoutineCardBase extends StatefulWidget {
   final Color railColor;
   final double? railHeight;
   final bool isCompleted;
-  final bool hasConflict;
   final bool isNow;
   final VoidCallback? onTap;
 
@@ -25,7 +24,6 @@ class RoutineCardBase extends StatefulWidget {
     required this.railColor,
     this.railHeight,
     this.isCompleted = false,
-    this.hasConflict = false,
     this.isNow = false,
     this.onTap,
   });
@@ -70,22 +68,6 @@ class _RoutineCardBaseState extends State<RoutineCardBase>
       bgColor = OptivusColors.success.withValues(alpha: 0.08);
       borderColor = OptivusColors.success;
       borderWidth = 1.2;
-      shadows = [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.06),
-          blurRadius: 14,
-          offset: const Offset(0, 4),
-        ),
-        BoxShadow(
-          color: Colors.white.withValues(alpha: 0.55),
-          blurRadius: 0,
-          offset: const Offset(-1, -1),
-        ),
-      ];
-    } else if (widget.hasConflict) {
-      bgColor = Colors.white.withValues(alpha: 0.55);
-      borderColor = OptivusColors.warning.withValues(alpha: 0.45);
-      borderWidth = 1.1;
       shadows = [
         BoxShadow(
           color: Colors.black.withValues(alpha: 0.06),
@@ -191,43 +173,6 @@ class _RoutineCardBaseState extends State<RoutineCardBase>
                 ),
               ),
             ),
-            if (widget.hasConflict)
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: OptivusColors.warning.withValues(alpha: 0.13),
-                    borderRadius: BorderRadius.circular(9),
-                    border: Border.all(
-                      color: OptivusColors.warning.withValues(alpha: 0.22),
-                    ),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.warning_amber_rounded,
-                        size: 11,
-                        color: OptivusColors.warning,
-                      ),
-                      SizedBox(width: 3),
-                      Text(
-                        'Conflict',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w900,
-                          color: OptivusColors.warning,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
           ],
         ),
       ),
