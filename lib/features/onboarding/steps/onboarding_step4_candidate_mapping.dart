@@ -305,6 +305,11 @@ Onboarding4CandidateMappingResult mapOnboarding4Candidates({
         subject: title,
         room:
             extractRoomLabelFromOnboarding4Candidate(effectiveCandidate) ?? '',
+        professor: effectiveCandidate.professor ?? '',
+        courseCode: effectiveCandidate.courseCode ?? '',
+        classType: effectiveCandidate.classType ?? '',
+        section: effectiveCandidate.sectionLabel ?? '',
+        notes: effectiveCandidate.notes ?? '',
         startMinute: effectiveCandidate.startMinute.clamp(0, 24 * 60 - 1),
         endMinute: effectiveCandidate.endMinute.clamp(1, 24 * 60),
         repeatDays: repeatDays,

@@ -17,6 +17,7 @@ import 'package:optivus/features/tracker/fitness/providers/fitness_provider.dart
 import 'package:optivus/features/tracker/providers/tracker_navigation_provider.dart';
 import 'package:optivus/features/tracker/providers/tracker_settings_provider.dart';
 import 'package:optivus/features/uploads/providers/onboarding_upload_interaction_provider.dart';
+import 'package:optivus/repositories/base_timeline_setup_repository.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_generation.dart';
@@ -47,6 +48,7 @@ class AuthSessionResetCoordinator {
     }
     _ref.invalidate(onboardingClassTimelineProvider);
     _ref.invalidate(onboardingWorkTimelineProvider);
+    _ref.invalidate(baseTimelineSetupNotifierProvider);
     _ref.read(profileSettingsProvider.notifier).resetForSignedOut();
     _ref.read(homeDashboardProvider.notifier).resetForSignedOut();
     _ref.read(fitnessCenterProvider.notifier).resetForSignedOut();

@@ -139,6 +139,12 @@ class RoutineItem {
   // Skincare specific details (kept for backward compat, prefer `steps`)
   final List<String>? skincareProducts;
 
+  // Structured Class details
+  final String? professor;
+  final String? courseCode;
+  final String? classType;
+  final String? sectionLabel;
+
   // Block configuration
   final bool hardBlock;
   final List<String> allowedOverlaps; // Legacy string-based IDs
@@ -193,6 +199,10 @@ class RoutineItem {
     this.caloriesEstimate,
     this.proteinEstimate,
     this.skincareProducts,
+    this.professor,
+    this.courseCode,
+    this.classType,
+    this.sectionLabel,
     this.hardBlock = false,
     this.allowedOverlaps = const [],
     this.allowedConflicts = const [],
@@ -328,6 +338,10 @@ class RoutineItem {
     double? caloriesEstimate,
     double? proteinEstimate,
     List<String>? skincareProducts,
+    String? professor,
+    String? courseCode,
+    String? classType,
+    String? sectionLabel,
     bool? hardBlock,
     List<String>? allowedOverlaps,
     List<RoutineConflictAllowance>? allowedConflicts,
@@ -383,6 +397,10 @@ class RoutineItem {
       caloriesEstimate: caloriesEstimate ?? this.caloriesEstimate,
       proteinEstimate: proteinEstimate ?? this.proteinEstimate,
       skincareProducts: skincareProducts ?? this.skincareProducts,
+      professor: professor ?? this.professor,
+      courseCode: courseCode ?? this.courseCode,
+      classType: classType ?? this.classType,
+      sectionLabel: sectionLabel ?? this.sectionLabel,
       hardBlock: hardBlock ?? this.hardBlock,
       allowedOverlaps: allowedOverlaps ?? this.allowedOverlaps,
       allowedConflicts: allowedConflicts ?? this.allowedConflicts,
@@ -439,6 +457,10 @@ class RoutineItem {
       'caloriesEstimate': caloriesEstimate,
       'proteinEstimate': proteinEstimate,
       'skincareProducts': skincareProducts,
+      'professor': professor,
+      'courseCode': courseCode,
+      'classType': classType,
+      'sectionLabel': sectionLabel,
       'hardBlock': hardBlock,
       'allowedOverlaps': allowedOverlaps,
       'allowedConflicts': allowedConflicts.map((c) => c.toMap()).toList(),
@@ -492,6 +514,14 @@ class RoutineItem {
       if (dishes != null) 'dishes': List<String>.from(dishes!),
       if (caloriesEstimate != null) 'caloriesEstimate': caloriesEstimate,
       if (proteinEstimate != null) 'proteinEstimate': proteinEstimate,
+      if (professor != null && professor!.trim().isNotEmpty)
+        'professor': professor!.trim(),
+      if (courseCode != null && courseCode!.trim().isNotEmpty)
+        'courseCode': courseCode!.trim(),
+      if (classType != null && classType!.trim().isNotEmpty)
+        'classType': classType!.trim(),
+      if (sectionLabel != null && sectionLabel!.trim().isNotEmpty)
+        'sectionLabel': sectionLabel!.trim(),
       'hardBlock': hardBlock,
       'allowedConflicts': allowedConflicts.map((c) => c.toMap()).toList(),
       if (onboardingProjectionId != null &&
@@ -583,6 +613,10 @@ class RoutineItem {
       caloriesEstimate: (map['caloriesEstimate'] as num?)?.toDouble(),
       proteinEstimate: (map['proteinEstimate'] as num?)?.toDouble(),
       skincareProducts: (map['skincareProducts'] as List?)?.cast<String>(),
+      professor: (map['professor'] ?? map['instructor']) as String?,
+      courseCode: map['courseCode'] as String?,
+      classType: map['classType'] as String?,
+      sectionLabel: (map['sectionLabel'] ?? map['section']) as String?,
       hardBlock: map['hardBlock'] as bool? ?? false,
       allowedOverlaps:
           (map['allowedOverlaps'] as List?)?.cast<String>() ?? const [],

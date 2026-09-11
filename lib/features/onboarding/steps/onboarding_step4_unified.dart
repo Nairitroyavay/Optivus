@@ -138,8 +138,6 @@ class _VisualTimelineBlock {
   });
 }
 
-
-
 @visibleForTesting
 List<Onboarding4UploadTargetSpec> onboarding4UploadTargetsForRole(
   String? role,
@@ -199,8 +197,6 @@ List<Onboarding4UploadTargetSpec> onboarding4UploadTargetsForRole(
   }
   return const [];
 }
-
-
 
 @visibleForTesting
 String? onboarding4PartialFailureMessage({

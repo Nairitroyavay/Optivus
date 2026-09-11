@@ -2349,8 +2349,7 @@ class RecordingR2UploadClient implements R2UploadClient {
   Future<String> getPreviewUrl({
     required String objectKey,
     required String idToken,
-  }) async =>
-      'https://preview.local/$objectKey';
+  }) async => 'https://preview.local/$objectKey';
 }
 
 class DelayedDeleteR2UploadClient extends RecordingR2UploadClient {

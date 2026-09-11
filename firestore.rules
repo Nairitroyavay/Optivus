@@ -201,6 +201,10 @@ service cloud.firestore {
         "dishes",
         "caloriesEstimate",
         "proteinEstimate",
+        "professor",
+        "courseCode",
+        "classType",
+        "sectionLabel",
         "hardBlock",
         "allowedConflicts",
         "baseTimelineSection",
@@ -427,6 +431,14 @@ service cloud.firestore {
           || data.caloriesEstimate is number)
         && (!data.keys().hasAny(["proteinEstimate"])
           || data.proteinEstimate is number)
+        && (!data.keys().hasAny(["professor"])
+          || data.professor is string)
+        && (!data.keys().hasAny(["courseCode"])
+          || data.courseCode is string)
+        && (!data.keys().hasAny(["classType"])
+          || data.classType is string)
+        && (!data.keys().hasAny(["sectionLabel"])
+          || data.sectionLabel is string)
         && (!data.keys().hasAny(["onboardingProjectionId"])
           || data.onboardingProjectionId is string)
         && (!data.keys().hasAny(["onboardingSourceItemId"])

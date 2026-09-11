@@ -170,7 +170,7 @@ class BaseTimelineSetupNotifier
 }
 
 final baseTimelineSetupNotifierProvider =
-    StateNotifierProvider.autoDispose<
+    StateNotifierProvider<
       BaseTimelineSetupNotifier,
       AsyncValue<BaseTimelineSetup>
     >((ref) {

@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
@@ -152,11 +151,8 @@ class _BaseTimelinePhotoPreviewCardState
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Background blur / base
-            BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: Container(color: Colors.black.withValues(alpha: 0.25)),
-            ),
+            // Solid translucent background without expensive backdrop blur
+            Container(color: Colors.black.withValues(alpha: 0.25)),
 
             if (_loading)
               Center(
@@ -192,6 +188,8 @@ class _BaseTimelinePhotoPreviewCardState
                     Image.network(
                       _previewUri.toString(),
                       fit: BoxFit.cover,
+                      cacheWidth: 600,
+                      cacheHeight: 400,
                       errorBuilder: (context, error, stackTrace) =>
                           _buildFallbackContent(),
                     ),
@@ -260,18 +258,22 @@ class _BaseTimelinePhotoPreviewCardState
   }
 
   Widget _buildFallbackContent() {
+    final isCompact = widget.height < 120;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: isCompact ? 6 : 16,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               Icons.image_outlined,
               color: OptivusColors.textSecondary.withValues(alpha: 0.7),
-              size: 32,
+              size: isCompact ? 24 : 32,
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: isCompact ? 4 : 8),
             Text(
               widget.title,
               style: const TextStyle(
@@ -280,7 +282,7 @@ class _BaseTimelinePhotoPreviewCardState
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             const Text(
               'Secure cloud storage',
               style: TextStyle(

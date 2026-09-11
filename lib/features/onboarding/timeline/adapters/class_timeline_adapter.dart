@@ -11,12 +11,34 @@ import 'timeline_feature_adapter.dart';
 class ClassTimelineAdapter
     implements TimelineFeatureAdapter<ClassRoutineBlock> {
   final Color accent;
+  final bool defaultEditable;
 
-  const ClassTimelineAdapter({this.accent = OptivusColors.aquaAccent});
+  const ClassTimelineAdapter({
+    this.accent = OptivusColors.aquaAccent,
+    this.defaultEditable = true,
+  });
 
   /// Translates [ClassRoutineBlock] into neutral [TimelineEntry].
   @override
-  List<TimelineEntry> toEntries(ClassRoutineBlock block) {
+  List<TimelineEntry> toEntries(ClassRoutineBlock block, {bool? isEditable}) {
+    final hasDetails =
+        block.room.isNotEmpty ||
+        block.professor.isNotEmpty ||
+        block.courseCode.isNotEmpty ||
+        block.classType.isNotEmpty;
+    final hasRichDetails =
+        (block.room.isNotEmpty && block.professor.isNotEmpty) ||
+        ((block.courseCode.isNotEmpty || block.classType.isNotEmpty) &&
+            (block.room.isNotEmpty || block.professor.isNotEmpty));
+    final minHeight = hasRichDetails ? 96.0 : (hasDetails ? 76.0 : 60.0);
+
+    String? subtitle;
+    if (block.room.isNotEmpty) {
+      subtitle = block.room;
+    } else if (block.courseCode.isNotEmpty) {
+      subtitle = block.courseCode;
+    }
+
     return [
       TimelineEntry(
         id: block.id,
@@ -25,10 +47,11 @@ class ClassTimelineAdapter
         endMinute: block.endMinute,
         repeatDays: block.repeatDays,
         title: block.subject,
-        subtitle: block.room.isNotEmpty ? block.room : null,
+        subtitle: subtitle,
         category: TimelineCategory.classes,
-        isEditable: true,
+        isEditable: isEditable ?? defaultEditable,
         adapterKey: 'classes',
+        minHeight: minHeight,
       ),
     ];
   }
@@ -63,6 +86,11 @@ class ClassTimelineAdapter
   }) {
     final titleCtrl = TextEditingController(text: block.subject);
     final roomCtrl = TextEditingController(text: block.room);
+    final courseCodeCtrl = TextEditingController(text: block.courseCode);
+    final classTypeCtrl = TextEditingController(text: block.classType);
+    final professorCtrl = TextEditingController(text: block.professor);
+    final sectionCtrl = TextEditingController(text: block.section);
+    final notesCtrl = TextEditingController(text: block.notes);
     var startMinute = block.startMinute;
     var endMinute = block.endMinute;
     final selectedDays = Set<int>.from(
@@ -91,6 +119,11 @@ class ClassTimelineAdapter
         final updated = block.copyWith(
           subject: title,
           room: roomCtrl.text.trim(),
+          courseCode: courseCodeCtrl.text.trim(),
+          classType: classTypeCtrl.text.trim(),
+          professor: professorCtrl.text.trim(),
+          section: sectionCtrl.text.trim(),
+          notes: notesCtrl.text.trim(),
           startMinute: startMinute,
           endMinute: endMinute,
           repeatDays: selectedDays.toList()..sort(),
@@ -133,11 +166,157 @@ class ClassTimelineAdapter
                     ),
                   ),
 
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
 
-                  // Room / Location
+                  // Course Code & Class Type Row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'COURSE CODE',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                color: OptivusColors.textSecondary,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              key: const Key('timeline-edit-course-code-field'),
+                              controller: courseCodeCtrl,
+                              decoration: InputDecoration(
+                                hintText: 'e.g. CS101',
+                                filled: true,
+                                fillColor: Colors.white.withValues(alpha: 0.6),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(
+                                    color: accent.withValues(alpha: 0.5),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'CLASS TYPE',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                color: OptivusColors.textSecondary,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              key: const Key('timeline-edit-class-type-field'),
+                              controller: classTypeCtrl,
+                              decoration: InputDecoration(
+                                hintText: 'e.g. Lecture / Lab',
+                                filled: true,
+                                fillColor: Colors.white.withValues(alpha: 0.6),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(
+                                    color: accent.withValues(alpha: 0.5),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // Room & Professor Row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'ROOM / LOCATION',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                color: OptivusColors.textSecondary,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              key: const Key('timeline-edit-room-field'),
+                              controller: roomCtrl,
+                              decoration: InputDecoration(
+                                hintText: 'e.g. Hall B-12',
+                                filled: true,
+                                fillColor: Colors.white.withValues(alpha: 0.6),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(
+                                    color: accent.withValues(alpha: 0.5),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'PROFESSOR',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                color: OptivusColors.textSecondary,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              key: const Key('timeline-edit-professor-field'),
+                              controller: professorCtrl,
+                              decoration: InputDecoration(
+                                hintText: 'e.g. Dr. Sharma',
+                                filled: true,
+                                fillColor: Colors.white.withValues(alpha: 0.6),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(
+                                    color: accent.withValues(alpha: 0.5),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // Section
                   const Text(
-                    'ROOM / LOCATION',
+                    'SECTION (OPTIONAL)',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w900,
@@ -147,10 +326,39 @@ class ClassTimelineAdapter
                   ),
                   const SizedBox(height: 6),
                   TextFormField(
-                    key: const Key('timeline-edit-room-field'),
-                    controller: roomCtrl,
+                    key: const Key('timeline-edit-section-field'),
+                    controller: sectionCtrl,
                     decoration: InputDecoration(
-                      hintText: 'e.g. Hall B-12 (optional)',
+                      hintText: 'e.g. Sec A',
+                      filled: true,
+                      fillColor: Colors.white.withValues(alpha: 0.6),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: accent.withValues(alpha: 0.5),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // Notes
+                  const Text(
+                    'NOTES (OPTIONAL)',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.textSecondary,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    key: const Key('timeline-edit-notes-field'),
+                    controller: notesCtrl,
+                    decoration: InputDecoration(
+                      hintText: 'e.g. Bring lab coat',
                       filled: true,
                       fillColor: Colors.white.withValues(alpha: 0.6),
                       border: OutlineInputBorder(

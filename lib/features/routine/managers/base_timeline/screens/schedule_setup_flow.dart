@@ -60,7 +60,11 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
         id: b.id,
         subject: b.title,
         room: b.location ?? '',
-        professor: '',
+        professor: b.professor ?? '',
+        courseCode: b.courseCode ?? '',
+        classType: b.classType ?? '',
+        section: b.sectionLabel ?? '',
+        notes: b.notes ?? '',
         startMinute: b.startMinute,
         endMinute: b.endMinute,
         repeatDays: b.repeatDays.isEmpty ? const [1, 2, 3, 4, 5] : b.repeatDays,
@@ -345,6 +349,11 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
         repeatDays: b.repeatDays,
         section: widget.config.timelineSection,
         blockType: TimelineBlockDraft.hardBlockKey,
+        professor: b.professor,
+        courseCode: b.courseCode,
+        classType: b.classType,
+        sectionLabel: b.section,
+        notes: b.notes,
       );
     }).toList();
 

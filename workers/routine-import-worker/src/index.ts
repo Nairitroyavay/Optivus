@@ -94,6 +94,10 @@ type RoutineImportCandidate = {
   notes?: string;
   mealCategory?: string;
   steps: string[];
+  courseCode?: string;
+  classType?: string;
+  instructor?: string;
+  sectionLabel?: string;
 };
 
 type ExtractArgs = {
@@ -705,7 +709,7 @@ function buildRoutineImportPrompt(
 ): string {
   const sourceRules = {
     classes:
-      "Extract subjects/classes/labs/tutorials from weekly timetable tables. If days/times are visible in headers, extract class cells even if subjects are short abbreviations. Short subject abbreviations such as DSD, AFL, DS, PS, STW, IND4 are valid class titles and must not be discarded as unclear by themselves. If a cell has a subject and nearby room/location, create a hard_block and preserve the room/location if visible, such as C25-B-301. Rows or columns may contain day labels like MON, MON(1), TUE(1), WED(0), THU(0), FRI(1), Monday, Friday, Mon-Fri, or weekdays; parse those labels into repeatDays. Times may be column or row headers like 9-10, 10-11, 3.15-4.15, 4.15-5.15; convert clear ranges to startMinute/endMinute. Use hard_block and category classBlock for clear timed class cells. Do not require the category to be named class if the source is classes and the title/time/day are clear. Do not return empty if there are clearly visible timed class cells. If only period numbers exist and exact times are missing, create flexible/unplaced low-confidence candidates.",
+      "Extract subjects/classes/labs/tutorials from weekly timetable tables. If days/times are visible in headers, extract class cells even if subjects are short abbreviations. Short subject abbreviations such as DSD, AFL, DS, PS, STW, IND4 are valid class titles and must not be discarded as unclear by themselves. If a cell has a subject and nearby room/location, create a hard_block and preserve the room/location if visible, such as C25-B-301. Extract these structured fields only when clearly visible in the timetable cell, nearby labels, or an unambiguous timetable legend: courseCode (e.g. CS101, MATH201), classType (e.g. Lecture, Lab, Tutorial, Seminar, Practical), instructor (e.g. Prof. Sharma, Dr. Lee, faculty name), sectionLabel (e.g. Sec A, Batch 2), location (room/building/hall), and notes (only when source provides useful notes). Never infer a professor, course code, section, or class type that is not clearly supported by the image. If timetable colors map to faculty through an explicit visible legend, preserve that relationship when readable. Rows or columns may contain day labels like MON, MON(1), TUE(1), WED(0), THU(0), FRI(1), Monday, Friday, Mon-Fri, or weekdays; parse those labels into repeatDays. Times may be column or row headers like 9-10, 10-11, 3.15-4.15, 4.15-5.15; convert clear ranges to startMinute/endMinute. Use hard_block and category classBlock for clear timed class cells. Do not require the category to be named class if the source is classes and the title/time/day are clear. Do not return empty if there are clearly visible timed class cells. If only period numbers exist and exact times are missing, create flexible/unplaced low-confidence candidates.",
     work:
       "Extract only clearly timed work/business responsibility blocks from the image. If days are columns and times are rows, extract visible work/business cells. Valid work/business titles include Office Work, Work, Shift, Meeting, Client Calls, Project Work, Team Sync, Team Review, Weekly Review, Training Session, Commute, Lunch Break / Break, Freelance Project, freelance/side-work, and Business Hours. Preserve the visible title and time. Use hard_block for fixed timed blocks. Use category job. Do not ignore blocks just because they are not named exactly Work. Do not import personal habit blocks like Gym/Exercise, Study/Reading, Online Course, Reading, Rest Day/No Work, or personal habits as job candidates. For weekly grid images, days are columns and times are rows. Convert each visible timed cell into one candidate with repeatDays matching the day column. Treat all clearly timed work schedule items as fixed work/business blocks unless source text clearly says rest day/no work. Do not return empty if there are clearly visible timed work cells. Use flexible tasks only for to-dos without a visible time.",
     eating:
@@ -788,6 +792,10 @@ function buildRoutineImportPrompt(
           notes: "safe note",
           mealCategory: "Breakfast/Lunch/Dinner/Snack",
           steps: ["step"],
+          courseCode: "course code if visible",
+          classType: "Lecture/Lab/Tutorial if visible",
+          instructor: "instructor/professor/faculty if visible",
+          sectionLabel: "section/batch if visible",
         },
       ],
       warnings: ["warning"],
@@ -856,7 +864,14 @@ function fakeCandidates(args: ExtractArgs): RoutineImportCandidate[] {
   switch (args.source) {
     case "classes":
       return [
-        common("ai_class_math", "Math class", 540, 600, [1, 3, 5], "hard_block", "classBlock", true, "MON/WED/FRI 9:00 Math"),
+        {
+          ...common("ai_class_math", "Math class", 540, 600, [1, 3, 5], "hard_block", "classBlock", true, "MON/WED/FRI 9:00 Math"),
+          courseCode: "MATH101",
+          classType: "Lecture",
+          instructor: "Prof. Sharma",
+          sectionLabel: "Sec A",
+          location: "Hall B-12",
+        },
         unclearCandidate({
           args,
           id: "ai_class_unclear_period",
@@ -1064,6 +1079,10 @@ function sanitizeCandidate(
     notes: optionalText(candidate.notes, 800),
     mealCategory: optionalText(candidate.mealCategory, 80),
     steps: stringList(candidate.steps, 16, 120),
+    courseCode: optionalText(candidate.courseCode, 64),
+    classType: optionalText(candidate.classType, 64),
+    instructor: optionalText(candidate.instructor, 120),
+    sectionLabel: optionalText(candidate.sectionLabel, 64),
   };
 }
 
@@ -1126,6 +1145,10 @@ function coerceCandidate(value: unknown): RoutineImportCandidate {
     notes: textValue(body.notes),
     mealCategory: textValue(body.mealCategory),
     steps: Array.isArray(body.steps) ? body.steps.filter(isString) : [],
+    courseCode: textValue(body.courseCode),
+    classType: textValue(body.classType),
+    instructor: textValue(body.instructor) ?? textValue(body.professor),
+    sectionLabel: textValue(body.sectionLabel) ?? textValue(body.section),
   };
 }
 
@@ -1542,12 +1565,27 @@ function assertOwnedRoutineImportObjectKey(args: {
 
   const parts = args.objectKey.split("/");
   const allowedPurposes = classWorkScheduleSwapPurposes(args.source);
+  const allowedSourceFeatures = new Set(["onboarding", "routine_base_timeline"]);
   if (
     parts.length !== 5 ||
     parts[0] !== "users" ||
     parts[1] !== safeUid ||
-    parts[2] !== "onboarding" ||
+    !allowedSourceFeatures.has(parts[2]) ||
     !allowedPurposes.has(parts[3])
+  ) {
+    throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
+  }
+
+  if (
+    parts[2] === "routine_base_timeline" &&
+    (args.source !== "classes" && args.source !== "work")
+  ) {
+    throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
+  }
+  if (
+    parts[2] === "routine_base_timeline" &&
+    parts[3] !== "class_timetable" &&
+    parts[3] !== "work_schedule"
   ) {
     throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
   }

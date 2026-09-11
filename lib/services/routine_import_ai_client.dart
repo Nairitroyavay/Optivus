@@ -128,6 +128,12 @@ class FakeRoutineImportAiClient implements RoutineImportAiClient {
           RoutineCategory.classBlock.name,
           true,
           'MON/WED/FRI 9:00 Math',
+        ).copyWith(
+          courseCode: 'MATH101',
+          classType: 'Lecture',
+          instructor: 'Prof. Sharma',
+          sectionLabel: 'Sec A',
+          location: 'Hall B-12',
         ),
         _unclearCandidate(
           review: review,

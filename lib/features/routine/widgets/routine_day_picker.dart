@@ -8,6 +8,8 @@ import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/routine_glass_filter.dart';
 
+enum _PickerPhase { closed, opening, open, closing }
+
 /// Compact selected-day button with an authentic liquid-glass finish and
 /// an anchored smooth vertical snapping date wheel popover.
 ///
@@ -26,27 +28,40 @@ class _RoutineDayPickerButtonState extends ConsumerState<RoutineDayPickerButton>
     with SingleTickerProviderStateMixin {
   OverlayEntry? _overlay;
   late final AnimationController _anim;
-  late final Animation<double> _scaleAnim;
-  late final Animation<double> _fadeAnim;
   final LayerLink _link = LayerLink();
-  bool _isClosing = false;
+  _PickerPhase _phase = _PickerPhase.closed;
 
   @override
   void initState() {
     super.initState();
     _anim = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 220),
+      duration: const Duration(milliseconds: 150),
+      reverseDuration: const Duration(milliseconds: 100),
     );
-    _scaleAnim = Tween<double>(begin: 0.96, end: 1.0).animate(
-      CurvedAnimation(parent: _anim, curve: OptivusMotion.enterCurve),
-    );
-    _fadeAnim = CurvedAnimation(parent: _anim, curve: OptivusMotion.enterCurve);
+    _anim.addStatusListener(_handleAnimationStatus);
+  }
+
+  void _handleAnimationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed && _phase == _PickerPhase.opening) {
+      _phase = _PickerPhase.open;
+    } else if (status == AnimationStatus.dismissed &&
+        _phase == _PickerPhase.closing) {
+      _removeOverlaySynchronously();
+      _phase = _PickerPhase.closed;
+    }
+  }
+
+  void _removeOverlaySynchronously() {
+    _overlay?.remove();
+    _overlay = null;
   }
 
   @override
   void dispose() {
-    _closePicker(immediate: true);
+    _anim.stop();
+    _anim.removeStatusListener(_handleAnimationStatus);
+    _removeOverlaySynchronously();
     _anim.dispose();
     super.dispose();
   }
@@ -59,70 +74,112 @@ class _RoutineDayPickerButtonState extends ConsumerState<RoutineDayPickerButton>
     }
   }
 
+  void _togglePicker() {
+    switch (_phase) {
+      case _PickerPhase.closed:
+        _openPicker();
+        break;
+      case _PickerPhase.closing:
+        _openPicker(); // reverse current transition smoothly
+        break;
+      case _PickerPhase.opening:
+      case _PickerPhase.open:
+        _closePicker();
+        break;
+    }
+  }
+
   void _openPicker() {
-    if (_overlay != null || _isClosing) return;
+    if (_phase == _PickerPhase.open || _phase == _PickerPhase.opening) return;
+
+    final isReduced = OptivusMotion.isReducedMotion(context);
+
+    if (_phase == _PickerPhase.closing) {
+      _phase = _PickerPhase.opening;
+      if (isReduced) {
+        _anim.value = 1.0;
+        _phase = _PickerPhase.open;
+      } else {
+        _anim.forward();
+      }
+      return;
+    }
+
     final selectedDay = ref.read(routineNotifierProvider).selectedDay;
 
     _overlay = OverlayEntry(
       builder: (_) {
-        return GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () => _closePicker(),
-          child: Stack(
-            children: [
-              CompositedTransformFollower(
-                link: _link,
-                showWhenUnlinked: false,
-                targetAnchor: Alignment.bottomLeft,
-                followerAnchor: Alignment.topLeft,
-                offset: const Offset(0, 8),
-                child: AnimatedBuilder(
-                  animation: _anim,
-                  builder: (context, child) {
-                    final isReduced = OptivusMotion.isReducedMotion(context);
-                    final opacity = isReduced ? 1.0 : _fadeAnim.value;
-                    final scale = isReduced ? 1.0 : _scaleAnim.value;
-                    final translateY =
-                        isReduced ? 0.0 : (1.0 - _fadeAnim.value) * -3.0;
-
-                    return Opacity(
-                      opacity: opacity.clamp(0.0, 1.0),
-                      child: Transform.translate(
-                        offset: Offset(0, translateY),
-                        child: Transform.scale(
-                          scale: scale,
-                          alignment: Alignment.topLeft,
-                          child: child,
-                        ),
-                      ),
-                    );
-                  },
-                  child: _RoutineDayWheelPopover(
-                    initialSelectedDay: selectedDay,
-                    onDateSelected: _onDateSelected,
-                    onClose: () => _closePicker(),
-                  ),
-                ),
+        return Stack(
+          children: [
+            // 1. Explicit full-screen scrim behind the popup
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _closePicker,
+                child: const ColoredBox(color: Colors.transparent),
               ),
-            ],
-          ),
+            ),
+            // 2. Trigger proxy over button so tapping trigger while overlay is active invokes _togglePicker
+            CompositedTransformFollower(
+              link: _link,
+              showWhenUnlinked: false,
+              targetAnchor: Alignment.topLeft,
+              followerAnchor: Alignment.topLeft,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _togglePicker,
+                child: const SizedBox(width: 50, height: 48),
+              ),
+            ),
+            // 3. Anchored floating glass date picker popover
+            CompositedTransformFollower(
+              link: _link,
+              showWhenUnlinked: false,
+              targetAnchor: Alignment.bottomLeft,
+              followerAnchor: Alignment.topLeft,
+              offset: const Offset(0, 8),
+              child: _RoutineDayWheelPopover(
+                animation: _anim,
+                initialSelectedDay: selectedDay,
+                onDateSelected: _onDateSelected,
+                onClose: _closePicker,
+              ),
+            ),
+          ],
         );
       },
     );
 
+    _phase = _PickerPhase.opening;
     Overlay.of(context).insert(_overlay!);
-    _anim.forward();
+
+    if (isReduced) {
+      _anim.value = 1.0;
+      _phase = _PickerPhase.open;
+    } else {
+      _anim.value = 0.0;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _overlay == null || _phase != _PickerPhase.opening) {
+          return;
+        }
+        _anim.forward(from: 0.0);
+      });
+    }
   }
 
-  void _closePicker({bool immediate = false}) async {
-    if (_overlay == null || _isClosing) return;
-    _isClosing = true;
-    if (!immediate && mounted) {
-      await _anim.reverse();
+  void _closePicker() {
+    if (_phase == _PickerPhase.closed || _phase == _PickerPhase.closing) return;
+
+    _phase = _PickerPhase.closing;
+    final isReduced = OptivusMotion.isReducedMotion(context);
+
+    if (isReduced) {
+      _removeOverlaySynchronously();
+      _anim.value = 0.0;
+      _phase = _PickerPhase.closed;
+    } else {
+      _anim.reverse();
     }
-    _overlay?.remove();
-    _overlay = null;
-    _isClosing = false;
   }
 
   @override
@@ -161,9 +218,9 @@ class _RoutineDayPickerButtonState extends ConsumerState<RoutineDayPickerButton>
         'Selected date, $weekdayName $monthName ${selectedDay.day}. Tap to change date.';
 
     return PopScope(
-      canPop: _overlay == null,
+      canPop: _phase == _PickerPhase.closed,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _overlay != null) {
+        if (!didPop && _phase != _PickerPhase.closed) {
           _closePicker();
         }
       },
@@ -174,7 +231,7 @@ class _RoutineDayPickerButtonState extends ConsumerState<RoutineDayPickerButton>
           label: semanticLabel,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => _overlay == null ? _openPicker() : _closePicker(),
+            onTap: _togglePicker,
             child: SizedBox(
               height: 48,
               width: 50,
@@ -242,8 +299,9 @@ class _RoutineDayPickerButtonState extends ConsumerState<RoutineDayPickerButton>
                                   style: TextStyle(
                                     fontSize: 9,
                                     fontWeight: FontWeight.w900,
-                                    color: OptivusColors.ink
-                                        .withValues(alpha: 0.62),
+                                    color: OptivusColors.ink.withValues(
+                                      alpha: 0.62,
+                                    ),
                                     letterSpacing: 0.8,
                                     height: 1.0,
                                     decoration: TextDecoration.none,
@@ -279,11 +337,13 @@ class _RoutineDayPickerButtonState extends ConsumerState<RoutineDayPickerButton>
 
 /// Floating glass popover containing the smooth snapping vertical date wheel.
 class _RoutineDayWheelPopover extends StatefulWidget {
+  final Animation<double> animation;
   final DateTime initialSelectedDay;
   final ValueChanged<DateTime> onDateSelected;
   final VoidCallback onClose;
 
   const _RoutineDayWheelPopover({
+    required this.animation,
     required this.initialSelectedDay,
     required this.onDateSelected,
     required this.onClose,
@@ -299,8 +359,11 @@ class _RoutineDayWheelPopoverState extends State<_RoutineDayWheelPopover> {
   late final int _initialIndex;
   late final PageController _scrollController;
   late final DateTime _today;
+  late final Stopwatch _stopwatch;
 
   int _lastHapticIndex = -1;
+  int? _lastHapticTimeMs;
+  late int _lastCommittedIndex;
 
   static const double _popoverWidth = 120.0;
   static const double _popoverHeight = 220.0;
@@ -312,6 +375,7 @@ class _RoutineDayWheelPopoverState extends State<_RoutineDayWheelPopover> {
   @override
   void initState() {
     super.initState();
+    _stopwatch = Stopwatch()..start();
     final now = DateTime.now();
     _today = TimelineUtils.dateOnly(now);
     final selectedDay = widget.initialSelectedDay;
@@ -337,6 +401,7 @@ class _RoutineDayWheelPopoverState extends State<_RoutineDayWheelPopover> {
     );
     _initialIndex = matchIndex >= 0 ? matchIndex : pastDays;
     _lastHapticIndex = _initialIndex;
+    _lastCommittedIndex = _initialIndex;
 
     _scrollController = PageController(
       initialPage: _initialIndex,
@@ -346,26 +411,30 @@ class _RoutineDayWheelPopoverState extends State<_RoutineDayWheelPopover> {
 
   @override
   void dispose() {
-    if (_scrollController.hasClients) {
-      final currentPage =
-          _scrollController.page?.round() ?? _scrollController.initialPage;
-      _commitSelection(currentPage);
-    }
     _scrollController.dispose();
     super.dispose();
   }
 
   void _onPageChanged(int index) {
-    if (index != _lastHapticIndex) {
+    if (index == _lastHapticIndex) return;
+
+    final nowMs = _stopwatch.elapsedMilliseconds;
+    if (_lastHapticTimeMs != null && (nowMs - _lastHapticTimeMs!) < 50) {
       _lastHapticIndex = index;
-      HapticFeedback.selectionClick();
+      return;
     }
+
+    _lastHapticTimeMs = nowMs;
+    _lastHapticIndex = index;
+    HapticFeedback.mediumImpact();
   }
 
   void _commitSelection(int index) {
-    if (index >= 0 && index < _dates.length) {
-      widget.onDateSelected(_dates[index]);
-    }
+    if (index == _lastCommittedIndex) return;
+    if (index < 0 || index >= _dates.length) return;
+
+    _lastCommittedIndex = index;
+    widget.onDateSelected(_dates[index]);
   }
 
   @override
@@ -391,7 +460,7 @@ class _RoutineDayWheelPopoverState extends State<_RoutineDayWheelPopover> {
             filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
             child: Stack(
               children: [
-                // 1. Transparent frosted glass tint matching Filter (0.06 alpha)
+                // 1. Static frosted glass background tint (0.06 alpha)
                 Positioned.fill(
                   child: IgnorePointer(
                     child: Container(
@@ -403,74 +472,82 @@ class _RoutineDayWheelPopoverState extends State<_RoutineDayWheelPopover> {
                   ),
                 ),
 
-                // 2. Translucent center selection lane indicator (behind date items)
-                Positioned(
-                  top: (_popoverHeight - _itemExtent) / 2,
-                  left: 8,
-                  right: 8,
-                  height: _itemExtent,
-                  child: IgnorePointer(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.40),
-                          width: 1.0,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.03),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+                // 2. Animated lightweight foreground: center selection lane + PageView
+                AnimatedBuilder(
+                  animation: widget.animation,
+                  builder: (context, child) {
+                    final progress = widget.animation.value;
+                    final opacity = progress.clamp(0.0, 1.0);
+                    final translateY = (1.0 - progress) * -3.0;
 
-                // 3. Smooth vertical PageView with edge gradient mask
-                NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    if (notification is ScrollEndNotification) {
-                      final page = _scrollController.page?.round() ??
-                          _scrollController.initialPage;
-                      _commitSelection(page);
-                    }
-                    return false;
+                    return Opacity(
+                      opacity: opacity,
+                      child: Transform.translate(
+                        offset: Offset(0, translateY),
+                        child: child,
+                      ),
+                    );
                   },
-                  child: ShaderMask(
-                    shaderCallback: (rect) {
-                      return const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black,
-                          Colors.black,
-                          Colors.transparent,
-                        ],
-                        stops: [0.0, 0.16, 0.84, 1.0],
-                      ).createShader(rect);
-                    },
-                    blendMode: BlendMode.dstIn,
-                    child: PageView.builder(
-                      controller: _scrollController,
-                      scrollDirection: Axis.vertical,
-                      itemCount: _dates.length,
-                      physics: const BouncingScrollPhysics(
-                        parent: PageScrollPhysics(),
+                  child: Stack(
+                    children: [
+                      // Center selection lane indicator (behind date items)
+                      Positioned(
+                        top: (_popoverHeight - _itemExtent) / 2,
+                        left: 8,
+                        right: 8,
+                        height: _itemExtent,
+                        child: IgnorePointer(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.40),
+                                width: 1.0,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.03),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
-                      onPageChanged: _onPageChanged,
-                      itemBuilder: (context, index) {
-                        return _buildDateItem(context, index);
-                      },
-                    ),
+
+                      // Vertical PageView (RepaintBoundary isolates scrolling from glass rim)
+                      NotificationListener<ScrollNotification>(
+                        onNotification: (notification) {
+                          if (notification is ScrollEndNotification) {
+                            final page =
+                                _scrollController.page?.round() ??
+                                _scrollController.initialPage;
+                            _commitSelection(page);
+                          }
+                          return false;
+                        },
+                        child: RepaintBoundary(
+                          child: PageView.builder(
+                            controller: _scrollController,
+                            scrollDirection: Axis.vertical,
+                            itemCount: _dates.length,
+                            physics: const PageScrollPhysics(
+                              parent: ClampingScrollPhysics(),
+                            ),
+                            onPageChanged: _onPageChanged,
+                            itemBuilder: (context, index) {
+                              return _buildDateItem(context, index);
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
 
-                // 4. Glass highlight rim painter on top
+                // 3. Static glass highlight rim painter on top
                 Positioned.fill(
                   child: IgnorePointer(
                     child: CustomPaint(
@@ -527,7 +604,8 @@ class _RoutineDayWheelPopoverState extends State<_RoutineDayWheelPopover> {
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () {
-            final currentPage = _scrollController.page?.round() ??
+            final currentPage =
+                _scrollController.page?.round() ??
                 _scrollController.initialPage;
             if (index == currentPage) {
               _commitSelection(index);
@@ -538,16 +616,16 @@ class _RoutineDayWheelPopoverState extends State<_RoutineDayWheelPopover> {
                     index,
                     duration: OptivusMotion.duration(
                       context,
-                      const Duration(milliseconds: 200),
+                      const Duration(milliseconds: 180),
                     ),
                     curve: OptivusMotion.enterCurve,
                   )
                   .then((_) {
-                if (mounted) {
-                  _commitSelection(index);
-                  widget.onClose();
-                }
-              });
+                    if (mounted) {
+                      _commitSelection(index);
+                      widget.onClose();
+                    }
+                  });
             }
           },
           child: Center(
@@ -564,8 +642,9 @@ class _RoutineDayWheelPopoverState extends State<_RoutineDayWheelPopover> {
                       weekdayStr,
                       style: TextStyle(
                         fontSize: isCenter ? 12 : 11,
-                        fontWeight:
-                            isCenter ? FontWeight.w800 : FontWeight.w700,
+                        fontWeight: isCenter
+                            ? FontWeight.w800
+                            : FontWeight.w700,
                         color: OptivusColors.ink,
                         letterSpacing: 0.4,
                         decoration: TextDecoration.none,

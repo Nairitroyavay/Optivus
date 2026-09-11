@@ -124,6 +124,10 @@ class ClassRoutineBlock {
   final String subject;
   final String room;
   final String professor;
+  final String courseCode;
+  final String classType;
+  final String section;
+  final String notes;
   final int startMinute;
   final int endMinute;
   final List<int> repeatDays;
@@ -134,6 +138,7 @@ class ClassRoutineBlock {
   final bool reminderEnabled;
   final String? suggestionId;
 
+  String get sectionLabel => section;
   int? get weekday => repeatDays.isEmpty ? null : repeatDays.first;
   int get durationMinutes => (endMinute - startMinute).clamp(1, 24 * 60);
 
@@ -145,6 +150,10 @@ class ClassRoutineBlock {
     required this.subject,
     this.room = '',
     this.professor = '',
+    this.courseCode = '',
+    this.classType = '',
+    this.section = '',
+    this.notes = '',
     required this.startMinute,
     required this.endMinute,
     this.repeatDays = const [1],
@@ -161,6 +170,10 @@ class ClassRoutineBlock {
     String? subject,
     String? room,
     String? professor,
+    String? courseCode,
+    String? classType,
+    String? section,
+    String? notes,
     int? startMinute,
     int? endMinute,
     List<int>? repeatDays,
@@ -176,6 +189,10 @@ class ClassRoutineBlock {
       subject: subject ?? this.subject,
       room: room ?? this.room,
       professor: professor ?? this.professor,
+      courseCode: courseCode ?? this.courseCode,
+      classType: classType ?? this.classType,
+      section: section ?? this.section,
+      notes: notes ?? this.notes,
       startMinute: startMinute ?? this.startMinute,
       endMinute: endMinute ?? this.endMinute,
       repeatDays: repeatDays ?? this.repeatDays,

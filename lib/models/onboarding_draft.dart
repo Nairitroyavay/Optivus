@@ -4484,6 +4484,11 @@ class TimelineBlockDraft {
   final List<String> skincareMissingItems;
   final String? skincareSlotLabel;
   final List<String> provenanceSourceIds;
+  final String? professor;
+  final String? courseCode;
+  final String? classType;
+  final String? sectionLabel;
+  final String? notes;
 
   const TimelineBlockDraft({
     required this.id,
@@ -4508,6 +4513,11 @@ class TimelineBlockDraft {
     this.skincareMissingItems = const [],
     this.skincareSlotLabel,
     this.provenanceSourceIds = const [],
+    this.professor,
+    this.courseCode,
+    this.classType,
+    this.sectionLabel,
+    this.notes,
   });
 
   factory TimelineBlockDraft.fromMap(Map<String, dynamic> map) {
@@ -4534,6 +4544,11 @@ class TimelineBlockDraft {
       skincareMissingItems: _readStringList(map['skincareMissingItems']),
       skincareSlotLabel: map['skincareSlotLabel'] as String?,
       provenanceSourceIds: _readStringList(map['provenanceSourceIds']),
+      professor: (map['professor'] ?? map['instructor']) as String?,
+      courseCode: map['courseCode'] as String?,
+      classType: map['classType'] as String?,
+      sectionLabel: (map['sectionLabel'] ?? map['section']) as String?,
+      notes: map['notes'] as String?,
     );
   }
 
@@ -4560,6 +4575,11 @@ class TimelineBlockDraft {
     'skincareMissingItems': skincareMissingItems,
     'skincareSlotLabel': skincareSlotLabel,
     'provenanceSourceIds': provenanceSourceIds,
+    'professor': professor,
+    'courseCode': courseCode,
+    'classType': classType,
+    'sectionLabel': sectionLabel,
+    'notes': notes,
   };
 
   TimelineBlockDraft copyWith({
@@ -4585,6 +4605,11 @@ class TimelineBlockDraft {
     List<String>? skincareMissingItems,
     String? skincareSlotLabel,
     List<String>? provenanceSourceIds,
+    String? professor,
+    String? courseCode,
+    String? classType,
+    String? sectionLabel,
+    String? notes,
   }) {
     return TimelineBlockDraft(
       id: id ?? this.id,
@@ -4610,6 +4635,11 @@ class TimelineBlockDraft {
       skincareMissingItems: skincareMissingItems ?? this.skincareMissingItems,
       skincareSlotLabel: skincareSlotLabel ?? this.skincareSlotLabel,
       provenanceSourceIds: provenanceSourceIds ?? this.provenanceSourceIds,
+      professor: professor ?? this.professor,
+      courseCode: courseCode ?? this.courseCode,
+      classType: classType ?? this.classType,
+      sectionLabel: sectionLabel ?? this.sectionLabel,
+      notes: notes ?? this.notes,
     );
   }
 

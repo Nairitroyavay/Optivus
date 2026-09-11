@@ -108,7 +108,6 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     ref.listen(routineDetailViewRequestProvider, (previous, next) {
@@ -248,34 +247,32 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
   Widget _buildDetail() {
     return switch (_activeDetail.view) {
       RoutineDetailView.baseTimeline => BaseTimelineScreen(
-          onBack: _closeDetail,
-          onOpenDetail: _openDetail,
-        ),
+        onBack: _closeDetail,
+        onOpenDetail: _openDetail,
+      ),
       RoutineDetailView.classesSetup => ClassesBaseSetupScreen(
-          onBack: _closeDetail,
-        ),
-      RoutineDetailView.workSetup => WorkBaseSetupScreen(
-          onBack: _closeDetail,
-        ),
+        onBack: _closeDetail,
+      ),
+      RoutineDetailView.workSetup => WorkBaseSetupScreen(onBack: _closeDetail),
       RoutineDetailView.eatingSetup => EatingBaseSetupScreen(
-          onBack: _closeDetail,
-        ),
+        onBack: _closeDetail,
+      ),
       RoutineDetailView.fixedSetup => FixedBaseSetupScreen(
-          onBack: _closeDetail,
-        ),
+        onBack: _closeDetail,
+      ),
       RoutineDetailView.skinCareSetup => SkinCareBaseSetupScreen(
-          onBack: _closeDetail,
-        ),
+        onBack: _closeDetail,
+      ),
       RoutineDetailView.routineSettings => _RoutineSettingsInline(
-          onBack: _closeDetail,
-          onOpenDetail: _openDetail,
-        ),
+        onBack: _closeDetail,
+        onOpenDetail: _openDetail,
+      ),
       RoutineDetailView.habitSystems => RoutineHabitSystemsScreen(
-          onBack: _closeDetail,
-        ),
+        onBack: _closeDetail,
+      ),
       RoutineDetailView.routineHistory => RoutineHistoryScreen(
-          onBack: _closeDetail,
-        ),
+        onBack: _closeDetail,
+      ),
       RoutineDetailView.none => const SizedBox.shrink(),
     };
   }
@@ -359,9 +356,7 @@ class _RoutineSettingsInline extends ConsumerWidget {
               subtitle: 'Classes, work, eating, fixed, and skin care.',
               accentColor: OptivusColors.routineAccent,
               onTap: () => onOpenDetail(
-                const RoutineDetailTarget(
-                  view: RoutineDetailView.baseTimeline,
-                ),
+                const RoutineDetailTarget(view: RoutineDetailView.baseTimeline),
               ),
             ),
             LiquidActionRow(

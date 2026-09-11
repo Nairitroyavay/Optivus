@@ -1281,8 +1281,7 @@ class _PendingTestR2Client implements R2UploadClient {
   Future<String> getPreviewUrl({
     required String objectKey,
     required String idToken,
-  }) async =>
-      'https://preview.local/$objectKey';
+  }) async => 'https://preview.local/$objectKey';
 }
 
 class _PendingTestImageService extends ImagePrepareService {

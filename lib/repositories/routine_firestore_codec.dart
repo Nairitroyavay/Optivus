@@ -34,6 +34,10 @@ class RoutineTemplateFirestoreCodec {
     'dishes',
     'caloriesEstimate',
     'proteinEstimate',
+    'professor',
+    'courseCode',
+    'classType',
+    'sectionLabel',
     'hardBlock',
     'allowedConflicts',
     'baseTimelineSection',
@@ -90,6 +94,11 @@ class RoutineTemplateFirestoreCodec {
       if (item.caloriesEstimate != null)
         'caloriesEstimate': item.caloriesEstimate,
       if (item.proteinEstimate != null) 'proteinEstimate': item.proteinEstimate,
+      if (_notBlank(item.professor)) 'professor': item.professor!.trim(),
+      if (_notBlank(item.courseCode)) 'courseCode': item.courseCode!.trim(),
+      if (_notBlank(item.classType)) 'classType': item.classType!.trim(),
+      if (_notBlank(item.sectionLabel))
+        'sectionLabel': item.sectionLabel!.trim(),
       'hardBlock': item.hardBlock,
       'allowedConflicts': item.allowedConflicts.map((c) => c.toMap()).toList(),
       if (_notBlank(item.onboardingProjectionId))
@@ -224,6 +233,10 @@ class RoutineTemplateFirestoreCodec {
           (data['proteinEstimate'] as num?)?.toDouble() ??
           (data['protein'] as num?)?.toDouble(),
       skincareProducts: _readStringList(data['skincareProducts']),
+      professor: _optionalString(data['professor']),
+      courseCode: _optionalString(data['courseCode']),
+      classType: _optionalString(data['classType']),
+      sectionLabel: _optionalString(data['sectionLabel']),
       hardBlock:
           data['hardBlock'] as bool? ??
           data['blockType'] == RoutineBlockType.hardBlock.name,

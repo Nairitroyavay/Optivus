@@ -212,6 +212,14 @@ describe("Routine Import Worker request boundary", () => {
       "invalid_object_key",
     ],
     [
+      "unknown source feature",
+      {
+        uploadedAssetR2Key:
+          "users/uid-1/profile/class_timetable/asset-1.jpg",
+      },
+      "invalid_object_key",
+    ],
+    [
       "wrong purpose for source",
       {
         source: "eating",
@@ -226,6 +234,87 @@ describe("Routine Import Worker request boundary", () => {
       { uploadedAssetId: "asset-2" },
       "asset_mismatch",
     ],
+    [
+      "malformed path with ..",
+      {
+        uploadedAssetR2Key:
+          "users/uid-1/../class_timetable/asset-1.jpg",
+      },
+      "invalid_object_key",
+    ],
+    [
+      "malformed path with backslash",
+      {
+        uploadedAssetR2Key:
+          "users/uid-1\\onboarding/class_timetable/asset-1.jpg",
+      },
+      "invalid_object_key",
+    ],
+    [
+      "malformed path with double slash",
+      {
+        uploadedAssetR2Key:
+          "users/uid-1//class_timetable/asset-1.jpg",
+      },
+      "invalid_object_key",
+    ],
+    [
+      "routine_base_timeline wrong owner UID",
+      {
+        uploadedAssetId: "asset-bt-1",
+        uploadedAssetR2Key:
+          "users/other-uid/routine_base_timeline/class_timetable/asset-bt-1.jpg",
+      },
+      "invalid_object_key",
+    ],
+    [
+      "routine_base_timeline wrong purpose for classes",
+      {
+        source: "classes",
+        uploadedAssetId: "asset-bt-1",
+        uploadedAssetR2Key:
+          "users/uid-1/routine_base_timeline/eating_menu/asset-bt-1.jpg",
+      },
+      "invalid_object_key",
+    ],
+    [
+      "routine_base_timeline asset ID mismatch",
+      {
+        uploadedAssetId: "different-id",
+        uploadedAssetR2Key:
+          "users/uid-1/routine_base_timeline/class_timetable/asset-bt-1.jpg",
+      },
+      "asset_mismatch",
+    ],
+    [
+      "routine_base_timeline malformed path with ..",
+      {
+        uploadedAssetId: "asset-bt-1",
+        uploadedAssetR2Key:
+          "users/uid-1/routine_base_timeline/../class_timetable/asset-bt-1.jpg",
+      },
+      "invalid_object_key",
+    ],
+    [
+      "routine_base_timeline rejected for eating source",
+      {
+        source: "eating",
+        uploadedAssetId: "asset-bt-1",
+        uploadedAssetR2Key:
+          "users/uid-1/routine_base_timeline/eating_plan/asset-bt-1.jpg",
+      },
+      "invalid_object_key",
+    ],
+    [
+      "routine_base_timeline rejected for skincare source",
+      {
+        source: "skinCare",
+        uploadedAssetId: "asset-bt-1",
+        uploadedAssetR2Key:
+          "users/uid-1/routine_base_timeline/skin_care/asset-bt-1.jpg",
+      },
+      "invalid_object_key",
+    ],
   ])("rejects %s before reading R2", async (_label, overrides, errorCode) => {
     const env = makeEnv();
     const response = await worker.fetch(
@@ -237,6 +326,110 @@ describe("Routine Import Worker request boundary", () => {
     expect(response.status).toBe(400);
     expect(json.error).toBe(errorCode);
     expect(env.UPLOAD_BUCKET.get).not.toHaveBeenCalled();
+  });
+
+  test("accepts routine_base_timeline class photo and extracts candidates", async () => {
+    const btObjectKey = "users/uid-1/routine_base_timeline/class_timetable/asset-bt-1.jpg";
+    stubGemini(200, {
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                text: JSON.stringify({
+                  id: "ext-1",
+                  uid: "uid-1",
+                  source: "classes",
+                  engine: "gemini",
+                  engineVersion: "phase2d",
+                  sourceAssetId: "asset-bt-1",
+                  sourceR2Key: btObjectKey,
+                  candidates: [
+                    {
+                      id: "c1",
+                      title: "Data Structures",
+                      candidateType: "block",
+                      startMinute: 480,
+                      endMinute: 540,
+                      hasFixedTime: true,
+                      repeatDays: [1, 3],
+                      blockType: "hard_block",
+                      category: "classBlock",
+                      hardBlock: true,
+                      selected: true,
+                      needsManualReview: false,
+                      confidenceScore: 0.9,
+                      confidenceLabel: "high",
+                      validationIssues: [],
+                      courseCode: "CS201",
+                      classType: "Lecture",
+                      instructor: "Prof. Sharma",
+                      sectionLabel: "Batch A",
+                      location: "Room C25-B-301",
+                      notes: "Bring laptop",
+                      steps: [],
+                    },
+                  ],
+                  warnings: [],
+                  createdAt: new Date().toISOString(),
+                }),
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    const env = makeEnv();
+    const response = await worker.fetch(
+      request({
+        reviewId: "review-bt-1",
+        source: "classes",
+        uploadedAssetId: "asset-bt-1",
+        uploadedAssetR2Key: btObjectKey,
+        sourceLabel: "Classes",
+      }),
+      env as never,
+    );
+
+    expect(response.status).toBe(200);
+    expect(env.UPLOAD_BUCKET.get).toHaveBeenCalledWith(btObjectKey);
+    const json = await response.json() as {
+      candidates: Array<Record<string, unknown>>;
+      source: string;
+      sourceR2Key: string;
+    };
+    expect(json.source).toBe("classes");
+    expect(json.sourceR2Key).toBe(btObjectKey);
+    expect(json.candidates.length).toBe(1);
+    const candidate = json.candidates[0];
+    expect(candidate.title).toBe("Data Structures");
+    expect(candidate.courseCode).toBe("CS201");
+    expect(candidate.classType).toBe("Lecture");
+    expect(candidate.instructor).toBe("Prof. Sharma");
+    expect(candidate.sectionLabel).toBe("Batch A");
+    expect(candidate.location).toBe("Room C25-B-301");
+    expect(candidate.notes).toBe("Bring laptop");
+  });
+
+  test("fake extractor preserves structured class metadata", async () => {
+    const env = makeEnv({ AI_PROVIDER: "fake" });
+    const response = await worker.fetch(
+      request(extractionBody()),
+      env as never,
+    );
+    expect(response.status).toBe(200);
+    const json = await response.json() as {
+      candidates: Array<Record<string, unknown>>;
+    };
+    expect(json.candidates.length).toBeGreaterThan(0);
+    const mathClass = json.candidates.find((c) => c.id === "ai_class_math");
+    expect(mathClass).toBeDefined();
+    expect(mathClass!.courseCode).toBe("MATH101");
+    expect(mathClass!.classType).toBe("Lecture");
+    expect(mathClass!.instructor).toBe("Prof. Sharma");
+    expect(mathClass!.sectionLabel).toBe("Sec A");
+    expect(mathClass!.location).toBe("Hall B-12");
   });
 
   test("malformed provider output returns no fabricated candidates", async () => {

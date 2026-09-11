@@ -273,11 +273,17 @@ class RoutineImportCandidateBlock {
   final String? extractionVersion;
   final String? location;
   final String? notes;
+  final String? courseCode;
+  final String? classType;
+  final String? instructor;
+  final String? sectionLabel;
   final String? mealCategory;
   final String? mealSlot;
   final double? caloriesEstimate;
   final double? proteinEstimate;
   final List<String> steps;
+
+  String? get professor => instructor;
 
   RoutineImportCandidateBlock({
     required this.id,
@@ -309,6 +315,10 @@ class RoutineImportCandidateBlock {
     this.extractionVersion,
     this.location,
     this.notes,
+    this.courseCode,
+    this.classType,
+    this.instructor,
+    this.sectionLabel,
     this.mealCategory,
     this.mealSlot,
     this.caloriesEstimate,
@@ -362,6 +372,10 @@ class RoutineImportCandidateBlock {
       'extractionVersion': extractionVersion,
       'location': location,
       'notes': notes,
+      'courseCode': courseCode,
+      'classType': classType,
+      'instructor': instructor,
+      'sectionLabel': sectionLabel,
       'mealCategory': mealCategory,
       'mealSlot': mealSlot,
       'caloriesEstimate': caloriesEstimate,
@@ -403,6 +417,10 @@ class RoutineImportCandidateBlock {
       extractionVersion: map['extractionVersion'] as String?,
       location: map['location'] as String?,
       notes: map['notes'] as String?,
+      courseCode: map['courseCode'] as String?,
+      classType: map['classType'] as String?,
+      instructor: (map['instructor'] ?? map['professor']) as String?,
+      sectionLabel: (map['sectionLabel'] ?? map['section']) as String?,
       mealCategory: map['mealCategory'] as String?,
       mealSlot: map['mealSlot'] as String?,
       caloriesEstimate: (map['caloriesEstimate'] as num?)?.toDouble(),
@@ -449,6 +467,10 @@ class RoutineImportCandidateBlock {
     String? extractionVersion,
     String? location,
     String? notes,
+    String? courseCode,
+    String? classType,
+    String? instructor,
+    String? sectionLabel,
     String? mealCategory,
     String? mealSlot,
     double? caloriesEstimate,
@@ -469,6 +491,10 @@ class RoutineImportCandidateBlock {
     bool clearExtractionVersion = false,
     bool clearLocation = false,
     bool clearNotes = false,
+    bool clearCourseCode = false,
+    bool clearClassType = false,
+    bool clearInstructor = false,
+    bool clearSectionLabel = false,
     bool clearMealCategory = false,
     bool clearMealSlot = false,
     bool clearCaloriesEstimate = false,
@@ -528,6 +554,12 @@ class RoutineImportCandidateBlock {
           : (extractionVersion ?? this.extractionVersion),
       location: clearLocation ? null : (location ?? this.location),
       notes: clearNotes ? null : (notes ?? this.notes),
+      courseCode: clearCourseCode ? null : (courseCode ?? this.courseCode),
+      classType: clearClassType ? null : (classType ?? this.classType),
+      instructor: clearInstructor ? null : (instructor ?? this.instructor),
+      sectionLabel: clearSectionLabel
+          ? null
+          : (sectionLabel ?? this.sectionLabel),
       mealCategory: clearMealCategory
           ? null
           : (mealCategory ?? this.mealCategory),

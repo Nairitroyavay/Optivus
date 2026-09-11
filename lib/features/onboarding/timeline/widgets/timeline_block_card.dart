@@ -90,6 +90,11 @@ class TimelineBlockCard extends StatelessWidget {
     bool isNarrow,
     String timeLabel,
   ) {
+    final displayTags = style.tags
+        .where((t) => t != entry.subtitle)
+        .take(3)
+        .toList();
+
     if (tiny) {
       return Align(
         alignment: Alignment.centerLeft,
@@ -234,13 +239,13 @@ class TimelineBlockCard extends StatelessWidget {
               ),
             ],
 
-            // Tags / Dishes / Products (if available)
-            if (style.tags.isNotEmpty) ...[
+            // Tags / Dishes / Products (if available, excluding duplicate subtitle)
+            if (displayTags.isNotEmpty) ...[
               const SizedBox(height: 6),
               Wrap(
                 spacing: 4,
                 runSpacing: 4,
-                children: style.tags.take(3).map((tag) {
+                children: displayTags.map((tag) {
                   return Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 6,
