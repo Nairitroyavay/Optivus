@@ -282,7 +282,7 @@ class SystemSetupScreen extends ConsumerWidget {
                 ref
                     .read(routineDetailViewRequestProvider.notifier)
                     .state = const RoutineDetailTarget(
-                  view: RoutineDetailView.baseTimelineManager,
+                  view: RoutineDetailView.baseTimeline,
                 );
               },
             ),

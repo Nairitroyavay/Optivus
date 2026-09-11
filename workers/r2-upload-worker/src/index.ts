@@ -1,4 +1,4 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
@@ -75,6 +75,10 @@ export default {
 
       if (request.method === "POST" && url.pathname === "/v1/uploads/delete") {
         return await handleDeleteUpload(request, env);
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/uploads/preview") {
+        return await handlePreviewUpload(request, env);
       }
 
       return jsonResponse(request, env, { error: "not_found" }, 404);
@@ -190,6 +194,35 @@ async function handleDeleteUpload(request: Request, env: Env): Promise<Response>
   await requiredUploadBucket(env).delete(objectKey);
 
   return jsonResponse(request, env, { ok: true, objectKey });
+}
+
+async function handlePreviewUpload(request: Request, env: Env): Promise<Response> {
+  const user = await requireVerifiedFirebaseUser(request, env);
+  const body = await readSmallJson(request);
+  const objectKey = readString(body, "objectKey");
+  assertOwnedObjectKey(user.uid, objectKey, true);
+
+  const object = await requiredUploadBucket(env).head(objectKey);
+  if (!object) {
+    throw new HttpError(404, "object_not_found", "Uploaded object was not found.");
+  }
+
+  const expiresIn = numberEnv(env.UPLOAD_URL_EXPIRES_SECONDS, 900);
+  const previewUrl = await getSignedUrl(
+    r2Client(env),
+    new GetObjectCommand({
+      Bucket: requiredEnv(env.R2_BUCKET_NAME, "R2_BUCKET_NAME"),
+      Key: objectKey,
+    }),
+    { expiresIn },
+  );
+
+  return jsonResponse(request, env, {
+    ok: true,
+    objectKey,
+    previewUrl,
+    expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
+  });
 }
 
 async function requireVerifiedFirebaseUser(request: Request, env: Env): Promise<VerifiedUser> {

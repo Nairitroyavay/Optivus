@@ -531,12 +531,8 @@ class FakeSkinCareAiClient implements SkinCareAiClient {
       );
     }
 
-    final desired =
-        (params['desiredApplicationsPerDay'] is num
-                ? (params['desiredApplicationsPerDay'] as num).toInt()
-                : 2)
-            .clamp(2, 4)
-            .toInt();
+    final rawDesired = params['desiredApplicationsPerDay'];
+    final desired = (rawDesired is num ? rawDesired.toInt() : 2) <= 2 ? 2 : 3;
     final rawDetails = params['typedProductDetails'];
     final selectedDetails = rawDetails is List
         ? rawDetails.whereType<Map>().map(Map<String, dynamic>.from).toList()
@@ -574,23 +570,13 @@ class FakeSkinCareAiClient implements SkinCareAiClient {
         productNames: [sunscreen],
       ),
       SkinCareRoutinePlan(
-        slotLabel: 'afternoon',
-        title: 'Afternoon Skin Care',
-        steps: ['Reapply sunscreen'],
-        productNames: [sunscreen],
-      ),
-      SkinCareRoutinePlan(
         slotLabel: 'night',
         title: 'Night Skin Care',
         steps: ['Cleanse face', 'Apply moisturizer'],
         productNames: [cleanser, moisturizer],
       ),
     ];
-    final plans = desired == 2
-        ? [allPlans.first, allPlans.last]
-        : desired == 3
-        ? [allPlans[0], allPlans[1], allPlans[3]]
-        : allPlans;
+    final plans = desired == 2 ? [allPlans.first, allPlans.last] : allPlans;
     return SkinCareAiRoutineResult(
       routinePlans: plans,
       morningRoutine: ["Fake Cleanser", "Sunscreen"],
@@ -1115,9 +1101,9 @@ class SkinCareWorkerPayloadValidator {
       final desired = params['desiredApplicationsPerDay'];
       if (desired is num) {
         final val = desired.toInt();
-        if (val < 2 || val > 4) {
+        if (val < 2 || val > 3) {
           return const SkinCarePayloadValidationResult.invalid(
-            'Desired applications per day must be between 2 and 4.',
+            'Desired applications per day must be between 2 and 3.',
           );
         }
       }
@@ -1533,7 +1519,7 @@ class OfflineSkinCareRoutineGenerator {
     Map<String, dynamic> params,
   ) {
     final rawDesired = params['desiredApplicationsPerDay'];
-    final desired = (rawDesired is num ? rawDesired.toInt() : 2).clamp(2, 4);
+    final desired = (rawDesired is num ? rawDesired.toInt() : 2) <= 2 ? 2 : 3;
 
     final rawDetails = params['typedProductDetails'];
     final details = rawDetails is List
@@ -1585,16 +1571,6 @@ class OfflineSkinCareRoutineGenerator {
         SkinCareRoutinePlan(
           slotLabel: 'midday',
           title: 'Midday Skin Care',
-          steps: ['Reapply sunscreen'],
-          productNames: [sunscreen],
-        ),
-      );
-    }
-    if (desired == 4) {
-      plans.add(
-        SkinCareRoutinePlan(
-          slotLabel: 'afternoon',
-          title: 'Afternoon Skin Care',
           steps: ['Reapply sunscreen'],
           productNames: [sunscreen],
         ),

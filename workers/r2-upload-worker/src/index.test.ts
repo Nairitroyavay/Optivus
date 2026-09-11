@@ -9,6 +9,9 @@ vi.mock("@aws-sdk/client-s3", () => ({
   PutObjectCommand: class {
     constructor(readonly input: unknown) {}
   },
+  GetObjectCommand: class {
+    constructor(readonly input: unknown) {}
+  },
   S3Client: class {
     constructor(readonly config: unknown) {}
   },
@@ -340,5 +343,58 @@ describe("R2 Upload Worker request boundary", () => {
     expect(text).toContain("Upload worker error.");
     expect(text).not.toContain("must-not-leak");
     expect(text).not.toContain("R2_SECRET_ACCESS_KEY");
+  });
+
+  test("preview endpoint generates short-lived presigned URL for owner", async () => {
+    vi.mocked(getSignedUrl).mockResolvedValue(
+      "https://signed-preview.example.test/object",
+    );
+    const env = makeEnv();
+    const response = await worker.fetch(
+      request("/v1/uploads/preview", {
+        objectKey: "users/uid-1/onboarding/class_timetable/asset-1.jpg",
+      }),
+      env as never,
+    );
+    const json = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.previewUrl).toBe("https://signed-preview.example.test/object");
+    expect(json.objectKey).toBe(
+      "users/uid-1/onboarding/class_timetable/asset-1.jpg",
+    );
+    expect(env.UPLOAD_BUCKET.head).toHaveBeenCalledWith(
+      "users/uid-1/onboarding/class_timetable/asset-1.jpg",
+    );
+  });
+
+  test("preview rejects non-owner object key", async () => {
+    const env = makeEnv();
+    const response = await worker.fetch(
+      request("/v1/uploads/preview", {
+        objectKey: "users/other-uid/onboarding/class_timetable/asset-1.jpg",
+      }),
+      env as never,
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json() as Record<string, unknown>).error).toBe(
+      "invalid_object_key",
+    );
+  });
+
+  test("preview returns 404 when object is missing from bucket", async () => {
+    const env = makeEnv();
+    env.UPLOAD_BUCKET.head = vi.fn(async () => null);
+    const response = await worker.fetch(
+      request("/v1/uploads/preview", {
+        objectKey: "users/uid-1/onboarding/class_timetable/asset-1.jpg",
+      }),
+      env as never,
+    );
+    expect(response.status).toBe(404);
+    expect((await response.json() as Record<string, unknown>).error).toBe(
+      "object_not_found",
+    );
   });
 });

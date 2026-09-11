@@ -1202,8 +1202,7 @@ function routinePlanPerDayCounts(plans: any[]): Record<string, number> {
 
 function requiredSlotsForFrequency(desired: number): string[] {
   if (desired <= 2) return ["morning", "night"];
-  if (desired === 3) return ["morning", "midday", "night"];
-  return ["morning", "midday", "afternoon", "night"];
+  return ["morning", "midday", "night"];
 }
 
 function slotCoverageByDay(plans: any[]): Record<string, Set<string>> {
@@ -1662,6 +1661,7 @@ type SkinCareAiStage =
   | "product_analysis"
   | "recommendation"
   | "recommendation_repair"
+  | "routine_coverage_repair"
   | "routine_generation"
   | "recommend_and_build"
   | string;
@@ -1669,6 +1669,7 @@ type SkinCareAiStage =
 function generationConfigForStage(stage: SkinCareAiStage): Record<string, unknown> {
   const maxOutputTokens = (() => {
     if (stage === "recommendation_repair") return 1536;
+    if (stage === "routine_coverage_repair") return 2048;
     if (stage === "product_analysis") return 2048;
     if (stage === "recommendation") return 3072;
     if (stage === "recommend_and_build") return 6144;
@@ -2031,7 +2032,7 @@ async function handleRoutineGenerate(request: Request, env: Env): Promise<Respon
   const countryCode = String(body.countryCode || "ZZ").trim().toUpperCase() || "ZZ";
   const currencyCode = String(body.currencyCode || "USD").trim().toUpperCase() || "USD";
   const desiredApplicationsPerDay = Math.min(
-    4,
+    3,
     Math.max(2, Number.parseInt(String(body.desiredApplicationsPerDay || "2"), 10) || 2)
   );
 
@@ -2130,7 +2131,6 @@ If at least one usable owned product exists, return the selected routine count p
 For selected frequency, required slots are strict every day:
 2/day requires exactly these slots every day: morning, night.
 3/day requires exactly these slots every day: morning, midday, night.
-4/day requires exactly these slots every day: morning, midday, afternoon, night.
 Do not omit midday for 3/day. Do not replace midday with night active.
 Missing important categories must go into missingItems.
 Missing moisturizer/cleanser/sunscreen must not reduce routinePlan count.
@@ -2140,7 +2140,7 @@ productNames = exact owned product names only.
 missingItems = missing important categories/products not owned.
 Rinse-off cleanser/face wash may contain acids but should still be treated as cleanser, not removed as a leave-on strong active.
 Leave-on strong actives include PHA/AHA/BHA toner, exfoliant, retinol, retinal, tretinoin, adapalene, peeling solution, glycolic/lactic/salicylic/mandelic leave-on products, and benzoyl peroxide.
-Do not put strong actives in daily morning/midday/afternoon routines. Do not create an extra special-care block.
+Do not put strong actives in daily morning/midday routines. Do not create an extra special-care block.
 Put strong actives only inside the existing night slot on exactly two repeat days per week.
 Strong-active split is only a variation of the night slot, not an extra slot.
 Split night routine when needed: normal night without strong active repeatDays [1,2,4,5,7], active night with strong active repeatDays [3,6].
@@ -2195,10 +2195,9 @@ Routine Preference: ${body.routinePreference || "balanced"}
 Desired Applications Per Day: ${desiredApplicationsPerDay}
 ${ownedProductInstruction}
 Use warningIfAny and possibleActives to avoid unsafe conflicts. E.g. avoid Retinol + AHA/BHA in the same routine block, sunscreen in morning when appropriate.
-Use slot labels from: morning, midday, afternoon, night, custom.
+Use slot labels from: morning, midday, night, custom.
 For 2/day prefer morning + night.
 For 3/day use morning + midday + night.
-For 4/day prefer morning + midday + afternoon + night.
 
 Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks may be included only for compatibility; Flutter will ignore all start/end times:
 {
@@ -2290,7 +2289,92 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
   const warnings = stringList(parsed.warnings);
   if (routinePlans.length === 0 && !recommendationOnly) {
     warnings.push("ai_returned_no_usable_routine");
-  } else {
+  } else if (!recommendationOnly) {
+    const initialCoverageWarnings = routineCoverageWarnings(routinePlans, desiredApplicationsPerDay);
+    const initialMissingSlots = initialCoverageWarnings
+      .filter((w) => w.startsWith("ai_missing_required_slot:"))
+      .map((w) => w.slice("ai_missing_required_slot:".length));
+
+    if (desiredApplicationsPerDay === 3 && initialMissingSlots.length > 0) {
+      const repairPrompt = `Repair missing skin-care routine slots for this user.
+The user requested ${desiredApplicationsPerDay} applications per day.
+Required slots for this frequency are: ${JSON.stringify(requiredSlotsForFrequency(desiredApplicationsPerDay))}.
+Missing required slots: ${JSON.stringify(initialMissingSlots)}.
+Skin Type: ${body.skinType || "unknown"}
+Main Problem: ${body.mainProblem || "none"}
+Skin Concerns: ${JSON.stringify(stringList(body.skinConcerns))}
+Budget: ${body.budget || "medium"}
+Country: ${countryName} (${countryCode})
+Routine Preference: ${body.routinePreference || "balanced"}
+${ownedProductMode ? `Owned products catalog: ${JSON.stringify(catalog.map((p: any) => ({ name: p.name, category: p.category, brand: p.brand })))}
+CRITICAL: Use ONLY exact owned product names from the catalog. Do NOT invent new products.` : ""}
+Existing routine plans already generated:
+${JSON.stringify(routinePlans)}
+
+Generate routinePlans ONLY for the missing slots (${JSON.stringify(initialMissingSlots)}) across all 7 repeat days ([1, 2, 3, 4, 5, 6, 7]).
+${ownedProductMode ? `Do NOT repeat strong actives in midday. Midday routines should be gentle/hydrating (e.g. cleanser, gentle moisturizer, sunscreen) using ONLY owned products.` : ""}
+
+Return ONLY a strict JSON object:
+{
+  "routinePlans": [
+    {
+      "slotLabel": "${initialMissingSlots[0] || "midday"}",
+      "title": "${(initialMissingSlots[0] || "midday").charAt(0).toUpperCase() + (initialMissingSlots[0] || "midday").slice(1)} Skin Care",
+      "steps": ["Gentle wash", "Moisturizer"],
+      "productNames": ["Exact Owned Product Name"],
+      "repeatDays": [1, 2, 3, 4, 5, 6, 7]
+    }
+  ]
+}`;
+      try {
+        const repairText = await callGeminiWithFallback(
+          repairPrompt,
+          [],
+          env,
+          deadline,
+          { requestId, stage: "routine_coverage_repair" },
+          { onProviderAttempt: () => { providerAttemptCount += 1; } },
+        );
+        const repairParsed = parseAiJsonText(repairText);
+        const rawRepairPlans = Array.isArray(repairParsed?.routinePlans) ? repairParsed.routinePlans : [];
+        const repairRejectedReasons: string[] = [];
+        const sanitizedRepairPlans = ownedProductMode
+          ? rawRepairPlans.flatMap((plan: any) => {
+              const result = sanitizeOwnedRoutinePlan(plan, catalog, repairRejectedReasons);
+              return result.plans;
+            })
+          : rawRepairPlans
+              .map(normalizeRoutinePlan)
+              .filter((plan: any) => plan !== null);
+
+        if (sanitizedRepairPlans.length > 0) {
+          const candidatePlans = dedupeRoutinePlans([...routinePlans, ...sanitizedRepairPlans]);
+          const candidateWarnings = routineCoverageWarnings(candidatePlans, desiredApplicationsPerDay);
+          const candidateMissing = candidateWarnings
+            .filter((w) => w.startsWith("ai_missing_required_slot:"));
+          const candidateHasExtra = candidateWarnings.includes("ai_extra_daily_slot_count");
+
+          if (!candidateHasExtra && candidateMissing.length < initialMissingSlots.length) {
+            routinePlans = candidatePlans;
+            warnings.push("ai_routine_coverage_repaired");
+          }
+        }
+      } catch (error) {
+        const failureKind = error instanceof HttpError
+          ? error.errorCode
+          : error instanceof Error
+            ? error.name
+            : "unknown";
+        warnings.push(`ai_routine_coverage_repair_failed:${failureKind}`);
+        console.warn(JSON.stringify({
+          event: "skin_care_routine_coverage_repair_failed",
+          requestId,
+          stage: "routine_coverage_repair",
+          errorType: failureKind,
+        }));
+      }
+    }
+
     for (const warning of routineCoverageWarnings(routinePlans, desiredApplicationsPerDay)) {
       if (!warnings.includes(warning)) warnings.push(warning);
     }

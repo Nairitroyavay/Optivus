@@ -8,6 +8,7 @@ import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/uploaded_asset_repository.dart';
 import 'package:optivus/services/cloudflare/cloudflare_clients.dart';
+import 'package:optivus/services/uploads/authenticated_r2_preview_resolver.dart';
 import 'package:optivus/services/uploads/image_prepare_service.dart';
 import 'package:optivus/state/auth_state.dart';
 
@@ -1005,9 +1006,14 @@ final r2UploadClientProvider = Provider<R2UploadClient>((ref) {
 });
 
 final uploadedAssetPreviewResolverProvider =
-    Provider<UploadedAssetPreviewResolver>(
-      (ref) => const UnavailableUploadedAssetPreviewResolver(),
-    );
+    Provider<UploadedAssetPreviewResolver>((ref) {
+      final authRepo = ref.watch(authRepositoryProvider);
+      final client = ref.watch(r2UploadClientProvider);
+      return AuthenticatedR2PreviewResolver(
+        client: client,
+        getIdToken: () => authRepo.currentIdToken(),
+      );
+    });
 
 final restoredUploadsProvider =
     StateNotifierProvider<RestoredUploadsController, RestoredUploadsState>((

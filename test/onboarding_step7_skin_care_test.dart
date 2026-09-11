@@ -359,11 +359,11 @@ void main() {
         await tester.ensureVisible(find.text('Add photo'));
         expect(find.text('Add photo').hitTestable(), findsOneWidget);
         await tester.ensureVisible(
-          find.byKey(const ValueKey('onboarding-step7-frequency-4')),
+          find.byKey(const ValueKey('onboarding-step7-frequency-3')),
         );
         expect(
           find
-              .byKey(const ValueKey('onboarding-step7-frequency-4'))
+              .byKey(const ValueKey('onboarding-step7-frequency-3'))
               .hitTestable(),
           findsOneWidget,
         );
@@ -789,40 +789,67 @@ void main() {
     expect(client.lastGenerateParams?['routinePreference'], 'simple');
   });
 
-  testWidgets('6g. Personalization opens a fixed no-scroll sheet', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      buildTestWidget(draft: _hasProductsDraft(uid: 'uid-1')),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    '6g. Personalization sheet is scrollable and all contents reachable without overflow on compact screens',
+    (tester) async {
+      for (final size in const [Size(360, 640), Size(360, 800)]) {
+        for (final textScale in const [1.0, 1.5, 2.0]) {
+          tester.view.physicalSize = Size(size.width * 2, size.height * 2);
+          tester.view.devicePixelRatio = 2.0;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
 
-    expect(find.byType(ExpansionTile), findsNothing);
-    expect(find.byType(SingleChildScrollView), findsNothing);
-    expect(find.text('Oily'), findsNothing);
+          await tester.pumpWidget(
+            MediaQuery(
+              data: MediaQueryData(
+                size: size,
+                textScaler: TextScaler.linear(textScale),
+                viewPadding: const EdgeInsets.only(bottom: 24),
+              ),
+              child: buildTestWidget(draft: _hasProductsDraft(uid: 'uid-1')),
+            ),
+          );
+          await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Personalize routine'));
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const ValueKey('onboarding-step7-personalize-sheet')),
-      findsOneWidget,
-    );
-    expect(find.byType(SingleChildScrollView), findsNothing);
-    expect(find.text('Oily'), findsOneWidget);
-    expect(tester.takeException(), isNull);
+          final personalizeBtn = find.text('Personalize routine');
+          await tester.ensureVisible(personalizeBtn);
+          await tester.tap(personalizeBtn);
+          await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Oily'));
-    await tester.pump();
-    expect(find.text('Oily'), findsOneWidget);
-    expect(tester.takeException(), isNull);
+          expect(
+            find.byKey(const ValueKey('onboarding-step7-personalize-sheet')),
+            findsOneWidget,
+          );
 
-    await tester.tap(
-      find.byKey(const ValueKey('onboarding-step7-personalize-done')),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Oily'), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
+          final sheetScrollable = find.descendant(
+            of: find.byKey(
+              const ValueKey('onboarding-step7-personalize-sheet'),
+            ),
+            matching: find.byType(SingleChildScrollView),
+          );
+          expect(sheetScrollable, findsOneWidget);
+
+          // Drag to verify scrolling inside sheet
+          await tester.drag(sheetScrollable, const Offset(0, -100));
+          await tester.pumpAndSettle();
+
+          // Done button is pinned in header, reachable, and taps cleanly
+          final doneBtn = find.byKey(
+            const ValueKey('onboarding-step7-personalize-done'),
+          );
+          expect(doneBtn, findsOneWidget);
+          await tester.tap(doneBtn);
+          await tester.pumpAndSettle();
+
+          expect(
+            find.byKey(const ValueKey('onboarding-step7-personalize-sheet')),
+            findsNothing,
+          );
+          expect(tester.takeException(), isNull);
+        }
+      }
+    },
+  );
 
   testWidgets('6e. Switching source does not silently delete typed text', (
     tester,
@@ -1454,7 +1481,7 @@ void main() {
           of: find.byType(OnboardingStep7),
           matching: find.byType(SingleChildScrollView),
         ),
-        findsNothing,
+        findsOneWidget,
       );
     },
   );
@@ -2153,11 +2180,11 @@ void main() {
     },
   );
 
-  testWidgets('14. Selecting 4 routines per day creates 4 skin-care blocks', (
+  testWidgets('14. Selecting 3 routines per day creates 3 skin-care blocks', (
     tester,
   ) async {
     final client = TestSkinCareAiClient(
-      routineResult: _routineResultWithPlanCount(4),
+      routineResult: _routineResultWithPlanCount(3),
     );
     await tester.pumpWidget(
       buildTestWidget(
@@ -2170,7 +2197,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(
-      find.byKey(const ValueKey('onboarding-step7-frequency-4')),
+      find.byKey(const ValueKey('onboarding-step7-frequency-3')),
     );
     await tester.enterText(
       find.byKey(const ValueKey('onboarding-step7-product-names-field')),
@@ -2188,8 +2215,8 @@ void main() {
         .baseTimeline
         .confirmedBlocksForSection('skin_care');
 
-    expect(client.lastGenerateParams?['desiredApplicationsPerDay'], 4);
-    expect(blocks, hasLength(4));
+    expect(client.lastGenerateParams?['desiredApplicationsPerDay'], 3);
+    expect(blocks, hasLength(3));
     expect(
       blocks.every(
         (block) =>
@@ -2199,6 +2226,22 @@ void main() {
       isTrue,
     );
   });
+
+  test(
+    'Legacy persisted skinCareDesiredApplicationsPerDay 4 deserializes and migrates to 3',
+    () {
+      final json = {
+        'skinCareDesiredApplicationsPerDay': 4,
+        'skinCareSetupPath': 'has_products',
+        'skinCareSetupStep': 1,
+        'skinCareStageContractVersion':
+            BaseTimelineDraft.currentSkinCareStageContractVersion,
+        'blocks': <Map<String, dynamic>>[],
+      };
+      final base = BaseTimelineDraft.fromMap(json);
+      expect(base.skinCareDesiredApplicationsPerDay, 3);
+    },
+  );
 
   test(
     '15. Scheduler anchors routines after bath, after lunch, and before sleep',
@@ -2262,14 +2305,14 @@ void main() {
       ];
       final result = onboarding7ScheduleSkinCareRoutine(
         baseTimeline: BaseTimelineDraft(blocks: occupied),
-        routinePlans: _skinCarePlansForCount(4),
-        desiredApplicationsPerDay: 4,
+        routinePlans: _skinCarePlansForCount(3),
+        desiredApplicationsPerDay: 3,
         ownedProductNames: const ['Cleanser', 'Sunscreen'],
         now: DateTime.utc(2026, 6, 15),
       );
 
       expect(result.errorMessage, isNull);
-      expect(result.blocks, hasLength(4));
+      expect(result.blocks, hasLength(3));
       expect(
         result.blocks
             .singleWhere((block) => block.skincareSlotLabel == 'morning')
@@ -2281,12 +2324,6 @@ void main() {
             .singleWhere((block) => block.skincareSlotLabel == 'midday')
             .startMinute,
         810,
-      );
-      expect(
-        result.blocks
-            .singleWhere((block) => block.skincareSlotLabel == 'afternoon')
-            .startMinute,
-        960,
       );
       expect(
         result.blocks
@@ -2358,7 +2395,7 @@ void main() {
     expect(afterBath.title, 'After-bath Skin Care');
   });
 
-  test('15c. A late bath still produces all four anchored routines', () {
+  test('15c. A late bath still produces all three anchored routines', () {
     final result = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: BaseTimelineDraft(
         blocks: [
@@ -2374,28 +2411,28 @@ void main() {
           ),
         ],
       ),
-      routinePlans: _skinCarePlansForCount(4),
-      desiredApplicationsPerDay: 4,
+      routinePlans: _skinCarePlansForCount(3),
+      desiredApplicationsPerDay: 3,
       ownedProductNames: const ['Cleanser', 'Sunscreen'],
       now: DateTime.utc(2026, 6, 15),
     );
 
     expect(result.errorMessage, isNull);
-    expect(result.blocks, hasLength(4));
+    expect(result.blocks, hasLength(3));
     final afterWake = result.blocks.singleWhere(
       (block) => block.skincareSlotLabel == 'morning',
     );
-    final afterBath = result.blocks.singleWhere(
-      (block) => block.skincareSlotLabel == 'afternoon',
+    final night = result.blocks.singleWhere(
+      (block) => block.skincareSlotLabel == 'night',
     );
     expect(afterWake.startMinute, 7 * 60);
     expect(afterWake.title, 'After-wake Skin Care');
-    expect(afterBath.startMinute, 17 * 60);
-    expect(afterBath.title, 'After-bath Skin Care');
+    expect(night.startMinute, 23 * 60 + 15);
+    expect(night.title, 'Before-bed Skin Care');
   });
 
-  test('15c1. Two, three, and four routines preserve wake and bed anchors', () {
-    for (final desired in const [2, 3, 4]) {
+  test('15c1. Two and three routines preserve wake and bed anchors', () {
+    for (final desired in const [2, 3]) {
       final result = onboarding7ScheduleSkinCareRoutine(
         baseTimeline: BaseTimelineDraft(
           blocks: [
@@ -2646,27 +2683,18 @@ void main() {
           ),
         ],
       ),
-      routinePlans: _skinCarePlansForCount(4),
-      desiredApplicationsPerDay: 4,
+      routinePlans: _skinCarePlansForCount(3),
+      desiredApplicationsPerDay: 3,
       ownedProductNames: const ['Cleanser', 'Sunscreen'],
       now: DateTime.utc(2026, 6, 15),
     );
 
     expect(result.errorMessage, isNull);
-    expect(result.blocks, hasLength(4));
+    expect(result.blocks, hasLength(3));
     final midday = result.blocks.singleWhere(
       (block) => block.skincareSlotLabel == 'midday',
     );
-    final afternoon = result.blocks.singleWhere(
-      (block) => block.skincareSlotLabel == 'afternoon',
-    );
     expect(midday.startMinute, 17 * 60);
-    expect(
-      afternoon.startMinute,
-      greaterThanOrEqualTo(
-        midday.endMinute + onboarding7SkinCareMinimumGapMinutes,
-      ),
-    );
   });
 
   test('15h. Dense timetable uses every real free slot without failing', () {
@@ -2713,14 +2741,14 @@ void main() {
     ];
     final result = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: BaseTimelineDraft(blocks: occupied),
-      routinePlans: _skinCarePlansForCount(4),
-      desiredApplicationsPerDay: 4,
+      routinePlans: _skinCarePlansForCount(3),
+      desiredApplicationsPerDay: 3,
       ownedProductNames: const ['Cleanser', 'Sunscreen'],
       now: DateTime.utc(2026, 6, 15),
     );
 
-    expect(result.errorMessage, onboarding7NoCompleteScheduleMessage);
-    expect(result.blocks, isEmpty);
+    expect(result.errorMessage, isNull);
+    expect(result.blocks, hasLength(3));
   });
 
   test('15i. After-lunch routine never falls back to before lunch', () {
@@ -3214,46 +3242,28 @@ void main() {
   );
 
   testWidgets(
-    '19. AI returns 2 plans, selecting 4 without unsafe warning shows fewer-routines error',
+    '19. Frequency selector supports 2 and 3 times/day only, 4/day does not exist',
     (tester) async {
-      final client = TestSkinCareAiClient(
-        routineResult: _routineResultWithPlanCount(2),
-      );
       await tester.pumpWidget(
         buildTestWidget(
           draft: _hasProductsDraft(
             blocks: [BaseTimelineDraft.defaultBathBlock()],
           ),
-          client: client,
         ),
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(
-        find.byKey(const ValueKey('onboarding-step7-frequency-4')),
-      );
-      await tester.enterText(
-        find.byKey(const ValueKey('onboarding-step7-product-names-field')),
-        'Cleanser, Sunscreen SPF 50',
-      );
-      await tapBuildRoutine(tester);
-      await tester.pumpAndSettle();
-
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(OnboardingStep7)),
-      );
-      final blocks = container
-          .read(onboardingStateProvider)
-          .draft
-          .baseTimeline
-          .confirmedBlocksForSection('skin_care');
-
-      expect(blocks, isEmpty);
       expect(
-        find.text(
-          'AI returned fewer routines than requested. Try again or choose fewer times per day.',
-        ),
+        find.byKey(const ValueKey('onboarding-step7-frequency-2')),
         findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('onboarding-step7-frequency-3')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('onboarding-step7-frequency-4')),
+        findsNothing,
       );
     },
   );
@@ -3369,18 +3379,17 @@ void main() {
   );
 
   testWidgets(
-    '19d. Missing afternoon worker warning shows specific 4/day error and creates zero blocks',
+    '19d. Obsolete afternoon slot warning does not show 4/day error and falls back safely',
     (tester) async {
       final client = TestSkinCareAiClient(
         routineResult: SkinCareAiRoutineResult(
-          routinePlans: _skinCarePlansForCount(3),
+          routinePlans: _skinCarePlansForCount(2),
           morningRoutine: const [],
           nightRoutine: const [],
           weeklyRoutine: const [],
           timelineBlocks: const [],
           warnings: const [
             'ai_missing_required_slot:afternoon',
-            'ai_wrong_daily_slot_count',
             'ai_returned_fewer_routines',
           ],
         ),
@@ -3396,7 +3405,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(
-        find.byKey(const ValueKey('onboarding-step7-frequency-4')),
+        find.byKey(const ValueKey('onboarding-step7-frequency-3')),
       );
       await tester.enterText(
         find.byKey(const ValueKey('onboarding-step7-product-names-field')),
@@ -3418,6 +3427,12 @@ void main() {
       expect(
         find.text(
           'AI returned no afternoon routine for 4/day. Try again or choose 3 times/day.',
+        ),
+        findsNothing,
+      );
+      expect(
+        find.text(
+          'AI returned fewer routines than requested. Try again or choose fewer times per day.',
         ),
         findsOneWidget,
       );
@@ -3565,7 +3580,7 @@ void main() {
   );
 
   testWidgets(
-    '21. Photo source sends only photo products for 4 AI-returned routines',
+    '21. Photo source sends only photo products for 3 AI-returned routines',
     (tester) async {
       final asset = _uploadedAsset();
       final client = TestSkinCareAiClient(
@@ -3590,12 +3605,6 @@ void main() {
             SkinCareRoutinePlan(
               slotLabel: 'midday',
               title: 'Midday SPF',
-              steps: ['Reapply sunscreen'],
-              productNames: ['sunscreen'],
-            ),
-            SkinCareRoutinePlan(
-              slotLabel: 'afternoon',
-              title: 'Afternoon SPF',
               steps: ['Reapply sunscreen'],
               productNames: ['sunscreen'],
             ),
@@ -3625,9 +3634,9 @@ void main() {
       await tester.pumpAndSettle();
 
       await chooseSkinPhotoFromGallery(tester);
-      final freq4 = find.byKey(const ValueKey('onboarding-step7-frequency-4'));
-      await tester.ensureVisible(freq4);
-      await tester.tap(freq4);
+      final freq3 = find.byKey(const ValueKey('onboarding-step7-frequency-3'));
+      await tester.ensureVisible(freq3);
+      await tester.tap(freq3);
       await tapBuildRoutine(tester);
       await tester.pumpAndSettle();
 
@@ -3640,16 +3649,10 @@ void main() {
           .baseTimeline
           .confirmedBlocksForSection('skin_care');
 
-      expect(blocks, hasLength(4));
+      expect(blocks, hasLength(3));
       expect(
         blocks
             .singleWhere((block) => block.skincareSlotLabel == 'midday')
-            .skincareProducts,
-        contains('UV Aqua Gel'),
-      );
-      expect(
-        blocks
-            .singleWhere((block) => block.skincareSlotLabel == 'afternoon')
             .skincareProducts,
         contains('UV Aqua Gel'),
       );
@@ -5698,21 +5701,15 @@ void main() {
     expect(titleOnly.blocks, isEmpty);
     expect(titleOnly.errorMessage, noRoutineMessage);
 
-    final fourPerDay = onboarding7ScheduleSkinCareRoutine(
+    final threePerDayWithFewer = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
-      desiredApplicationsPerDay: 4,
+      desiredApplicationsPerDay: 3,
       ownedProductNames: const ['Gentle Cleanser', 'Daily Sunscreen'],
       routinePlans: const [
         SkinCareRoutinePlan(
           slotLabel: 'morning',
           title: 'Morning AI',
           steps: ['Apply sunscreen'],
-          productNames: ['Daily Sunscreen'],
-        ),
-        SkinCareRoutinePlan(
-          slotLabel: 'afternoon',
-          title: 'Afternoon AI',
-          steps: ['Reapply sunscreen'],
           productNames: ['Daily Sunscreen'],
         ),
         SkinCareRoutinePlan(
@@ -5724,8 +5721,8 @@ void main() {
       ],
       now: DateTime.utc(2026, 6, 15),
     );
-    expect(fourPerDay.blocks, isEmpty);
-    expect(fourPerDay.errorMessage, fewerRoutinesMessage);
+    expect(threePerDayWithFewer.blocks, isEmpty);
+    expect(threePerDayWithFewer.errorMessage, fewerRoutinesMessage);
 
     final ambiguousSerum = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
@@ -5754,7 +5751,7 @@ void main() {
 
     final aiReturnedFewerRoutines = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
-      desiredApplicationsPerDay: 4,
+      desiredApplicationsPerDay: 3,
       ownedProductNames: const ['Cleanse', 'Protect'],
       ownedProductDetails: const [],
       routinePlans: const [
@@ -7158,7 +7155,7 @@ void main() {
     );
   });
 
-  testWidgets('71. No-products exposes and forwards 2, 3, or 4 times per day', (
+  testWidgets('71. No-products exposes and forwards 2 or 3 times per day', (
     tester,
   ) async {
     useAndroidWidth(tester);
@@ -7183,12 +7180,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('How many times per day?'), findsOneWidget);
-    for (final option in const [2, 3, 4]) {
+    for (final option in const [2, 3]) {
       expect(
         find.byKey(ValueKey('onboarding-step7-frequency-$option')),
         findsOneWidget,
       );
     }
+    expect(
+      find.byKey(const ValueKey('onboarding-step7-frequency-4')),
+      findsNothing,
+    );
 
     await tester.tap(
       find.byKey(const ValueKey('onboarding-step7-frequency-3')),
@@ -7255,10 +7256,10 @@ void main() {
     await tester.tap(find.text('Change details'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(
-      find.byKey(const ValueKey('onboarding-step7-frequency-4')),
+      find.byKey(const ValueKey('onboarding-step7-frequency-3')),
     );
     await tester.tap(
-      find.byKey(const ValueKey('onboarding-step7-frequency-4')),
+      find.byKey(const ValueKey('onboarding-step7-frequency-3')),
     );
     await tester.pumpAndSettle();
 
@@ -7668,6 +7669,33 @@ void main() {
       expect(client.generateCalls, hasLength(1));
       expect(client.generateCalls.first['recommendationOnly'], isTrue);
       expect(find.text('Build skin routine'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    '78. Initial has-products setup is scrollable on compact screen (360x640) and footer action is reachable',
+    (tester) async {
+      tester.view.physicalSize = const Size(720, 1280);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(
+            size: Size(360, 640),
+            viewPadding: EdgeInsets.only(bottom: 24),
+          ),
+          child: buildTestWidget(draft: _hasProductsDraft(uid: 'uid-compact')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SingleChildScrollView), findsAtLeastNWidgets(1));
+      final buildBtn = find.text('Build skin routine');
+      await tester.ensureVisible(buildBtn);
+      expect(buildBtn.hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
     },
   );
 }

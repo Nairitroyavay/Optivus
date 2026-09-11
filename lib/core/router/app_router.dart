@@ -345,7 +345,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/routine/base-timeline',
         redirect: (context, state) => openRoutineDetail(
           const RoutineDetailTarget(
-            view: RoutineDetailView.baseTimelineManager,
+            view: RoutineDetailView.baseTimeline,
           ),
         ),
       ),
@@ -382,7 +382,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/routine/import-review',
         redirect: (context, state) => openRoutineDetail(
-          const RoutineDetailTarget(view: RoutineDetailView.importReview),
+          const RoutineDetailTarget(view: RoutineDetailView.baseTimeline),
         ),
       ),
       GoRoute(

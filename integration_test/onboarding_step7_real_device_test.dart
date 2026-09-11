@@ -17,29 +17,18 @@ import 'package:optivus/state/auth_state.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-
   group('Step 7 Real Device Acceptance Suite', () {
     testWidgets(
-      'Flow A: Has-products review -> Next Step -> Step 8 -> Back -> review -> shell Back enters rebuild',
+      'Flow A: Has-products setup (2/3 frequency, personalize scroll) -> Build 3/day routine -> Review -> Next Step -> Step 8 -> Back -> Review -> Shell Back',
       (tester) async {
         const uid = 'flow-a-user';
-        final initialBlocks = [
-          TimelineBlockDraft(
-            id: 'morning-block',
-            section: 'skin_care',
-            title: 'Morning Skin Care',
-            startMinute: 480,
-            endMinute: 495,
-            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-            blockType: TimelineBlockDraft.softBlockKey,
-            skincareSteps: const ['1. Cleanse face', '2. Apply sunscreen'],
-            skincareProducts: const ['Gentle Cleanser', 'SPF 50 Sunscreen'],
-          ),
-        ];
+        final client = _IntegrationSkinCareAiClient(
+          routineResultsQueue: [_testRoutineResult3Slots()],
+        );
 
-        var base = BaseTimelineDraft(
+        final base = BaseTimelineDraft(
           skinCareSetupPath: 'has_products',
-          skinCareSetupStep: 2,
+          skinCareSetupStep: 1,
           skinCareStageContractVersion:
               BaseTimelineDraft.currentSkinCareStageContractVersion,
           skinCareProductNames: 'Gentle Cleanser\nSPF 50 Sunscreen',
@@ -47,16 +36,7 @@ void main() {
             SkinCareDetectedProduct(name: 'Gentle Cleanser'),
             SkinCareDetectedProduct(name: 'SPF 50 Sunscreen'),
           ],
-          blocks: initialBlocks,
-        );
-        final fingerprint = base.computeSkinCareRoutineFingerprint();
-        base = base.copyWith(
-          skinCareRoutineFingerprint: fingerprint,
-          blocks: [
-            base.blocks.single.copyWith(
-              provenanceSourceIds: ['skin-care-generation:$fingerprint'],
-            ),
-          ],
+          blocks: [BaseTimelineDraft.defaultBathBlock()],
         );
 
         final notifier = OnboardingNotifier()
@@ -70,9 +50,7 @@ void main() {
               optivusBackendModeProvider.overrideWithValue(
                 OptivusBackendMode.fake,
               ),
-              authRepositoryProvider.overrideWithValue(
-                const FakeAuthRepository(),
-              ),
+              authRepositoryProvider.overrideWithValue(FakeAuthRepository()),
               authProvider.overrideWith(
                 (ref) => _Step7TestAuthNotifier(
                   const AuthUser(
@@ -84,12 +62,61 @@ void main() {
               ),
               authGenerationProvider.overrideWith((ref) => 1),
               onboardingStateProvider.overrideWith((ref) => notifier),
+              skinCareAiClientProvider.overrideWithValue(client),
             ],
             child: const MaterialApp(home: OnboardingFlow()),
           ),
         );
         await tester.pumpAndSettle();
 
+        // 1. Verify we are in has-products setup
+        expect(find.text('Build skin routine'), findsOneWidget);
+
+        // 2. Verify frequency selector contract: 2 and 3 exist, 4 does NOT
+        expect(
+          find.byKey(const ValueKey('skin-care-frequency-2')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('skin-care-frequency-3')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('skin-care-frequency-4')),
+          findsNothing,
+        );
+
+        // 3. Select 3 times/day
+        await tester.tap(find.byKey(const ValueKey('skin-care-frequency-3')));
+        await tester.pumpAndSettle();
+
+        // 4. Open Personalize routine sheet and verify full scrolling and Done button
+        final personalizeBtn = find.text('Personalize routine');
+        expect(personalizeBtn, findsOneWidget);
+        await tester.tap(personalizeBtn);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('onboarding-step7-personalize-sheet')),
+          findsOneWidget,
+        );
+        final doneBtn = find.byKey(
+          const ValueKey('onboarding-step7-personalize-done'),
+        );
+        expect(doneBtn, findsOneWidget);
+        await tester.tap(doneBtn);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('onboarding-step7-personalize-sheet')),
+          findsNothing,
+        );
+
+        // 5. Tap Build skin routine to generate 3/day routine
+        final buildBtn = find.text('Build skin routine');
+        await tester.tap(buildBtn);
+        await tester.pumpAndSettle();
+
+        // 6. Verify we reached review stage with valid routine
         expect(find.text('Skin Care Routine'), findsOneWidget);
         expect(find.text('Review your weekly routine'), findsOneWidget);
         expect(find.text('Rebuild / Edit'), findsNothing);
@@ -102,10 +129,12 @@ void main() {
         final nextStepBtn = find.text('Next Step');
         expect(nextStepBtn, findsOneWidget);
 
+        // 7. Next Step -> Step 8
         await tester.tap(nextStepBtn);
         await tester.pumpAndSettle();
         expect(notifier.state.draft.currentStep, 8);
 
+        // 8. Step 8 back -> Step 7 review
         final shellBackStep8 = find.byKey(const Key('onboarding-step8-back'));
         expect(shellBackStep8, findsOneWidget);
         await tester.tap(shellBackStep8);
@@ -115,6 +144,7 @@ void main() {
         expect(find.text('Skin Care Routine'), findsOneWidget);
         expect(find.text('Review your weekly routine'), findsOneWidget);
 
+        // 9. Shell Back -> returns to rebuild (hasProductsEditing) while preserving routine
         final shellBackStep7 = find.byKey(const Key('onboarding-step7-back'));
         expect(shellBackStep7, findsOneWidget);
         await tester.tap(shellBackStep7);
@@ -172,9 +202,7 @@ void main() {
               optivusBackendModeProvider.overrideWithValue(
                 OptivusBackendMode.fake,
               ),
-              authRepositoryProvider.overrideWithValue(
-                const FakeAuthRepository(),
-              ),
+              authRepositoryProvider.overrideWithValue(FakeAuthRepository()),
               authProvider.overrideWith(
                 (ref) => _Step7TestAuthNotifier(
                   const AuthUser(
@@ -300,9 +328,7 @@ void main() {
               optivusBackendModeProvider.overrideWithValue(
                 OptivusBackendMode.fake,
               ),
-              authRepositoryProvider.overrideWithValue(
-                const FakeAuthRepository(),
-              ),
+              authRepositoryProvider.overrideWithValue(FakeAuthRepository()),
               onboardingStateProvider.overrideWith((ref) => notifier),
             ],
             child: const MaterialApp(home: Scaffold(body: OnboardingStep7())),
@@ -325,7 +351,7 @@ void main() {
     );
 
     testWidgets(
-      'Flow D: PermissionAwareDeviceCountryService resolves country and informs AI request',
+      'Flow D: Deterministic integration test — mocked device country informs AI recommendations and displays currency-aware products',
       (tester) async {
         const uid = 'flow-d-user';
         final client = _IntegrationSkinCareAiClient(
@@ -358,9 +384,7 @@ void main() {
               optivusBackendModeProvider.overrideWithValue(
                 OptivusBackendMode.fake,
               ),
-              authRepositoryProvider.overrideWithValue(
-                const FakeAuthRepository(),
-              ),
+              authRepositoryProvider.overrideWithValue(FakeAuthRepository()),
               authProvider.overrideWith(
                 (ref) => _Step7TestAuthNotifier(
                   const AuthUser(
@@ -586,6 +610,38 @@ SkinCareAiRoutineResult _testRoutineResult() {
           'Minimalist Barrier Moisturizer',
         ],
         steps: ['Wash face', 'Apply moisturizer'],
+        repeatDays: [1, 2, 3, 4, 5, 6, 7],
+      ),
+    ],
+  );
+}
+
+SkinCareAiRoutineResult _testRoutineResult3Slots() {
+  return const SkinCareAiRoutineResult(
+    morningRoutine: ['Cleanse', 'Sunscreen'],
+    nightRoutine: ['Cleanse'],
+    weeklyRoutine: [],
+    timelineBlocks: [],
+    routinePlans: [
+      SkinCareRoutinePlan(
+        slotLabel: 'morning',
+        title: 'Morning Skin Care',
+        productNames: ['Gentle Cleanser', 'SPF 50 Sunscreen'],
+        steps: ['Wash face', 'Apply sunscreen'],
+        repeatDays: [1, 2, 3, 4, 5, 6, 7],
+      ),
+      SkinCareRoutinePlan(
+        slotLabel: 'midday',
+        title: 'Midday Skin Care',
+        productNames: ['SPF 50 Sunscreen'],
+        steps: ['Reapply sunscreen'],
+        repeatDays: [1, 2, 3, 4, 5, 6, 7],
+      ),
+      SkinCareRoutinePlan(
+        slotLabel: 'night',
+        title: 'Night Skin Care',
+        productNames: ['Gentle Cleanser'],
+        steps: ['Wash face'],
         repeatDays: [1, 2, 3, 4, 5, 6, 7],
       ),
     ],

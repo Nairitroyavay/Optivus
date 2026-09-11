@@ -1098,6 +1098,11 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /users/{uid}/baseTimelineSetup/{setupId} {
+      allow read, write: if verifiedOwner(uid);
+    }
+
+
     function validUserProfileKeys(data) {
       return data.keys().hasOnly([
         "uid",

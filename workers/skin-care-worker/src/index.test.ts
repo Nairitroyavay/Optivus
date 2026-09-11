@@ -1737,7 +1737,7 @@ describe("Skin-care Worker", () => {
     expect(json.warnings).toContain("ai_returned_fewer_routines");
   });
 
-  test("routine generate warns when 4/day is missing required afternoon slot", async () => {
+  test("routine generate clamps desiredApplicationsPerDay 4 to 3 and accepts valid 3/day routine", async () => {
     stubGemini(JSON.stringify({
       suggestedProducts: [],
       weeklyRoutine: [],
@@ -1778,8 +1778,156 @@ describe("Skin-care Worker", () => {
     const json = await response.json() as any;
 
     expect(response.status).toBe(200);
-    expect(json.warnings).toContain("ai_missing_required_slot:afternoon");
-    expect(json.warnings).toContain("ai_wrong_daily_slot_count");
+    expect(json.routinePlans).toHaveLength(3);
+    expect(json.warnings).not.toContain("ai_missing_required_slot:afternoon");
+    expect(json.warnings).not.toContain("ai_missing_required_slot:midday");
+    expect(json.warnings).not.toContain("ai_wrong_daily_slot_count");
+  });
+
+  test("routine coverage repair succeeds when initial generation misses midday slot", async () => {
+    stubGeminiResponses([
+      geminiSuccess(JSON.stringify({
+        suggestedProducts: [],
+        weeklyRoutine: [],
+        warnings: [],
+        routinePlans: [
+          {
+            slotLabel: "morning",
+            title: "Morning Skin Care",
+            steps: ["Apply Minimalist SPF 50"],
+            productNames: ["Minimalist SPF 50"],
+            repeatDays: [1, 2, 3, 4, 5, 6, 7],
+          },
+          {
+            slotLabel: "night",
+            title: "Night Skin Care",
+            steps: ["Cleanse face"],
+            productNames: ["Beardo Detan Face Wash"],
+            repeatDays: [1, 2, 3, 4, 5, 6, 7],
+          },
+        ],
+      })),
+      geminiSuccess(JSON.stringify({
+        routinePlans: [
+          {
+            slotLabel: "midday",
+            title: "Midday Skin Care",
+            steps: ["Reapply Minimalist SPF 50"],
+            productNames: ["Minimalist SPF 50"],
+            repeatDays: [1, 2, 3, 4, 5, 6, 7],
+          },
+        ],
+      })),
+    ]);
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        productInputSource: "typed",
+        typedProductDetails: fiveTypedProducts(),
+        desiredApplicationsPerDay: 3,
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.routinePlans).toHaveLength(3);
+    expect(json.warnings).toContain("ai_routine_coverage_repaired");
+    expect(json.warnings).not.toContain("ai_missing_required_slot:midday");
+  });
+
+  test("routine coverage repair fails safely when repair model invents unowned product", async () => {
+    stubGeminiResponses([
+      geminiSuccess(JSON.stringify({
+        suggestedProducts: [],
+        weeklyRoutine: [],
+        warnings: [],
+        routinePlans: [
+          {
+            slotLabel: "morning",
+            title: "Morning Skin Care",
+            steps: ["Apply Minimalist SPF 50"],
+            productNames: ["Minimalist SPF 50"],
+            repeatDays: [1, 2, 3, 4, 5, 6, 7],
+          },
+          {
+            slotLabel: "night",
+            title: "Night Skin Care",
+            steps: ["Cleanse face"],
+            productNames: ["Beardo Detan Face Wash"],
+            repeatDays: [1, 2, 3, 4, 5, 6, 7],
+          },
+        ],
+      })),
+      geminiSuccess(JSON.stringify({
+        routinePlans: [
+          {
+            slotLabel: "midday",
+            title: "Midday Skin Care",
+            steps: ["Apply Unowned Prescription Tretinoin Cream"],
+            productNames: ["Unowned Prescription Tretinoin Cream"],
+            repeatDays: [1, 2, 3, 4, 5, 6, 7],
+          },
+        ],
+      })),
+    ]);
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        productInputSource: "typed",
+        typedProductDetails: fiveTypedProducts(),
+        desiredApplicationsPerDay: 3,
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.warnings).toContain("ai_missing_required_slot:midday");
+    expect(json.warnings).not.toContain("ai_routine_coverage_repaired");
+  });
+
+  test("routine coverage repair fails safely when repair model omits midday slot", async () => {
+    stubGeminiResponses([
+      geminiSuccess(JSON.stringify({
+        suggestedProducts: [],
+        weeklyRoutine: [],
+        warnings: [],
+        routinePlans: [
+          {
+            slotLabel: "morning",
+            title: "Morning Skin Care",
+            steps: ["Apply Minimalist SPF 50"],
+            productNames: ["Minimalist SPF 50"],
+            repeatDays: [1, 2, 3, 4, 5, 6, 7],
+          },
+          {
+            slotLabel: "night",
+            title: "Night Skin Care",
+            steps: ["Cleanse face"],
+            productNames: ["Beardo Detan Face Wash"],
+            repeatDays: [1, 2, 3, 4, 5, 6, 7],
+          },
+        ],
+      })),
+      geminiSuccess(JSON.stringify({
+        routinePlans: [],
+      })),
+    ]);
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        productInputSource: "typed",
+        typedProductDetails: fiveTypedProducts(),
+        desiredApplicationsPerDay: 3,
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.warnings).toContain("ai_missing_required_slot:midday");
+    expect(json.warnings).not.toContain("ai_routine_coverage_repaired");
   });
 
   test("owned-product sanitizer removes morning strong active without creating active night variant", async () => {
@@ -2469,7 +2617,7 @@ describe("Skin-care Worker", () => {
     expect(prompt).toContain("Desired Applications Per Day: 2");
   });
 
-  test("desiredApplicationsPerDay 99 is capped to 4 in prompt", async () => {
+  test("desiredApplicationsPerDay 99 is capped to 3 in prompt", async () => {
     const calls: FetchCall[] = [];
     stubGemini(JSON.stringify({
       routinePlans: [
@@ -2486,7 +2634,7 @@ describe("Skin-care Worker", () => {
     );
 
     const prompt = calls[0].body.contents[0].parts[0].text as string;
-    expect(prompt).toContain("Desired Applications Per Day: 4");
+    expect(prompt).toContain("Desired Applications Per Day: 3");
   });
 
   test("title-only routine plans are filtered and compatibility uses valid plans", async () => {

@@ -119,6 +119,14 @@ class FirestoreUserPaths {
     return 'users/$uid/habitSystems';
   }
 
+  static String baseTimelineSetup(String uid) {
+    return 'users/$uid/baseTimelineSetup/current';
+  }
+
+  static String baseTimelineSetups(String uid) {
+    return 'users/$uid/baseTimelineSetup';
+  }
+
   static String goal(String uid, String goalId) {
     return 'users/$uid/goals/$goalId';
   }

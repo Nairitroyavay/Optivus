@@ -3223,3 +3223,61 @@ describe("Firestore Rules for upload metadata", () => {
     ));
   });
 });
+
+describe("Firestore Rules for baseTimelineSetup", () => {
+  function baseTimelineSetupRef(db, uid = "user123", setupId = "current") {
+    return db.collection("users").doc(uid).collection("baseTimelineSetup").doc(setupId);
+  }
+
+  it("owner can create and read baseTimelineSetup document", async () => {
+    const db = ownerDb();
+    await assertSucceeds(
+      baseTimelineSetupRef(db).set({
+        schemaVersion: 1,
+        updatedAt: new Date().toISOString(),
+        sections: {},
+      })
+    );
+    const doc = await baseTimelineSetupRef(db).get();
+    expect(doc.exists).toBe(true);
+  });
+
+  it("owner can update baseTimelineSetup document", async () => {
+    const db = ownerDb();
+    await baseTimelineSetupRef(db).set({
+      schemaVersion: 1,
+      updatedAt: new Date().toISOString(),
+      sections: {},
+    });
+    await assertSucceeds(
+      baseTimelineSetupRef(db).update({
+        "sections.classes.configured": true,
+      })
+    );
+  });
+
+  it("non-owner cannot read or write baseTimelineSetup document", async () => {
+    const other = ownerDb("other_user");
+    await assertFails(
+      baseTimelineSetupRef(other, "user123").set({
+        schemaVersion: 1,
+        updatedAt: new Date().toISOString(),
+        sections: {},
+      })
+    );
+    await assertFails(baseTimelineSetupRef(other, "user123").get());
+  });
+
+  it("unauthenticated client cannot read or write baseTimelineSetup document", async () => {
+    const anon = testEnv.unauthenticatedContext().firestore();
+    await assertFails(
+      baseTimelineSetupRef(anon, "user123").set({
+        schemaVersion: 1,
+        updatedAt: new Date().toISOString(),
+        sections: {},
+      })
+    );
+    await assertFails(baseTimelineSetupRef(anon, "user123").get());
+  });
+});
+

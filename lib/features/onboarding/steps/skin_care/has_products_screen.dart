@@ -1056,18 +1056,14 @@ class _HasProductsModeScreenState
         ],
       );
 
-      final editorContent = isEditing
-          ? SingleChildScrollView(
-              padding: EdgeInsets.only(
-                bottom: hasSharedFooter
-                    ? OnboardingFooterMetrics.resolve(
-                        context,
-                      ).requiredContentInset
-                    : 8,
-              ),
-              child: setupBody,
-            )
-          : setupBody;
+      final editorContent = SingleChildScrollView(
+        padding: EdgeInsets.only(
+          bottom: hasSharedFooter
+              ? OnboardingFooterMetrics.resolve(context).requiredContentInset
+              : 8,
+        ),
+        child: setupBody,
+      );
 
       return _SkinCareContainedPane(
         enabled: isEditingTransaction,

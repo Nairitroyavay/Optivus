@@ -48,7 +48,7 @@ class _SkinCarePersonalizeSection extends StatelessWidget {
     return showModalBottomSheet<void>(
       context: context,
       useSafeArea: true,
-      isScrollControlled: false,
+      isScrollControlled: true,
       enableDrag: false,
       elevation: 0,
       barrierColor: Colors.transparent,
@@ -145,94 +145,122 @@ class _SkinCarePersonalizationSheetState
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      key: const ValueKey('onboarding-step7-personalize-sheet'),
-      padding: const EdgeInsets.fromLTRB(24, 10, 24, 18),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF9FA),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        border: Border.all(
-          color: OptivusColors.roseAccent.withValues(alpha: 0.24),
+    final mediaQuery = MediaQuery.of(context);
+    final bottomInset = math.max(
+      mediaQuery.viewPadding.bottom,
+      mediaQuery.viewInsets.bottom,
+    );
+    final maxHeight = mediaQuery.size.height * 0.85;
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        key: const ValueKey('onboarding-step7-personalize-sheet'),
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF9FA),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          border: Border.all(
+            color: OptivusColors.roseAccent.withValues(alpha: 0.24),
+          ),
         ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Personalize routine',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
-                    color: OptivusColors.textPrimary,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 10, 16, 4),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Personalize routine',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                        color: OptivusColors.textPrimary,
+                      ),
+                    ),
                   ),
+                  TextButton(
+                    key: const ValueKey('onboarding-step7-personalize-done'),
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Done'),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  24,
+                  4,
+                  24,
+                  18 + (bottomInset > 0 ? bottomInset : 0),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _SkinCareChipGroup(
+                      label: 'Skin Type',
+                      children: [
+                        for (final option in _skinTypeOptions)
+                          _SkinCarePreferenceChip(
+                            label: option.label,
+                            selected: _skinType == option.key,
+                            accent: OptivusColors.roseAccent,
+                            onTap: widget.onSkinTypeChanged == null
+                                ? null
+                                : () {
+                                    setState(() => _skinType = option.key);
+                                    widget.onSkinTypeChanged!(option.key);
+                                  },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    _SkinCareChipGroup(
+                      label: 'Main Concern',
+                      children: [
+                        for (final option in _skinConcernOptions)
+                          _SkinCarePreferenceChip(
+                            label: option.label,
+                            selected: _concern == option.key,
+                            accent: OptivusColors.roseAccent,
+                            onTap: widget.onConcernChanged == null
+                                ? null
+                                : () {
+                                    setState(() => _concern = option.key);
+                                    widget.onConcernChanged!(option.key);
+                                  },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    _SkinCareChipGroup(
+                      label: 'Routine Style',
+                      children: [
+                        for (final option in _skinPreferenceOptions)
+                          _SkinCarePreferenceChip(
+                            label: option.label,
+                            selected: _preference == option.key,
+                            accent: OptivusColors.roseAccent,
+                            onTap: widget.onPreferenceChanged == null
+                                ? null
+                                : () {
+                                    setState(() => _preference = option.key);
+                                    widget.onPreferenceChanged!(option.key);
+                                  },
+                          ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              TextButton(
-                key: const ValueKey('onboarding-step7-personalize-done'),
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Done'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          _SkinCareChipGroup(
-            label: 'Skin Type',
-            children: [
-              for (final option in _skinTypeOptions)
-                _SkinCarePreferenceChip(
-                  label: option.label,
-                  selected: _skinType == option.key,
-                  accent: OptivusColors.roseAccent,
-                  onTap: widget.onSkinTypeChanged == null
-                      ? null
-                      : () {
-                          setState(() => _skinType = option.key);
-                          widget.onSkinTypeChanged!(option.key);
-                        },
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          _SkinCareChipGroup(
-            label: 'Main Concern',
-            children: [
-              for (final option in _skinConcernOptions)
-                _SkinCarePreferenceChip(
-                  label: option.label,
-                  selected: _concern == option.key,
-                  accent: OptivusColors.roseAccent,
-                  onTap: widget.onConcernChanged == null
-                      ? null
-                      : () {
-                          setState(() => _concern = option.key);
-                          widget.onConcernChanged!(option.key);
-                        },
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          _SkinCareChipGroup(
-            label: 'Routine Style',
-            children: [
-              for (final option in _skinPreferenceOptions)
-                _SkinCarePreferenceChip(
-                  label: option.label,
-                  selected: _preference == option.key,
-                  accent: OptivusColors.roseAccent,
-                  onTap: widget.onPreferenceChanged == null
-                      ? null
-                      : () {
-                          setState(() => _preference = option.key);
-                          widget.onPreferenceChanged!(option.key);
-                        },
-                ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -460,7 +488,7 @@ class _SkinCareFrequencySelector extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          for (final option in const [2, 3, 4])
+          for (final option in const [2, 3])
             GestureDetector(
               key: ValueKey('onboarding-step7-frequency-$option'),
               behavior: HitTestBehavior.opaque,

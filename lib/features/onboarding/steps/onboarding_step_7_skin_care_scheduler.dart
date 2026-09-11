@@ -706,7 +706,6 @@ Onboarding7SkinCareScheduleResult _attemptSkinCareSchedule({
 
 int onboarding7NormalizeDesiredApplications(int value) {
   if (value <= 2) return 2;
-  if (value >= 4) return 4;
   return 3;
 }
 
@@ -850,16 +849,6 @@ _SkinCareSearchWindow? _skinCareSearchWindowForDay({
     wakingRange.startMinute,
     nightAnchor - _onboarding7AnchorSearchMinutes,
   );
-  final hasSeparateBathRoutine =
-      desiredApplicationsPerDay >= 4 && !bathFollowsWake;
-  final separateBathAnchor = math.max(
-    wakingRange.startMinute,
-    bathWindow.endMinute,
-  );
-  final separateBathMaxStart = math.min(
-    latestWakingStart,
-    separateBathAnchor + _onboarding7AnchorSearchMinutes,
-  );
   final afterLunchMaxStart = restWindow == null
       ? latestWakingStart
       : math.min(
@@ -887,25 +876,13 @@ _SkinCareSearchWindow? _skinCareSearchWindowForDay({
       searchAfterOnly: true,
       displayTitle: 'After-lunch Skin Care',
     ),
-    'afternoon' =>
-      hasSeparateBathRoutine
-          ? _SkinCareSearchWindow(
-              minStartMinute: separateBathAnchor,
-              maxStartMinute: separateBathMaxStart,
-              preferredStartMinute: separateBathAnchor,
-              searchAfterOnly: true,
-              displayTitle: 'After-bath Skin Care',
-            )
-          : _SkinCareSearchWindow(
-              minStartMinute: math.max(
-                wakingRange.startMinute,
-                lunchWindow.endMinute,
-              ),
-              maxStartMinute: latestWakingStart,
-              preferredStartMinute: _onboarding7AfternoonPreferredMinute,
-              enforceAfterMidday: true,
-              displayTitle: 'Afternoon Skin Care',
-            ),
+    'afternoon' => _SkinCareSearchWindow(
+      minStartMinute: math.max(wakingRange.startMinute, lunchWindow.endMinute),
+      maxStartMinute: latestWakingStart,
+      preferredStartMinute: _onboarding7AfternoonPreferredMinute,
+      enforceAfterMidday: true,
+      displayTitle: 'Afternoon Skin Care',
+    ),
     'night' => _SkinCareSearchWindow(
       minStartMinute: nightMinStart,
       maxStartMinute: latestWakingStart,
@@ -1078,11 +1055,6 @@ List<Onboarding7SkinCareSlotSpec> onboarding7SkinCareSlotSpecs({
             _onboarding7DefaultLunchStartMinute +
             _onboarding7FallbackLunchDurationMinutes,
       ),
-      const Onboarding7SkinCareSlotSpec(
-        slotLabel: 'afternoon',
-        title: 'Afternoon Skin Care',
-        preferredStartMinute: _onboarding7AfternoonPreferredMinute,
-      ),
       Onboarding7SkinCareSlotSpec(
         slotLabel: 'night',
         title: 'Night Skin Care',
@@ -1118,8 +1090,7 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
   );
   final targetSlots = switch (desired) {
     2 => const ['morning', 'night'],
-    3 => const ['morning', 'midday', 'night'],
-    _ => const ['morning', 'midday', 'afternoon', 'night'],
+    _ => const ['morning', 'midday', 'night'],
   };
   final slotSpecs = onboarding7SkinCareSlotSpecs(
     desiredApplicationsPerDay: desired,

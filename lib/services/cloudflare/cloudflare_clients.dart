@@ -83,6 +83,11 @@ abstract class R2UploadClient {
     required String objectKey,
     required String idToken,
   });
+
+  Future<String> getPreviewUrl({
+    required String objectKey,
+    required String idToken,
+  });
 }
 
 class FakeCloudflareWorkerClient implements CloudflareWorkerClient {
@@ -202,6 +207,14 @@ class FakeR2UploadClient implements R2UploadClient {
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 120));
   }
+
+  @override
+  Future<String> getPreviewUrl({
+    required String objectKey,
+    required String idToken,
+  }) async {
+    return 'https://preview.local/$objectKey';
+  }
 }
 
 class RealR2UploadClient implements R2UploadClient {
@@ -307,6 +320,26 @@ class RealR2UploadClient implements R2UploadClient {
       ),
     );
     _throwIfWorkerFailed(response, 'Could not delete the uploaded photo.');
+  }
+
+  @override
+  Future<String> getPreviewUrl({
+    required String objectKey,
+    required String idToken,
+  }) async {
+    final response = await _workerClient.post(
+      CloudflareWorkerRequest(
+        path: '/v1/uploads/preview',
+        headers: {'authorization': 'Bearer $idToken'},
+        body: {'objectKey': objectKey},
+      ),
+    );
+    _throwIfWorkerFailed(response, 'Could not load the photo preview.');
+    final previewUrl = response.body['previewUrl'] as String?;
+    if (previewUrl == null || previewUrl.isEmpty) {
+      throw const CloudflareClientException('Missing preview URL in response.');
+    }
+    return previewUrl;
   }
 
   void _throwIfWorkerFailed(

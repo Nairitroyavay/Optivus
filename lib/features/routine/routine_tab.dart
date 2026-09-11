@@ -4,13 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/models/routine_item.dart';
-import 'package:optivus/features/routine/managers/base_timeline/base_timeline_manager_screen.dart';
-import 'package:optivus/features/routine/managers/base_timeline/screens/classes_routine_setup_screen.dart';
-import 'package:optivus/features/routine/managers/base_timeline/screens/eating_routine_setup_screen.dart';
-import 'package:optivus/features/routine/managers/base_timeline/screens/fixed_routine_setup_screen.dart';
-import 'package:optivus/features/routine/managers/base_timeline/screens/routine_import_review_screen.dart';
-import 'package:optivus/features/routine/managers/base_timeline/screens/skin_care_routine_setup_screen.dart';
-import 'package:optivus/features/routine/managers/base_timeline/screens/work_routine_setup_screen.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/base_timeline_screen.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/classes_base_setup_screen.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/eating_base_setup_screen.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/fixed_base_setup_screen.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/skin_care_base_setup_screen.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/work_base_setup_screen.dart';
+
 import 'package:optivus/features/routine/providers/routine_navigation_provider.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/screens/routine_habit_systems_screen.dart';
@@ -40,7 +40,9 @@ class RoutineTab extends ConsumerStatefulWidget {
 
 class _RoutineTabState extends ConsumerState<RoutineTab> {
   Timer? _minuteTimer;
-  RoutineDetailTarget _activeDetail = RoutineDetailTarget.none;
+  final List<RoutineDetailTarget> _detailStack = [];
+  RoutineDetailTarget get _activeDetail =>
+      _detailStack.isEmpty ? RoutineDetailTarget.none : _detailStack.last;
   bool _initialRoutineLoadRequested = false;
 
   @override
@@ -82,12 +84,19 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
   }
 
   void _openDetail(RoutineDetailTarget target) {
-    setState(() => _activeDetail = target);
+    if (target.view == RoutineDetailView.none) {
+      setState(() => _detailStack.clear());
+      return;
+    }
+    setState(() => _detailStack.add(target));
   }
 
   void _closeDetail() {
-    setState(() => _activeDetail = RoutineDetailTarget.none);
+    if (_detailStack.isNotEmpty) {
+      setState(() => _detailStack.removeLast());
+    }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -231,39 +240,38 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
 
   Widget _buildDetail() {
     return switch (_activeDetail.view) {
-      RoutineDetailView.baseTimelineManager => BaseTimelineManagerScreen(
-        onBack: _closeDetail,
-        onOpenDetail: _openDetail,
-      ),
-      RoutineDetailView.classesSetup => ClassesRoutineSetupScreen(
-        onBack: _closeDetail,
-      ),
-      RoutineDetailView.workSetup => WorkRoutineSetupScreen(
-        onBack: _closeDetail,
-      ),
-      RoutineDetailView.eatingSetup => EatingRoutineSetupScreen(
-        onBack: _closeDetail,
-      ),
-      RoutineDetailView.fixedSetup => FixedRoutineSetupScreen(
-        onBack: _closeDetail,
-      ),
-      RoutineDetailView.skinCareSetup => SkinCareRoutineSetupScreen(
-        onBack: _closeDetail,
-      ),
-      RoutineDetailView.importReview => RoutineImportReviewScreen(
-        onBack: _closeDetail,
-        source: _activeDetail.importSource ?? RoutineImportSource.classes,
-      ),
+      RoutineDetailView.baseTimeline ||
+      RoutineDetailView.baseTimelineManager =>
+        BaseTimelineScreen(
+          onBack: _closeDetail,
+          onOpenDetail: _openDetail,
+        ),
+      RoutineDetailView.classesSetup => ClassesBaseSetupScreen(
+          onBack: _closeDetail,
+        ),
+      RoutineDetailView.workSetup => WorkBaseSetupScreen(
+          onBack: _closeDetail,
+        ),
+      RoutineDetailView.eatingSetup => EatingBaseSetupScreen(
+          onBack: _closeDetail,
+        ),
+      RoutineDetailView.fixedSetup => FixedBaseSetupScreen(
+          onBack: _closeDetail,
+        ),
+      RoutineDetailView.skinCareSetup => SkinCareBaseSetupScreen(
+          onBack: _closeDetail,
+        ),
+      RoutineDetailView.importReview => const SizedBox.shrink(),
       RoutineDetailView.routineSettings => _RoutineSettingsInline(
-        onBack: _closeDetail,
-        onOpenDetail: _openDetail,
-      ),
+          onBack: _closeDetail,
+          onOpenDetail: _openDetail,
+        ),
       RoutineDetailView.habitSystems => RoutineHabitSystemsScreen(
-        onBack: _closeDetail,
-      ),
+          onBack: _closeDetail,
+        ),
       RoutineDetailView.routineHistory => RoutineHistoryScreen(
-        onBack: _closeDetail,
-      ),
+          onBack: _closeDetail,
+        ),
       RoutineDetailView.none => const SizedBox.shrink(),
     };
   }
@@ -343,12 +351,12 @@ class _RoutineSettingsInline extends ConsumerWidget {
           children: [
             LiquidActionRow(
               icon: Icons.schedule_rounded,
-              title: 'Base Timeline Manager',
+              title: 'Base Timeline',
               subtitle: 'Classes, work, eating, fixed, and skin care.',
               accentColor: OptivusColors.routineAccent,
               onTap: () => onOpenDetail(
                 const RoutineDetailTarget(
-                  view: RoutineDetailView.baseTimelineManager,
+                  view: RoutineDetailView.baseTimeline,
                 ),
               ),
             ),

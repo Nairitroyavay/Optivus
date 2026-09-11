@@ -472,9 +472,6 @@ String onboarding7FriendlyAiMessage(String? error, List<String> warnings) {
   if (text.contains('ai_missing_required_slot:midday')) {
     return 'AI returned no midday routine for 3/day. Try again or choose 2 times/day.';
   }
-  if (text.contains('ai_missing_required_slot:afternoon')) {
-    return 'AI returned no afternoon routine for 4/day. Try again or choose 3 times/day.';
-  }
   if (text.contains('ai_extra_daily_slot_count')) {
     return 'AI returned too many routines for some days. Try again.';
   }
