@@ -179,7 +179,11 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
                       ),
                       FilledButton.icon(
                         icon: const Icon(Icons.edit_calendar_rounded, size: 16),
-                        label: const Text('Change setup'),
+                        label: Text(
+                          snapshot.isConfigured
+                              ? 'Change setup'
+                              : 'Set up Work',
+                        ),
                         style: FilledButton.styleFrom(
                           backgroundColor: OptivusColors.warning,
                           padding: const EdgeInsets.symmetric(

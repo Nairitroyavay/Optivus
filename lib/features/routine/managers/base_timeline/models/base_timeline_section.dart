@@ -31,6 +31,8 @@ class BaseTimelineSectionSnapshot {
     required this.summary,
   });
 
+  bool get isConfigured => configured;
+
   String get displayName => switch (section) {
     BaseTimelineSection.classes => 'Classes',
     BaseTimelineSection.work => 'Work / Business',

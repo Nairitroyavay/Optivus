@@ -61,6 +61,7 @@ void main() {
             asset: restored.asset,
             uid: uidA,
             purpose: UploadedAssetPurpose.classTimetable,
+            expectedSourceFeature: UploadSourceFeature.onboarding,
           ),
           isTrue,
         );
@@ -120,6 +121,7 @@ void main() {
             asset: restored.asset,
             uid: uidA,
             purpose: UploadedAssetPurpose.eatingMenu,
+            expectedSourceFeature: UploadSourceFeature.onboarding,
           ),
           isTrue,
         );
@@ -179,6 +181,7 @@ void main() {
             asset: restored!.asset,
             uid: uidA,
             purpose: UploadedAssetPurpose.classTimetable,
+            expectedSourceFeature: UploadSourceFeature.onboarding,
           ),
           isTrue,
         );
@@ -235,6 +238,7 @@ void main() {
         asset: asset,
         uid: uidA,
         purpose: UploadedAssetPurpose.classTimetable,
+        expectedSourceFeature: UploadSourceFeature.onboarding,
       );
       expect(isMatchForClass, isFalse);
 
@@ -242,6 +246,7 @@ void main() {
         asset: asset,
         uid: uidA,
         purpose: UploadedAssetPurpose.skinCare,
+        expectedSourceFeature: UploadSourceFeature.onboarding,
       );
       expect(isMatchForSkin, isTrue);
     });
@@ -602,6 +607,7 @@ void main() {
             asset: asset,
             uid: uidA,
             purpose: UploadedAssetPurpose.classTimetable,
+            expectedSourceFeature: UploadSourceFeature.onboarding,
           ),
           isFalse,
         );

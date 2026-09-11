@@ -92,6 +92,7 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
             asset: restored.asset,
             uid: normalizedUid,
             purpose: slot.purpose,
+            expectedSourceFeature: UploadSourceFeature.onboarding,
           );
 
       // If there is an active in-flight transient attempt for this slot, preserve attempt state

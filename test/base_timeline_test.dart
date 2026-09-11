@@ -362,10 +362,15 @@ void main() {
         final baseTimelineRepo = FakeBaseTimelineSetupRepository(
           onboardingRepo: onboardingRepo,
         );
+        final txRepo = FakeRoutineTransactionRepository(
+          routineRepository: routineRepo,
+          setupRepository: baseTimelineRepo,
+        );
 
         final coordinator = BaseTimelineTransactionCoordinator(
           routineRepo: routineRepo,
           setupRepo: baseTimelineRepo,
+          transactionRepo: txRepo,
         );
 
         // Pre-seed with existing routine items:
@@ -471,10 +476,15 @@ void main() {
         final baseTimelineRepo = FakeBaseTimelineSetupRepository(
           onboardingRepo: onboardingRepo,
         );
+        final txRepo = FakeRoutineTransactionRepository(
+          routineRepository: routineRepo,
+          setupRepository: baseTimelineRepo,
+        );
 
         final coordinator = BaseTimelineTransactionCoordinator(
           routineRepo: routineRepo,
           setupRepo: baseTimelineRepo,
+          transactionRepo: txRepo,
         );
 
         // 1. Save Class from 10:00 to 11:00 (600 to 660)
@@ -553,7 +563,7 @@ void main() {
         fileName: 'classes_preview.jpg',
         contentType: 'image/jpeg',
         sizeBytes: 1024,
-        r2Key: 'test/classes_preview.jpg',
+        r2Key: 'users/user-test/onboarding/classes_preview.jpg',
         status: UploadedAssetStatus.uploaded,
         createdAt: now,
         updatedAt: now,
@@ -567,7 +577,9 @@ void main() {
       expect(uri1, isNotNull);
       expect(
         uri1.toString(),
-        contains('https://preview.local/test/classes_preview.jpg'),
+        contains(
+          'https://preview.local/users/user-test/onboarding/classes_preview.jpg',
+        ),
       );
       expect(tokenFetchCount, 1);
 
@@ -611,6 +623,49 @@ void main() {
         expect(uri, isNull);
       },
     );
+
+    test(
+      'Denies cross-user key resolution and isolates cache by UID',
+      () async {
+        final fakeClient = FakeR2UploadClient();
+        var tokenFetchCount = 0;
+        final resolver = AuthenticatedR2PreviewResolver(
+          client: fakeClient,
+          getIdToken: () async {
+            tokenFetchCount++;
+            return 'valid-token';
+          },
+        );
+
+        // Attempt to resolve another user's key with user-1 UID
+        final deniedUri = await resolver.resolveR2Key(
+          uid: 'user-1',
+          r2Key: 'users/other-user/onboarding/photo.jpg',
+        );
+        expect(deniedUri, isNull);
+        expect(
+          tokenFetchCount,
+          0,
+        ); // Denied before fetching token or calling worker
+
+        // Resolving legitimately owned key works
+        final allowedUri = await resolver.resolveR2Key(
+          uid: 'user-1',
+          r2Key: 'users/user-1/onboarding/photo.jpg',
+        );
+        expect(allowedUri, isNotNull);
+        expect(tokenFetchCount, 1);
+
+        // Clearing cache forces re-fetch
+        resolver.clearCache();
+        final refetchedUri = await resolver.resolveR2Key(
+          uid: 'user-1',
+          r2Key: 'users/user-1/onboarding/photo.jpg',
+        );
+        expect(refetchedUri, isNotNull);
+        expect(tokenFetchCount, 2);
+      },
+    );
   });
 
   group('Base Timeline Provenance and Item Isolation Tests', () {
@@ -622,9 +677,14 @@ void main() {
         final baseTimelineRepo = FakeBaseTimelineSetupRepository(
           onboardingRepo: onboardingRepo,
         );
+        final txRepo = FakeRoutineTransactionRepository(
+          routineRepository: routineRepo,
+          setupRepository: baseTimelineRepo,
+        );
         final coordinator = BaseTimelineTransactionCoordinator(
           routineRepo: routineRepo,
           setupRepo: baseTimelineRepo,
+          transactionRepo: txRepo,
         );
 
         final blocks = <TimelineBlockDraft>[
@@ -666,9 +726,14 @@ void main() {
         final baseTimelineRepo = FakeBaseTimelineSetupRepository(
           onboardingRepo: onboardingRepo,
         );
+        final txRepo = FakeRoutineTransactionRepository(
+          routineRepository: routineRepo,
+          setupRepository: baseTimelineRepo,
+        );
         final coordinator = BaseTimelineTransactionCoordinator(
           routineRepo: routineRepo,
           setupRepo: baseTimelineRepo,
+          transactionRepo: txRepo,
         );
 
         // Pre-seed an imported meal and a manual habit

@@ -11,13 +11,13 @@ import 'package:optivus/services/routine_onboarding_projection.dart';
 
 class BaseTimelineTransactionCoordinator {
   final RoutineRepository _routineRepo;
-  final RoutineTransactionRepository? _transactionRepo;
+  final RoutineTransactionRepository _transactionRepo;
   final BaseTimelineSetupRepository _setupRepo;
   final Ref? _ref;
 
   BaseTimelineTransactionCoordinator({
     required RoutineRepository routineRepo,
-    RoutineTransactionRepository? transactionRepo,
+    required RoutineTransactionRepository transactionRepo,
     required BaseTimelineSetupRepository setupRepo,
     Ref? ref,
   }) : _routineRepo = routineRepo,
@@ -120,10 +120,14 @@ class BaseTimelineTransactionCoordinator {
 
     // 2. Identify items belonging to this section
     // Note: manual user items, imported meal plans, habits, and trackers are STRICTLY preserved.
-    final itemsToDelete = allItems
+    final trackedIds = currentSetup.trackedIdsFor(section);
+    final legacyItemsToDelete = allItems
         .where(
-          (item) => isSectionRoutineItem(item, section, setup: currentSetup),
+          (item) =>
+              !trackedIds.contains(item.id) &&
+              isSectionRoutineItem(item, section, setup: currentSetup),
         )
+        .map((item) => item.id)
         .toList(growable: false);
 
     // 3. Convert newBlocks to RoutineItem with baseTimeline provenance
@@ -174,51 +178,24 @@ class BaseTimelineTransactionCoordinator {
       newRoutineItems.add(item);
     }
 
-    // 4. Update BaseTimelineSetup with tracked IDs
-    final intermediateSetup = updateSetup(currentSetup);
-    final newIds = newRoutineItems.map((i) => i.id).toList();
-    final updatedSetup = switch (section) {
-      BaseTimelineSection.classes => intermediateSetup.copyWith(
-        classRoutineItemIds: newIds,
-      ),
-      BaseTimelineSection.work => intermediateSetup.copyWith(
-        workRoutineItemIds: newIds,
-      ),
-      BaseTimelineSection.eating => intermediateSetup.copyWith(
-        eatingRoutineItemIds: newIds,
-      ),
-      BaseTimelineSection.fixed => intermediateSetup.copyWith(
-        fixedRoutineItemIds: newIds,
-      ),
-      BaseTimelineSection.skinCare => intermediateSetup.copyWith(
-        skinCareRoutineItemIds: newIds,
-      ),
-    };
+    // 4. Atomic transaction with live revision optimistic concurrency check
+    await _transactionRepo.replaceBaseTimelineSection(
+      uid: uid,
+      section: section,
+      expectedRevision: currentSetup.revision,
+      newRoutineItems: newRoutineItems,
+      additionalDeleteIds: legacyItemsToDelete,
+      buildUpdatedSetup: (liveSetup) {
+        return updateSetup(liveSetup);
+      },
+    );
 
-    // 5. Commit atomically via RoutineTransactionRepository if available
-    if (_transactionRepo != null) {
-      await _transactionRepo.commitWrite(
-        uid: uid,
-        deleteItemIds: itemsToDelete.map((i) => i.id).toList(),
-        setItems: newRoutineItems,
-        setBaseTimelineSetupDoc: updatedSetup.toMap(),
-      );
-    } else {
-      // Fallback for isolated mocks without transaction repository
-      for (final oldItem in itemsToDelete) {
-        await _routineRepo.deleteRoutineItem(uid, oldItem.id);
-      }
-      for (final newItem in newRoutineItems) {
-        await _routineRepo.createRoutineItem(uid, newItem);
-      }
-      await _setupRepo.saveSetup(uid, updatedSetup);
-    }
-
-    // 6. Update in-memory state
+    // 5. Update in-memory state
+    final savedSetup = await _setupRepo.fetchSetup(uid);
     if (_ref != null) {
       _ref
           .read(baseTimelineSetupNotifierProvider.notifier)
-          .updateInMemory(updatedSetup);
+          .updateInMemory(savedSetup);
 
       try {
         await _ref.read(routineNotifierProvider.notifier).loadForOwner(uid);

@@ -198,10 +198,20 @@ DateTime? _dateTimeFromValue(Object? value) {
   return null;
 }
 
+abstract final class UploadSourceFeature {
+  static const String onboarding = 'onboarding';
+  static const String routineBaseTimeline = 'routine_base_timeline';
+
+  static bool isValid(String value) {
+    return value == onboarding || value == routineBaseTimeline;
+  }
+}
+
 bool isUsableSkinUpload({
   required UploadedAsset? asset,
   required String uid,
   required UploadedAssetPurpose expectedPurpose,
+  String expectedSourceFeature = UploadSourceFeature.onboarding,
 }) {
   return asset != null &&
       uploadedAssetFieldsAreDurablyUploadedForSlot(
@@ -212,6 +222,7 @@ bool isUsableSkinUpload({
         r2Key: asset.r2Key,
         status: asset.status,
         uid: uid,
+        expectedSourceFeature: expectedSourceFeature,
         expectedPurpose: expectedPurpose,
       );
 }
@@ -224,6 +235,7 @@ bool uploadedAssetFieldsAreDurablyUploadedForSlot({
   required String r2Key,
   required UploadedAssetStatus status,
   required String uid,
+  required String expectedSourceFeature,
   required UploadedAssetPurpose expectedPurpose,
 }) {
   final normalizedAssetId = assetId.trim();
@@ -232,7 +244,7 @@ bool uploadedAssetFieldsAreDurablyUploadedForSlot({
   if (status != UploadedAssetStatus.uploaded ||
       normalizedUid.isEmpty ||
       ownerUid != normalizedUid ||
-      sourceFeature != 'onboarding' ||
+      sourceFeature != expectedSourceFeature ||
       purpose != expectedPurpose ||
       normalizedAssetId.isEmpty ||
       key.contains('..') ||
@@ -244,7 +256,7 @@ bool uploadedAssetFieldsAreDurablyUploadedForSlot({
   if (parts.length != 5 ||
       parts[0] != 'users' ||
       parts[1] != normalizedUid ||
-      parts[2] != 'onboarding' ||
+      parts[2] != expectedSourceFeature ||
       parts[3] != expectedPurpose.wireName) {
     return false;
   }

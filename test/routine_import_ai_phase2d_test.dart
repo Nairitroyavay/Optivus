@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:optivus/config/routine_import_ai_config.dart';
-import 'package:optivus/features/routine/managers/base_timeline/screens/routine_import_review_screen.dart';
+import 'package:optivus/features/shared/import_review/routine_import_review_screen.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/routine_item.dart';

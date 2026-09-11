@@ -6,7 +6,7 @@ import 'package:optivus/core/theme/optivus_spacing.dart';
 import 'package:optivus/features/onboarding/steps/base_timeline_step.dart';
 import 'package:optivus/features/onboarding/onboarding_step_id.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
-import 'package:optivus/features/routine/managers/base_timeline/screens/routine_import_review_screen.dart';
+import 'package:optivus/features/shared/import_review/routine_import_review_screen.dart';
 import 'package:optivus/features/routine/providers/routine_navigation_provider.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/onboarding_draft.dart';

@@ -180,7 +180,11 @@ class _ClassesBaseSetupScreenState
                       ),
                       FilledButton.icon(
                         icon: const Icon(Icons.edit_calendar_rounded, size: 16),
-                        label: const Text('Change setup'),
+                        label: Text(
+                          snapshot.isConfigured
+                              ? 'Change setup'
+                              : 'Set up Classes',
+                        ),
                         style: FilledButton.styleFrom(
                           backgroundColor: OptivusColors.blueAccent,
                           padding: const EdgeInsets.symmetric(

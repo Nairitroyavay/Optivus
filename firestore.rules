@@ -39,6 +39,11 @@ service cloud.firestore {
         || purpose == "profile_photo";
     }
 
+    function validUploadSourceFeatureAndPurpose(sourceFeature, purpose) {
+      return (sourceFeature == "onboarding" && validUploadPurpose(purpose))
+        || (sourceFeature == "routine_base_timeline" && isImageUploadPurpose(purpose));
+    }
+
     function validUploadContentType(purpose, contentType) {
       return purpose == "profile_photo"
         ? contentType == "image/jpeg"
@@ -944,12 +949,14 @@ service cloud.firestore {
           request.resource.data.purpose,
           request.resource.data.contentType
         )
-        && request.resource.data.sourceFeature == "onboarding"
+        && validUploadSourceFeatureAndPurpose(
+          request.resource.data.sourceFeature,
+          request.resource.data.purpose
+        )
         && validUploadObjectIdentity(request.resource.data)
         && request.resource.data.fileName is string
         && request.resource.data.createdAt is timestamp
         && request.resource.data.updatedAt is timestamp
-        && validUploadPurpose(request.resource.data.purpose)
         && validUploadStatus(request.resource.data.status);
 
       function isLegacySkinCareDelete() {
@@ -991,12 +998,14 @@ service cloud.firestore {
               request.resource.data.purpose,
               request.resource.data.contentType
             )
-            && request.resource.data.sourceFeature == "onboarding"
+            && validUploadSourceFeatureAndPurpose(
+              request.resource.data.sourceFeature,
+              request.resource.data.purpose
+            )
             && validUploadObjectIdentity(request.resource.data)
             && request.resource.data.fileName is string
             && request.resource.data.createdAt is timestamp
             && request.resource.data.updatedAt is timestamp
-            && validUploadPurpose(request.resource.data.purpose)
             && validUploadStatus(request.resource.data.status)
             && validUploadStatusTransition(resource.data.status, request.resource.data.status)
             // Immutable identity fields

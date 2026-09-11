@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
+import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/models/conflict_acceptance.dart';
 import 'package:optivus/models/routine_event_record.dart';
@@ -49,6 +50,16 @@ abstract class RoutineTransactionRepository {
     required RoutineProjectionReceipt fromReceipt,
     required RoutineProjectionReceipt toReceipt,
     required List<RoutineEventRecord> addEvents,
+  });
+
+  Future<void> replaceBaseTimelineSection({
+    required String uid,
+    required BaseTimelineSection section,
+    required int expectedRevision,
+    required List<RoutineItem> newRoutineItems,
+    List<String> additionalDeleteIds = const [],
+    required BaseTimelineSetup Function(BaseTimelineSetup liveSetup)
+    buildUpdatedSetup,
   });
 
   Stream<RoutineEventFeed> watchEvents(String uid);
@@ -163,9 +174,7 @@ class FirestoreRoutineTransactionRepository
 
       final idsToDelete = [?deleteItemId, ...?deleteItemIds];
       for (final id in idsToDelete) {
-        final docRef = _firestore.doc(
-          FirestoreUserPaths.routineItem(uid, id),
-        );
+        final docRef = _firestore.doc(FirestoreUserPaths.routineItem(uid, id));
         transaction.delete(docRef);
       }
 
@@ -289,6 +298,71 @@ class FirestoreRoutineTransactionRepository
         }
         transaction.set(receiptRef, receiptData);
       }
+    });
+  }
+
+  @override
+  Future<void> replaceBaseTimelineSection({
+    required String uid,
+    required BaseTimelineSection section,
+    required int expectedRevision,
+    required List<RoutineItem> newRoutineItems,
+    List<String> additionalDeleteIds = const [],
+    required BaseTimelineSetup Function(BaseTimelineSetup liveSetup)
+    buildUpdatedSetup,
+  }) async {
+    validateOwnerUid(uid);
+    final setupRef = _firestore.doc(FirestoreUserPaths.baseTimelineSetup(uid));
+
+    await _firestore.runTransaction((transaction) async {
+      final setupSnap = await transaction.get(setupRef);
+      final liveSetup = (setupSnap.exists && setupSnap.data() != null)
+          ? BaseTimelineSetup.fromMap(setupSnap.data()!, uid: uid)
+          : BaseTimelineSetup(
+              uid: uid,
+              updatedAt: DateTime.now(),
+              schemaVersion: BaseTimelineSetup.currentSchemaVersion,
+              revision: 0,
+            );
+
+      if (liveSetup.revision != expectedRevision) {
+        throw StateError(
+          'Base timeline revision mismatch: expected $expectedRevision, actual ${liveSetup.revision}',
+        );
+      }
+
+      final itemsToDelete = {
+        ...liveSetup.trackedIdsFor(section),
+        ...additionalDeleteIds,
+      };
+      for (final id in itemsToDelete) {
+        final trimmed = id.trim();
+        if (trimmed.isNotEmpty) {
+          transaction.delete(
+            _firestore.doc(FirestoreUserPaths.routineItem(uid, trimmed)),
+          );
+        }
+      }
+
+      for (final item in newRoutineItems) {
+        final docRef = _firestore.doc(
+          FirestoreUserPaths.routineItem(uid, item.id),
+        );
+        final data = _itemCodec.toFirestore(
+          ownerUid: uid,
+          item: item.copyWith(userId: uid),
+        );
+        data['updatedAt'] = FieldValue.serverTimestamp();
+        transaction.set(docRef, data);
+      }
+
+      final updatedSetup = buildUpdatedSetup(liveSetup);
+      final newIds = newRoutineItems.map((i) => i.id).toList(growable: false);
+      final finalSetup = updatedSetup
+          .copyWith(revision: liveSetup.revision + 1, updatedAt: DateTime.now())
+          .withSectionRoutineIds(section, newIds);
+
+      transaction.set(setupRef, finalSetup.toMap());
     });
   }
 
@@ -448,10 +522,12 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
         }
 
         if (setBaseTimelineSetupDoc != null && _setupRepository != null) {
-          futures.add(_setupRepository.saveSetup(
-            uid,
-            BaseTimelineSetup.fromMap(setBaseTimelineSetupDoc, uid: uid),
-          ));
+          futures.add(
+            _setupRepository.saveSetup(
+              uid,
+              BaseTimelineSetup.fromMap(setBaseTimelineSetupDoc, uid: uid),
+            ),
+          );
         }
 
         final historyRepository = _historyRepository;
@@ -635,6 +711,95 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
         if (!error.toString().contains('_SKIP_ROLLBACK')) {
           routineRepository.database.receiptsByUid[uid] = initialReceipts;
           _publishEvents(uid, initialEvents);
+        }
+        rethrow;
+      }
+    } finally {
+      completer.complete();
+    }
+  }
+
+  @override
+  Future<void> replaceBaseTimelineSection({
+    required String uid,
+    required BaseTimelineSection section,
+    required int expectedRevision,
+    required List<RoutineItem> newRoutineItems,
+    List<String> additionalDeleteIds = const [],
+    required BaseTimelineSetup Function(BaseTimelineSetup liveSetup)
+    buildUpdatedSetup,
+  }) async {
+    final completer = Completer<void>();
+    final previousMutex = _mutex;
+    _mutex = completer.future;
+
+    try {
+      await previousMutex;
+      validateOwnerUid(uid);
+
+      final initialSetup = _setupRepository != null
+          ? await _setupRepository.fetchSetup(uid)
+          : BaseTimelineSetup(
+              uid: uid,
+              updatedAt: DateTime.now(),
+              schemaVersion: BaseTimelineSetup.currentSchemaVersion,
+              revision: 0,
+            );
+
+      if (initialSetup.revision != expectedRevision) {
+        throw StateError(
+          'Base timeline revision mismatch: expected $expectedRevision, actual ${initialSetup.revision}',
+        );
+      }
+
+      final initialItems = _routineRepository != null
+          ? await _routineRepository.fetchRoutineItems(uid)
+          : <RoutineItem>[];
+
+      try {
+        await onBeforeMutation?.call();
+
+        final itemsToDelete = {
+          ...initialSetup.trackedIdsFor(section),
+          ...additionalDeleteIds,
+        };
+        final routineRepository = _routineRepository;
+        if (routineRepository != null) {
+          for (final id in itemsToDelete) {
+            final trimmed = id.trim();
+            if (trimmed.isNotEmpty) {
+              await routineRepository.deleteRoutineItem(uid, trimmed);
+            }
+          }
+          for (final item in newRoutineItems) {
+            await routineRepository.createRoutineItem(uid, item);
+          }
+        }
+
+        final updatedSetup = buildUpdatedSetup(initialSetup);
+        final newIds = newRoutineItems.map((i) => i.id).toList(growable: false);
+        final finalSetup = updatedSetup
+            .copyWith(
+              revision: initialSetup.revision + 1,
+              updatedAt: DateTime.now(),
+            )
+            .withSectionRoutineIds(section, newIds);
+
+        if (_setupRepository != null) {
+          await _setupRepository.saveSetup(uid, finalSetup);
+        }
+      } catch (e) {
+        if (_routineRepository != null) {
+          final current = await _routineRepository.fetchRoutineItems(uid);
+          for (final item in current) {
+            await _routineRepository.deleteRoutineItem(uid, item.id);
+          }
+          for (final item in initialItems) {
+            await _routineRepository.createRoutineItem(uid, item);
+          }
+        }
+        if (_setupRepository != null) {
+          await _setupRepository.saveSetup(uid, initialSetup);
         }
         rethrow;
       }

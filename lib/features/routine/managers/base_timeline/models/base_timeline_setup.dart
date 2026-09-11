@@ -8,11 +8,12 @@ import 'package:optivus/models/skin_care_product_draft.dart';
 /// Durable runtime Base Timeline configuration stored at
 /// `users/{uid}/baseTimelineSetup/current`.
 class BaseTimelineSetup {
-  static const int currentSchemaVersion = 1;
+  static const int currentSchemaVersion = 2;
 
   final String uid;
   final DateTime updatedAt;
   final int schemaVersion;
+  final int revision;
 
   // ── Tracked Routine Item IDs ──────────────────────────────────
   final List<String> classRoutineItemIds;
@@ -77,6 +78,7 @@ class BaseTimelineSetup {
     required this.uid,
     required this.updatedAt,
     this.schemaVersion = currentSchemaVersion,
+    this.revision = 1,
     this.classRoutineItemIds = const [],
     this.workRoutineItemIds = const [],
     this.eatingRoutineItemIds = const [],
@@ -345,10 +347,178 @@ class BaseTimelineSetup {
     );
   }
 
+  List<String> trackedIdsFor(BaseTimelineSection section) {
+    return switch (section) {
+      BaseTimelineSection.classes => List.unmodifiable(classRoutineItemIds),
+      BaseTimelineSection.work => List.unmodifiable(workRoutineItemIds),
+      BaseTimelineSection.eating => List.unmodifiable(eatingRoutineItemIds),
+      BaseTimelineSection.fixed => List.unmodifiable(fixedRoutineItemIds),
+      BaseTimelineSection.skinCare => List.unmodifiable(skinCareRoutineItemIds),
+    };
+  }
+
+  BaseTimelineSetup withSectionRoutineIds(
+    BaseTimelineSection section,
+    List<String> newIds,
+  ) {
+    return switch (section) {
+      BaseTimelineSection.classes => copyWith(classRoutineItemIds: newIds),
+      BaseTimelineSection.work => copyWith(workRoutineItemIds: newIds),
+      BaseTimelineSection.eating => copyWith(eatingRoutineItemIds: newIds),
+      BaseTimelineSection.fixed => copyWith(fixedRoutineItemIds: newIds),
+      BaseTimelineSection.skinCare => copyWith(skinCareRoutineItemIds: newIds),
+    };
+  }
+
+  /// Prepares state when transitioning to or rebuilding Skin Care 'products' flow.
+  /// Retains current product inputs/photos, but clears 'build_for_me' face recommendations.
+  BaseTimelineSetup asSkinCareProducts({
+    String? productNames,
+    String? productPhotoAssetId,
+    String? productPhotoR2Key,
+    List<SkinCareDetectedProduct>? reviewedProducts,
+    List<TimelineBlockDraft>? blocks,
+  }) {
+    return copyWith(
+      skinCareSetupPath: 'products',
+      skinCareSkipped: false,
+      skinCareProductNames: productNames ?? skinCareProductNames,
+      skinCareProductPhotoAssetId:
+          productPhotoAssetId ?? skinCareProductPhotoAssetId,
+      skinCareProductPhotoR2Key: productPhotoR2Key ?? skinCareProductPhotoR2Key,
+      skinCareReviewedProducts: reviewedProducts ?? skinCareReviewedProducts,
+      skinCareBlocks: blocks ?? skinCareBlocks,
+      clearSkinCareFacePhotoAssetId: true,
+      clearSkinCareFacePhotoR2Key: true,
+      skinCareFacePhotoSkipped: false,
+      skinCareProductRecommendations: const [],
+      skinCareSelectedProductNames: const [],
+    );
+  }
+
+  /// Prepares state when transitioning to or rebuilding Skin Care 'build_for_me' flow.
+  /// Retains face photo & preference answers, but clears pre-existing product inputs.
+  BaseTimelineSetup asSkinCareBuildForMe({
+    String? facePhotoAssetId,
+    String? facePhotoR2Key,
+    bool? facePhotoSkipped,
+    String? skinType,
+    List<String>? problems,
+    String? budget,
+    String? preference,
+    List<String>? selectedProductNames,
+    List<SkinCareProductRecommendationDraft>? productRecommendations,
+    List<String>? specialCareNotes,
+    List<TimelineBlockDraft>? blocks,
+  }) {
+    return copyWith(
+      skinCareSetupPath: 'build_for_me',
+      skinCareSkipped: false,
+      skinCareFacePhotoAssetId: facePhotoAssetId ?? skinCareFacePhotoAssetId,
+      skinCareFacePhotoR2Key: facePhotoR2Key ?? skinCareFacePhotoR2Key,
+      skinCareFacePhotoSkipped: facePhotoSkipped ?? skinCareFacePhotoSkipped,
+      skinCareSkinType: skinType ?? skinCareSkinType,
+      skinCareProblems: problems ?? skinCareProblems,
+      skinCareBudget: budget ?? skinCareBudget,
+      skinCarePreference: preference ?? skinCarePreference,
+      skinCareSelectedProductNames:
+          selectedProductNames ?? skinCareSelectedProductNames,
+      skinCareProductRecommendations:
+          productRecommendations ?? skinCareProductRecommendations,
+      skinCareSpecialCareNotes: specialCareNotes ?? skinCareSpecialCareNotes,
+      skinCareBlocks: blocks ?? skinCareBlocks,
+      skinCareProductNames: null,
+      clearSkinCareProductPhotoAssetId: true,
+      clearSkinCareProductPhotoR2Key: true,
+      skinCareReviewedProducts: const [],
+    );
+  }
+
+  /// Sets Skin Care as skipped.
+  BaseTimelineSetup asSkinCareSkipped() {
+    return copyWith(
+      skinCareSetupPath: 'skip',
+      skinCareSkipped: true,
+      skinCareBlocks: const [],
+      skinCareRoutineItemIds: const [],
+      skinCareProductNames: null,
+      clearSkinCareProductPhotoAssetId: true,
+      clearSkinCareProductPhotoR2Key: true,
+      skinCareReviewedProducts: const [],
+      clearSkinCareFacePhotoAssetId: true,
+      clearSkinCareFacePhotoR2Key: true,
+      skinCareFacePhotoSkipped: false,
+      skinCareSkinType: null,
+      skinCareProblems: const [],
+      skinCareBudget: null,
+      skinCarePreference: null,
+      skinCareSelectedProductNames: const [],
+      skinCareProductRecommendations: const [],
+      skinCareSpecialCareNotes: const [],
+    );
+  }
+
+  /// Transitions Eating to AI generated from answers ('create').
+  BaseTimelineSetup asEatingGenerated({
+    List<TimelineBlockDraft>? blocks,
+    String? goal,
+    int? meals,
+    String? mode,
+    String? type,
+    String? styleCustomText,
+    String? budget,
+    String? ability,
+    int? breakfast,
+    int? lunch,
+    int? dinner,
+    int? snack,
+    int? extraSnack,
+    int? calories,
+    int? protein,
+  }) {
+    return copyWith(
+      eatingSetupPath: 'create',
+      eatingBlocks: blocks ?? eatingBlocks,
+      clearEatingPhotoAssetId: true,
+      clearEatingPhotoR2Key: true,
+      mealPlanningGoal: goal ?? mealPlanningGoal,
+      mealsPerDay: meals ?? mealsPerDay,
+      eatingMode: mode ?? eatingMode,
+      foodType: type ?? foodType,
+      foodStyleCustomText: styleCustomText ?? foodStyleCustomText,
+      mealBudget: budget ?? mealBudget,
+      cookingAbility: ability ?? cookingAbility,
+      breakfastMinute: breakfast ?? breakfastMinute,
+      lunchMinute: lunch ?? lunchMinute,
+      dinnerMinute: dinner ?? dinnerMinute,
+      snackMinute: snack ?? snackMinute,
+      extraSnackMinute: extraSnack ?? extraSnackMinute,
+      targetCalories: calories ?? targetCalories,
+      targetProtein: protein ?? targetProtein,
+    );
+  }
+
+  /// Transitions Eating to meal plan photo ('has_routine').
+  BaseTimelineSetup asEatingPhoto({
+    required String photoAssetId,
+    required String photoR2Key,
+    List<TimelineBlockDraft>? blocks,
+    int? meals,
+  }) {
+    return copyWith(
+      eatingSetupPath: 'has_routine',
+      eatingPhotoAssetId: photoAssetId,
+      eatingPhotoR2Key: photoR2Key,
+      eatingBlocks: blocks ?? eatingBlocks,
+      mealsPerDay: meals ?? mealsPerDay,
+    );
+  }
+
   BaseTimelineSetup copyWith({
     String? uid,
     DateTime? updatedAt,
     int? schemaVersion,
+    int? revision,
     List<String>? classRoutineItemIds,
     List<String>? workRoutineItemIds,
     List<String>? eatingRoutineItemIds,
@@ -411,6 +581,7 @@ class BaseTimelineSetup {
       uid: uid ?? this.uid,
       updatedAt: updatedAt ?? this.updatedAt,
       schemaVersion: schemaVersion ?? this.schemaVersion,
+      revision: revision ?? this.revision,
       classRoutineItemIds: classRoutineItemIds ?? this.classRoutineItemIds,
       workRoutineItemIds: workRoutineItemIds ?? this.workRoutineItemIds,
       eatingRoutineItemIds: eatingRoutineItemIds ?? this.eatingRoutineItemIds,
@@ -492,6 +663,7 @@ class BaseTimelineSetup {
       'uid': uid,
       'updatedAt': Timestamp.fromDate(updatedAt),
       'schemaVersion': schemaVersion,
+      'revision': revision,
       'classRoutineItemIds': classRoutineItemIds,
       'workRoutineItemIds': workRoutineItemIds,
       'eatingRoutineItemIds': eatingRoutineItemIds,
@@ -571,8 +743,8 @@ class BaseTimelineSetup {
           ? map['uid'] as String
           : uid,
       updatedAt: updated,
-      schemaVersion:
-          (map['schemaVersion'] as num?)?.toInt() ?? currentSchemaVersion,
+      schemaVersion: (map['schemaVersion'] as num?)?.toInt() ?? 1,
+      revision: (map['revision'] as num?)?.toInt() ?? 1,
       classRoutineItemIds:
           (map['classRoutineItemIds'] as List?)
               ?.map((e) => e.toString())
@@ -789,10 +961,217 @@ class BaseTimelineSetup {
     );
   }
 
+  factory BaseTimelineSetup.fromOnboardingCompletion({
+    required OnboardingDraft finalDraft,
+    required OnboardingCompletionBundle bundle,
+  }) {
+    final base = finalDraft.baseTimeline;
+    final blocks = bundle.baseTimelineBlocks.isNotEmpty
+        ? bundle.baseTimelineBlocks
+        : base.blocks;
+    final classBlocks = blocks
+        .where((b) => b.section.toLowerCase().contains('class'))
+        .toList();
+    final workBlocks = blocks
+        .where(
+          (b) =>
+              b.section.toLowerCase().contains('job') ||
+              b.section.toLowerCase().contains('work'),
+        )
+        .toList();
+    final eatingBlocks = blocks
+        .where(
+          (b) =>
+              b.section.toLowerCase().contains('eat') ||
+              b.section.toLowerCase().contains('meal'),
+        )
+        .toList();
+    final fixedBlocks = blocks
+        .where(
+          (b) =>
+              b.section.toLowerCase().contains('fixed') ||
+              b.section.toLowerCase().contains('sleep') ||
+              b.section.toLowerCase().contains('bath'),
+        )
+        .toList();
+    final skinCareBlocks = blocks
+        .where((b) => b.section.toLowerCase().contains('skin'))
+        .toList();
+
+    String? classAssetId = base.classLogicalAssetId;
+    String? classR2Key = base.classLogicalAssetR2Key;
+    String? workAssetId = base.workLogicalAssetId;
+    String? workR2Key = base.workLogicalAssetR2Key;
+    String? eatingAssetId;
+    String? eatingR2Key;
+    String? skinCareProductAssetId = base.skinCareProductPhotoAssetId;
+    String? skinCareProductR2Key = base.skinCareProductPhotoR2Key;
+    String? skinCareFaceAssetId = base.skinCareFacePhotoAssetId;
+    String? skinCareFaceR2Key = base.skinCareFacePhotoR2Key;
+
+    for (final imp in base.pendingFutureImports) {
+      final s = imp.section.toLowerCase();
+      if (s.contains('class')) {
+        classAssetId ??= imp.uploadedAssetId;
+        classR2Key ??= imp.uploadedAssetR2Key;
+      } else if (s.contains('job') || s.contains('work')) {
+        workAssetId ??= imp.uploadedAssetId;
+        workR2Key ??= imp.uploadedAssetR2Key;
+      } else if (s.contains('eat') || s.contains('meal')) {
+        eatingAssetId ??= imp.uploadedAssetId;
+        eatingR2Key ??= imp.uploadedAssetR2Key;
+      }
+    }
+
+    for (final ref in bundle.uploadedAssetReferences) {
+      final sec = ref.section.toLowerCase();
+      if (sec.contains('class')) {
+        classAssetId = ref.uploadedAssetId;
+        classR2Key = ref.uploadedAssetR2Key;
+      } else if (sec.contains('job') || sec.contains('work')) {
+        workAssetId = ref.uploadedAssetId;
+        workR2Key = ref.uploadedAssetR2Key;
+      } else if (sec.contains('eat') || sec.contains('meal')) {
+        eatingAssetId = ref.uploadedAssetId;
+        eatingR2Key = ref.uploadedAssetR2Key;
+      } else if (sec.contains('skin')) {
+        if (ref.mode == 'no_products' || ref.id.contains('face')) {
+          skinCareFaceAssetId = ref.uploadedAssetId;
+          skinCareFaceR2Key = ref.uploadedAssetR2Key;
+        } else {
+          skinCareProductAssetId = ref.uploadedAssetId;
+          skinCareProductR2Key = ref.uploadedAssetR2Key;
+        }
+      }
+    }
+
+    final classRoutineItemIds = bundle.routineItemsForApp
+        .where(
+          (item) =>
+              classBlocks.any((b) => b.id == item.id) ||
+              item.baseTimelineSection == 'classes' ||
+              item.category == RoutineCategory.classBlock,
+        )
+        .map((e) => e.id)
+        .toList();
+    final workRoutineItemIds = bundle.routineItemsForApp
+        .where(
+          (item) =>
+              workBlocks.any((b) => b.id == item.id) ||
+              item.baseTimelineSection == 'work' ||
+              item.category == RoutineCategory.job,
+        )
+        .map((e) => e.id)
+        .toList();
+    final eatingRoutineItemIds = bundle.routineItemsForApp
+        .where(
+          (item) =>
+              eatingBlocks.any((b) => b.id == item.id) ||
+              item.baseTimelineSection == 'eating' ||
+              item.category == RoutineCategory.eating,
+        )
+        .map((e) => e.id)
+        .toList();
+    final fixedRoutineItemIds = bundle.routineItemsForApp
+        .where(
+          (item) =>
+              fixedBlocks.any((b) => b.id == item.id) ||
+              item.baseTimelineSection == 'fixed' ||
+              item.category == RoutineCategory.fixed ||
+              item.category == RoutineCategory.sleep,
+        )
+        .map((e) => e.id)
+        .toList();
+    final skinCareRoutineItemIds = bundle.routineItemsForApp
+        .where(
+          (item) =>
+              skinCareBlocks.any((b) => b.id == item.id) ||
+              item.baseTimelineSection == 'skinCare' ||
+              item.category == RoutineCategory.skinCare,
+        )
+        .map((e) => e.id)
+        .toList();
+
+    final targets = finalDraft.canonicalNutritionTargets();
+
+    return BaseTimelineSetup(
+      uid: bundle.uid,
+      updatedAt: bundle.updatedAt,
+      schemaVersion: currentSchemaVersion,
+      revision: 1,
+      classRoutineItemIds: classRoutineItemIds.isNotEmpty
+          ? classRoutineItemIds
+          : classBlocks.map((b) => b.id).toList(),
+      workRoutineItemIds: workRoutineItemIds.isNotEmpty
+          ? workRoutineItemIds
+          : workBlocks.map((b) => b.id).toList(),
+      eatingRoutineItemIds: eatingRoutineItemIds.isNotEmpty
+          ? eatingRoutineItemIds
+          : eatingBlocks.map((b) => b.id).toList(),
+      fixedRoutineItemIds: fixedRoutineItemIds.isNotEmpty
+          ? fixedRoutineItemIds
+          : fixedBlocks.map((b) => b.id).toList(),
+      skinCareRoutineItemIds: skinCareRoutineItemIds.isNotEmpty
+          ? skinCareRoutineItemIds
+          : skinCareBlocks.map((b) => b.id).toList(),
+      classLogicalAssetId: classAssetId,
+      classLogicalAssetR2Key: classR2Key,
+      classBlocks: classBlocks,
+      workLogicalAssetId: workAssetId,
+      workLogicalAssetR2Key: workR2Key,
+      workBlocks: workBlocks,
+      eatingSetupPath:
+          base.eatingSetupPath ??
+          (eatingAssetId != null ? 'has_routine' : 'create'),
+      eatingBlocks: eatingBlocks,
+      mealPlanningGoal: base.mealPlanningGoal,
+      mealsPerDay: base.mealsPerDay,
+      eatingMode: base.eatingMode,
+      foodType: base.foodType,
+      foodStyleCustomText: base.foodStyleCustomText,
+      mealBudget: base.mealBudget,
+      cookingAbility: base.cookingAbility,
+      breakfastMinute: base.breakfastMinute,
+      lunchMinute: base.lunchMinute,
+      dinnerMinute: base.dinnerMinute,
+      snackMinute: base.snackMinute,
+      extraSnackMinute: base.extraSnackMinute,
+      targetCalories: targets.targetCalories,
+      targetProtein: targets.proteinTarget?.round(),
+      eatingPhotoAssetId: eatingAssetId,
+      eatingPhotoR2Key: eatingR2Key,
+      fixedBlocks: fixedBlocks,
+      skinCareSetupPath: base.skinCareSetupPath,
+      skinCareSkipped: base.skinCareSkipped,
+      skinCareBlocks: skinCareBlocks,
+      skinCareProductNames: base.skinCareProductNames,
+      skinCareProductPhotoAssetId: skinCareProductAssetId,
+      skinCareProductPhotoR2Key: skinCareProductR2Key,
+      skinCareReviewedProducts: base.skinCareReviewedProducts,
+      skinCareFacePhotoAssetId: skinCareFaceAssetId,
+      skinCareFacePhotoR2Key: skinCareFaceR2Key,
+      skinCareFacePhotoSkipped: base.skinCareFacePhotoSkipped,
+      skinCareSkinType: base.skinCareSkinType,
+      skinCareProblems: base.skinCareProblems,
+      skinCareBudget: base.skinCareBudget,
+      skinCarePreference: base.skinCarePreference,
+      skinCareSelectedProductNames: base.skinCareSelectedProductNames,
+      skinCareProductRecommendations: base.skinCareProductRecommendations,
+      skinCareSpecialCareNotes: base.skinCareSpecialCareNotes,
+    );
+  }
+
   factory BaseTimelineSetup.fromCompletionBundle(
     String uid,
-    OnboardingCompletionBundle bundle,
-  ) {
+    OnboardingCompletionBundle bundle, {
+    OnboardingDraft? finalDraft,
+  }) {
+    if (finalDraft != null) {
+      return BaseTimelineSetup.fromOnboardingCompletion(
+        finalDraft: finalDraft,
+        bundle: bundle,
+      );
+    }
     final blocks = bundle.baseTimelineBlocks;
     final classBlocks = blocks
         .where((b) => b.section.toLowerCase().contains('class'))

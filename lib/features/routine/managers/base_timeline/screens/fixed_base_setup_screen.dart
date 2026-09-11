@@ -65,14 +65,14 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
         backgroundColor: OptivusColors.backgroundBottom,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
-          'Discard changes?',
+          'Discard this setup?',
           style: TextStyle(
             color: OptivusColors.textPrimary,
             fontWeight: FontWeight.w700,
           ),
         ),
         content: const Text(
-          'Any unsaved fixed block edits will be lost.',
+          "Your current Fixed setup won't be affected.",
           style: TextStyle(color: OptivusColors.textSecondary),
         ),
         actions: [
@@ -135,6 +135,7 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
   }
 
   Future<void> _saveWorkingBlocks() async {
+    if (_isSaving) return;
     setState(() => _isSaving = true);
     try {
       final uid = ref.read(userProfileProvider).uid;
@@ -221,12 +222,11 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
               .firstOrNull;
 
           return PopScope(
-            canPop: !_isDirty,
+            canPop: !_isDirty && !_isSaving,
             onPopInvokedWithResult: (didPop, _) async {
-              if (!didPop) {
-                if (await _confirmDiscard()) {
-                  setState(() => _isEditing = false);
-                }
+              if (didPop || _isSaving) return;
+              if (await _confirmDiscard()) {
+                setState(() => _isEditing = false);
               }
             },
             child: Scaffold(
@@ -248,11 +248,13 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
                               Icons.close_rounded,
                               color: OptivusColors.textPrimary,
                             ),
-                            onPressed: () async {
-                              if (await _confirmDiscard()) {
-                                setState(() => _isEditing = false);
-                              }
-                            },
+                            onPressed: _isSaving
+                                ? null
+                                : () async {
+                                    if (await _confirmDiscard()) {
+                                      setState(() => _isEditing = false);
+                                    }
+                                  },
                             style: IconButton.styleFrom(
                               backgroundColor: Colors.white.withValues(
                                 alpha: 0.1,
@@ -515,7 +517,11 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
                       ),
                       FilledButton.icon(
                         icon: const Icon(Icons.edit_calendar_rounded, size: 16),
-                        label: const Text('Change setup'),
+                        label: Text(
+                          snapshot.isConfigured
+                              ? 'Change setup'
+                              : 'Set up Fixed',
+                        ),
                         style: FilledButton.styleFrom(
                           backgroundColor: OptivusColors.purpleAccent,
                           padding: const EdgeInsets.symmetric(

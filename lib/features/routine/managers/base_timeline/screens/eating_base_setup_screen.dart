@@ -7,6 +7,7 @@ import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timelin
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_upload_lifecycle_helper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_domain_engine.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_ai_thinking_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
@@ -53,6 +54,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
   String? _workingAssetId;
   String? _workingR2Key;
   String? _workingSetupPath;
+  String? _initialAssetId;
+  String? _initialR2Key;
 
   void _initWorkingState(dynamic setup) {
     _workingBlocks = List.from(setup.eatingBlocks);
@@ -63,6 +66,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     _workingTargetProtein = setup.targetProtein ?? 130;
     _workingAssetId = setup.eatingPhotoAssetId;
     _workingR2Key = setup.eatingPhotoR2Key;
+    _initialAssetId = setup.eatingPhotoAssetId;
+    _initialR2Key = setup.eatingPhotoR2Key;
     _workingSetupPath = setup.eatingSetupPath ?? 'create';
     _isDirty = false;
   }
@@ -100,7 +105,21 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         ],
       ),
     );
-    return res ?? false;
+    final confirmed = res ?? false;
+    if (confirmed) {
+      if (_workingAssetId != null && _workingAssetId != _initialAssetId) {
+        try {
+          final uid = ref.read(userProfileProvider).uid;
+          final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
+          await helper.retireUncommittedUpload(
+            uid: uid,
+            assetId: _workingAssetId,
+            objectKey: _workingR2Key,
+          );
+        } catch (_) {}
+      }
+    }
+    return confirmed;
   }
 
   void _showPhotoSourceSheet() {
@@ -154,6 +173,18 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
   Future<void> _pickAndUploadPhoto(ImageSource source) async {
     final uid = ref.read(userProfileProvider).uid;
     if (uid.trim().isEmpty) return;
+
+    // Retire any previously uncommitted upload before starting new one
+    if (_workingAssetId != null && _workingAssetId != _initialAssetId) {
+      try {
+        final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
+        await helper.retireUncommittedUpload(
+          uid: uid,
+          assetId: _workingAssetId,
+          objectKey: _workingR2Key,
+        );
+      } catch (_) {}
+    }
 
     final uploadNotifier = ref.read(uploadControllerProvider.notifier);
 
@@ -297,6 +328,16 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       );
 
       if (mounted) {
+        if (_workingAssetId != null && _workingAssetId != _initialAssetId) {
+          try {
+            final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
+            await helper.retireUncommittedUpload(
+              uid: uid,
+              assetId: _workingAssetId,
+              objectKey: _workingR2Key,
+            );
+          } catch (_) {}
+        }
         setState(() {
           _workingBlocks = blocks;
           _workingSetupPath = 'create';
@@ -366,6 +407,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
   }
 
   Future<void> _saveWorkingSetup() async {
+    if (_isSaving) return;
     setState(() => _isSaving = true);
     try {
       final uid = ref.read(userProfileProvider).uid;
@@ -389,7 +431,22 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
           updatedAt: DateTime.now(),
         ),
       );
+
+      // Retire replaced asset if photo changed
+      if (_initialAssetId != null && _initialAssetId != _workingAssetId) {
+        try {
+          final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
+          await helper.retireReplacedAsset(
+            uid: uid,
+            oldAssetId: _initialAssetId!,
+            oldObjectKey: _initialR2Key,
+          );
+        } catch (_) {}
+      }
+
       if (mounted) {
+        _initialAssetId = _workingAssetId;
+        _initialR2Key = _workingR2Key;
         setState(() {
           _isSaving = false;
           _isEditing = false;
@@ -454,12 +511,11 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
               .toList();
 
           return PopScope(
-            canPop: !_isDirty,
+            canPop: !_isDirty && !_isSaving && !_isExtracting,
             onPopInvokedWithResult: (didPop, _) async {
-              if (!didPop) {
-                if (await _confirmDiscard()) {
-                  setState(() => _isEditing = false);
-                }
+              if (didPop || _isSaving || _isExtracting) return;
+              if (await _confirmDiscard()) {
+                setState(() => _isEditing = false);
               }
             },
             child: Scaffold(
@@ -481,11 +537,13 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                               Icons.close_rounded,
                               color: OptivusColors.textPrimary,
                             ),
-                            onPressed: () async {
-                              if (await _confirmDiscard()) {
-                                setState(() => _isEditing = false);
-                              }
-                            },
+                            onPressed: (_isSaving || _isExtracting)
+                                ? null
+                                : () async {
+                                    if (await _confirmDiscard()) {
+                                      setState(() => _isEditing = false);
+                                    }
+                                  },
                             style: IconButton.styleFrom(
                               backgroundColor: Colors.white.withValues(
                                 alpha: 0.1,
@@ -710,7 +768,11 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                       ),
                       FilledButton.icon(
                         icon: const Icon(Icons.edit_calendar_rounded, size: 16),
-                        label: const Text('Change setup'),
+                        label: Text(
+                          snapshot.isConfigured
+                              ? 'Change setup'
+                              : 'Set up Eating',
+                        ),
                         style: FilledButton.styleFrom(
                           backgroundColor: OptivusColors.roseAccent,
                           padding: const EdgeInsets.symmetric(

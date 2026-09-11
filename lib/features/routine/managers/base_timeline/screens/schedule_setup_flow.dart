@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step4_candidate_mapping.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/class_timeline_adapter.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/work_timeline_adapter.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_upload_lifecycle_helper.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/state/app_state.dart';
-import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
 
@@ -19,7 +20,7 @@ class ScheduleSetupFlow extends ConsumerStatefulWidget {
   final List<TimelineBlockDraft> initialBlocks;
   final String? initialAssetId;
   final String? initialR2Key;
-  final void Function(
+  final Future<void> Function(
     List<TimelineBlockDraft> blocks,
     String? assetId,
     String? r2Key,
@@ -47,6 +48,7 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
   String? _r2Key;
   int _selectedDay = 1;
   bool _isExtracting = false;
+  bool _isSaving = false;
   bool _isDirty = false;
   String? _errorMessage;
 
@@ -105,17 +107,17 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
   }
 
   void _handleCancel() async {
+    if (_isSaving || _isExtracting) return;
     if (await _confirmDiscard()) {
-      if (_r2Key != null && _r2Key != widget.initialR2Key) {
+      if (_assetId != null && _assetId != widget.initialAssetId) {
         try {
-          final idToken = await ref
-              .read(authRepositoryProvider)
-              .currentIdToken();
-          if (idToken != null) {
-            await ref
-                .read(r2UploadClientProvider)
-                .deleteUpload(objectKey: _r2Key!, idToken: idToken);
-          }
+          final uid = ref.read(userProfileProvider).uid;
+          final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
+          await helper.retireUncommittedUpload(
+            uid: uid,
+            assetId: _assetId,
+            objectKey: _r2Key,
+          );
         } catch (_) {}
       }
       widget.onCancel();
@@ -125,6 +127,18 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
   Future<void> _pickAndUploadPhoto(ImageSource source) async {
     final uid = ref.read(userProfileProvider).uid;
     if (uid.trim().isEmpty) return;
+
+    // Retire any previously uncommitted upload before starting new one
+    if (_assetId != null && _assetId != widget.initialAssetId) {
+      try {
+        final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
+        await helper.retireUncommittedUpload(
+          uid: uid,
+          assetId: _assetId,
+          objectKey: _r2Key,
+        );
+      } catch (_) {}
+    }
 
     final uploadNotifier = ref.read(uploadControllerProvider.notifier);
     final purpose = widget.config.source == RoutineImportReviewSource.classes
@@ -140,7 +154,7 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
       final asset = await uploadNotifier.startUpload(
         uid: uid,
         purpose: purpose,
-        sourceFeature: 'routine_base_timeline',
+        sourceFeature: UploadSourceFeature.routineBaseTimeline,
         source: source,
       );
 
@@ -174,26 +188,28 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
       final result = await aiController.runExtraction(reviewDraft);
 
       if (result != null && result.candidates.isNotEmpty) {
-        final extracted = result.candidates.map((c) {
-          return ClassRoutineBlock(
-            id: c.id,
-            subject: c.title,
-            room: c.location ?? '',
-            professor: '',
-            startMinute: c.startMinute,
-            endMinute: c.endMinute,
-            repeatDays: c.repeatDays.isEmpty
-                ? const [1, 2, 3, 4, 5]
-                : c.repeatDays,
-          );
-        }).toList();
+        final mappingResult = mapOnboarding4Candidates(
+          candidates: result.candidates,
+          config: widget.config,
+        );
 
-        if (mounted) {
-          setState(() {
-            _blocks = extracted;
-            _isDirty = true;
-            _isExtracting = false;
-          });
+        if (mappingResult.blocks.isNotEmpty) {
+          if (mounted) {
+            setState(() {
+              _blocks = mappingResult.blocks;
+              _isDirty = true;
+              _isExtracting = false;
+            });
+          }
+        } else {
+          if (mounted) {
+            setState(() {
+              _isExtracting = false;
+              _errorMessage =
+                  result.warnings.firstOrNull ??
+                  'No valid blocks found in schedule. You can add blocks manually.';
+            });
+          }
         }
       } else {
         if (mounted) {
@@ -312,7 +328,13 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
     );
   }
 
-  void _handleSave() {
+  Future<void> _handleSave() async {
+    if (_isSaving || _isExtracting) return;
+    setState(() {
+      _isSaving = true;
+      _errorMessage = null;
+    });
+
     final drafts = _blocks.map((b) {
       return TimelineBlockDraft(
         id: b.id,
@@ -326,7 +348,27 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
       );
     }).toList();
 
-    widget.onSave(drafts, _assetId, _r2Key);
+    try {
+      await widget.onSave(drafts, _assetId, _r2Key);
+      if (widget.initialAssetId != null && _assetId != widget.initialAssetId) {
+        try {
+          final uid = ref.read(userProfileProvider).uid;
+          final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
+          await helper.retireReplacedAsset(
+            uid: uid,
+            oldAssetId: widget.initialAssetId!,
+            oldObjectKey: widget.initialR2Key,
+          );
+        } catch (_) {}
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+          _errorMessage = 'Failed to save schedule. Please try again.';
+        });
+      }
+    }
   }
 
   @override
@@ -341,7 +383,7 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
     }).toList();
 
     return PopScope(
-      canPop: !_isDirty,
+      canPop: !_isDirty && !_isSaving && !_isExtracting,
       onPopInvokedWithResult: (didPop, _) async {
         if (!didPop) {
           if (await _confirmDiscard()) {
@@ -368,7 +410,9 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
                         Icons.close_rounded,
                         color: OptivusColors.textPrimary,
                       ),
-                      onPressed: _handleCancel,
+                      onPressed: (_isSaving || _isExtracting)
+                          ? null
+                          : _handleCancel,
                       style: IconButton.styleFrom(
                         backgroundColor: Colors.white.withValues(alpha: 0.1),
                       ),
@@ -407,14 +451,25 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      onPressed: _handleSave,
-                      child: const Text(
-                        'Save',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
+                      onPressed: (_isSaving || _isExtracting)
+                          ? null
+                          : _handleSave,
+                      child: _isSaving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Save',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
                     ),
                   ],
                 ),
@@ -441,7 +496,9 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
                         ),
                         icon: const Icon(Icons.camera_alt_outlined, size: 18),
                         label: const Text('Scan Photo'),
-                        onPressed: _isExtracting ? null : _showImageSourceSheet,
+                        onPressed: (_isExtracting || _isSaving)
+                            ? null
+                            : _showImageSourceSheet,
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -458,7 +515,9 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
                         ),
                         icon: const Icon(Icons.add_rounded, size: 18),
                         label: const Text('Add Block'),
-                        onPressed: _isExtracting ? null : _addNewBlock,
+                        onPressed: (_isExtracting || _isSaving)
+                            ? null
+                            : _addNewBlock,
                       ),
                     ),
                   ],
@@ -482,7 +541,7 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
 
               // ── Main Timeline View ──
               Expanded(
-                child: _isExtracting
+                child: (_isExtracting || _isSaving)
                     ? Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -490,7 +549,9 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
                             const CircularProgressIndicator(),
                             const SizedBox(height: 14),
                             Text(
-                              'Analyzing ${widget.config.sectionLabel.toLowerCase()} photo...',
+                              _isSaving
+                                  ? 'Saving ${widget.config.sectionLabel.toLowerCase()}...'
+                                  : 'Analyzing ${widget.config.sectionLabel.toLowerCase()} photo...',
                               style: const TextStyle(
                                 color: OptivusColors.textPrimary,
                                 fontWeight: FontWeight.w600,

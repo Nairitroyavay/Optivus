@@ -29,6 +29,7 @@ enum UploadedAssetPreviewStatus { loading, available, unavailable }
 bool uploadedAssetIsDurablyUploadedForSlot({
   required UploadedAsset asset,
   required String uid,
+  required String expectedSourceFeature,
   required UploadedAssetPurpose purpose,
 }) {
   return uploadedAssetFieldsAreDurablyUploadedForSlot(
@@ -39,6 +40,7 @@ bool uploadedAssetIsDurablyUploadedForSlot({
     r2Key: asset.r2Key,
     status: asset.status,
     uid: uid,
+    expectedSourceFeature: expectedSourceFeature,
     expectedPurpose: purpose,
   );
 }
@@ -46,14 +48,43 @@ bool uploadedAssetIsDurablyUploadedForSlot({
 bool uploadedAssetHasLegitimateIdentityForSlot({
   required UploadedAsset asset,
   required String uid,
+  required String expectedSourceFeature,
   required UploadedAssetPurpose purpose,
 }) {
   return asset.ownerUid == uid &&
       asset.purpose == purpose &&
-      asset.sourceFeature == OnboardingDraft.sourceOnboarding &&
+      asset.sourceFeature == expectedSourceFeature &&
       asset.assetId.trim().isNotEmpty &&
       asset.r2Key.trim().isNotEmpty &&
       _uploadedAssetR2IdentityMatches(asset);
+}
+
+/// Explicit onboarding-specific wrapper for slot durability check.
+bool onboardingUploadedAssetIsDurablyUploadedForSlot({
+  required UploadedAsset asset,
+  required String uid,
+  required UploadedAssetPurpose purpose,
+}) {
+  return uploadedAssetIsDurablyUploadedForSlot(
+    asset: asset,
+    uid: uid,
+    expectedSourceFeature: UploadSourceFeature.onboarding,
+    purpose: purpose,
+  );
+}
+
+/// Explicit Base Timeline wrapper for slot durability check.
+bool baseTimelineUploadedAssetIsDurablyUploadedForSlot({
+  required UploadedAsset asset,
+  required String uid,
+  required UploadedAssetPurpose purpose,
+}) {
+  return uploadedAssetIsDurablyUploadedForSlot(
+    asset: asset,
+    uid: uid,
+    expectedSourceFeature: UploadSourceFeature.routineBaseTimeline,
+    purpose: purpose,
+  );
 }
 
 /// Resolves one purpose by immutable upload-generation chronology.
@@ -76,6 +107,7 @@ UploadedAsset? resolveCurrentDurableUploadedAssetForPurpose({
                 uploadedAssetHasLegitimateIdentityForSlot(
                   asset: asset,
                   uid: uid,
+                  expectedSourceFeature: sourceFeature,
                   purpose: purpose,
                 ),
           )
@@ -94,6 +126,7 @@ UploadedAsset? resolveCurrentDurableUploadedAssetForPurpose({
         if (uploadedAssetIsDurablyUploadedForSlot(
           asset: asset,
           uid: uid,
+          expectedSourceFeature: sourceFeature,
           purpose: purpose,
         )) {
           return asset;
@@ -336,6 +369,7 @@ class RestoredUploadsController extends StateNotifier<RestoredUploadsState> {
             uploadedAssetIsDurablyUploadedForSlot(
               asset: candidate,
               uid: normalizedUid,
+              expectedSourceFeature: UploadSourceFeature.onboarding,
               purpose: candidate.purpose,
             )) {
           byId[candidate.assetId] = RestoredUploadedAsset(asset: candidate);
@@ -528,6 +562,7 @@ class RestoredUploadsController extends StateNotifier<RestoredUploadsState> {
     return uploadedAssetIsDurablyUploadedForSlot(
       asset: asset,
       uid: uid,
+      expectedSourceFeature: UploadSourceFeature.onboarding,
       purpose: asset.purpose,
     );
   }
@@ -665,7 +700,9 @@ class UploadController extends StateNotifier<UploadState> {
         clearAsset: true,
         clearError: true,
       );
-      final pickedFile = await _imagePrepareService.pickImageFile(source: source);
+      final pickedFile = await _imagePrepareService.pickImageFile(
+        source: source,
+      );
       if (!_isCurrentOperation(uid, operationGeneration)) return null;
       if (pickedFile == null) {
         state = state.copyWith(status: UploadFlowStatus.idle, clearError: true);

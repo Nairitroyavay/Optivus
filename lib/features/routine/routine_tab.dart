@@ -18,7 +18,6 @@ import 'package:optivus/features/routine/screens/routine_history_screen.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/routine_header.dart';
 import 'package:optivus/features/routine/widgets/routine_title_filter_row.dart';
-import 'package:optivus/features/routine/widgets/routine_day_selector.dart';
 import 'package:optivus/features/routine/widgets/routine_timeline_viewport.dart';
 import 'package:optivus/features/routine/widgets/conflict_banner.dart';
 import 'package:optivus/features/routine/widgets/routine_write_status_banner.dart';
@@ -186,13 +185,9 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                   ),
                 ),
 
-                // ── Title + Filter (inside same padding block as header) ──
+                // ── Controls: Selected Day + Week + Filter ──
                 const RoutineTitleFilterRow(),
-                const SizedBox(height: 16),
-
-                // ── Day Selector ──
-                const RoutineDaySelector(),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
 
                 // ── Conflict Banner ──
                 ConflictBanner(

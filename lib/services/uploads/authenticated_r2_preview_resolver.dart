@@ -32,18 +32,26 @@ class AuthenticatedR2PreviewResolver implements UploadedAssetPreviewResolver {
     required String uid,
     required String r2Key,
   }) async {
+    final normalizedUid = uid.trim();
     final trimmedKey = r2Key.trim();
-    if (trimmedKey.isEmpty) {
+    if (normalizedUid.isEmpty || trimmedKey.isEmpty) {
       return null;
     }
 
+    // Verify key belongs to users/$uid/ to prevent cross-user key access
+    if (!trimmedKey.startsWith('users/$normalizedUid/')) {
+      return null;
+    }
+
+    final cacheKey = '$normalizedUid:$trimmedKey';
+
     // Check cache for a valid unexpired preview URI (cached for 10 minutes max)
-    final cached = _cache[trimmedKey];
+    final cached = _cache[cacheKey];
     if (cached != null) {
       if (DateTime.now().isBefore(cached.$2)) {
         return cached.$1;
       } else {
-        _cache.remove(trimmedKey);
+        _cache.remove(cacheKey);
       }
     }
 
@@ -61,7 +69,10 @@ class AuthenticatedR2PreviewResolver implements UploadedAssetPreviewResolver {
       final uri = Uri.tryParse(previewUrlString);
       if (uri != null) {
         // Cache for 10 minutes (presigned URL is valid for 15 minutes)
-        _cache[trimmedKey] = (uri, DateTime.now().add(const Duration(minutes: 10)));
+        _cache[cacheKey] = (
+          uri,
+          DateTime.now().add(const Duration(minutes: 10)),
+        );
         return uri;
       }
     } catch (_) {
@@ -76,4 +87,3 @@ class AuthenticatedR2PreviewResolver implements UploadedAssetPreviewResolver {
     _cache.clear();
   }
 }
-

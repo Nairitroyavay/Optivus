@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/widgets/routine_glass_filter.dart'; // For GlassHighlightPainter
+import 'package:optivus/features/routine/widgets/routine_day_picker.dart';
 import 'package:optivus/features/routine/sheets/week_planner_sheet.dart';
 
 /// Filter row for Routine.
@@ -302,10 +303,11 @@ class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
         children: [
+          const RoutineDayPickerButton(),
+          const SizedBox(width: 8),
           GestureDetector(
             onTap: () => showRoutineWeekPlannerSheet(context, ref),
             child: Container(
@@ -348,13 +350,18 @@ class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
               ),
             ),
           ),
-          const SizedBox(width: 10),
-          CompositedTransformTarget(
-            link: _link,
-            child: GestureDetector(
-              onTap: () =>
-                  _overlay == null ? _openDropdown() : _closeDropdown(),
-              child: _RoutineGlassPill(label: pillLabel, width: _widgetWidth),
+          const SizedBox(width: 8),
+          Expanded(
+            child: CompositedTransformTarget(
+              link: _link,
+              child: GestureDetector(
+                onTap: () =>
+                    _overlay == null ? _openDropdown() : _closeDropdown(),
+                child: _RoutineGlassPill(
+                  label: pillLabel,
+                  maxWidth: _widgetWidth,
+                ),
+              ),
             ),
           ),
         ],
@@ -365,9 +372,9 @@ class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
 
 class _RoutineGlassPill extends StatelessWidget {
   final String label;
-  final double width;
+  final double maxWidth;
 
-  const _RoutineGlassPill({required this.label, required this.width});
+  const _RoutineGlassPill({required this.label, required this.maxWidth});
 
   static const double outerR = 20.0;
   static const double rim = 7.0;
@@ -376,7 +383,7 @@ class _RoutineGlassPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: width,
+      constraints: BoxConstraints(maxWidth: maxWidth),
       height: 40,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(outerR),

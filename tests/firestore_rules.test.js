@@ -2823,6 +2823,90 @@ describe("Firestore Rules for upload metadata", () => {
     ));
   });
 
+  // --- Base Timeline upload tests ---
+
+  it("owner creates routine_base_timeline class_timetable upload", async () => {
+    const db = ownerDb();
+    await assertSucceeds(uploadRef(db, "user123", "bt-class").set(
+      uploadData("user123", "bt-class", {
+        sourceFeature: "routine_base_timeline",
+        purpose: "class_timetable",
+      })
+    ));
+  });
+
+  it("owner creates routine_base_timeline work_schedule upload", async () => {
+    const db = ownerDb();
+    await assertSucceeds(uploadRef(db, "user123", "bt-work").set(
+      uploadData("user123", "bt-work", {
+        sourceFeature: "routine_base_timeline",
+        purpose: "work_schedule",
+      })
+    ));
+  });
+
+  it("owner creates routine_base_timeline eating_menu upload", async () => {
+    const db = ownerDb();
+    await assertSucceeds(uploadRef(db, "user123", "bt-eating").set(
+      uploadData("user123", "bt-eating", {
+        sourceFeature: "routine_base_timeline",
+        purpose: "eating_menu",
+      })
+    ));
+  });
+
+  it("owner creates routine_base_timeline skin_face upload", async () => {
+    const db = ownerDb();
+    await assertSucceeds(uploadRef(db, "user123", "bt-face").set(
+      uploadData("user123", "bt-face", {
+        sourceFeature: "routine_base_timeline",
+        purpose: "skin_face",
+      })
+    ));
+  });
+
+  it("owner creates routine_base_timeline skin_products upload", async () => {
+    const db = ownerDb();
+    await assertSucceeds(uploadRef(db, "user123", "bt-products").set(
+      uploadData("user123", "bt-products", {
+        sourceFeature: "routine_base_timeline",
+        purpose: "skin_products",
+      })
+    ));
+  });
+
+  it("rejects routine_base_timeline with profile_photo", async () => {
+    const db = ownerDb();
+    await assertFails(uploadRef(db, "user123", "bt-profile").set(
+      uploadData("user123", "bt-profile", {
+        sourceFeature: "routine_base_timeline",
+        purpose: "profile_photo",
+        contentType: "image/jpeg",
+        sizeBytes: 2097152,
+      })
+    ));
+  });
+
+  it("rejects routine_base_timeline with invalid purpose", async () => {
+    const db = ownerDb();
+    await assertFails(uploadRef(db, "user123", "bt-invalid").set(
+      uploadData("user123", "bt-invalid", {
+        sourceFeature: "routine_base_timeline",
+        purpose: "invalid_purpose",
+      })
+    ));
+  });
+
+  it("rejects unknown sourceFeature", async () => {
+    const db = ownerDb();
+    await assertFails(uploadRef(db, "user123", "unknown-src").set(
+      uploadData("user123", "unknown-src", {
+        sourceFeature: "unknown_feature",
+        purpose: "class_timetable",
+      })
+    ));
+  });
+
   // --- Owner read ---
 
   it("owner reads own upload", async () => {
@@ -3156,7 +3240,7 @@ describe("Firestore Rules for upload metadata", () => {
     ));
   });
 
-  it("rejects sourceFeature other than onboarding", async () => {
+  it("rejects sourceFeature other than onboarding or routine_base_timeline", async () => {
     const db = ownerDb();
     await assertFails(uploadRef(db).set(
       uploadData("user123", "asset-001", { sourceFeature: "profile" })

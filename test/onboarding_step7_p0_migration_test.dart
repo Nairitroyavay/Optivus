@@ -130,6 +130,7 @@ void main() {
           status: status,
           uid: testUid,
           expectedPurpose: UploadedAssetPurpose.skinProducts,
+          expectedSourceFeature: UploadSourceFeature.onboarding,
         );
       }
 
@@ -160,6 +161,7 @@ void main() {
           status: UploadedAssetStatus.uploaded,
           uid: testUid,
           expectedPurpose: UploadedAssetPurpose.skinFace,
+          expectedSourceFeature: UploadSourceFeature.onboarding,
         ),
         isTrue,
       );
@@ -198,6 +200,7 @@ void main() {
               'Test moisturizer',
               'Test sunscreen',
             ],
+            skinCareRecommendationCurrencyCode: 'INR',
             skinCareProductRecommendations: [
               for (final category in ['cleanser', 'moisturizer', 'sunscreen'])
                 SkinCareProductRecommendationDraft(

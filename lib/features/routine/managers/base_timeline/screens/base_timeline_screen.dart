@@ -56,7 +56,7 @@ class BaseTimelineScreen extends ConsumerWidget {
             const Padding(
               padding: EdgeInsets.only(left: 4),
               child: Text(
-                'Foundation schedule blocks and recurring weekly routines.',
+                'The routines that shape your day. Change one without rebuilding the others.',
                 style: TextStyle(
                   fontSize: 13,
                   color: OptivusColors.textSecondary,

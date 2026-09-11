@@ -385,7 +385,7 @@ describe("R2 Upload Worker request boundary", () => {
 
   test("preview returns 404 when object is missing from bucket", async () => {
     const env = makeEnv();
-    env.UPLOAD_BUCKET.head = vi.fn(async () => null);
+    env.UPLOAD_BUCKET.head = vi.fn(async () => null as never);
     const response = await worker.fetch(
       request("/v1/uploads/preview", {
         objectKey: "users/uid-1/onboarding/class_timetable/asset-1.jpg",

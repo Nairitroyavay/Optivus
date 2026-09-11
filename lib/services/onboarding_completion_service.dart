@@ -372,6 +372,7 @@ class OnboardingCompletionService {
             status: parsedStatus,
             uid: draft.uid,
             expectedPurpose: purpose,
+            expectedSourceFeature: UploadSourceFeature.onboarding,
           ) ||
           legacySkinCareUploadHasOwnedExactIdentity(
             assetId: id,

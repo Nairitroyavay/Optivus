@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
+import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/repositories/firestore_paths.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
@@ -21,42 +22,28 @@ class FakeBaseTimelineSetupRepository implements BaseTimelineSetupRepository {
   final OnboardingRepository? _onboardingRepo;
 
   FakeBaseTimelineSetupRepository({OnboardingRepository? onboardingRepo})
-      : _onboardingRepo = onboardingRepo;
+    : _onboardingRepo = onboardingRepo;
 
   @override
   Future<BaseTimelineSetup> fetchSetup(String uid) async {
     final existing = _setups[uid];
-    if (existing != null) return existing;
-
-    // Attempt migration from OnboardingDraft
-    if (_onboardingRepo != null) {
-      try {
-        final draft = await _onboardingRepo.fetchDraft(uid);
-        if (draft != null &&
-            (draft.baseTimeline.blocks.isNotEmpty ||
-                draft.baseTimeline.pendingFutureImports.isNotEmpty ||
-                draft.baseTimeline.skinCareProductPhotoAssetId != null)) {
-          final setup = BaseTimelineSetup.fromOnboardingDraft(
-            uid,
-            draft,
-          );
-          _setups[uid] = setup;
-          return setup;
-        }
-
-        final bundle = await _onboardingRepo.fetchCompletionBundle(uid);
-        if (bundle != null) {
-          final setup = BaseTimelineSetup.fromCompletionBundle(
-            uid,
-            bundle,
-          );
-          _setups[uid] = setup;
-          return setup;
-        }
-      } catch (_) {}
+    if (existing != null) {
+      if (existing.schemaVersion < BaseTimelineSetup.currentSchemaVersion) {
+        final source = await _fetchOnboardingSource(uid, _onboardingRepo);
+        final migrated = migrateBaseTimelineSetupIfNeeded(
+          existing: existing,
+          onboardingSource: source,
+        );
+        _setups[uid] = migrated;
+        _controller.add(migrated);
+        return migrated;
+      }
+      return existing;
     }
 
-    final initial = BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
+    final source = await _fetchOnboardingSource(uid, _onboardingRepo);
+    final initial =
+        source ?? BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
     _setups[uid] = initial;
     return initial;
   }
@@ -81,8 +68,8 @@ class FirestoreBaseTimelineSetupRepository
   FirestoreBaseTimelineSetupRepository({
     FirebaseFirestore? firestore,
     OnboardingRepository? onboardingRepo,
-  })  : _injectedFirestore = firestore,
-        _onboardingRepo = onboardingRepo;
+  }) : _injectedFirestore = firestore,
+       _onboardingRepo = onboardingRepo;
 
   FirebaseFirestore get _firestore =>
       _injectedFirestore ?? FirebaseFirestore.instance;
@@ -94,36 +81,24 @@ class FirestoreBaseTimelineSetupRepository
     final data = doc.data();
 
     if (doc.exists && data != null) {
-      return BaseTimelineSetup.fromMap(data, uid: uid);
+      final existing = BaseTimelineSetup.fromMap(data, uid: uid);
+      if (existing.schemaVersion < BaseTimelineSetup.currentSchemaVersion) {
+        final source = await _fetchOnboardingSource(uid, _onboardingRepo);
+        final migrated = migrateBaseTimelineSetupIfNeeded(
+          existing: existing,
+          onboardingSource: source,
+        );
+        try {
+          await saveSetup(uid, migrated);
+        } catch (_) {}
+        return migrated;
+      }
+      return existing;
     }
 
-    // Attempt migration from Onboarding
-    BaseTimelineSetup? migrated;
-    if (_onboardingRepo != null) {
-      try {
-        final draft = await _onboardingRepo.fetchDraft(uid);
-        if (draft != null &&
-            (draft.baseTimeline.blocks.isNotEmpty ||
-                draft.baseTimeline.pendingFutureImports.isNotEmpty ||
-                draft.baseTimeline.skinCareProductPhotoAssetId != null)) {
-          migrated = BaseTimelineSetup.fromOnboardingDraft(
-            uid,
-            draft,
-          );
-        } else {
-          final bundle = await _onboardingRepo.fetchCompletionBundle(uid);
-          if (bundle != null) {
-            migrated = BaseTimelineSetup.fromCompletionBundle(
-              uid,
-              bundle,
-            );
-          }
-        }
-      } catch (_) {}
-    }
-
+    final source = await _fetchOnboardingSource(uid, _onboardingRepo);
     final setup =
-        migrated ?? BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
+        source ?? BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
     // Persist migrated setup so subsequent reads hit Firestore directly
     try {
       await saveSetup(uid, setup);
@@ -144,23 +119,25 @@ class FirestoreBaseTimelineSetupRepository
         .doc(FirestoreUserPaths.baseTimelineSetup(uid))
         .snapshots()
         .map((snap) {
-      if (!snap.exists || snap.data() == null) return null;
-      return BaseTimelineSetup.fromMap(snap.data()!, uid: uid);
-    });
+          if (!snap.exists || snap.data() == null) return null;
+          return BaseTimelineSetup.fromMap(snap.data()!, uid: uid);
+        });
   }
 }
 
 final baseTimelineSetupRepositoryProvider =
     Provider<BaseTimelineSetupRepository>((ref) {
-  return ref.watch(fakeBackendPolicyProvider).selectBackend(
-        firebase: () => FirestoreBaseTimelineSetupRepository(
-          onboardingRepo: ref.watch(onboardingRepositoryProvider),
-        ),
-        fake: () => FakeBaseTimelineSetupRepository(
-          onboardingRepo: ref.watch(onboardingRepositoryProvider),
-        ),
-      );
-});
+      return ref
+          .watch(fakeBackendPolicyProvider)
+          .selectBackend(
+            firebase: () => FirestoreBaseTimelineSetupRepository(
+              onboardingRepo: ref.watch(onboardingRepositoryProvider),
+            ),
+            fake: () => FakeBaseTimelineSetupRepository(
+              onboardingRepo: ref.watch(onboardingRepositoryProvider),
+            ),
+          );
+    });
 
 class BaseTimelineSetupNotifier
     extends StateNotifier<AsyncValue<BaseTimelineSetup>> {
@@ -168,7 +145,7 @@ class BaseTimelineSetupNotifier
   final String _uid;
 
   BaseTimelineSetupNotifier(this._repository, this._uid)
-      : super(const AsyncValue.loading()) {
+    : super(const AsyncValue.loading()) {
     load();
   }
 
@@ -192,9 +169,167 @@ class BaseTimelineSetupNotifier
   }
 }
 
-final baseTimelineSetupNotifierProvider = StateNotifierProvider.autoDispose<
-    BaseTimelineSetupNotifier, AsyncValue<BaseTimelineSetup>>((ref) {
-  final uid = ref.watch(userProfileProvider).uid;
-  final repo = ref.watch(baseTimelineSetupRepositoryProvider);
-  return BaseTimelineSetupNotifier(repo, uid);
-});
+final baseTimelineSetupNotifierProvider =
+    StateNotifierProvider.autoDispose<
+      BaseTimelineSetupNotifier,
+      AsyncValue<BaseTimelineSetup>
+    >((ref) {
+      final uid = ref.watch(userProfileProvider).uid;
+      final repo = ref.watch(baseTimelineSetupRepositoryProvider);
+      return BaseTimelineSetupNotifier(repo, uid);
+    });
+
+Future<BaseTimelineSetup?> _fetchOnboardingSource(
+  String uid,
+  OnboardingRepository? onboardingRepo,
+) async {
+  if (onboardingRepo == null) return null;
+  try {
+    final draft = await onboardingRepo.fetchDraft(uid);
+    final bundle = await onboardingRepo.fetchCompletionBundle(uid);
+    if (draft != null && bundle != null) {
+      return BaseTimelineSetup.fromOnboardingCompletion(
+        finalDraft: draft,
+        bundle: bundle,
+      );
+    } else if (draft != null &&
+        (draft.baseTimeline.blocks.isNotEmpty ||
+            draft.baseTimeline.pendingFutureImports.isNotEmpty ||
+            draft.baseTimeline.skinCareProductPhotoAssetId != null)) {
+      return BaseTimelineSetup.fromOnboardingDraft(uid, draft);
+    } else if (bundle != null) {
+      return BaseTimelineSetup.fromCompletionBundle(
+        uid,
+        bundle,
+        finalDraft: draft,
+      );
+    }
+  } catch (_) {}
+  return null;
+}
+
+BaseTimelineSetup migrateBaseTimelineSetupIfNeeded({
+  required BaseTimelineSetup existing,
+  BaseTimelineSetup? onboardingSource,
+}) {
+  if (existing.schemaVersion >= BaseTimelineSetup.currentSchemaVersion) {
+    return existing;
+  }
+
+  var migrated = existing.copyWith(
+    schemaVersion: BaseTimelineSetup.currentSchemaVersion,
+    revision: existing.revision < 1 ? 1 : existing.revision,
+  );
+
+  if (onboardingSource != null) {
+    // Classes: preserve existing runtime edits unconditionally
+    final classesConfigured =
+        existing.snapshotFor(BaseTimelineSection.classes).configured ||
+        existing.classBlocks.isNotEmpty ||
+        existing.classRoutineItemIds.isNotEmpty;
+    if (!classesConfigured && onboardingSource.classBlocks.isNotEmpty) {
+      migrated = migrated.copyWith(
+        classBlocks: onboardingSource.classBlocks,
+        classRoutineItemIds: onboardingSource.classRoutineItemIds,
+        classLogicalAssetId: onboardingSource.classLogicalAssetId,
+        classLogicalAssetR2Key: onboardingSource.classLogicalAssetR2Key,
+      );
+    }
+
+    // Work: preserve existing runtime edits unconditionally
+    final workConfigured =
+        existing.snapshotFor(BaseTimelineSection.work).configured ||
+        existing.workBlocks.isNotEmpty ||
+        existing.workRoutineItemIds.isNotEmpty;
+    if (!workConfigured && onboardingSource.workBlocks.isNotEmpty) {
+      migrated = migrated.copyWith(
+        workBlocks: onboardingSource.workBlocks,
+        workRoutineItemIds: onboardingSource.workRoutineItemIds,
+        workLogicalAssetId: onboardingSource.workLogicalAssetId,
+        workLogicalAssetR2Key: onboardingSource.workLogicalAssetR2Key,
+      );
+    }
+
+    // Eating: preserve existing runtime edits unconditionally
+    final eatingConfigured =
+        existing.snapshotFor(BaseTimelineSection.eating).configured ||
+        existing.eatingBlocks.isNotEmpty ||
+        existing.eatingRoutineItemIds.isNotEmpty ||
+        existing.eatingSetupPath != null;
+    if (!eatingConfigured &&
+        (onboardingSource.eatingBlocks.isNotEmpty ||
+            onboardingSource.eatingSetupPath != null)) {
+      migrated = migrated.copyWith(
+        eatingSetupPath: onboardingSource.eatingSetupPath,
+        eatingBlocks: onboardingSource.eatingBlocks,
+        eatingRoutineItemIds: onboardingSource.eatingRoutineItemIds,
+        mealPlanningGoal: onboardingSource.mealPlanningGoal,
+        mealsPerDay: onboardingSource.mealsPerDay,
+        eatingMode: onboardingSource.eatingMode,
+        foodType: onboardingSource.foodType,
+        foodStyleCustomText: onboardingSource.foodStyleCustomText,
+        mealBudget: onboardingSource.mealBudget,
+        cookingAbility: onboardingSource.cookingAbility,
+        breakfastMinute: onboardingSource.breakfastMinute,
+        lunchMinute: onboardingSource.lunchMinute,
+        dinnerMinute: onboardingSource.dinnerMinute,
+        snackMinute: onboardingSource.snackMinute,
+        extraSnackMinute: onboardingSource.extraSnackMinute,
+        targetCalories: onboardingSource.targetCalories,
+        targetProtein: onboardingSource.targetProtein,
+        eatingPhotoAssetId: onboardingSource.eatingPhotoAssetId,
+        eatingPhotoR2Key: onboardingSource.eatingPhotoR2Key,
+      );
+    }
+
+    // Fixed: preserve existing runtime edits unconditionally
+    final fixedConfigured =
+        existing.snapshotFor(BaseTimelineSection.fixed).configured ||
+        existing.fixedBlocks.isNotEmpty ||
+        existing.fixedRoutineItemIds.isNotEmpty;
+    if (!fixedConfigured && onboardingSource.fixedBlocks.isNotEmpty) {
+      migrated = migrated.copyWith(
+        fixedBlocks: onboardingSource.fixedBlocks,
+        fixedRoutineItemIds: onboardingSource.fixedRoutineItemIds,
+      );
+    }
+
+    // Skin Care: preserve existing runtime edits unconditionally
+    final skinCareConfigured =
+        existing.snapshotFor(BaseTimelineSection.skinCare).configured ||
+        existing.skinCareBlocks.isNotEmpty ||
+        existing.skinCareRoutineItemIds.isNotEmpty ||
+        existing.skinCareSetupPath != null ||
+        existing.skinCareSkipped;
+    if (!skinCareConfigured &&
+        (onboardingSource.skinCareBlocks.isNotEmpty ||
+            onboardingSource.skinCareSetupPath != null ||
+            onboardingSource.skinCareSkipped)) {
+      migrated = migrated.copyWith(
+        skinCareSetupPath: onboardingSource.skinCareSetupPath,
+        skinCareSkipped: onboardingSource.skinCareSkipped,
+        skinCareBlocks: onboardingSource.skinCareBlocks,
+        skinCareRoutineItemIds: onboardingSource.skinCareRoutineItemIds,
+        skinCareProductNames: onboardingSource.skinCareProductNames,
+        skinCareProductPhotoAssetId:
+            onboardingSource.skinCareProductPhotoAssetId,
+        skinCareProductPhotoR2Key: onboardingSource.skinCareProductPhotoR2Key,
+        skinCareReviewedProducts: onboardingSource.skinCareReviewedProducts,
+        skinCareFacePhotoAssetId: onboardingSource.skinCareFacePhotoAssetId,
+        skinCareFacePhotoR2Key: onboardingSource.skinCareFacePhotoR2Key,
+        skinCareFacePhotoSkipped: onboardingSource.skinCareFacePhotoSkipped,
+        skinCareSkinType: onboardingSource.skinCareSkinType,
+        skinCareProblems: onboardingSource.skinCareProblems,
+        skinCareBudget: onboardingSource.skinCareBudget,
+        skinCarePreference: onboardingSource.skinCarePreference,
+        skinCareSelectedProductNames:
+            onboardingSource.skinCareSelectedProductNames,
+        skinCareProductRecommendations:
+            onboardingSource.skinCareProductRecommendations,
+        skinCareSpecialCareNotes: onboardingSource.skinCareSpecialCareNotes,
+      );
+    }
+  }
+
+  return migrated;
+}

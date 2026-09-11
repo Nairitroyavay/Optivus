@@ -3626,6 +3626,7 @@ class BaseTimelineDraft {
           status: parsedStatus,
           uid: uid,
           expectedPurpose: purpose,
+          expectedSourceFeature: UploadSourceFeature.onboarding,
         ) ||
         legacySkinCareUploadHasOwnedExactIdentity(
           assetId: id,

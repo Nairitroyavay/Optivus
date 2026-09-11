@@ -478,6 +478,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
           asset: asset,
           uid: uid,
           purpose: UploadedAssetPurpose.eatingMenu,
+          expectedSourceFeature: UploadSourceFeature.onboarding,
         )) {
       setState(
         () => _generationError = 'Upload your routine/menu photo first.',

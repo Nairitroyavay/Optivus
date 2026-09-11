@@ -1406,6 +1406,7 @@ void main() {
               asset: pending,
               uid: uidA,
               purpose: UploadedAssetPurpose.classTimetable,
+              expectedSourceFeature: UploadSourceFeature.onboarding,
             ),
             isFalse,
           );

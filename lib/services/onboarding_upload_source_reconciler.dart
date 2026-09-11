@@ -83,6 +83,7 @@ class OnboardingUploadSourceReconciler {
             asset: asset,
             uid: ownerUid,
             purpose: asset.purpose,
+            expectedSourceFeature: UploadSourceFeature.onboarding,
           ) &&
           (r2Key == null ||
               r2Key.trim().isEmpty ||
@@ -122,6 +123,7 @@ class OnboardingUploadSourceReconciler {
         asset: raw,
         uid: ownerUid,
         purpose: raw.purpose,
+        expectedSourceFeature: UploadSourceFeature.onboarding,
       )) {
         return '${codePrefix}_identity_invalid';
       }

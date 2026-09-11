@@ -7,6 +7,7 @@ import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timelin
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_upload_lifecycle_helper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/skin_care_domain_engine.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_ai_thinking_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
@@ -51,6 +52,8 @@ class _SkinCareBaseSetupScreenState
   List<String> _workingProblems = [];
   String? _workingAssetId;
   String? _workingR2Key;
+  String? _initialAssetId;
+  String? _initialR2Key;
 
   final TextEditingController _productsController = TextEditingController();
 
@@ -65,6 +68,8 @@ class _SkinCareBaseSetupScreenState
         setup.skinCareProductPhotoAssetId ?? setup.skinCareFacePhotoAssetId;
     _workingR2Key =
         setup.skinCareProductPhotoR2Key ?? setup.skinCareFacePhotoR2Key;
+    _initialAssetId = _workingAssetId;
+    _initialR2Key = _workingR2Key;
     _productsController.text = setup.skinCareProductNames ?? '';
     _isDirty = false;
   }
@@ -108,7 +113,21 @@ class _SkinCareBaseSetupScreenState
         ],
       ),
     );
-    return res ?? false;
+    final confirmed = res ?? false;
+    if (confirmed) {
+      if (_workingAssetId != null && _workingAssetId != _initialAssetId) {
+        try {
+          final uid = ref.read(userProfileProvider).uid;
+          final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
+          await helper.retireUncommittedUpload(
+            uid: uid,
+            assetId: _workingAssetId,
+            objectKey: _workingR2Key,
+          );
+        } catch (_) {}
+      }
+    }
+    return confirmed;
   }
 
   void _showPhotoSourceSheet() {
@@ -312,11 +331,23 @@ class _SkinCareBaseSetupScreenState
       );
 
       if (mounted) {
+        if (_workingAssetId != null && _workingAssetId != _initialAssetId) {
+          try {
+            final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
+            await helper.retireUncommittedUpload(
+              uid: uid,
+              assetId: _workingAssetId,
+              objectKey: _workingR2Key,
+            );
+          } catch (_) {}
+        }
         setState(() {
           _workingBlocks = blocks;
           _workingPath = 'products';
           _workingSkipped = false;
           _workingProductNames = rawText;
+          _workingAssetId = null;
+          _workingR2Key = null;
           _isDirty = true;
           _isExtracting = false;
         });
@@ -368,6 +399,16 @@ class _SkinCareBaseSetupScreenState
       );
 
       if (mounted) {
+        if (_workingAssetId != null && _workingAssetId != _initialAssetId) {
+          try {
+            final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
+            await helper.retireUncommittedUpload(
+              uid: uid,
+              assetId: _workingAssetId,
+              objectKey: _workingR2Key,
+            );
+          } catch (_) {}
+        }
         setState(() {
           _workingBlocks = blocks;
           _workingPath = 'build_for_me';
@@ -393,6 +434,17 @@ class _SkinCareBaseSetupScreenState
   }
 
   void _skipSkinCare() {
+    if (_workingAssetId != null && _workingAssetId != _initialAssetId) {
+      try {
+        final uid = ref.read(userProfileProvider).uid;
+        final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
+        helper.retireUncommittedUpload(
+          uid: uid,
+          assetId: _workingAssetId,
+          objectKey: _workingR2Key,
+        );
+      } catch (_) {}
+    }
     setState(() {
       _workingBlocks = [];
       _workingPath = 'skip';
@@ -407,6 +459,18 @@ class _SkinCareBaseSetupScreenState
   Future<void> _pickPhoto(ImageSource source) async {
     final uid = ref.read(userProfileProvider).uid;
     if (uid.trim().isEmpty) return;
+
+    // Retire any previously uncommitted upload before starting new one
+    if (_workingAssetId != null && _workingAssetId != _initialAssetId) {
+      try {
+        final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
+        await helper.retireUncommittedUpload(
+          uid: uid,
+          assetId: _workingAssetId,
+          objectKey: _workingR2Key,
+        );
+      } catch (_) {}
+    }
 
     final uploadNotifier = ref.read(uploadControllerProvider.notifier);
 
@@ -503,6 +567,7 @@ class _SkinCareBaseSetupScreenState
   }
 
   Future<void> _saveWorkingSetup() async {
+    if (_isSaving) return;
     setState(() => _isSaving = true);
     try {
       final uid = ref.read(userProfileProvider).uid;
@@ -531,7 +596,22 @@ class _SkinCareBaseSetupScreenState
           updatedAt: DateTime.now(),
         ),
       );
+
+      // Retire replaced asset if photo changed
+      if (_initialAssetId != null && _initialAssetId != _workingAssetId) {
+        try {
+          final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
+          await helper.retireReplacedAsset(
+            uid: uid,
+            oldAssetId: _initialAssetId!,
+            oldObjectKey: _initialR2Key,
+          );
+        } catch (_) {}
+      }
+
       if (mounted) {
+        _initialAssetId = _workingAssetId;
+        _initialR2Key = _workingR2Key;
         setState(() {
           _isSaving = false;
           _isEditing = false;
@@ -596,12 +676,11 @@ class _SkinCareBaseSetupScreenState
               .toList();
 
           return PopScope(
-            canPop: !_isDirty,
+            canPop: !_isDirty && !_isSaving && !_isExtracting,
             onPopInvokedWithResult: (didPop, _) async {
-              if (!didPop) {
-                if (await _confirmDiscard()) {
-                  setState(() => _isEditing = false);
-                }
+              if (didPop || _isSaving || _isExtracting) return;
+              if (await _confirmDiscard()) {
+                setState(() => _isEditing = false);
               }
             },
             child: Scaffold(
@@ -623,11 +702,13 @@ class _SkinCareBaseSetupScreenState
                               Icons.close_rounded,
                               color: OptivusColors.textPrimary,
                             ),
-                            onPressed: () async {
-                              if (await _confirmDiscard()) {
-                                setState(() => _isEditing = false);
-                              }
-                            },
+                            onPressed: (_isSaving || _isExtracting)
+                                ? null
+                                : () async {
+                                    if (await _confirmDiscard()) {
+                                      setState(() => _isEditing = false);
+                                    }
+                                  },
                             style: IconButton.styleFrom(
                               backgroundColor: Colors.white.withValues(
                                 alpha: 0.1,
@@ -877,7 +958,11 @@ class _SkinCareBaseSetupScreenState
                       ),
                       FilledButton.icon(
                         icon: const Icon(Icons.edit_calendar_rounded, size: 16),
-                        label: const Text('Change setup'),
+                        label: Text(
+                          snapshot.isConfigured
+                              ? 'Change setup'
+                              : 'Set up Skin Care',
+                        ),
                         style: FilledButton.styleFrom(
                           backgroundColor: OptivusColors.mintAccent,
                           padding: const EdgeInsets.symmetric(

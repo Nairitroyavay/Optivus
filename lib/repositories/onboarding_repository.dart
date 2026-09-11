@@ -574,7 +574,11 @@ class FirestoreOnboardingRepository
         );
         transaction.set(
           _firestore.doc(FirestoreUserPaths.baseTimelineSetup(bundle.uid)),
-          BaseTimelineSetup.fromCompletionBundle(bundle.uid, bundle).toMap(),
+          BaseTimelineSetup.fromCompletionBundle(
+            bundle.uid,
+            bundle,
+            finalDraft: finalDraft,
+          ).toMap(),
         );
         final intermediateProfilePatch =
             Map<String, dynamic>.from(bundle.userProfilePatch)
@@ -819,7 +823,11 @@ class FirestoreOnboardingRepository
     batch.set(bundleReference, bundle.toFirestoreMap());
     batch.set(
       _firestore.doc(FirestoreUserPaths.baseTimelineSetup(bundle.uid)),
-      BaseTimelineSetup.fromCompletionBundle(bundle.uid, bundle).toMap(),
+      BaseTimelineSetup.fromCompletionBundle(
+        bundle.uid,
+        bundle,
+        finalDraft: finalDraft,
+      ).toMap(),
     );
     final profilePatch = Map<String, dynamic>.from(bundle.userProfilePatch)
       ..removeWhere((_, value) => value == null)
