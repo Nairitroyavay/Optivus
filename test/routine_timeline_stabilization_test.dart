@@ -95,6 +95,7 @@ void main() {
         addTearDown(container.dispose);
         final notifier = container.read(routineNotifierProvider.notifier);
         await notifier.loadForOwner(uid);
+        await notifier.inFlightProjectionRepair;
 
         final state = container.read(routineNotifierProvider);
         expect(
@@ -131,6 +132,7 @@ void main() {
         );
 
         await notifier.loadForOwner(uid);
+        await notifier.inFlightProjectionRepair;
         final second = container.read(routineNotifierProvider);
         expect(
           second.items.where((item) => item.id == classItem.id),

@@ -189,38 +189,74 @@ class FakeRoutineRepository implements RoutineRepository {
       return false;
     }
     final items = database.itemsByUid.putIfAbsent(uid, () => {});
-    for (final expected in plan.items) {
-      final actual = items[expected.id];
-      if (actual != null &&
-          (actual.source != RoutineSource.onboarding ||
-              actual.onboardingSourceItemId !=
-                  expected.onboardingSourceItemId)) {
-        return false;
-      }
-    }
+
+    final expectedItemIds = plan.items.map((e) => e.id).toList()..sort();
+    final createdItemIds = <String>[];
+    final existingItemIds = <String>[];
+    final repairedItemIds = <String>[];
+    final failedItemIds = <String>[];
+
     var changed = false;
     for (final expected in plan.items) {
       final actual = items[expected.id];
       if (actual == null) {
         items[expected.id] = _safeProjectedItem(expected);
+        createdItemIds.add(expected.id);
         changed = true;
         continue;
       }
+
+      final hasValidProjection =
+          actual.onboardingProjectionId != null &&
+          actual.onboardingProjectionId!.trim().isNotEmpty;
+      final isUnsafe =
+          actual.source != RoutineSource.onboarding ||
+          actual.onboardingSourceItemId != expected.onboardingSourceItemId ||
+          actual.onboardingSourceItemId == null ||
+          actual.onboardingSourceItemId!.isEmpty ||
+          actual.userId != uid ||
+          !hasValidProjection ||
+          actual.schemaVersion < 1 ||
+          actual.schemaVersion > RoutineItem.currentSchemaVersion;
+
+      if (isUnsafe) {
+        failedItemIds.add(expected.id);
+        continue;
+      }
+
       final repaired = _reconciledProjectedItem(expected, actual);
       if (repaired.onboardingVisualStyleKey !=
               actual.onboardingVisualStyleKey ||
           repaired.notes != actual.notes) {
         items[expected.id] = repaired;
+        repairedItemIds.add(expected.id);
         changed = true;
+      } else {
+        existingItemIds.add(expected.id);
       }
     }
-    if (receipt == null) {
+
+    final updatedReceipt = routineProjectionReceiptForCategories(
+      plan.receipt,
+      expectedItemIds: expectedItemIds,
+      createdItemIds: createdItemIds,
+      existingItemIds: existingItemIds,
+      repairedItemIds: repairedItemIds,
+      failedItemIds: failedItemIds,
+    );
+
+    final isReceiptAlreadyFinalized =
+        receipt != null &&
+        receipt.status == 'completed' &&
+        receipt.cursor == receipt.totalCount &&
+        receipt.failedItemIds.isEmpty;
+
+    if (!isReceiptAlreadyFinalized || updatedReceipt.status != receipt.status) {
       final now = DateTime.now().toUtc();
-      receipts[plan.projectionId] = plan.receipt.copyWith(
-        status: 'completed',
-        cursor: plan.receipt.totalCount,
+      receipts[plan.projectionId] = updatedReceipt.copyWith(
+        createdAt: receipt?.createdAt ?? now,
         updatedAt: now,
-        completedAt: now,
+        completedAt: updatedReceipt.status == 'completed' ? now : null,
       );
       changed = true;
     }
@@ -402,93 +438,179 @@ class FirestoreRoutineRepository implements RoutineRepository {
   ) async {
     validateOwnerUid(uid);
     if (uid != plan.ownerUid) return false;
+
     final receiptRef = _firestore.doc(
       FirestoreUserPaths.routineProjection(uid, plan.projectionId),
     );
-    final itemRefs = [
-      for (final item in plan.items)
-        _firestore.doc(FirestoreUserPaths.routineItem(uid, item.id)),
-    ];
-    return _firestore.runTransaction((transaction) async {
-      final receiptSnapshot = await transaction.get(receiptRef);
-      RoutineProjectionReceipt? receipt;
-      final receiptData = receiptSnapshot.data();
-      if (receiptData != null) {
-        receipt = _receiptCodec.fromFirestore(
-          documentId: receiptSnapshot.id,
-          data: receiptData,
-        );
-        if (receipt.ownerUid != uid ||
-            receipt.sourceBundleFingerprint != plan.fingerprint) {
-          return false;
-        }
+    final itemsCollection = _firestore.collection(
+      FirestoreUserPaths.routineItems(uid),
+    );
+
+    final reads = await Future.wait<Object>([
+      receiptRef.get(),
+      itemsCollection.get(),
+    ]);
+
+    final receiptSnapshot = reads[0] as DocumentSnapshot<Map<String, dynamic>>;
+    final itemsSnapshot = reads[1] as QuerySnapshot<Map<String, dynamic>>;
+
+    RoutineProjectionReceipt? receipt;
+    final receiptData = receiptSnapshot.data();
+    if (receiptSnapshot.exists && receiptData != null) {
+      receipt = _receiptCodec.fromFirestore(
+        documentId: receiptSnapshot.id,
+        data: receiptData,
+      );
+      if (receipt.ownerUid != uid ||
+          receipt.sourceBundleFingerprint != plan.fingerprint) {
+        return false;
       }
-      final snapshots = <DocumentSnapshot<Map<String, dynamic>>>[];
-      for (final ref in itemRefs) {
-        snapshots.add(await transaction.get(ref));
+    }
+
+    final persistedDocs = {for (final doc in itemsSnapshot.docs) doc.id: doc};
+
+    final expectedItemIds = plan.items.map((e) => e.id).toList()..sort();
+    final createdItemIds = <String>[];
+    final existingItemIds = <String>[];
+    final repairedItemIds = <String>[];
+    final failedItemIds = <String>[];
+
+    final missingItems = <RoutineItem>[];
+    final repairedItems = <RoutineItem>[];
+
+    for (final expected in plan.items) {
+      final doc = persistedDocs[expected.id];
+      if (doc == null || !doc.exists) {
+        missingItems.add(_safeProjectedItem(expected));
+        createdItemIds.add(expected.id);
+        continue;
       }
-      for (var index = 0; index < plan.items.length; index++) {
-        final data = snapshots[index].data();
-        if (data == null) continue;
-        final actual = _codec.fromFirestore(
-          documentId: snapshots[index].id,
-          data: data,
-        );
-        final expected = plan.items[index];
-        if (actual.source != RoutineSource.onboarding ||
-            actual.onboardingSourceItemId != expected.onboardingSourceItemId) {
-          return false;
-        }
+
+      final data = doc.data();
+      RoutineItem actual;
+      try {
+        actual = _codec.fromFirestore(documentId: doc.id, data: data);
+      } catch (_) {
+        failedItemIds.add(expected.id);
+        continue;
       }
-      var changed = false;
-      for (var index = 0; index < plan.items.length; index++) {
-        final expected = plan.items[index];
-        final snapshot = snapshots[index];
-        final data = snapshot.data();
-        if (data == null) {
-          final created = _codec.toFirestore(
-            ownerUid: uid,
-            item: _safeProjectedItem(expected),
-          );
-          created['createdAt'] = FieldValue.serverTimestamp();
-          created['updatedAt'] = FieldValue.serverTimestamp();
-          transaction.set(itemRefs[index], created);
-          changed = true;
-          continue;
-        }
-        final actual = _codec.fromFirestore(
-          documentId: snapshot.id,
-          data: data,
-        );
-        final repaired = _reconciledProjectedItem(expected, actual);
-        if (repaired.onboardingVisualStyleKey !=
-                actual.onboardingVisualStyleKey ||
-            repaired.notes != actual.notes) {
-          final repairedData = _codec.toFirestore(
-            ownerUid: uid,
-            item: repaired,
-          );
-          repairedData['createdAt'] = data['createdAt'];
-          repairedData['updatedAt'] = FieldValue.serverTimestamp();
-          transaction.set(itemRefs[index], repairedData);
-          changed = true;
-        }
+
+      final hasValidProjection =
+          actual.onboardingProjectionId != null &&
+          actual.onboardingProjectionId!.trim().isNotEmpty;
+      final isUnsafe =
+          actual.source != RoutineSource.onboarding ||
+          actual.onboardingSourceItemId != expected.onboardingSourceItemId ||
+          actual.onboardingSourceItemId == null ||
+          actual.onboardingSourceItemId!.isEmpty ||
+          actual.userId != uid ||
+          !hasValidProjection ||
+          actual.schemaVersion < 1 ||
+          actual.schemaVersion > RoutineItem.currentSchemaVersion;
+
+      if (isUnsafe) {
+        failedItemIds.add(expected.id);
+        continue;
       }
-      if (receipt == null) {
-        final completed = plan.receipt.copyWith(
-          status: 'completed',
-          cursor: plan.receipt.totalCount,
-          completedAt: DateTime.now().toUtc(),
+
+      final repaired = _reconciledProjectedItem(expected, actual);
+      final needsRepair =
+          repaired.onboardingVisualStyleKey !=
+              actual.onboardingVisualStyleKey ||
+          repaired.notes != actual.notes;
+
+      if (needsRepair) {
+        repairedItems.add(repaired);
+        repairedItemIds.add(expected.id);
+      } else {
+        existingItemIds.add(expected.id);
+      }
+    }
+
+    final updatedReceipt = routineProjectionReceiptForCategories(
+      plan.receipt,
+      expectedItemIds: expectedItemIds,
+      createdItemIds: createdItemIds,
+      existingItemIds: existingItemIds,
+      repairedItemIds: repairedItemIds,
+      failedItemIds: failedItemIds,
+    );
+
+    final isReceiptAlreadyFinalized =
+        receipt != null &&
+        receipt.status == 'completed' &&
+        receipt.cursor == receipt.totalCount &&
+        receipt.failedItemIds.isEmpty;
+
+    final hasItemMutations =
+        missingItems.isNotEmpty || repairedItems.isNotEmpty;
+    final needsReceiptWrite =
+        !isReceiptAlreadyFinalized || updatedReceipt.status != receipt.status;
+
+    if (!hasItemMutations && !needsReceiptWrite) {
+      return false;
+    }
+
+    const maxOpsPerBatch = 400;
+    final writeOps = <void Function(WriteBatch batch)>[];
+
+    for (final item in missingItems) {
+      writeOps.add((batch) {
+        final ref = _firestore.doc(
+          FirestoreUserPaths.routineItem(uid, item.id),
         );
-        final data = _receiptCodec.toFirestore(completed);
+        final data = _codec.toFirestore(ownerUid: uid, item: item);
         data['createdAt'] = FieldValue.serverTimestamp();
         data['updatedAt'] = FieldValue.serverTimestamp();
-        data['completedAt'] = FieldValue.serverTimestamp();
-        transaction.set(receiptRef, data);
-        changed = true;
+        batch.set(ref, data);
+      });
+    }
+
+    for (final item in repairedItems) {
+      writeOps.add((batch) {
+        final ref = _firestore.doc(
+          FirestoreUserPaths.routineItem(uid, item.id),
+        );
+        final data = _codec.toFirestore(ownerUid: uid, item: item);
+        final existingDoc = persistedDocs[item.id];
+        final existingData = existingDoc?.data();
+        if (existingData != null && existingData['createdAt'] != null) {
+          data['createdAt'] = existingData['createdAt'];
+        } else {
+          data['createdAt'] = FieldValue.serverTimestamp();
+        }
+        data['updatedAt'] = FieldValue.serverTimestamp();
+        batch.set(ref, data);
+      });
+    }
+
+    writeOps.add((batch) {
+      final receiptMap = _receiptCodec.toFirestore(updatedReceipt);
+      if (receiptData != null && receiptData['createdAt'] != null) {
+        receiptMap['createdAt'] = receiptData['createdAt'];
+      } else {
+        receiptMap['createdAt'] = FieldValue.serverTimestamp();
       }
-      return changed;
+      receiptMap['updatedAt'] = FieldValue.serverTimestamp();
+      if (updatedReceipt.status == 'completed') {
+        receiptMap['completedAt'] = FieldValue.serverTimestamp();
+      }
+      batch.set(receiptRef, receiptMap);
     });
+
+    for (var i = 0; i < writeOps.length; i += maxOpsPerBatch) {
+      final end = (i + maxOpsPerBatch < writeOps.length)
+          ? i + maxOpsPerBatch
+          : writeOps.length;
+      final chunk = writeOps.sublist(i, end);
+      final batch = _firestore.batch();
+      for (final op in chunk) {
+        op(batch);
+      }
+      await batch.commit();
+    }
+
+    return true;
   }
 }
 

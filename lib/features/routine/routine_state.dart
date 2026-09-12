@@ -331,7 +331,13 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   int _loadGeneration = 0;
   int _eventsGeneration = 0;
   StreamSubscription<RoutineEventFeed>? _eventsSubscription;
-  String? _lastProjectionIntegritySignature;
+  String? _inFlightProjectionIntegritySignature;
+  String? _lastSuccessfulProjectionIntegritySignature;
+  final Map<String, int> _projectionIntegrityRetryCount = {};
+  final Map<String, DateTime> _projectionIntegrityNextRetryAt = {};
+  Future<bool>? _inFlightProjectionRepair;
+
+  Future<bool>? get inFlightProjectionRepair => _inFlightProjectionRepair;
 
   Map<String, dynamic> _boundedHistorySnapshot(RoutineItem item, String uid) {
     // Only capture the fields required to render history reliably
@@ -493,72 +499,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
               : _onboardingRepository.fetchCompletionBundle(uid),
         ]);
         if (generation != _loadGeneration || _ownerUid != uid) return;
-        var remoteItems = (results[0] as List<RoutineItem>)
+        final remoteItems = (results[0] as List<RoutineItem>)
             .map(
               (remote) => remote.hasConflict || remote.conflictMessage != null
                   ? remote.copyWith(hasConflict: false, clearConflict: true)
                   : remote,
             )
             .toList();
-        final bundle = results[2];
-        if (bundle is OnboardingCompletionBundle) {
-          final plan = RoutineOnboardingProjection.build(bundle);
-          final receipt = await _repository.fetchProjectionReceipt(
-            uid,
-            plan.projectionId,
-          );
-          if (generation != _loadGeneration || _ownerUid != uid) return;
-          final validation = const RoutineProjectionReceiptValidator().validate(
-            receipt: receipt,
-            actualItems: remoteItems,
-            ownerUid: uid,
-            plan: plan,
-          );
-          final signature = Object.hash(
-            uid,
-            plan.fingerprint,
-            receipt?.sourceBundleFingerprint,
-            Object.hashAll(
-              remoteItems.map(
-                (item) => Object.hash(
-                  item.id,
-                  item.onboardingVisualStyleKey,
-                  item.notes,
-                ),
-              ),
-            ),
-          ).toString();
-          if (kDebugMode) {
-            debugPrint(
-              'RoutineProjectionIntegrity: expected=${plan.items.length} '
-              'persisted=${remoteItems.where((item) => item.source == RoutineSource.onboarding).length} '
-              'expectedIds=${plan.items.map((item) => item.id).join(',')} '
-              'valid=${validation.isValid}',
-            );
-          }
-          if (!validation.isValid &&
-              _lastProjectionIntegritySignature != signature) {
-            _lastProjectionIntegritySignature = signature;
-            final repaired = await _repository.reconcileOnboardingProjection(
-              uid,
-              plan,
-            );
-            if (repaired) {
-              remoteItems = (await _repository.fetchRoutineItems(uid))
-                  .map(
-                    (remote) =>
-                        remote.hasConflict || remote.conflictMessage != null
-                        ? remote.copyWith(
-                            hasConflict: false,
-                            clearConflict: true,
-                          )
-                        : remote,
-                  )
-                  .toList();
-            }
-            if (generation != _loadGeneration || _ownerUid != uid) return;
-          }
-        }
+
         final localActiveIds = state.pendingItemIds.union(
           state.failedIntentsByItemId.keys.toSet(),
         );
@@ -609,6 +557,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           loading: false,
           eventsLoading: true,
         );
+
         final eventsGeneration = ++_eventsGeneration;
         _eventsSubscription = _transactionRepository
             .watchEvents(uid)
@@ -638,6 +587,16 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
                 }
               },
             );
+
+        final bundle = results[2];
+        if (bundle is OnboardingCompletionBundle) {
+          _scheduleProjectionIntegritySelfHeal(
+            uid: uid,
+            bundle: bundle,
+            generation: generation,
+            currentRemoteItems: remoteItems,
+          );
+        }
       } catch (e) {
         if (generation != _loadGeneration || _ownerUid != uid) return;
         state = state.copyWith(
@@ -693,12 +652,227 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         );
   }
 
+  void _scheduleProjectionIntegritySelfHeal({
+    required String uid,
+    required OnboardingCompletionBundle bundle,
+    required int generation,
+    required List<RoutineItem> currentRemoteItems,
+  }) {
+    if (_ownerUid != uid || generation != _loadGeneration) return;
+
+    final repairFuture = _runProjectionIntegritySelfHeal(
+      uid: uid,
+      bundle: bundle,
+      generation: generation,
+      currentRemoteItems: currentRemoteItems,
+    );
+    _inFlightProjectionRepair = repairFuture;
+  }
+
+  Future<bool> _runProjectionIntegritySelfHeal({
+    required String uid,
+    required OnboardingCompletionBundle bundle,
+    required int generation,
+    required List<RoutineItem> currentRemoteItems,
+  }) async {
+    try {
+      final plan = RoutineOnboardingProjection.build(bundle);
+      final receipt = await _repository.fetchProjectionReceipt(
+        uid,
+        plan.projectionId,
+      );
+      if (!mounted || generation != _loadGeneration || _ownerUid != uid) {
+        return false;
+      }
+
+      final validation = const RoutineProjectionReceiptValidator().validate(
+        receipt: receipt,
+        actualItems: currentRemoteItems,
+        ownerUid: uid,
+        plan: plan,
+      );
+
+      final signature = Object.hash(
+        uid,
+        plan.fingerprint,
+        receipt?.sourceBundleFingerprint,
+        Object.hashAll(
+          currentRemoteItems.map(
+            (item) =>
+                Object.hash(item.id, item.onboardingVisualStyleKey, item.notes),
+          ),
+        ),
+      ).toString();
+
+      if (kDebugMode) {
+        final persistedOnboarding = currentRemoteItems
+            .where((item) => item.source == RoutineSource.onboarding)
+            .toList();
+        final persistedIds = persistedOnboarding.map((i) => i.id).toSet();
+        final missingIds = plan.items
+            .where((expected) => !persistedIds.contains(expected.id))
+            .map((i) => i.id)
+            .toList();
+        final sampleMissing = missingIds.take(3).join(',');
+        debugPrint(
+          'RoutineProjectionIntegrity: expectedCount=${plan.items.length} '
+          'persistedOnboardingCount=${persistedOnboarding.length} '
+          'missingCount=${missingIds.length} valid=${validation.isValid} '
+          'projectionId=${plan.projectionId} '
+          'fingerprintPrefix=${plan.fingerprint.substring(0, 8)}'
+          '${missingIds.isNotEmpty ? ' sampleMissing=[$sampleMissing]' : ''}',
+        );
+      }
+
+      if (validation.isValid) {
+        _lastSuccessfulProjectionIntegritySignature = signature;
+        _projectionIntegrityRetryCount.remove(signature);
+        _projectionIntegrityNextRetryAt.remove(signature);
+        return false;
+      }
+
+      if (_lastSuccessfulProjectionIntegritySignature == signature) {
+        return false;
+      }
+
+      if (_inFlightProjectionIntegritySignature != null) {
+        return false;
+      }
+
+      final nextRetryAt = _projectionIntegrityNextRetryAt[signature];
+      if (nextRetryAt != null && DateTime.now().isBefore(nextRetryAt)) {
+        return false;
+      }
+
+      _inFlightProjectionIntegritySignature = signature;
+
+      try {
+        final repaired = await _repository.reconcileOnboardingProjection(
+          uid,
+          plan,
+        );
+        if (!mounted || generation != _loadGeneration || _ownerUid != uid) {
+          return false;
+        }
+
+        if (repaired) {
+          final refreshedItems = await _repository.fetchRoutineItems(uid);
+          if (!mounted || generation != _loadGeneration || _ownerUid != uid) {
+            return false;
+          }
+
+          final normalized = refreshedItems
+              .map(
+                (remote) => remote.hasConflict || remote.conflictMessage != null
+                    ? remote.copyWith(hasConflict: false, clearConflict: true)
+                    : remote,
+              )
+              .toList();
+
+          final updatedReceipt = await _repository.fetchProjectionReceipt(
+            uid,
+            plan.projectionId,
+          );
+          final postValidation = const RoutineProjectionReceiptValidator()
+              .validate(
+                receipt: updatedReceipt,
+                actualItems: normalized,
+                ownerUid: uid,
+                plan: plan,
+              );
+
+          if (postValidation.isValid) {
+            _lastSuccessfulProjectionIntegritySignature = signature;
+            _projectionIntegrityRetryCount.remove(signature);
+            _projectionIntegrityNextRetryAt.remove(signature);
+          } else {
+            final retries =
+                (_projectionIntegrityRetryCount[signature] ?? 0) + 1;
+            _projectionIntegrityRetryCount[signature] = retries;
+            final backoffSeconds = retries == 1 ? 5 : (retries == 2 ? 15 : 30);
+            _projectionIntegrityNextRetryAt[signature] = DateTime.now().add(
+              Duration(seconds: backoffSeconds),
+            );
+          }
+
+          if (mounted && _ownerUid == uid) {
+            _mergeRefreshedItems(normalized);
+          }
+          return true;
+        } else {
+          if (validation.isValid) {
+            _lastSuccessfulProjectionIntegritySignature = signature;
+            _projectionIntegrityRetryCount.remove(signature);
+            _projectionIntegrityNextRetryAt.remove(signature);
+          } else {
+            final retries =
+                (_projectionIntegrityRetryCount[signature] ?? 0) + 1;
+            _projectionIntegrityRetryCount[signature] = retries;
+            final backoffSeconds = retries == 1 ? 5 : (retries == 2 ? 15 : 30);
+            _projectionIntegrityNextRetryAt[signature] = DateTime.now().add(
+              Duration(seconds: backoffSeconds),
+            );
+          }
+          return false;
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint(
+            'RoutineProjectionIntegrity: repair failed (safe degraded state): $e',
+          );
+        }
+        final retries = (_projectionIntegrityRetryCount[signature] ?? 0) + 1;
+        _projectionIntegrityRetryCount[signature] = retries;
+        final backoffSeconds = retries == 1 ? 5 : (retries == 2 ? 15 : 30);
+        _projectionIntegrityNextRetryAt[signature] = DateTime.now().add(
+          Duration(seconds: backoffSeconds),
+        );
+        return false;
+      } finally {
+        if (_inFlightProjectionIntegritySignature == signature) {
+          _inFlightProjectionIntegritySignature = null;
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint(
+          'RoutineProjectionIntegrity: inspection failed (safe degraded state): $e',
+        );
+      }
+      return false;
+    }
+  }
+
+  void _mergeRefreshedItems(List<RoutineItem> refreshedItems) {
+    final localActiveIds = state.pendingItemIds.union(
+      state.failedIntentsByItemId.keys.toSet(),
+    );
+    final mergedItems = <RoutineItem>[];
+    for (final remote in refreshedItems) {
+      if (!localActiveIds.contains(remote.id)) {
+        mergedItems.add(remote);
+      }
+    }
+    for (final id in localActiveIds) {
+      final localItem = state.items.where((e) => e.id == id).firstOrNull;
+      if (localItem != null) {
+        mergedItems.add(localItem);
+      }
+    }
+    state = state.copyWith(items: mergedItems);
+  }
+
   void resetForSignedOut() {
     _eventsSubscription?.cancel();
     _eventsSubscription = null;
     _loadGeneration++;
     _eventsGeneration++;
     _ownerUid = null;
+    _inFlightProjectionIntegritySignature = null;
+    _lastSuccessfulProjectionIntegritySignature = null;
+    _projectionIntegrityRetryCount.clear();
+    _projectionIntegrityNextRetryAt.clear();
+    _inFlightProjectionRepair = null;
     _ref.read(trackerSessionLinksProvider.notifier).reset();
     state = RoutineState(
       items: const [],

@@ -204,3 +204,51 @@ class RoutineProjectionRetryRequiredException implements Exception {
   @override
   String toString() => 'Routine projection retry required: $cause';
 }
+
+RoutineProjectionReceipt routineProjectionReceiptForCategories(
+  RoutineProjectionReceipt receipt, {
+  required List<String> expectedItemIds,
+  required List<String> createdItemIds,
+  required List<String> existingItemIds,
+  required List<String> repairedItemIds,
+  required List<String> failedItemIds,
+}) {
+  final projectedItemIds = <String>{
+    ...createdItemIds,
+    ...existingItemIds,
+    ...repairedItemIds,
+  }.toList()..sort();
+
+  final expectedIdSet = expectedItemIds.toSet();
+  final projectedIdSet = projectedItemIds.toSet();
+  final accountedCount = projectedIdSet.length;
+  final isCompleted =
+      failedItemIds.isEmpty &&
+      expectedIdSet.length == expectedItemIds.length &&
+      projectedIdSet.length == expectedIdSet.length &&
+      projectedIdSet.containsAll(expectedIdSet);
+  return RoutineProjectionReceipt(
+    id: receipt.id,
+    ownerUid: receipt.ownerUid,
+    slot: receipt.slot,
+    revision: receipt.revision,
+    source: receipt.source,
+    sourceBundleSchemaVersion: receipt.sourceBundleSchemaVersion,
+    sourceBundleId: receipt.sourceBundleId,
+    sourceBundleFingerprint: receipt.sourceBundleFingerprint,
+    expectedItemIds: expectedItemIds,
+    createdItemIds: createdItemIds,
+    existingItemIds: existingItemIds,
+    repairedItemIds: repairedItemIds,
+    failedItemIds: failedItemIds,
+    projectedItemIds: projectedItemIds,
+    eventSchemaVersion: receipt.eventSchemaVersion,
+    status: isCompleted ? 'completed' : 'pending',
+    cursor: accountedCount,
+    totalCount: expectedItemIds.length,
+    createdAt: receipt.createdAt,
+    updatedAt: receipt.updatedAt,
+    completedAt: isCompleted ? receipt.createdAt : null,
+    schemaVersion: receipt.schemaVersion,
+  );
+}
