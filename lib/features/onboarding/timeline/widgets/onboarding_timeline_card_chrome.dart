@@ -1,5 +1,5 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:optivus/core/timeline/widgets/timeline_card_chrome.dart';
 
 /// Shared frosted glass card chrome representing the Step 4 golden visual reference.
 ///
@@ -25,43 +25,13 @@ class OnboardingTimelineCardChrome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveRadius = borderRadius ?? BorderRadius.circular(24);
-
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: effectiveRadius,
-        color: Colors.white.withValues(
-          alpha: hasOverlap ? (isFront ? 0.72 : 0.58) : 0.42,
-        ),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            baseColor.withValues(alpha: isFront ? 0.26 : 0.18),
-            baseColor.withValues(alpha: isFront ? 0.08 : 0.04),
-          ],
-        ),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: isFront ? 0.96 : 0.82),
-          width: isFront ? 1.6 : 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: baseColor.withValues(alpha: isFront ? 0.18 : 0.09),
-            blurRadius: isFront ? 14 : 10,
-            offset: Offset(0, isFront ? 5 : 3),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: effectiveRadius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: padding != null
-              ? Padding(padding: padding!, child: child)
-              : child,
-        ),
-      ),
+    return TimelineCardChrome(
+      baseColor: baseColor,
+      isFront: isFront,
+      hasOverlap: hasOverlap,
+      borderRadius: borderRadius,
+      padding: padding,
+      child: child,
     );
   }
 }

@@ -25,19 +25,19 @@ class TimelineCardChrome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveRadius = borderRadius ?? BorderRadius.circular(20);
+    final effectiveRadius = borderRadius ?? BorderRadius.circular(24);
 
     return Container(
       decoration: BoxDecoration(
         borderRadius: effectiveRadius,
         color: Colors.white.withValues(
-          alpha: hasOverlap ? (isFront ? 0.72 : 0.58) : 0.55,
+          alpha: hasOverlap ? (isFront ? 0.72 : 0.58) : 0.42,
         ),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            baseColor.withValues(alpha: isFront ? 0.22 : 0.12),
+            baseColor.withValues(alpha: isFront ? 0.26 : 0.18),
             baseColor.withValues(alpha: isFront ? 0.08 : 0.04),
           ],
         ),

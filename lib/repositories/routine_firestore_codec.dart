@@ -34,6 +34,7 @@ class RoutineTemplateFirestoreCodec {
     'dishes',
     'caloriesEstimate',
     'proteinEstimate',
+    'skincareMissingItems',
     'professor',
     'courseCode',
     'classType',
@@ -94,6 +95,8 @@ class RoutineTemplateFirestoreCodec {
       if (item.caloriesEstimate != null)
         'caloriesEstimate': item.caloriesEstimate,
       if (item.proteinEstimate != null) 'proteinEstimate': item.proteinEstimate,
+      if (item.skincareMissingItems != null)
+        'skincareMissingItems': List<String>.from(item.skincareMissingItems!),
       if (_notBlank(item.professor)) 'professor': item.professor!.trim(),
       if (_notBlank(item.courseCode)) 'courseCode': item.courseCode!.trim(),
       if (_notBlank(item.classType)) 'classType': item.classType!.trim(),
@@ -233,6 +236,7 @@ class RoutineTemplateFirestoreCodec {
           (data['proteinEstimate'] as num?)?.toDouble() ??
           (data['protein'] as num?)?.toDouble(),
       skincareProducts: _readStringList(data['skincareProducts']),
+      skincareMissingItems: _readStringList(data['skincareMissingItems']),
       professor: _optionalString(data['professor']),
       courseCode: _optionalString(data['courseCode']),
       classType: _optionalString(data['classType']),

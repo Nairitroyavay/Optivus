@@ -78,14 +78,10 @@ class TrackerTaskCard extends ConsumerWidget {
                   children: [
                     Text(
                       item.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 14.5,
                         fontWeight: FontWeight.w800,
-                        color: isComplete
-                            ? OptivusColors.success
-                            : OptivusColors.ink,
+                        color: OptivusColors.ink,
                         letterSpacing: -0.2,
                         decoration: isComplete
                             ? TextDecoration.lineThrough
@@ -95,8 +91,6 @@ class TrackerTaskCard extends ConsumerWidget {
                     const SizedBox(height: 2),
                     Text(
                       '${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)} • ${item.trackerType != TrackerType.none ? item.trackerType.name : item.blockTypeLabel}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -142,8 +136,6 @@ class TrackerTaskCard extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     item.location!.trim(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -170,8 +162,6 @@ class TrackerTaskCard extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     item.notes!.trim(),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w500,

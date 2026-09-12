@@ -82,14 +82,10 @@ class SoftBlockCard extends ConsumerWidget {
                     // Title
                     Text(
                       item.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 14.5,
                         fontWeight: FontWeight.w800,
-                        color: item.isCompleted
-                            ? OptivusColors.success
-                            : OptivusColors.ink,
+                        color: OptivusColors.ink,
                         letterSpacing: -0.2,
                         decoration: item.isCompleted
                             ? TextDecoration.lineThrough
@@ -100,8 +96,6 @@ class SoftBlockCard extends ConsumerWidget {
                     // Time + type
                     Text(
                       '${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)} • ${item.blockTypeLabel}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -115,20 +109,29 @@ class SoftBlockCard extends ConsumerWidget {
           ),
 
           // Meal slot or category subtitle if distinct from title
-          if (isEating &&
-              item.mealSlot != null &&
-              item.mealSlot!.trim().isNotEmpty &&
-              item.mealSlot!.trim().toLowerCase() !=
-                  item.title.trim().toLowerCase()) ...[
-            const SizedBox(height: 5),
-            Text(
-              item.mealSlot!.trim(),
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: OptivusColors.sub,
+          if (isEating) ...[
+            if (RoutineCardFactory.shouldShowMealSlot(item)) ...[
+              const SizedBox(height: 5),
+              Text(
+                item.mealSlot!.trim(),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: OptivusColors.sub,
+                ),
               ),
-            ),
+            ],
+            if (RoutineCardFactory.shouldShowMealCategory(item)) ...[
+              const SizedBox(height: 4),
+              Text(
+                item.mealCategory!.trim(),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: OptivusColors.sub,
+                ),
+              ),
+            ],
           ],
 
           // Location
@@ -145,8 +148,6 @@ class SoftBlockCard extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     item.location!.trim(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -159,9 +160,7 @@ class SoftBlockCard extends ConsumerWidget {
           ],
 
           // Eating: Nutrition
-          if (isEating &&
-              (item.caloriesEstimate != null ||
-                  item.proteinEstimate != null)) ...[
+          if (isEating && RoutineCardFactory.nutritionString(item) != null) ...[
             const SizedBox(height: 6),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -170,7 +169,7 @@ class SoftBlockCard extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                _formatNutrition(item.caloriesEstimate, item.proteinEstimate),
+                RoutineCardFactory.nutritionString(item)!,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -281,6 +280,40 @@ class SoftBlockCard extends ConsumerWidget {
                 ),
           ],
 
+          // Skin care: Missing Items (all missing items rendered)
+          if (isSkinCare &&
+              item.skincareMissingItems != null &&
+              item.skincareMissingItems!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'MISSING',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.warning,
+                letterSpacing: 0.6,
+              ),
+            ),
+            const SizedBox(height: 4),
+            ...item.skincareMissingItems!
+                .map((m) => m.trim())
+                .where((m) => m.isNotEmpty)
+                .map(
+                  (missing) => Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Text(
+                      '⚠ $missing',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: OptivusColors.warning,
+                        height: 1.25,
+                      ),
+                    ),
+                  ),
+                ),
+          ],
+
           // Notes
           if (item.notes != null && item.notes!.trim().isNotEmpty) ...[
             const SizedBox(height: 6),
@@ -296,8 +329,6 @@ class SoftBlockCard extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     item.notes!.trim(),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w500,
@@ -315,12 +346,5 @@ class SoftBlockCard extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  static String _formatNutrition(double? cal, double? protein) {
-    final parts = <String>[];
-    if (cal != null) parts.add('${cal.toInt()} kcal');
-    if (protein != null) parts.add('${protein.toInt()}g protein');
-    return parts.join(' • ');
   }
 }

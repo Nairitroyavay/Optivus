@@ -138,6 +138,7 @@ class RoutineItem {
 
   // Skincare specific details (kept for backward compat, prefer `steps`)
   final List<String>? skincareProducts;
+  final List<String>? skincareMissingItems;
 
   // Structured Class details
   final String? professor;
@@ -199,6 +200,7 @@ class RoutineItem {
     this.caloriesEstimate,
     this.proteinEstimate,
     this.skincareProducts,
+    this.skincareMissingItems,
     this.professor,
     this.courseCode,
     this.classType,
@@ -338,6 +340,7 @@ class RoutineItem {
     double? caloriesEstimate,
     double? proteinEstimate,
     List<String>? skincareProducts,
+    List<String>? skincareMissingItems,
     String? professor,
     String? courseCode,
     String? classType,
@@ -397,6 +400,7 @@ class RoutineItem {
       caloriesEstimate: caloriesEstimate ?? this.caloriesEstimate,
       proteinEstimate: proteinEstimate ?? this.proteinEstimate,
       skincareProducts: skincareProducts ?? this.skincareProducts,
+      skincareMissingItems: skincareMissingItems ?? this.skincareMissingItems,
       professor: professor ?? this.professor,
       courseCode: courseCode ?? this.courseCode,
       classType: classType ?? this.classType,
@@ -457,6 +461,7 @@ class RoutineItem {
       'caloriesEstimate': caloriesEstimate,
       'proteinEstimate': proteinEstimate,
       'skincareProducts': skincareProducts,
+      'skincareMissingItems': skincareMissingItems,
       'professor': professor,
       'courseCode': courseCode,
       'classType': classType,
@@ -516,6 +521,10 @@ class RoutineItem {
       if (dishes != null) 'dishes': List<String>.from(dishes!),
       if (caloriesEstimate != null) 'caloriesEstimate': caloriesEstimate,
       if (proteinEstimate != null) 'proteinEstimate': proteinEstimate,
+      if (skincareProducts != null)
+        'skincareProducts': List<String>.from(skincareProducts!),
+      if (skincareMissingItems != null)
+        'skincareMissingItems': List<String>.from(skincareMissingItems!),
       if (professor != null && professor!.trim().isNotEmpty)
         'professor': professor!.trim(),
       if (courseCode != null && courseCode!.trim().isNotEmpty)
@@ -615,6 +624,8 @@ class RoutineItem {
       caloriesEstimate: (map['caloriesEstimate'] as num?)?.toDouble(),
       proteinEstimate: (map['proteinEstimate'] as num?)?.toDouble(),
       skincareProducts: (map['skincareProducts'] as List?)?.cast<String>(),
+      skincareMissingItems: (map['skincareMissingItems'] as List?)
+          ?.cast<String>(),
       professor: (map['professor'] ?? map['instructor']) as String?,
       courseCode: map['courseCode'] as String?,
       classType: map['classType'] as String?,

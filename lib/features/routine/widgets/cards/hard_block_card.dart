@@ -91,14 +91,10 @@ class HardBlockCard extends ConsumerWidget {
                       item.isContinuation
                           ? '${item.title} continues'
                           : item.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 14.5,
                         fontWeight: FontWeight.w800,
-                        color: item.isCompleted
-                            ? OptivusColors.success
-                            : OptivusColors.ink,
+                        color: OptivusColors.ink,
                         letterSpacing: -0.2,
                         decoration: item.isCompleted
                             ? TextDecoration.lineThrough
@@ -110,8 +106,6 @@ class HardBlockCard extends ConsumerWidget {
                       item.isContinuation
                           ? '${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)} • Continues from yesterday'
                           : '${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)} • ${TimelineUtils.formatDuration(item.durationMinutes)} • ${item.blockTypeLabel}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -162,8 +156,6 @@ class HardBlockCard extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     item.location!.trim(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -189,8 +181,6 @@ class HardBlockCard extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     classDetails,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -217,8 +207,6 @@ class HardBlockCard extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     item.notes!.trim(),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w500,

@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/timeline/timeline_visual_models.dart'
+    hide TimelineLayoutResult;
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/onboarding/timeline/layout/timeline_overlap_engine.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_entry.dart';
@@ -254,129 +256,20 @@ TimelineCategory _categoryForSection(String section) => switch (section) {
   _ => TimelineCategory.other,
 };
 
-@immutable
-class Step14OverlapRegion {
-  final int startMinute;
-  final int endMinute;
-  final List<String> entryIds;
-
-  const Step14OverlapRegion({
-    required this.startMinute,
-    required this.endMinute,
-    required this.entryIds,
-  });
-
-  String keyForDay(int day) =>
-      '$day:$startMinute:$endMinute:${entryIds.join(',')}';
-}
+typedef Step14OverlapRegion = TimelineOverlapRegion;
 
 /// Splits a day into exact, non-transitive concurrency regions.
 List<Step14OverlapRegion> buildStep14OverlapRegions(
   List<TimelineEntry> entries,
-) {
-  if (entries.isEmpty) return const [];
-  final points =
-      entries
-          .expand((entry) => [entry.startMinute, entry.endMinute])
-          .toSet()
-          .toList()
-        ..sort();
-  final result = <Step14OverlapRegion>[];
-  for (var index = 0; index < points.length - 1; index++) {
-    final start = points[index];
-    final end = points[index + 1];
-    if (start == end) continue;
-    final active =
-        entries
-            .where(
-              (entry) => entry.startMinute < end && entry.endMinute > start,
-            )
-            .map((entry) => entry.id)
-            .toList()
-          ..sort();
-    if (active.isEmpty) continue;
-    if (result.isNotEmpty &&
-        result.last.endMinute == start &&
-        _sameIds(result.last.entryIds, active)) {
-      final previous = result.removeLast();
-      result.add(
-        Step14OverlapRegion(
-          startMinute: previous.startMinute,
-          endMinute: end,
-          entryIds: active,
-        ),
-      );
-    } else {
-      result.add(
-        Step14OverlapRegion(
-          startMinute: start,
-          endMinute: end,
-          entryIds: active,
-        ),
-      );
-    }
-  }
-  return List.unmodifiable(result);
-}
+) => buildTimelineOverlapRegions(entries);
 
-bool _sameIds(List<String> first, List<String> second) {
-  if (first.length != second.length) return false;
-  for (var i = 0; i < first.length; i++) {
-    if (first[i] != second[i]) return false;
-  }
-  return true;
-}
-
-@immutable
-class Step14OverlapComponent {
-  final String id;
-  final List<String> entryIds;
-
-  const Step14OverlapComponent({required this.id, required this.entryIds});
-}
+typedef Step14OverlapComponent = TimelineOverlapComponent;
 
 /// Builds connected interaction components without changing atomic active sets.
 List<Step14OverlapComponent> buildStep14OverlapComponents(
   List<TimelineEntry> entries, {
   required int selectedDay,
-}) {
-  final byId = {for (final entry in entries) entry.id: entry};
-  final remaining = byId.keys.toSet();
-  final result = <Step14OverlapComponent>[];
-  while (remaining.isNotEmpty) {
-    final seed = (remaining.toList()..sort()).first;
-    final queue = <String>[seed];
-    final connected = <String>[];
-    while (queue.isNotEmpty) {
-      final id = queue.removeAt(0);
-      if (!remaining.remove(id)) continue;
-      connected.add(id);
-      final entry = byId[id]!;
-      for (final candidateId in remaining.toList()) {
-        final candidate = byId[candidateId]!;
-        if (TimelineOverlapEngine.intervalsOverlap(
-          entry.startMinute,
-          entry.endMinute,
-          candidate.startMinute,
-          candidate.endMinute,
-        )) {
-          queue.add(candidateId);
-        }
-      }
-    }
-    if (connected.length > 1) {
-      connected.sort();
-      result.add(
-        Step14OverlapComponent(
-          id: '$selectedDay:${connected.join(',')}',
-          entryIds: List.unmodifiable(connected),
-        ),
-      );
-    }
-  }
-  result.sort((a, b) => a.id.compareTo(b.id));
-  return List.unmodifiable(result);
-}
+}) => buildTimelineOverlapComponents(entries, day: selectedDay);
 
 @immutable
 class Step14PreparedTimelineLayout {

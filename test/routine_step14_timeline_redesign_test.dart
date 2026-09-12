@@ -2,8 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/timeline/timeline_visual_layout.dart';
+import 'package:optivus/core/timeline/timeline_visual_models.dart';
+import 'package:optivus/core/timeline/widgets/timeline_card_chrome.dart';
+import 'package:optivus/features/onboarding/timeline/layout/timeline_overlap_engine.dart';
+import 'package:optivus/features/onboarding/timeline/models/timeline_entry.dart';
 import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/widgets/cards/routine_card_actions.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 import 'package:optivus/features/routine/widgets/routine_timeline_adapter.dart';
 import 'package:optivus/features/routine/widgets/routine_timeline_viewport.dart';
@@ -226,6 +232,7 @@ void main() {
     void Function(_MockRoutineNotifier)? onNotifierCreated,
     bool isToday = false,
     bool showCurrentTimeLine = false,
+    int? selectedDay,
   }) {
     return ProviderScope(
       overrides: [
@@ -255,6 +262,7 @@ void main() {
                   ),
               isToday: isToday,
               showCurrentTimeLine: showCurrentTimeLine,
+              selectedDay: selectedDay,
             ),
           ),
         ),
@@ -491,6 +499,303 @@ void main() {
         expect(
           find.byKey(const ValueKey('routine-back-label-c_1')),
           findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'Back tab strip matches Step 14 ClipRect styling without floating pill container',
+      (tester) async {
+        final item1 = RoutineItem(
+          id: 'bt_1',
+          title: 'First Event',
+          startMinute: 9 * 60,
+          endMinute: 11 * 60,
+          blockType: RoutineBlockType.hardBlock,
+          category: RoutineCategory.classBlock,
+        );
+        final item2 = RoutineItem(
+          id: 'bt_2',
+          title: 'Second Event',
+          startMinute: 9 * 60 + 15,
+          endMinute: 10 * 60,
+          blockType: RoutineBlockType.flexibleTask,
+        );
+
+        await tester.pumpWidget(buildTestableViewport(items: [item1, item2]));
+        await tester.pumpAndSettle();
+
+        final backTabFinder = find.byKey(
+          const ValueKey('routine-back-label-bt_1'),
+        );
+        expect(backTabFinder, findsOneWidget);
+
+        final clipRectAncestor = find.ancestor(
+          of: backTabFinder,
+          matching: find.byType(ClipRect),
+        );
+        expect(clipRectAncestor, findsAtLeastNWidgets(1));
+
+        final clipRRectAncestor = find.ancestor(
+          of: backTabFinder,
+          matching: find.byType(ClipRRect),
+        );
+        expect(clipRRectAncestor, findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Routine timeline viewport reconciles focus when items change',
+      (tester) async {
+        final item1 = RoutineItem(
+          id: 'foc_1',
+          title: 'Focus 1',
+          startMinute: 9 * 60,
+          endMinute: 11 * 60,
+          blockType: RoutineBlockType.hardBlock,
+          category: RoutineCategory.classBlock,
+        );
+        final item2 = RoutineItem(
+          id: 'foc_2',
+          title: 'Focus 2',
+          startMinute: 9 * 60 + 15,
+          endMinute: 10 * 60,
+          blockType: RoutineBlockType.flexibleTask,
+        );
+
+        await tester.pumpWidget(buildTestableViewport(items: [item1, item2]));
+        await tester.pumpAndSettle();
+
+        // Tap back tab to focus item1
+        await tester.tap(
+          find.byKey(const ValueKey('routine-back-label-foc_1')),
+        );
+        await tester.pumpAndSettle();
+
+        final stateBefore = tester.state<RoutineTimelineViewportState>(
+          find.byType(RoutineTimelineViewport),
+        );
+        expect(
+          stateBefore.focusedItemIdByComponentForTesting.values,
+          contains('foc_1'),
+        );
+
+        // Update widget with only item2 (foc_1 removed)
+        await tester.pumpWidget(buildTestableViewport(items: [item2]));
+        await tester.pumpAndSettle();
+
+        final stateAfter = tester.state<RoutineTimelineViewportState>(
+          find.byType(RoutineTimelineViewport),
+        );
+        expect(
+          stateAfter.focusedItemIdByComponentForTesting.values,
+          isNot(contains('foc_1')),
+        );
+      },
+    );
+
+    testWidgets(
+      'Routine timeline viewport triggers auto-scroll when transitioning to Today',
+      (tester) async {
+        final item = RoutineItem(
+          id: 'today_scroll_item',
+          title: 'Midday Block',
+          startMinute: 12 * 60,
+          endMinute: 13 * 60,
+          blockType: RoutineBlockType.hardBlock,
+        );
+
+        await tester.pumpWidget(
+          buildTestableViewport(items: [item], isToday: false),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.pumpWidget(
+          buildTestableViewport(items: [item], isToday: true),
+        );
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'Transitive overlap (A 10-12, B 10:30-11, C 10:45-12:30, D 12-12:20) groups into a single component with 1 front and 3 back tabs and supports bidirectional promotion',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final itemA = RoutineItem(
+          id: 'trans_a',
+          title: 'Deep Work Block',
+          startMinute: 10 * 60,
+          endMinute: 12 * 60,
+          blockType: RoutineBlockType.hardBlock,
+          category: RoutineCategory.job,
+        );
+        final itemB = RoutineItem(
+          id: 'trans_b',
+          title: 'Brunch Break',
+          startMinute: 10 * 60 + 30,
+          endMinute: 11 * 60,
+          blockType: RoutineBlockType.softBlock,
+          category: RoutineCategory.eating,
+          mealSlot: 'Brunch',
+          dishes: const ['Eggs', 'Toast'],
+        );
+        final itemC = RoutineItem(
+          id: 'trans_c',
+          title: 'Study Session',
+          startMinute: 10 * 60 + 45,
+          endMinute: 12 * 60 + 30,
+          blockType: RoutineBlockType.flexibleTask,
+        );
+        final itemD = RoutineItem(
+          id: 'trans_d',
+          title: 'Hydration Habit',
+          startMinute: 12 * 60,
+          endMinute: 12 * 60 + 20,
+          blockType: RoutineBlockType.checkIn,
+        );
+
+        await tester.pumpWidget(
+          buildTestableViewport(
+            items: [itemA, itemB, itemC, itemD],
+            layout: const TimelineLayout(
+              visibleStartMinute: 10 * 60,
+              visibleEndMinute: 13 * 60,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Initially, the two non-overlapping short items (trans_b at 10:30 and trans_d at 12:00)
+        // are front cards in their respective non-conflicting time windows, while trans_a and trans_c are in the gutter.
+        expect(
+          find.byKey(const ValueKey('routine-back-label-trans_a')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('routine-back-label-trans_c')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('routine-back-label-trans_b')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('routine-back-label-trans_d')),
+          findsNothing,
+        );
+
+        // Tap trans_c (the bridging item that overlaps trans_a, trans_b, and trans_d)
+        await tester.tap(
+          find.byKey(const ValueKey('routine-back-label-trans_c')),
+        );
+        await tester.pumpAndSettle();
+
+        // Now trans_c is promoted to front! Because trans_c spans across all 3 other items,
+        // all 3 (trans_a, trans_b, trans_d) are now exposed as back tabs!
+        expect(
+          find.byKey(const ValueKey('routine-back-label-trans_c')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('routine-back-label-trans_a')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('routine-back-label-trans_b')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('routine-back-label-trans_d')),
+          findsOneWidget,
+        );
+
+        // Tap trans_a back tab to promote trans_a (10:00-12:00)
+        await tester.tap(
+          find.byKey(const ValueKey('routine-back-label-trans_a')),
+        );
+        await tester.pumpAndSettle();
+
+        // trans_a is now front; trans_b and trans_c are in back; trans_d at 12:00 is also visible in front
+        expect(
+          find.byKey(const ValueKey('routine-back-label-trans_a')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('routine-back-label-trans_b')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('routine-back-label-trans_c')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('routine-back-label-trans_d')),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'Day switching focus reconciliation prunes component focus from another day',
+      (tester) async {
+        final item1 = RoutineItem(
+          id: 'day_foc_1',
+          title: 'Class Block',
+          startMinute: 9 * 60,
+          endMinute: 11 * 60,
+          blockType: RoutineBlockType.hardBlock,
+          category: RoutineCategory.classBlock,
+        );
+        final item2 = RoutineItem(
+          id: 'day_foc_2',
+          title: 'Habit Task',
+          startMinute: 9 * 60 + 15,
+          endMinute: 10 * 60,
+          blockType: RoutineBlockType.flexibleTask,
+        );
+
+        await tester.pumpWidget(
+          buildTestableViewport(items: [item1, item2], selectedDay: 1),
+        );
+        await tester.pumpAndSettle();
+
+        // Tap back tab to focus day_foc_1
+        await tester.tap(
+          find.byKey(const ValueKey('routine-back-label-day_foc_1')),
+        );
+        await tester.pumpAndSettle();
+
+        final stateDay1 = tester.state<RoutineTimelineViewportState>(
+          find.byType(RoutineTimelineViewport),
+        );
+        expect(
+          stateDay1.focusedItemIdByComponentForTesting.keys.any(
+            (k) => k.startsWith('1:'),
+          ),
+          isTrue,
+        );
+
+        // Switch to day 2 with same items
+        await tester.pumpWidget(
+          buildTestableViewport(items: [item1, item2], selectedDay: 2),
+        );
+        await tester.pumpAndSettle();
+
+        final stateDay2 = tester.state<RoutineTimelineViewportState>(
+          find.byType(RoutineTimelineViewport),
+        );
+        // Focus from day 1 has been pruned
+        expect(
+          stateDay2.focusedItemIdByComponentForTesting.keys.any(
+            (k) => k.startsWith('1:'),
+          ),
+          isFalse,
         );
       },
     );
@@ -858,9 +1163,374 @@ void main() {
       expect(find.byType(BottomSheet), findsNothing);
       expect(find.byType(Dialog), findsNothing);
     });
+
+    testWidgets(
+      'SoftBlockCard (Skin Care) displays missing items with warning styling',
+      (tester) async {
+        final skinItem = RoutineItem(
+          id: 'skin_missing',
+          title: 'Morning Routine',
+          startMinute: 8 * 60,
+          endMinute: 8 * 60 + 30,
+          blockType: RoutineBlockType.softBlock,
+          category: RoutineCategory.skinCare,
+          steps: const ['Wash Face', 'Moisturize'],
+          skincareProducts: const ['Cetaphil Cleanser'],
+          skincareMissingItems: const ['SPF 50 Sunscreen', 'Vitamin C'],
+        );
+
+        await tester.pumpWidget(
+          buildTestableViewport(
+            items: [skinItem],
+            layout: const TimelineLayout(
+              visibleStartMinute: 8 * 60,
+              visibleEndMinute: 10 * 60,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('MISSING'), findsOneWidget);
+        expect(find.text('⚠ SPF 50 Sunscreen'), findsOneWidget);
+        expect(find.text('⚠ Vitamin C'), findsOneWidget);
+
+        final missingHeader = tester.widget<Text>(find.text('MISSING'));
+        expect(missingHeader.style?.color, OptivusColors.warning);
+      },
+    );
+
+    testWidgets(
+      'SoftBlockCard (Eating) displays distinct mealSlot and mealCategory',
+      (tester) async {
+        final mealItem = RoutineItem(
+          id: 'meal_slot_cat',
+          title: 'Dinner',
+          startMinute: 18 * 60,
+          endMinute: 19 * 60,
+          blockType: RoutineBlockType.softBlock,
+          category: RoutineCategory.eating,
+          mealSlot: 'Dinner',
+          mealCategory: 'Post-Workout High Protein',
+          dishes: const ['Grilled Chicken', 'Brown Rice'],
+        );
+
+        await tester.pumpWidget(
+          buildTestableViewport(
+            items: [mealItem],
+            layout: const TimelineLayout(
+              visibleStartMinute: 18 * 60,
+              visibleEndMinute: 20 * 60,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Dinner'), findsOneWidget);
+        expect(find.text('Post-Workout High Protein'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'HardBlockCard renders unconstrained multiline title, location, and notes',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final item = RoutineItem(
+          id: 'multiline_hard',
+          title:
+              'Advanced Operating Systems\nConcurrency and Virtual Memory Lecture',
+          startMinute: 10 * 60,
+          endMinute: 12 * 60,
+          blockType: RoutineBlockType.hardBlock,
+          category: RoutineCategory.classBlock,
+          professor: 'Dr. Elizabeth Montgomery',
+          courseCode: 'CS 4400',
+          location: 'Hall B, Room 304\nNorth Campus Science Complex',
+          notes:
+              'Bring previous lab reports.\nReview chapter 7 on page replacement.\nPrepare presentation slides.',
+        );
+
+        await tester.pumpWidget(
+          buildTestableViewport(
+            items: [item],
+            layout: const TimelineLayout(
+              visibleStartMinute: 10 * 60,
+              visibleEndMinute: 13 * 60,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final titleText = tester.widget<Text>(
+          find.text(
+            'Advanced Operating Systems\nConcurrency and Virtual Memory Lecture',
+          ),
+        );
+        expect(titleText.maxLines, isNull);
+        expect(titleText.overflow, isNull);
+
+        final locationText = tester.widget<Text>(
+          find.text('Hall B, Room 304\nNorth Campus Science Complex'),
+        );
+        expect(locationText.maxLines, isNull);
+        expect(locationText.overflow, isNull);
+
+        final notesText = tester.widget<Text>(
+          find.text(
+            'Bring previous lab reports.\nReview chapter 7 on page replacement.\nPrepare presentation slides.',
+          ),
+        );
+        expect(notesText.maxLines, isNull);
+        expect(notesText.overflow, isNull);
+      },
+    );
+
+    testWidgets(
+      'RoutineCardActions consists of a single Row of 3 Expanded buttons with minHeight 44.0',
+      (tester) async {
+        final item = RoutineItem(
+          id: 'actions_test',
+          title: 'Standard Task',
+          startMinute: 9 * 60,
+          endMinute: 10 * 60,
+          blockType: RoutineBlockType.flexibleTask,
+        );
+
+        await tester.pumpWidget(buildTestableViewport(items: [item]));
+        await tester.pumpAndSettle();
+
+        final actionsFinder = find.byType(RoutineCardActions);
+        expect(actionsFinder, findsOneWidget);
+
+        final expandedFinder = find.descendant(
+          of: actionsFinder,
+          matching: find.byType(Expanded),
+        );
+        expect(expandedFinder, findsNWidgets(3));
+
+        final outerRow = tester.widget<Row>(
+          find.descendant(of: actionsFinder, matching: find.byType(Row)).first,
+        );
+        expect(outerRow.children.whereType<Expanded>().length, 3);
+
+        // Each button container has minHeight of 44.0
+        final containers = tester.widgetList<Container>(
+          find.descendant(
+            of: actionsFinder,
+            matching: find.byWidgetPredicate(
+              (w) => w is Container && w.constraints?.minHeight == 44.0,
+            ),
+          ),
+        );
+        expect(containers.length, 3);
+      },
+    );
   });
 
   group('Routine Step 14 Redesign: Card Colors & Scale Invariants', () {
+    testWidgets(
+      'Completed card retains category railColor (never turns green)',
+      (tester) async {
+        final hardItem = RoutineItem(
+          id: 'completed_hard',
+          title: 'Completed Class',
+          startMinute: 9 * 60,
+          endMinute: 10 * 60,
+          blockType: RoutineBlockType.hardBlock,
+          category: RoutineCategory.classBlock,
+          isCompleted: true,
+        );
+
+        await tester.pumpWidget(buildTestableViewport(items: [hardItem]));
+        await tester.pumpAndSettle();
+
+        final chrome = tester.widget<TimelineCardChrome>(
+          find.byType(TimelineCardChrome),
+        );
+        expect(chrome.baseColor, OptivusColors.blockHard);
+        expect(chrome.baseColor, isNot(OptivusColors.success));
+
+        // Done action button has isSelected highlight
+        final doneButtonFinder = find.byKey(
+          const ValueKey('routine-action-done-completed_hard'),
+        );
+        expect(doneButtonFinder, findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'All 6 completed block types retain their individual category railColors without turning green',
+      (tester) async {
+        final cases = [
+          (
+            RoutineItem(
+              id: 'c_hard',
+              title: 'Hard Block',
+              startMinute: 9 * 60,
+              endMinute: 10 * 60,
+              blockType: RoutineBlockType.hardBlock,
+              category: RoutineCategory.classBlock,
+              isCompleted: true,
+            ),
+            OptivusColors.blockHard,
+          ),
+          (
+            RoutineItem(
+              id: 'c_soft',
+              title: 'Soft Block',
+              startMinute: 9 * 60,
+              endMinute: 10 * 60,
+              blockType: RoutineBlockType.softBlock,
+              category: RoutineCategory.eating,
+              isCompleted: true,
+            ),
+            OptivusColors.blockSoft,
+          ),
+          (
+            RoutineItem(
+              id: 'c_flex',
+              title: 'Flex Task',
+              startMinute: 9 * 60,
+              endMinute: 10 * 60,
+              blockType: RoutineBlockType.flexibleTask,
+              isCompleted: true,
+            ),
+            OptivusColors.blockFlex,
+          ),
+          (
+            RoutineItem(
+              id: 'c_tracker',
+              title: 'Tracker Task',
+              startMinute: 9 * 60,
+              endMinute: 10 * 60,
+              blockType: RoutineBlockType.trackerTask,
+              isCompleted: true,
+            ),
+            OptivusColors.blockTracker,
+          ),
+          (
+            RoutineItem(
+              id: 'c_checkin',
+              title: 'Check In',
+              startMinute: 9 * 60,
+              endMinute: 10 * 60,
+              blockType: RoutineBlockType.checkIn,
+              isCompleted: true,
+            ),
+            OptivusColors.blockCheckIn,
+          ),
+          (
+            RoutineItem(
+              id: 'c_money',
+              title: 'Money Task',
+              startMinute: 9 * 60,
+              endMinute: 10 * 60,
+              blockType: RoutineBlockType.moneyTask,
+              isCompleted: true,
+            ),
+            OptivusColors.blockMoney,
+          ),
+        ];
+
+        for (final (item, expectedColor) in cases) {
+          await tester.pumpWidget(buildTestableViewport(items: [item]));
+          await tester.pumpAndSettle();
+
+          final chrome = tester.widget<TimelineCardChrome>(
+            find.byType(TimelineCardChrome),
+          );
+          expect(
+            chrome.baseColor,
+            expectedColor,
+            reason: 'Block type ${item.blockType} should use $expectedColor',
+          );
+          expect(
+            chrome.baseColor,
+            isNot(OptivusColors.success),
+            reason: 'Block type ${item.blockType} should never turn green',
+          );
+        }
+      },
+    );
+
+    test(
+      'solveRoutineStretchConstraints and TimelineOverlapEngine.solveStretchConstraints produce equivalent scale transformations',
+      () {
+        final entries = [
+          const RoutineConstraintEntry(
+            startMinute: 9 * 60,
+            endMinute: 9 * 60 + 15,
+            minHeight: 120.0,
+          ),
+          const RoutineConstraintEntry(
+            startMinute: 9 * 60 + 10,
+            endMinute: 9 * 60 + 25,
+            minHeight: 140.0,
+          ),
+          const RoutineConstraintEntry(
+            startMinute: 12 * 60,
+            endMinute: 12 * 60 + 10,
+            minHeight: 100.0,
+          ),
+        ];
+
+        const ppm = 1.0;
+        final routineSegments = solveRoutineStretchConstraints(
+          entries,
+          pixelsPerMinute: ppm,
+        );
+
+        final timelineEntries = entries.asMap().entries.map((e) {
+          return TimelineEntry(
+            id: 'constraint_${e.key}',
+            sourceId: 'constraint_${e.key}',
+            startMinute: e.value.startMinute,
+            endMinute: e.value.endMinute,
+            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+            title: 'Constraint',
+            category: TimelineCategory.other,
+            minHeight: e.value.minHeight,
+          );
+        }).toList();
+
+        final coreSegments = TimelineOverlapEngine.solveStretchConstraints(
+          timelineEntries,
+          pixelsPerMinute: ppm,
+        );
+
+        expect(routineSegments.length, coreSegments.length);
+        for (int i = 0; i < routineSegments.length; i++) {
+          final r = routineSegments[i];
+          final c = coreSegments[i];
+          expect(r.startMinute, c.startMinute);
+          expect(r.endMinute, c.endMinute);
+          expect(r.extraStretch, closeTo(c.extraStretch, 0.001));
+        }
+
+        final routineScale = TimelineVisualScale(
+          startMinute: 8 * 60,
+          endMinute: 18 * 60,
+          pixelsPerMinute: ppm,
+          stretchedSegments: routineSegments,
+        );
+        final coreScale = TimelineVisualScale(
+          startMinute: 8 * 60,
+          endMinute: 18 * 60,
+          pixelsPerMinute: ppm,
+          stretchedSegments: coreSegments,
+        );
+
+        for (int m = 8 * 60; m <= 18 * 60; m += 15) {
+          expect(
+            routineScale.yForMinute(m),
+            closeTo(coreScale.yForMinute(m), 0.001),
+          );
+        }
+      },
+    );
     test('Routine card colors strictly match RoutineCardFactory tokens', () {
       expect(
         RoutineCardFactory.colorForType(RoutineBlockType.hardBlock),

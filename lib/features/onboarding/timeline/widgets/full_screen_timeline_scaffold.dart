@@ -158,7 +158,7 @@ class FullScreenTimelineScaffold extends StatelessWidget {
                             !positioned.isFront &&
                             onFrontSelected != null) {
                           onFrontSelected!(entry.id);
-                        } else {
+                        } else if (mode == TimelineMode.fullScreenEditable) {
                           onEntryTapped?.call(entry);
                         }
                       },

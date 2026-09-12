@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:optivus/core/timeline/timeline_visual_models.dart';
 
 /// Semantic category for timeline items.
 enum TimelineCategory { classes, work, meal, fixed, skinCare, other }
@@ -7,17 +8,20 @@ enum TimelineCategory { classes, work, meal, fixed, skinCare, other }
 ///
 /// Decoupled from concrete feature domain objects.
 @immutable
-class TimelineEntry {
+class TimelineEntry implements TimelineInterval {
   /// Unique identifier for this visual timeline entry.
+  @override
   final String id;
 
   /// Underlying domain object identifier (e.g. routine ID or draft block ID).
   final String sourceId;
 
   /// Start minute of the event (0..1440).
+  @override
   final int startMinute;
 
   /// End minute of the event (0..1440). Must be >= startMinute.
+  @override
   final int endMinute;
 
   /// Active days of the week (1..7, where Monday = 1 and Sunday = 7).

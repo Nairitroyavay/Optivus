@@ -4,12 +4,14 @@ import 'package:optivus/core/timeline/timeline_visual_layout.dart';
 import 'package:optivus/core/timeline/timeline_visual_models.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/timeline_layout.dart';
+import 'package:optivus/features/onboarding/timeline/layout/timeline_overlap_engine.dart';
+import 'package:optivus/features/onboarding/timeline/models/timeline_entry.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 import 'package:optivus/features/routine/widgets/routine_time_ruler.dart';
 
 /// Item representation for routine timeline positioning.
-class RoutineTimelineItem implements TimelineVisualItem {
+class RoutineTimelineItem implements TimelineVisualItem, TimelineInterval {
   final RoutineItem item;
   @override
   final String id;
@@ -51,27 +53,10 @@ class RoutineTimelineItem implements TimelineVisualItem {
 }
 
 /// An atomic interval with overlapping items on the timeline.
-class RoutineOverlapRegion {
-  final int startMinute;
-  final int endMinute;
-  final List<String> itemIds;
-
-  const RoutineOverlapRegion({
-    required this.startMinute,
-    required this.endMinute,
-    required this.itemIds,
-  });
-
-  String get key => '${startMinute}_$endMinute';
-}
+typedef RoutineOverlapRegion = TimelineOverlapRegion;
 
 /// A connected cluster of overlapping items.
-class RoutineOverlapComponent {
-  final String id;
-  final List<String> itemIds;
-
-  const RoutineOverlapComponent({required this.id, required this.itemIds});
-}
+typedef RoutineOverlapComponent = TimelineOverlapComponent;
 
 /// Prepared layout holding all computed metrics, stretched scale, regions,
 /// and gutter widths for the Routine timeline.
@@ -112,6 +97,7 @@ class RoutinePreparedTimelineLayout {
     required List<RoutineItem> rawItems,
     required TimelineLayout timelineLayout,
     required double availableWidth,
+    int? selectedDay,
   }) {
     final textScaler = MediaQuery.textScalerOf(context);
     final textDirection = Directionality.of(context);
@@ -142,7 +128,10 @@ class RoutinePreparedTimelineLayout {
 
     // 2. Build atomic regions and components
     final regions = buildRoutineOverlapRegions(activeItems);
-    final components = buildRoutineOverlapComponents(activeItems);
+    final components = buildRoutineOverlapComponents(
+      activeItems,
+      day: selectedDay,
+    );
 
     final componentIdByItemId = <String, String>{
       for (final component in components)
@@ -189,7 +178,7 @@ class RoutinePreparedTimelineLayout {
         return math.max(
           cur,
           _measureCompactTabHeight(
-            it.item.title,
+            it.item,
             gutterWidth,
             textScaler,
             textDirection,
@@ -276,98 +265,14 @@ class RoutinePreparedTimelineLayout {
 List<RoutineOverlapRegion> buildRoutineOverlapRegions(
   List<RoutineTimelineItem> items,
 ) {
-  if (items.isEmpty) return const [];
-  final boundaries = <int>{};
-  for (final item in items) {
-    boundaries.add(item.startMinute);
-    boundaries.add(item.endMinute);
-  }
-  final sortedBoundaries = boundaries.toList()..sort();
-  final regions = <RoutineOverlapRegion>[];
-
-  for (var i = 0; i < sortedBoundaries.length - 1; i++) {
-    final start = sortedBoundaries[i];
-    final end = sortedBoundaries[i + 1];
-    if (start >= end) continue;
-
-    final activeIds = <String>[];
-    for (final item in items) {
-      if (item.startMinute < end && item.endMinute > start) {
-        activeIds.add(item.id);
-      }
-    }
-    if (activeIds.isEmpty) continue;
-    activeIds.sort();
-
-    if (regions.isNotEmpty &&
-        regions.last.endMinute == start &&
-        _sameIds(regions.last.itemIds, activeIds)) {
-      final previous = regions.removeLast();
-      regions.add(
-        RoutineOverlapRegion(
-          startMinute: previous.startMinute,
-          endMinute: end,
-          itemIds: activeIds,
-        ),
-      );
-    } else {
-      regions.add(
-        RoutineOverlapRegion(
-          startMinute: start,
-          endMinute: end,
-          itemIds: activeIds,
-        ),
-      );
-    }
-  }
-  return List.unmodifiable(regions);
-}
-
-bool _sameIds(List<String> a, List<String> b) {
-  if (a.length != b.length) return false;
-  for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) return false;
-  }
-  return true;
+  return buildTimelineOverlapRegions(items);
 }
 
 List<RoutineOverlapComponent> buildRoutineOverlapComponents(
-  List<RoutineTimelineItem> items,
-) {
-  if (items.isEmpty) return const [];
-  final byId = {for (final item in items) item.id: item};
-  final remaining = byId.keys.toSet();
-  final result = <RoutineOverlapComponent>[];
-
-  while (remaining.isNotEmpty) {
-    final seed = (remaining.toList()..sort()).first;
-    final queue = <String>[seed];
-    final connected = <String>[];
-    while (queue.isNotEmpty) {
-      final id = queue.removeAt(0);
-      if (!remaining.remove(id)) continue;
-      connected.add(id);
-      final item = byId[id]!;
-      for (final candidateId in remaining.toList()) {
-        final candidate = byId[candidateId]!;
-        if (item.startMinute < candidate.endMinute &&
-            item.endMinute > candidate.startMinute) {
-          queue.add(candidateId);
-        }
-      }
-    }
-    if (connected.length > 1) {
-      connected.sort();
-      result.add(
-        RoutineOverlapComponent(
-          id: 'comp_${connected.join('_')}',
-          itemIds: List.unmodifiable(connected),
-        ),
-      );
-    }
-  }
-  result.sort((a, b) => a.id.compareTo(b.id));
-  return List.unmodifiable(result);
+  List<RoutineTimelineItem> items, {
+  int? day,
+}) {
+  return buildTimelineOverlapComponents(items, day: day);
 }
 
 class RoutineConstraintEntry {
@@ -387,75 +292,48 @@ List<TimelineStretchedSegment> solveRoutineStretchConstraints(
   required double pixelsPerMinute,
   double epsilon = 0.01,
 }) {
-  final constraints =
-      entries
-          .where((e) => e.minHeight > 0 && e.endMinute > e.startMinute)
-          .toList()
-        ..sort((a, b) {
-          final cmp = a.startMinute.compareTo(b.startMinute);
-          if (cmp != 0) return cmp;
-          return b.endMinute.compareTo(a.endMinute);
-        });
-
-  final segments = <TimelineStretchedSegment>[];
-
-  double stretchAt(int minute) {
-    var result = 0.0;
-    for (final segment in segments) {
-      if (minute <= segment.startMinute) continue;
-      if (minute >= segment.endMinute) {
-        result += segment.extraStretch;
-      } else {
-        result +=
-            (minute - segment.startMinute) /
-            (segment.endMinute - segment.startMinute) *
-            segment.extraStretch;
-      }
-    }
-    return result;
-  }
-
-  for (var pass = 0; pass < math.max(1, constraints.length * 2); pass++) {
-    var changed = false;
-    for (final entry in constraints) {
-      final current =
-          (entry.endMinute - entry.startMinute) * pixelsPerMinute +
-          stretchAt(entry.endMinute) -
-          stretchAt(entry.startMinute);
-      final deficiency = entry.minHeight - current;
-      if (deficiency > epsilon) {
-        segments.add(
-          TimelineStretchedSegment(
-            startMinute: entry.startMinute,
-            endMinute: entry.endMinute,
-            extraStretch: deficiency,
-          ),
-        );
-        changed = true;
-      }
-    }
-    if (!changed) break;
-  }
-  return List.unmodifiable(segments);
+  final timelineEntries = entries.asMap().entries.map((e) {
+    final entry = e.value;
+    return TimelineEntry(
+      id: 'routine_constraint_${e.key}',
+      sourceId: 'routine_constraint_${e.key}',
+      startMinute: entry.startMinute,
+      endMinute: entry.endMinute,
+      repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+      title: 'Constraint',
+      category: TimelineCategory.other,
+      minHeight: entry.minHeight,
+    );
+  }).toList();
+  return TimelineOverlapEngine.solveStretchConstraints(
+    timelineEntries,
+    pixelsPerMinute: pixelsPerMinute,
+    epsilon: epsilon,
+  );
 }
 
 double _measureCompactTabHeight(
-  String title,
+  RoutineItem item,
   double gutterWidth,
   TextScaler textScaler,
   TextDirection textDirection,
 ) {
-  final labelWidth = math.max(20.0, gutterWidth - 34.0);
+  final labelWidth = math.max(18.0, gutterWidth - 25.0);
   final painter = TextPainter(
-    text: const TextSpan(
-      text: 'Sample',
-      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, height: 1.0),
+    text: TextSpan(
+      text: shortBackLabel(item),
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w900,
+        height: 1.0,
+      ),
     ),
     textDirection: textDirection,
     textScaler: textScaler,
     maxLines: 1,
+    ellipsis: '…',
   )..layout(maxWidth: labelWidth);
-  return math.max(40.0, painter.height + 22.0);
+  return math.max(44.0, painter.height + 12.0);
 }
 
 int _priorityFor(RoutineItem item) {

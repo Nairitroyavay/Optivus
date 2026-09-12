@@ -32,6 +32,7 @@ class RoutineTimelineViewport extends ConsumerStatefulWidget {
   final bool isToday;
   final bool showCurrentTimeLine;
   final ValueChanged<RoutineItem>? onCardTap;
+  final int? selectedDay;
 
   const RoutineTimelineViewport({
     super.key,
@@ -40,27 +41,46 @@ class RoutineTimelineViewport extends ConsumerStatefulWidget {
     required this.isToday,
     this.showCurrentTimeLine = true,
     this.onCardTap,
+    this.selectedDay,
   });
 
   @override
   ConsumerState<RoutineTimelineViewport> createState() =>
-      _RoutineTimelineViewportState();
+      RoutineTimelineViewportState();
 }
 
-class _RoutineTimelineViewportState
+class RoutineTimelineViewportState
     extends ConsumerState<RoutineTimelineViewport> {
   late ScrollController _scrollController;
   final Map<String, String> _focusedItemIdByComponent = {};
+  bool _hasAutoScrolledForToday = false;
 
   TimelineVisualScale? _lastScale;
+
+  @visibleForTesting
+  Map<String, String> get focusedItemIdByComponentForTesting =>
+      Map.unmodifiable(_focusedItemIdByComponent);
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToCurrentTime();
-    });
+    if (widget.isToday) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToCurrentTime();
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant RoutineTimelineViewport oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isToday && widget.isToday) {
+      _hasAutoScrolledForToday = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToCurrentTime();
+      });
+    }
   }
 
   @override
@@ -69,8 +89,24 @@ class _RoutineTimelineViewportState
     super.dispose();
   }
 
+  void _reconcileFocus(RoutinePreparedTimelineLayout prepared) {
+    final validComponentItemMap = <String, Set<String>>{};
+    for (final c in prepared.components) {
+      validComponentItemMap[c.id] = c.itemIds.toSet();
+    }
+    _focusedItemIdByComponent.removeWhere((componentId, itemId) {
+      final itemIds = validComponentItemMap[componentId];
+      if (itemIds == null) return true;
+      return !itemIds.contains(itemId);
+    });
+  }
+
   void _scrollToCurrentTime() {
-    if (!widget.isToday || !_scrollController.hasClients) return;
+    if (!widget.isToday ||
+        !_scrollController.hasClients ||
+        _hasAutoScrolledForToday)
+      return;
+    _hasAutoScrolledForToday = true;
 
     final now = DateTime.now();
     final currentMinute = now.hour * 60 + now.minute;
@@ -102,12 +138,16 @@ class _RoutineTimelineViewportState
           return const SizedBox.shrink();
         }
 
+        final effectiveDay =
+            widget.selectedDay ?? routineState.selectedDay.weekday;
         final prepared = RoutinePreparedTimelineLayout.prepare(
           context: context,
           rawItems: widget.items,
           timelineLayout: widget.layout,
           availableWidth: viewportWidth,
+          selectedDay: effectiveDay,
         );
+        _reconcileFocus(prepared);
         _lastScale = prepared.scale;
 
         final timelineHeight = math.max(
@@ -585,65 +625,50 @@ class _RoutineTimelineViewportState
     required double height,
   }) {
     final color = RoutineCardFactory.colorForType(item.blockType);
-    final stripWidth = math.max(24.0, width - 4.0);
-    final tabHeight = math.max(32.0, height - 4.0);
+    final stripWidth = width.clamp(44.0, 96.0);
     final label = shortBackLabel(item);
     final icon = backTabIcon(item);
 
     return Align(
       alignment: Alignment.centerLeft,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
+      child: ClipRect(
+        child: SizedBox(
           width: stripWidth,
-          height: tabHeight,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.72),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.90),
-              width: 1.2,
+          height: height,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 6, right: 6),
+            child: Row(
+              children: [
+                Container(
+                  width: 18,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: color.withValues(alpha: 0.16),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.72),
+                      width: 1,
+                    ),
+                  ),
+                  child: Icon(icon, color: color, size: 11),
+                ),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    label,
+                    key: ValueKey('routine-back-label-${item.id}'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      height: 1.0,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.ink,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            boxShadow: [
-              BoxShadow(
-                color: color.withValues(alpha: 0.16),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          child: Row(
-            children: [
-              Container(
-                width: 18,
-                height: 18,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: color.withValues(alpha: 0.16),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.72),
-                    width: 1,
-                  ),
-                ),
-                child: Icon(icon, color: color, size: 11),
-              ),
-              const SizedBox(width: 5),
-              Expanded(
-                child: Text(
-                  label,
-                  key: ValueKey('routine-back-label-${item.id}'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    height: 1.0,
-                    fontWeight: FontWeight.w900,
-                    color: OptivusColors.ink,
-                  ),
-                ),
-              ),
-            ],
           ),
         ),
       ),

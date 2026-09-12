@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/timeline/widgets/timeline_card_chrome.dart';
 
 /// Shared glass card wrapper for all routine timeline cards.
@@ -61,12 +60,8 @@ class _RoutineCardBaseState extends State<RoutineCardBase>
 
   @override
   Widget build(BuildContext context) {
-    final effectiveColor = widget.isCompleted
-        ? OptivusColors.success
-        : widget.railColor;
-    final accentRailHeight = (widget.railHeight ?? 42.0)
-        .clamp(32.0, 64.0)
-        .toDouble();
+    // Routine original category colors strictly preserved even when completed.
+    final effectiveColor = widget.railColor;
 
     return GestureDetector(
       onTapDown: (_) {
@@ -82,43 +77,22 @@ class _RoutineCardBaseState extends State<RoutineCardBase>
         animation: _scaleAnim,
         builder: (_, child) =>
             Transform.scale(scale: _scaleAnim.value, child: child),
-        child: TimelineCardChrome(
-          baseColor: effectiveColor,
-          isFront: widget.isFront,
-          hasOverlap: widget.hasOverlap,
-          borderRadius: BorderRadius.circular(20),
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Accent bar — 3.5px with glow shadow
-              Container(
-                width: 3.5,
-                height: accentRailHeight,
-                margin: const EdgeInsets.only(right: 10, top: 2),
-                decoration: BoxDecoration(
-                  color: effectiveColor,
-                  borderRadius: BorderRadius.circular(3),
-                  boxShadow: [
-                    BoxShadow(
-                      color: effectiveColor.withValues(alpha: 0.45),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
+        child: AnimatedOpacity(
+          opacity: widget.isCompleted ? 0.88 : 1.0,
+          duration: const Duration(milliseconds: 200),
+          child: TimelineCardChrome(
+            baseColor: effectiveColor,
+            isFront: widget.isFront,
+            hasOverlap: widget.hasOverlap,
+            borderRadius: BorderRadius.circular(24),
+            padding: const EdgeInsets.all(12),
+            child: Offstage(
+              offstage: widget.hasOverlap && !widget.isFront,
+              child: SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
+                child: widget.child,
               ),
-              // Content
-              Expanded(
-                child: Offstage(
-                  offstage: widget.hasOverlap && !widget.isFront,
-                  child: SingleChildScrollView(
-                    physics: const NeverScrollableScrollPhysics(),
-                    child: widget.child,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),

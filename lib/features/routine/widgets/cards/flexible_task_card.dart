@@ -78,14 +78,10 @@ class FlexibleTaskCard extends ConsumerWidget {
                   children: [
                     Text(
                       item.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 14.5,
                         fontWeight: FontWeight.w800,
-                        color: item.isCompleted
-                            ? OptivusColors.success
-                            : OptivusColors.ink,
+                        color: OptivusColors.ink,
                         letterSpacing: -0.2,
                         decoration: item.isCompleted
                             ? TextDecoration.lineThrough
@@ -95,8 +91,6 @@ class FlexibleTaskCard extends ConsumerWidget {
                     const SizedBox(height: 2),
                     Text(
                       '${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)} • ${TimelineUtils.formatDuration(item.durationMinutes)} • ${item.priorityLabel}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -123,8 +117,6 @@ class FlexibleTaskCard extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     item.location!.trim(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -176,8 +168,6 @@ class FlexibleTaskCard extends ConsumerWidget {
                       Expanded(
                         child: Text(
                           task,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w500,
@@ -211,8 +201,6 @@ class FlexibleTaskCard extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     item.notes!.trim(),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w500,

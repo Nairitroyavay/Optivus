@@ -75,14 +75,10 @@ class CheckInCard extends ConsumerWidget {
                   children: [
                     Text(
                       item.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 14.5,
                         fontWeight: FontWeight.w800,
-                        color: item.isCompleted
-                            ? OptivusColors.success
-                            : OptivusColors.ink,
+                        color: OptivusColors.ink,
                         letterSpacing: -0.2,
                         decoration: item.isCompleted
                             ? TextDecoration.lineThrough
@@ -92,8 +88,6 @@ class CheckInCard extends ConsumerWidget {
                     const SizedBox(height: 2),
                     Text(
                       '${TimelineUtils.formatMinute(item.startMinute)} • ${item.blockTypeLabel}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -120,8 +114,6 @@ class CheckInCard extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     item.location!.trim(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -148,8 +140,6 @@ class CheckInCard extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     item.notes!.trim(),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w500,

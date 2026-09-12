@@ -196,6 +196,7 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                               layout: layout,
                               isToday: isToday,
                               showCurrentTimeLine: showCurrentTimeLine,
+                              selectedDay: state.selectedDay.weekday,
                             ),
                             Positioned.fill(
                               child: IgnorePointer(child: _buildEmptyState()),
@@ -207,6 +208,7 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                           layout: layout,
                           isToday: isToday,
                           showCurrentTimeLine: showCurrentTimeLine,
+                          selectedDay: state.selectedDay.weekday,
                         ),
                 ),
               ],

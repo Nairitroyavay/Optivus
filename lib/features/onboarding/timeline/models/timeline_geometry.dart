@@ -1,5 +1,10 @@
 import 'package:flutter/foundation.dart';
+import 'package:optivus/core/timeline/timeline_visual_models.dart'
+    show TimelineStretchedSegment;
 import 'timeline_entry.dart';
+
+export 'package:optivus/core/timeline/timeline_visual_models.dart'
+    show TimelineStretchedSegment;
 
 /// Configuration parameters for timeline geometry calculation.
 @immutable
@@ -85,20 +90,6 @@ enum TimelineOverlapPresentation {
 
   /// Overlapping items present as a readable front card with exposed back card strip(s).
   frontAndExposed,
-}
-
-/// A segment of the timeline that has been stretched vertically to fit content.
-@immutable
-class TimelineStretchedSegment {
-  final int startMinute;
-  final int endMinute;
-  final double extraStretch;
-
-  const TimelineStretchedSegment({
-    required this.startMinute,
-    required this.endMinute,
-    required this.extraStretch,
-  });
 }
 
 /// Scale mapping minute of day to vertical coordinate in pixels.

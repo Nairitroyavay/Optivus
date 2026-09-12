@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/cards/hard_block_card.dart';
 import 'package:optivus/features/routine/widgets/cards/soft_block_card.dart';
 import 'package:optivus/features/routine/widgets/cards/flexible_task_card.dart';
@@ -91,6 +92,70 @@ class RoutineCardFactory {
     };
   }
 
+  /// Exact formatted time string matching each block's presentation.
+  static String formattedTimeString(RoutineItem item) {
+    return switch (item.blockType) {
+      RoutineBlockType.hardBlock =>
+        item.isContinuation
+            ? '${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)} • Continues from yesterday'
+            : '${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)} • ${TimelineUtils.formatDuration(item.durationMinutes)} • ${item.blockTypeLabel}',
+      RoutineBlockType.softBlock =>
+        '${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)} • ${item.blockTypeLabel}',
+      RoutineBlockType.flexibleTask =>
+        '${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)} • ${TimelineUtils.formatDuration(item.durationMinutes)} • ${item.priorityLabel}',
+      RoutineBlockType.trackerTask =>
+        '${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)} • ${item.trackerType != TrackerType.none ? item.trackerType.name : item.blockTypeLabel}',
+      RoutineBlockType.checkIn || RoutineBlockType.moneyTask =>
+        '${TimelineUtils.formatMinute(item.startMinute)} • ${item.blockTypeLabel}',
+    };
+  }
+
+  /// Class details string (professor, course, type, section).
+  static String? classDetailsString(RoutineItem item) {
+    final parts = [
+      if (item.professor != null && item.professor!.trim().isNotEmpty)
+        item.professor!.trim(),
+      if (item.courseCode != null && item.courseCode!.trim().isNotEmpty)
+        item.courseCode!.trim(),
+      if (item.classType != null && item.classType!.trim().isNotEmpty)
+        item.classType!.trim(),
+      if (item.sectionLabel != null && item.sectionLabel!.trim().isNotEmpty)
+        item.sectionLabel!.trim(),
+    ].join(' • ');
+    return parts.isEmpty ? null : parts;
+  }
+
+  /// Formatted nutrition string (calories + protein).
+  static String? nutritionString(RoutineItem item) {
+    final parts = <String>[];
+    if (item.caloriesEstimate != null) {
+      parts.add('${item.caloriesEstimate!.toInt()} kcal');
+    }
+    if (item.proteinEstimate != null) {
+      parts.add('${item.proteinEstimate!.toInt()}g protein');
+    }
+    return parts.isEmpty ? null : parts.join(' • ');
+  }
+
+  /// Whether mealSlot provides distinct value from title.
+  static bool shouldShowMealSlot(RoutineItem item) {
+    final slot = item.mealSlot?.trim();
+    if (slot == null || slot.isEmpty) return false;
+    return slot.toLowerCase() != item.title.trim().toLowerCase();
+  }
+
+  /// Whether mealCategory provides distinct value from title and mealSlot.
+  static bool shouldShowMealCategory(RoutineItem item) {
+    final category = item.mealCategory?.trim();
+    if (category == null || category.isEmpty) return false;
+    final catLower = category.toLowerCase();
+    if (catLower == 'meal') return false;
+    if (catLower == item.title.trim().toLowerCase()) return false;
+    final slotLower = item.mealSlot?.trim().toLowerCase();
+    if (slotLower != null && catLower == slotLower) return false;
+    return true;
+  }
+
   /// Pre-measures exact height required for full-detail rich card content
   /// based on available width, text scaling, and specific item attributes.
   static double measureHeight(
@@ -100,8 +165,8 @@ class RoutineCardFactory {
   ) {
     final scaler = MediaQuery.textScalerOf(context);
     final textDirection = Directionality.of(context);
-    // Card padding is 14 left + 14 right = 28. Accent bar is 3.5 + 10 margin = 13.5. Total horizontal = ~42.
-    final contentWidth = math.max(40.0, width - 44.0);
+    // Card padding is 12 left + 12 right = 24.
+    final contentWidth = math.max(40.0, width - 24.0);
     final titleWidth = math.max(20.0, contentWidth - 54.0);
 
     double measure(
@@ -174,18 +239,12 @@ class RoutineCardFactory {
 
     var height = 0.0;
 
-    // Header row: Emoji container (42px) + Title & time range
-    final titleH = measure(
-      item.title,
-      titleStyle,
-      customWidth: titleWidth,
-      maxLines: 2,
-    );
+    // Header row: Emoji container (42px) + Title & exact formatted time
+    final titleH = measure(item.title, titleStyle, customWidth: titleWidth);
     final timeH = measure(
-      'Time range • duration • type',
+      formattedTimeString(item),
       detailStyle,
       customWidth: titleWidth,
-      maxLines: 1,
     );
     final headerH = math.max(44.0, titleH + 4.0 + timeH);
     height += headerH;
@@ -201,23 +260,9 @@ class RoutineCardFactory {
     }
 
     // Class details
-    if (item.professor != null ||
-        item.courseCode != null ||
-        item.classType != null ||
-        item.sectionLabel != null) {
-      final parts = [
-        if (item.professor != null && item.professor!.trim().isNotEmpty)
-          item.professor!.trim(),
-        if (item.courseCode != null && item.courseCode!.trim().isNotEmpty)
-          item.courseCode!.trim(),
-        if (item.classType != null && item.classType!.trim().isNotEmpty)
-          item.classType!.trim(),
-        if (item.sectionLabel != null && item.sectionLabel!.trim().isNotEmpty)
-          item.sectionLabel!.trim(),
-      ].join(' • ');
-      if (parts.isNotEmpty) {
-        height += 6.0 + measure(parts, detailStyle);
-      }
+    final classInfo = classDetailsString(item);
+    if (classInfo != null) {
+      height += 6.0 + measure(classInfo, detailStyle);
     }
 
     // In-tracker progress badge
@@ -228,14 +273,15 @@ class RoutineCardFactory {
     // Eating
     final isEating = item.category == RoutineCategory.eating;
     if (isEating || item.dishes != null) {
-      if (item.mealSlot != null &&
-          item.mealSlot!.trim().isNotEmpty &&
-          item.mealSlot!.trim().toLowerCase() !=
-              item.title.trim().toLowerCase()) {
-        height += 6.0 + measure(item.mealSlot!.trim(), detailStyle);
+      if (shouldShowMealSlot(item)) {
+        height += 5.0 + measure(item.mealSlot!.trim(), detailStyle);
       }
-      if (item.caloriesEstimate != null || item.proteinEstimate != null) {
-        height += 8.0 + measure('0000 kcal • 00g protein', detailStyle) + 6.0;
+      if (shouldShowMealCategory(item)) {
+        height += 4.0 + measure(item.mealCategory!.trim(), detailStyle);
+      }
+      final nutrition = nutritionString(item);
+      if (nutrition != null) {
+        height += 6.0 + measure(nutrition, detailStyle) + 6.0;
       }
       if (item.dishes != null && item.dishes!.isNotEmpty) {
         final cleanDishes = item.dishes!
@@ -276,6 +322,16 @@ class RoutineCardFactory {
           }
         }
       }
+      if (item.skincareMissingItems != null &&
+          item.skincareMissingItems!.isNotEmpty) {
+        height += 8.0 + measure('MISSING', headingStyle) + 4.0;
+        for (final m in item.skincareMissingItems!) {
+          if (m.trim().isNotEmpty) {
+            height +=
+                2.0 + math.max(18.0, measure('⚠ ${m.trim()}', detailStyle));
+          }
+        }
+      }
     }
 
     // Subtasks
@@ -289,27 +345,30 @@ class RoutineCardFactory {
             3.0 +
             math.max(
               22.0,
-              measure(
-                s,
-                detailStyle,
-                customWidth: contentWidth - 24.0,
-                maxLines: 2,
-              ),
+              measure(s, detailStyle, customWidth: contentWidth - 24.0),
             );
       }
     }
 
     // Notes
     if (item.notes != null && item.notes!.trim().isNotEmpty) {
-      height += 6.0 + measure(item.notes!.trim(), detailStyle, maxLines: 2);
+      height += 6.0 + measure(item.notes!.trim(), detailStyle);
     }
 
-    // Three Primary Actions footer
-    final actionHeight = contentWidth < 210.0 ? 76.0 : 38.0;
-    height += 8.0 + actionHeight;
+    // Three Primary Actions footer (min 44px, scaling with textScaler)
+    final actionTextPainter = TextPainter(
+      text: const TextSpan(
+        text: 'Start',
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+      ),
+      textDirection: textDirection,
+      textScaler: scaler,
+    )..layout();
+    final actionButtonHeight = math.max(44.0, actionTextPainter.height + 16.0);
+    height += 8.0 + actionButtonHeight;
 
-    // Card padding (14 top + 14 bottom = 28) + extra safety cushion (20)
-    const verticalPadding = 28.0 + 20.0;
+    // Card padding (12 top + 12 bottom = 24) + extra safety cushion (20)
+    const verticalPadding = 24.0 + 20.0;
 
     return math.max(88.0, height + verticalPadding);
   }
