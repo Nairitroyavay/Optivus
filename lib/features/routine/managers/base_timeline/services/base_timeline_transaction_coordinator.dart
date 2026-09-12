@@ -177,6 +177,8 @@ class BaseTimelineTransactionCoordinator {
             ? b.skincareSteps
             : b.skincareProducts,
         skincareProducts: b.skincareProducts,
+        skincareMissingItems: b.skincareMissingItems,
+        skincareSlotLabel: b.skincareSlotLabel,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );

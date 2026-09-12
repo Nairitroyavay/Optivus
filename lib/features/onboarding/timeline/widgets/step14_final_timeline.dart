@@ -9,6 +9,7 @@ import 'package:optivus/features/onboarding/timeline/layout/timeline_overlap_eng
 import 'package:optivus/features/onboarding/timeline/models/timeline_entry.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/onboarding_timeline_card_chrome.dart';
+import 'package:optivus/core/timeline/widgets/timeline_back_tab_strip.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/timeline_day_chips.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/timeline_time_rail.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
@@ -1548,52 +1549,13 @@ Widget _buildBackTabStrip({
   required double width,
   required double height,
 }) {
-  final stripWidth = width.clamp(70.0, 96.0);
-  final baseColor = item.identity.accent;
-
-  return Align(
-    alignment: Alignment.centerLeft,
-    child: ClipRect(
-      child: SizedBox(
-        width: stripWidth,
-        height: height,
-        child: Padding(
-          padding: const EdgeInsets.only(left: 6, right: 6),
-          child: Row(
-            children: [
-              Container(
-                width: 18,
-                height: 18,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: baseColor.withValues(alpha: 0.16),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.72),
-                    width: 1,
-                  ),
-                ),
-                child: Icon(item.identity.icon, color: baseColor, size: 11),
-              ),
-              const SizedBox(width: 5),
-              Expanded(
-                child: Text(
-                  _shortBackLabel(item.sourceBlock),
-                  key: ValueKey('step14-back-label-${item.entry.id}'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    height: 1.0,
-                    fontWeight: FontWeight.w900,
-                    color: OptivusColors.ink,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
+  return TimelineBackTabStrip(
+    label: _shortBackLabel(item.sourceBlock),
+    icon: item.identity.icon,
+    accent: item.identity.accent,
+    width: width,
+    height: height,
+    labelKey: ValueKey('step14-back-label-${item.entry.id}'),
   );
 }
 

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import '../models/timeline_entry.dart';
 import '../models/timeline_geometry.dart';
+import 'package:optivus/core/timeline/timeline_stretch_solver.dart';
 
 /// Pure deterministic overlap layout engine.
 ///
@@ -423,53 +424,20 @@ class TimelineOverlapEngine {
     required double pixelsPerMinute,
     double epsilon = 0.01,
   }) {
-    final constraints =
-        entries
-            .where(
-              (entry) =>
-                  entry.minHeight > 0 && entry.endMinute > entry.startMinute,
-            )
-            .toList()
-          ..sort(_compareEntries);
-    final segments = <TimelineStretchedSegment>[];
-
-    double stretchAt(int minute) {
-      var result = 0.0;
-      for (final segment in segments) {
-        if (minute <= segment.startMinute) continue;
-        if (minute >= segment.endMinute) {
-          result += segment.extraStretch;
-        } else {
-          result +=
-              (minute - segment.startMinute) /
-              (segment.endMinute - segment.startMinute) *
-              segment.extraStretch;
-        }
-      }
-      return result;
-    }
-
-    for (var pass = 0; pass < math.max(1, constraints.length * 2); pass++) {
-      var changed = false;
-      for (final entry in constraints) {
-        final current =
-            (entry.endMinute - entry.startMinute) * pixelsPerMinute +
-            stretchAt(entry.endMinute) -
-            stretchAt(entry.startMinute);
-        final deficiency = entry.minHeight - current;
-        if (deficiency > epsilon) {
-          segments.add(
-            TimelineStretchedSegment(
-              startMinute: entry.startMinute,
-              endMinute: entry.endMinute,
-              extraStretch: deficiency,
-            ),
-          );
-          changed = true;
-        }
-      }
-      if (!changed) break;
-    }
-    return List.unmodifiable(segments);
+    final constraints = entries
+        .map(
+          (e) => TimelineHeightConstraint(
+            id: e.id,
+            startMinute: e.startMinute,
+            endMinute: e.endMinute,
+            minHeight: e.minHeight,
+          ),
+        )
+        .toList();
+    return solveTimelineStretchConstraints(
+      constraints,
+      pixelsPerMinute: pixelsPerMinute,
+      epsilon: epsilon,
+    );
   }
 }

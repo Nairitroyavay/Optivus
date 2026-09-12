@@ -15,6 +15,9 @@ import 'package:optivus/features/routine/widgets/routine_timeline_adapter.dart';
 import 'package:optivus/features/routine/widgets/routine_timeline_viewport.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/timeline_layout.dart';
+import 'package:optivus/core/timeline/widgets/timeline_back_tab_strip.dart';
+import 'package:optivus/features/routine/widgets/cards/routine_rich_timeline_card.dart';
+import 'package:optivus/repositories/routine_firestore_codec.dart';
 import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/repositories/routine_history_repository.dart';
 import 'package:optivus/repositories/routine_transaction_repository.dart';
@@ -1720,4 +1723,363 @@ void main() {
       expect(capturedNotifier!.discardedCreates, contains('failed_item'));
     });
   });
+
+  group(
+    'Routine Step 14 Final Redesign Verification: Strict Visual Language & Invariants',
+    () {
+      testWidgets(
+        'Routine cards strictly use 18px accent icon, 14px w900 title, and 11px w800 accent time row (zero 42px emoji box)',
+        (tester) async {
+          final item = RoutineItem(
+            id: 'class_exact',
+            title: 'Algorithms Lecture',
+            startMinute: 10 * 60,
+            endMinute: 11 * 60 + 30,
+            blockType: RoutineBlockType.hardBlock,
+            category: RoutineCategory.classBlock,
+          );
+
+          await tester.pumpWidget(
+            buildTestableViewport(
+              items: [item],
+              layout: const TimelineLayout(
+                visibleStartMinute: 9 * 60,
+                visibleEndMinute: 13 * 60,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          // Verify title styling: 14px, w900, textPrimary
+          final titleWidget = tester.widget<Text>(
+            find.text('Algorithms Lecture'),
+          );
+          expect(titleWidget.style?.fontSize, 14.0);
+          expect(titleWidget.style?.fontWeight, FontWeight.w900);
+          expect(titleWidget.style?.color, OptivusColors.textPrimary);
+
+          // Verify time range styling: 11px, w800, accent color
+          final timeWidget = tester.widget<Text>(
+            find.text('10:00 AM – 11:30 AM'),
+          );
+          expect(timeWidget.style?.fontSize, 11.0);
+          expect(timeWidget.style?.fontWeight, FontWeight.w800);
+          expect(timeWidget.style?.color, OptivusColors.blockHard);
+
+          // Verify icon: school icon with 18px size and accent color
+          final iconWidget = tester.widget<Icon>(
+            find.byIcon(Icons.school_rounded),
+          );
+          expect(iconWidget.size, 18.0);
+          expect(iconWidget.color, OptivusColors.blockHard);
+
+          // Verify NO 42px emoji box exists
+          expect(
+            find.byWidgetPredicate(
+              (w) => w is Container && w.constraints?.maxWidth == 42.0,
+            ),
+            findsNothing,
+          );
+
+          // Verify RoutineRichTimelineCard is rendered
+          expect(find.byType(RoutineRichTimelineCard), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'Meal nutrition pill and dishes chips use Step 14 white frosted glass styling',
+        (tester) async {
+          final mealItem = RoutineItem(
+            id: 'meal_glass',
+            title: 'Lunch',
+            startMinute: 12 * 60,
+            endMinute: 12 * 60 + 45,
+            blockType: RoutineBlockType.softBlock,
+            category: RoutineCategory.eating,
+            caloriesEstimate: 500,
+            proteinEstimate: 35,
+            dishes: const ['Chicken Rice', 'Salad Bowl'],
+          );
+
+          await tester.pumpWidget(
+            buildTestableViewport(
+              items: [mealItem],
+              layout: const TimelineLayout(
+                visibleStartMinute: 11 * 60,
+                visibleEndMinute: 14 * 60,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          // Find nutrition container
+          final nutritionText = find.text('500 kcal • 35g protein');
+          expect(nutritionText, findsOneWidget);
+          final nutritionContainer = tester.widget<Container>(
+            find
+                .ancestor(of: nutritionText, matching: find.byType(Container))
+                .first,
+          );
+          final nutritionBox = nutritionContainer.decoration as BoxDecoration;
+          expect(nutritionBox.color, Colors.white.withValues(alpha: 0.85));
+          expect(nutritionBox.borderRadius, BorderRadius.circular(8));
+          expect(
+            (nutritionBox.border as Border).top.color,
+            OptivusColors.blockSoft.withValues(alpha: 0.35),
+          );
+
+          // Find dish chip container
+          final dishText = find.text('Chicken Rice');
+          expect(dishText, findsOneWidget);
+          final dishContainer = tester.widget<Container>(
+            find.ancestor(of: dishText, matching: find.byType(Container)).first,
+          );
+          final dishBox = dishContainer.decoration as BoxDecoration;
+          expect(dishBox.color, Colors.white.withValues(alpha: 0.9));
+          expect(dishBox.borderRadius, BorderRadius.circular(6));
+          expect((dishBox.border as Border).top.color, const Color(0xFFD4D7E2));
+        },
+      );
+
+      test(
+        'Skincare slot label round-trips via Firestore codec and RoutineItem.fromMap',
+        () {
+          final original = RoutineItem(
+            id: 'skin_slot_item',
+            title: 'Night Glow Care',
+            startMinute: 21 * 60,
+            endMinute: 21 * 60 + 20,
+            blockType: RoutineBlockType.softBlock,
+            category: RoutineCategory.skinCare,
+            skincareSlotLabel: 'Evening Wind-down',
+          );
+
+          const codec = RoutineTemplateFirestoreCodec();
+          final firestoreMap = codec.toFirestore(
+            ownerUid: 'test_uid',
+            item: original,
+          );
+          expect(firestoreMap['skincareSlotLabel'], 'Evening Wind-down');
+
+          final reconstructed = codec.fromFirestore(
+            documentId: 'skin_slot_item',
+            data: firestoreMap,
+          );
+          expect(reconstructed.skincareSlotLabel, 'Evening Wind-down');
+
+          final copied = original.copyWith(
+            skincareSlotLabel: 'Morning Awakening',
+          );
+          expect(copied.skincareSlotLabel, 'Morning Awakening');
+
+          final itemMap = original.toMap();
+          expect(itemMap['skincareSlotLabel'], 'Evening Wind-down');
+          final fromMapItem = RoutineItem.fromMap(itemMap);
+          expect(fromMapItem.skincareSlotLabel, 'Evening Wind-down');
+        },
+      );
+
+      testWidgets(
+        'Skincare slot label renders when distinct from title and is omitted when identical',
+        (tester) async {
+          final distinctSlotItem = RoutineItem(
+            id: 'skin_distinct',
+            title: 'Glow Care',
+            startMinute: 8 * 60,
+            endMinute: 8 * 60 + 20,
+            blockType: RoutineBlockType.softBlock,
+            category: RoutineCategory.skinCare,
+            skincareSlotLabel: 'Morning Ritual',
+          );
+
+          final identicalSlotItem = RoutineItem(
+            id: 'skin_identical',
+            title: 'Night Care',
+            startMinute: 22 * 60,
+            endMinute: 22 * 60 + 20,
+            blockType: RoutineBlockType.softBlock,
+            category: RoutineCategory.skinCare,
+            skincareSlotLabel: 'Night Care',
+          );
+
+          await tester.pumpWidget(
+            buildTestableViewport(
+              items: [distinctSlotItem, identicalSlotItem],
+              layout: const TimelineLayout(
+                visibleStartMinute: 7 * 60,
+                visibleEndMinute: 23 * 60,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          expect(find.text('Morning Ritual'), findsOneWidget);
+          // 'Night Care' only appears once as the title, not duplicated as a slot label
+          expect(find.text('Night Care'), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'Overnight items render exact Step 14 canonical phrasing ("Continues tomorrow" and "Continued from yesterday")',
+        (tester) async {
+          final day1Sleep = RoutineItem(
+            id: 'sleep_day1',
+            title: 'Sleep',
+            startMinute: 23 * 60,
+            endMinute: 7 * 60,
+            crossesMidnight: true,
+            endsNextDay: true,
+            isContinuation: false,
+            blockType: RoutineBlockType.hardBlock,
+            category: RoutineCategory.sleep,
+          );
+
+          final day2Sleep = RoutineItem(
+            id: 'sleep_day2',
+            title: 'Sleep',
+            startMinute: 0,
+            endMinute: 7 * 60,
+            crossesMidnight: true,
+            endsNextDay: false,
+            isContinuation: true,
+            blockType: RoutineBlockType.hardBlock,
+            category: RoutineCategory.sleep,
+          );
+
+          await tester.pumpWidget(
+            buildTestableViewport(
+              items: [day1Sleep],
+              layout: const TimelineLayout(
+                visibleStartMinute: 22 * 60,
+                visibleEndMinute: 1440,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('Continues tomorrow'), findsOneWidget);
+
+          await tester.pumpWidget(
+            buildTestableViewport(
+              items: [day2Sleep],
+              layout: const TimelineLayout(
+                visibleStartMinute: 0,
+                visibleEndMinute: 8 * 60,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('Continued from yesterday'), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'Extra long dish name wraps gracefully without horizontal overflow',
+        (tester) async {
+          final mealItem = RoutineItem(
+            id: 'meal_long_dish',
+            title: 'Post-Workout Meal',
+            startMinute: 13 * 60,
+            endMinute: 14 * 60,
+            blockType: RoutineBlockType.softBlock,
+            category: RoutineCategory.eating,
+            dishes: const [
+              'Ultra Long Free-Range Herb Roasted Organic Rosemary Chicken Breast with Lemon Infused Glaze and Garlic Mashed Potatoes',
+            ],
+          );
+
+          await tester.pumpWidget(
+            buildTestableViewport(
+              items: [mealItem],
+              layout: const TimelineLayout(
+                visibleStartMinute: 12 * 60,
+                visibleEndMinute: 15 * 60,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          expect(tester.takeException(), isNull);
+          expect(
+            find.textContaining('Ultra Long Free-Range Herb Roasted'),
+            findsOneWidget,
+          );
+        },
+      );
+
+      testWidgets(
+        'Action button hides icon and preserves label at 2.5x accessibility scale',
+        (tester) async {
+          final item = RoutineItem(
+            id: 'scale_task',
+            title: 'Deep Work Session',
+            startMinute: 9 * 60,
+            endMinute: 10 * 60,
+            blockType: RoutineBlockType.flexibleTask,
+          );
+
+          await tester.pumpWidget(
+            MediaQuery(
+              data: const MediaQueryData(
+                size: Size(320, 800),
+                textScaler: TextScaler.linear(2.5),
+              ),
+              child: buildTestableViewport(
+                items: [item],
+                layout: const TimelineLayout(
+                  visibleStartMinute: 8 * 60,
+                  visibleEndMinute: 11 * 60,
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          expect(tester.takeException(), isNull);
+          expect(find.text('Start'), findsOneWidget);
+          expect(find.text('Done'), findsOneWidget);
+          expect(find.text('Move'), findsOneWidget);
+
+          // Verify that the small action icon in RoutineCardActions is omitted to prevent truncation
+          final playIconInAction = find.descendant(
+            of: find.byKey(const ValueKey('routine-action-start-scale_task')),
+            matching: find.byIcon(Icons.play_arrow_rounded),
+          );
+          expect(playIconInAction, findsNothing);
+        },
+      );
+
+      testWidgets(
+        'Routine timeline uses shared TimelineBackTabStrip for gutter tabs',
+        (tester) async {
+          final itemA = RoutineItem(
+            id: 'overlap_a',
+            title: 'Task Alpha',
+            startMinute: 10 * 60,
+            endMinute: 11 * 60,
+            blockType: RoutineBlockType.flexibleTask,
+          );
+          final itemB = RoutineItem(
+            id: 'overlap_b',
+            title: 'Task Beta',
+            startMinute: 10 * 60 + 15,
+            endMinute: 11 * 60,
+            blockType: RoutineBlockType.hardBlock,
+          );
+
+          await tester.pumpWidget(
+            buildTestableViewport(
+              items: [itemA, itemB],
+              layout: const TimelineLayout(
+                visibleStartMinute: 9 * 60,
+                visibleEndMinute: 12 * 60,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          expect(find.byType(TimelineBackTabStrip), findsOneWidget);
+        },
+      );
+    },
+  );
 }

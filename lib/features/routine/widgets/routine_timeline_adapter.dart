@@ -1,11 +1,10 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:optivus/core/timeline/timeline_stretch_solver.dart';
 import 'package:optivus/core/timeline/timeline_visual_layout.dart';
 import 'package:optivus/core/timeline/timeline_visual_models.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/timeline_layout.dart';
-import 'package:optivus/features/onboarding/timeline/layout/timeline_overlap_engine.dart';
-import 'package:optivus/features/onboarding/timeline/models/timeline_entry.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 import 'package:optivus/features/routine/widgets/routine_time_ruler.dart';
@@ -161,7 +160,7 @@ class RoutinePreparedTimelineLayout {
     );
 
     final desiredGutter = maxOverlap > 1
-        ? math.min(96.0, math.max(64.0, fullWidth * 0.24))
+        ? math.min(104.0, math.max(58.0, availableWidth * 0.24))
         : 0.0;
     final gutterWidth = maxOverlap > 1
         ? math.min(desiredGutter, math.max(44.0, fullWidth - minimumFrontWidth))
@@ -201,15 +200,17 @@ class RoutinePreparedTimelineLayout {
     }
 
     // 4. Build navigation constraints for back-card tabs
-    final constraints = <RoutineConstraintEntry>[
+    final constraints = <TimelineHeightConstraint>[
       for (final it in measuredItems)
-        RoutineConstraintEntry(
+        TimelineHeightConstraint(
+          id: it.id,
           startMinute: it.startMinute,
           endMinute: it.endMinute,
           minHeight: it.minHeight,
         ),
       for (final region in regions.where((r) => r.itemIds.length > 1))
-        RoutineConstraintEntry(
+        TimelineHeightConstraint(
+          id: '__nav_${region.startMinute}_${region.endMinute}',
           startMinute: region.startMinute,
           endMinute: region.endMinute,
           minHeight:
@@ -219,7 +220,7 @@ class RoutinePreparedTimelineLayout {
     ];
 
     // 5. Solve constraints and construct stretched visual scale
-    final stretchedSegments = solveRoutineStretchConstraints(
+    final stretchedSegments = solveTimelineStretchConstraints(
       constraints,
       pixelsPerMinute: timelineLayout.minuteHeight,
     );
@@ -275,38 +276,15 @@ List<RoutineOverlapComponent> buildRoutineOverlapComponents(
   return buildTimelineOverlapComponents(items, day: day);
 }
 
-class RoutineConstraintEntry {
-  final int startMinute;
-  final int endMinute;
-  final double minHeight;
-
-  const RoutineConstraintEntry({
-    required this.startMinute,
-    required this.endMinute,
-    required this.minHeight,
-  });
-}
+typedef RoutineConstraintEntry = TimelineHeightConstraint;
 
 List<TimelineStretchedSegment> solveRoutineStretchConstraints(
   List<RoutineConstraintEntry> entries, {
   required double pixelsPerMinute,
   double epsilon = 0.01,
 }) {
-  final timelineEntries = entries.asMap().entries.map((e) {
-    final entry = e.value;
-    return TimelineEntry(
-      id: 'routine_constraint_${e.key}',
-      sourceId: 'routine_constraint_${e.key}',
-      startMinute: entry.startMinute,
-      endMinute: entry.endMinute,
-      repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-      title: 'Constraint',
-      category: TimelineCategory.other,
-      minHeight: entry.minHeight,
-    );
-  }).toList();
-  return TimelineOverlapEngine.solveStretchConstraints(
-    timelineEntries,
+  return solveTimelineStretchConstraints(
+    entries,
     pixelsPerMinute: pixelsPerMinute,
     epsilon: epsilon,
   );
@@ -406,20 +384,28 @@ String shortBackLabel(RoutineItem item) {
 }
 
 IconData backTabIcon(RoutineItem item) {
+  if (item.category == RoutineCategory.eating) {
+    final title =
+        '${item.mealSlot ?? ''} ${item.mealCategory ?? ''} ${item.title}'
+            .toLowerCase();
+    if (title.contains('breakfast')) return Icons.wb_sunny_rounded;
+    if (title.contains('lunch')) return Icons.lunch_dining_rounded;
+    if (title.contains('dinner')) return Icons.dinner_dining_rounded;
+    if (title.contains('snack')) return Icons.cookie_rounded;
+    return Icons.restaurant_rounded;
+  }
   return switch (item.blockType) {
     RoutineBlockType.hardBlock =>
       item.category == RoutineCategory.sleep ||
               item.title.toLowerCase().contains('sleep')
-          ? Icons.nightlight_round
+          ? Icons.bedtime_rounded
           : (item.category == RoutineCategory.classBlock
                 ? Icons.school_rounded
                 : Icons.business_center_rounded),
     RoutineBlockType.softBlock =>
-      item.category == RoutineCategory.eating
-          ? Icons.restaurant_rounded
-          : (item.category == RoutineCategory.skinCare
-                ? Icons.spa_rounded
-                : Icons.self_improvement_rounded),
+      item.category == RoutineCategory.skinCare
+          ? Icons.spa_rounded
+          : Icons.self_improvement_rounded,
     RoutineBlockType.flexibleTask => Icons.assignment_rounded,
     RoutineBlockType.trackerTask => Icons.track_changes_rounded,
     RoutineBlockType.checkIn => Icons.check_circle_outline_rounded,

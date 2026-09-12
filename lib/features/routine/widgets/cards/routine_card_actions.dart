@@ -60,6 +60,10 @@ class RoutineCardActions extends ConsumerWidget {
                       routineState?.activeTrackerLaunchIntent?.routineTaskId ==
                           item.id)) {
                 ref.read(appNavigationProvider.notifier).goToTracker();
+              } else if (item.blockType == RoutineBlockType.trackerTask) {
+                ref
+                    .read(routineNotifierProvider.notifier)
+                    .startTrackerTask(item);
               } else {
                 ref
                     .read(routineNotifierProvider.notifier)
@@ -79,9 +83,15 @@ class RoutineCardActions extends ConsumerWidget {
             isDisabled: isPending,
             onTap: () {
               if (!hasScope) return;
-              ref
-                  .read(routineNotifierProvider.notifier)
-                  .completeRoutineItem(item.id);
+              if (item.blockType == RoutineBlockType.trackerTask) {
+                ref
+                    .read(routineNotifierProvider.notifier)
+                    .completeTrackerSession(item.id);
+              } else {
+                ref
+                    .read(routineNotifierProvider.notifier)
+                    .completeRoutineItem(item.id);
+              }
             },
           ),
         ),
@@ -255,6 +265,9 @@ class _ActionButton extends StatelessWidget {
         : color.withValues(alpha: 0.20);
     final effectiveTextColor = color;
 
+    final scaler = MediaQuery.textScalerOf(context);
+    final hideIcon = scaler.scale(12) > 15;
+
     return Semantics(
       button: true,
       label: label,
@@ -280,8 +293,10 @@ class _ActionButton extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon, size: 14, color: effectiveTextColor),
-                const SizedBox(width: 4),
+                if (!hideIcon) ...[
+                  Icon(icon, size: 14, color: effectiveTextColor),
+                  const SizedBox(width: 4),
+                ],
                 Flexible(
                   child: Text(
                     label,

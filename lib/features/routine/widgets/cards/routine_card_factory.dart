@@ -156,6 +156,13 @@ class RoutineCardFactory {
     return true;
   }
 
+  /// Whether skincareSlotLabel provides distinct value from title.
+  static bool shouldShowSkincareSlot(RoutineItem item) {
+    final slot = item.skincareSlotLabel?.trim();
+    if (slot == null || slot.isEmpty) return false;
+    return slot.toLowerCase() != item.title.trim().toLowerCase();
+  }
+
   /// Pre-measures exact height required for full-detail rich card content
   /// based on available width, text scaling, and specific item attributes.
   static double measureHeight(
@@ -167,7 +174,8 @@ class RoutineCardFactory {
     final textDirection = Directionality.of(context);
     // Card padding is 12 left + 12 right = 24.
     final contentWidth = math.max(40.0, width - 24.0);
-    final titleWidth = math.max(20.0, contentWidth - 54.0);
+    // In header row: 18px icon + 7px gap = 25px.
+    final titleWidth = math.max(20.0, contentWidth - 25.0);
 
     double measure(
       String text,
@@ -181,7 +189,7 @@ class RoutineCardFactory {
         textScaler: scaler,
         maxLines: maxLines,
       )..layout(maxWidth: customWidth ?? contentWidth);
-      return math.max(16.0, painter.height);
+      return painter.height;
     }
 
     double measureWrap(
@@ -195,17 +203,21 @@ class RoutineCardFactory {
       var currentLineWidth = 0.0;
       var lineCount = 1;
       var maxChipHeight = 0.0;
+      final maxChipWidth = math.max(40.0, contentWidth - 4.0);
       for (final text in items) {
         final painter = TextPainter(
           text: TextSpan(text: text, style: textStyle),
           textDirection: textDirection,
           textScaler: scaler,
-          maxLines: 1,
-        )..layout();
-        final chipWidth = painter.width + chipPadding.horizontal + 4.0;
+          maxLines: 2,
+        )..layout(maxWidth: maxChipWidth - chipPadding.horizontal);
+        final chipWidth = math.min(
+          maxChipWidth,
+          painter.width + chipPadding.horizontal,
+        );
         maxChipHeight = math.max(
           maxChipHeight,
-          painter.height + chipPadding.vertical + 4.0,
+          painter.height + chipPadding.vertical,
         );
         if (currentLineWidth > 0 &&
             currentLineWidth + spacing + chipWidth > contentWidth) {
@@ -219,39 +231,55 @@ class RoutineCardFactory {
     }
 
     const titleStyle = TextStyle(
-      fontSize: 14.5,
+      fontSize: 14,
+      fontWeight: FontWeight.w900,
+      height: 1.2,
+    );
+    const timeStyle = TextStyle(
+      fontSize: 11,
       fontWeight: FontWeight.w800,
-      letterSpacing: -0.2,
-      height: 1.25,
+      height: 1.2,
     );
     const detailStyle = TextStyle(
-      fontSize: 12,
-      fontWeight: FontWeight.w500,
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
       height: 1.25,
     );
     const headingStyle = TextStyle(
-      fontSize: 10,
+      fontSize: 9.5,
       fontWeight: FontWeight.w900,
-      letterSpacing: 0.6,
+      letterSpacing: 0.8,
       height: 1.2,
     );
-    const chipStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.w600);
+    const chipTextStyle = TextStyle(
+      fontSize: 10.5,
+      fontWeight: FontWeight.w700,
+      height: 1.25,
+    );
 
     var height = 0.0;
 
-    // Header row: Emoji container (42px) + Title & exact formatted time
+    // Header row: 18px icon + 7px gap + Title
     final titleH = measure(item.title, titleStyle, customWidth: titleWidth);
-    final timeH = measure(
-      formattedTimeString(item),
-      detailStyle,
-      customWidth: titleWidth,
-    );
-    final headerH = math.max(44.0, titleH + 4.0 + timeH);
-    height += headerH;
+    height += math.max(18.0, titleH);
+
+    // Time row: 5px gap + time
+    final timeText = item.startMinute == item.endMinute
+        ? TimelineUtils.formatMinute(item.startMinute)
+        : '${TimelineUtils.formatMinute(item.startMinute)} – ${TimelineUtils.formatMinute(item.endMinute)}';
+    final timeH = measure(timeText, timeStyle);
+    height += 5.0 + timeH;
 
     // Continuation
-    if (item.isContinuation) {
-      height += 6.0 + measure('Continues from yesterday', detailStyle);
+    final continuation = item.isContinuation
+        ? 'Continued from yesterday'
+        : ((item.crossesMidnight ||
+                  item.endsNextDay ||
+                  item.endMinute <= item.startMinute)
+              ? 'Continues tomorrow'
+              : null);
+    if (continuation != null) {
+      height += 6.0 + measure(continuation, detailStyle);
     }
 
     // Location
@@ -270,18 +298,27 @@ class RoutineCardFactory {
       height += 6.0 + measure('In progress in Tracker', detailStyle);
     }
 
+    // Tracker details / type
+    if (item.trackerType != TrackerType.none) {
+      height += 6.0 + measure(item.trackerType.name, detailStyle);
+    }
+
     // Eating
     final isEating = item.category == RoutineCategory.eating;
-    if (isEating || item.dishes != null) {
+    if (isEating || item.dishes != null || item.mealSlot != null) {
       if (shouldShowMealSlot(item)) {
-        height += 5.0 + measure(item.mealSlot!.trim(), detailStyle);
+        height += 6.0 + measure(item.mealSlot!.trim(), detailStyle);
       }
       if (shouldShowMealCategory(item)) {
-        height += 4.0 + measure(item.mealCategory!.trim(), detailStyle);
+        height += 6.0 + measure(item.mealCategory!.trim(), detailStyle);
       }
       final nutrition = nutritionString(item);
       if (nutrition != null) {
-        height += 6.0 + measure(nutrition, detailStyle) + 6.0;
+        final pillTextH = measure(
+          nutrition,
+          const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+        );
+        height += 8.0 + (pillTextH + 10.0);
       }
       if (item.dishes != null && item.dishes!.isNotEmpty) {
         final cleanDishes = item.dishes!
@@ -290,13 +327,13 @@ class RoutineCardFactory {
             .toList();
         if (cleanDishes.isNotEmpty) {
           height +=
-              8.0 +
+              6.0 +
               measureWrap(
                 cleanDishes,
-                chipStyle,
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                chipTextStyle,
+                const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
                 6.0,
-                4.0,
+                6.0,
               );
         }
       }
@@ -304,31 +341,56 @@ class RoutineCardFactory {
 
     // Skincare
     final isSkinCare = item.category == RoutineCategory.skinCare;
-    if (isSkinCare || item.steps != null) {
+    if (isSkinCare ||
+        item.steps != null ||
+        item.skincareProducts != null ||
+        item.skincareSlotLabel != null) {
+      if (shouldShowSkincareSlot(item)) {
+        height += 6.0 + measure(item.skincareSlotLabel!.trim(), detailStyle);
+      }
       final steps = item.displaySteps;
       if (steps != null && steps.isNotEmpty) {
-        height += 8.0 + measure('STEPS', headingStyle) + 4.0;
-        for (final s in steps) {
-          if (s.trim().isNotEmpty) {
-            height += 3.0 + math.max(18.0, measure(s.trim(), detailStyle));
+        height += 8.0 + measure('STEPS', headingStyle);
+        for (var i = 0; i < steps.length; i++) {
+          if (steps[i].trim().isNotEmpty) {
+            height +=
+                3.0 + measure('${i + 1}. ${steps[i].trim()}', detailStyle);
           }
         }
       }
       if (item.skincareProducts != null && item.skincareProducts!.isNotEmpty) {
-        height += 8.0 + measure('PRODUCTS', headingStyle) + 4.0;
+        height += 8.0 + measure('PRODUCTS', headingStyle);
         for (final p in item.skincareProducts!) {
           if (p.trim().isNotEmpty) {
-            height += 2.0 + math.max(18.0, measure(p.trim(), detailStyle));
+            height += 3.0 + measure('• ${p.trim()}', detailStyle);
           }
         }
       }
       if (item.skincareMissingItems != null &&
           item.skincareMissingItems!.isNotEmpty) {
-        height += 8.0 + measure('MISSING', headingStyle) + 4.0;
+        height +=
+            8.0 +
+            measure(
+              'MISSING',
+              const TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.7,
+                height: 1.2,
+              ),
+            );
         for (final m in item.skincareMissingItems!) {
           if (m.trim().isNotEmpty) {
             height +=
-                2.0 + math.max(18.0, measure('⚠ ${m.trim()}', detailStyle));
+                3.0 +
+                measure(
+                  '⚠ ${m.trim()}',
+                  const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    height: 1.25,
+                  ),
+                );
           }
         }
       }
@@ -337,16 +399,10 @@ class RoutineCardFactory {
     // Subtasks
     if (item.subtasks != null && item.subtasks!.isNotEmpty) {
       height +=
-          8.0 +
-          measure('SUBTASKS (${item.subtasks!.length})', headingStyle) +
-          4.0;
+          8.0 + measure('SUBTASKS (${item.subtasks!.length})', headingStyle);
       for (final s in item.subtasks!) {
-        height +=
-            3.0 +
-            math.max(
-              22.0,
-              measure(s, detailStyle, customWidth: contentWidth - 24.0),
-            );
+        final textH = measure(s, detailStyle, customWidth: contentWidth - 21.0);
+        height += 4.0 + math.max(16.0, textH);
       }
     }
 
@@ -367,9 +423,7 @@ class RoutineCardFactory {
     final actionButtonHeight = math.max(44.0, actionTextPainter.height + 16.0);
     height += 8.0 + actionButtonHeight;
 
-    // Card padding (12 top + 12 bottom = 24) + extra safety cushion (20)
-    const verticalPadding = 24.0 + 20.0;
-
-    return math.max(88.0, height + verticalPadding);
+    // Card padding (12 top + 12 bottom = 24) + subpixel rounding tolerance (2.0)
+    return math.max(88.0, height + 24.0 + 2.0);
   }
 }

@@ -139,6 +139,7 @@ class RoutineItem {
   // Skincare specific details (kept for backward compat, prefer `steps`)
   final List<String>? skincareProducts;
   final List<String>? skincareMissingItems;
+  final String? skincareSlotLabel;
 
   // Structured Class details
   final String? professor;
@@ -201,6 +202,7 @@ class RoutineItem {
     this.proteinEstimate,
     this.skincareProducts,
     this.skincareMissingItems,
+    this.skincareSlotLabel,
     this.professor,
     this.courseCode,
     this.classType,
@@ -341,6 +343,7 @@ class RoutineItem {
     double? proteinEstimate,
     List<String>? skincareProducts,
     List<String>? skincareMissingItems,
+    String? skincareSlotLabel,
     String? professor,
     String? courseCode,
     String? classType,
@@ -401,6 +404,7 @@ class RoutineItem {
       proteinEstimate: proteinEstimate ?? this.proteinEstimate,
       skincareProducts: skincareProducts ?? this.skincareProducts,
       skincareMissingItems: skincareMissingItems ?? this.skincareMissingItems,
+      skincareSlotLabel: skincareSlotLabel ?? this.skincareSlotLabel,
       professor: professor ?? this.professor,
       courseCode: courseCode ?? this.courseCode,
       classType: classType ?? this.classType,
@@ -462,6 +466,7 @@ class RoutineItem {
       'proteinEstimate': proteinEstimate,
       'skincareProducts': skincareProducts,
       'skincareMissingItems': skincareMissingItems,
+      'skincareSlotLabel': skincareSlotLabel,
       'professor': professor,
       'courseCode': courseCode,
       'classType': classType,
@@ -525,6 +530,8 @@ class RoutineItem {
         'skincareProducts': List<String>.from(skincareProducts!),
       if (skincareMissingItems != null)
         'skincareMissingItems': List<String>.from(skincareMissingItems!),
+      if (skincareSlotLabel != null && skincareSlotLabel!.trim().isNotEmpty)
+        'skincareSlotLabel': skincareSlotLabel!.trim(),
       if (professor != null && professor!.trim().isNotEmpty)
         'professor': professor!.trim(),
       if (courseCode != null && courseCode!.trim().isNotEmpty)
@@ -626,6 +633,7 @@ class RoutineItem {
       skincareProducts: (map['skincareProducts'] as List?)?.cast<String>(),
       skincareMissingItems: (map['skincareMissingItems'] as List?)
           ?.cast<String>(),
+      skincareSlotLabel: map['skincareSlotLabel'] as String?,
       professor: (map['professor'] ?? map['instructor']) as String?,
       courseCode: map['courseCode'] as String?,
       classType: map['classType'] as String?,

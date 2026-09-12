@@ -505,6 +505,7 @@ class OnboardingCompletionService {
             : b.skincareProducts,
         skincareProducts: b.skincareProducts,
         skincareMissingItems: b.skincareMissingItems,
+        skincareSlotLabel: b.skincareSlotLabel,
       );
     }).toList();
 

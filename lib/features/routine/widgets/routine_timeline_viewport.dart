@@ -13,6 +13,7 @@ import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 import 'package:optivus/features/routine/widgets/routine_time_ruler.dart';
 import 'package:optivus/features/routine/widgets/routine_current_time_line.dart';
+import 'package:optivus/core/timeline/widgets/timeline_back_tab_strip.dart';
 import 'package:optivus/features/routine/widgets/routine_timeline_adapter.dart';
 
 /// Routine timeline viewport redesign based on Onboarding Step 14 layout.
@@ -104,18 +105,25 @@ class RoutineTimelineViewportState
   void _scrollToCurrentTime() {
     if (!widget.isToday ||
         !_scrollController.hasClients ||
-        _hasAutoScrolledForToday)
+        _hasAutoScrolledForToday) {
       return;
-    _hasAutoScrolledForToday = true;
+    }
 
     final now = DateTime.now();
     final currentMinute = now.hour * 60 + now.minute;
 
     if (!widget.layout.isMinuteVisible(currentMinute)) return;
 
-    final targetY = _lastScale != null
-        ? _lastScale!.yForMinute(currentMinute)
-        : widget.layout.topForMinute(currentMinute);
+    if (_lastScale == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToCurrentTime();
+      });
+      return;
+    }
+
+    _hasAutoScrolledForToday = true;
+
+    final targetY = _lastScale!.yForMinute(currentMinute);
     final targetScroll = targetY - 100;
     final maxScroll = _scrollController.position.maxScrollExtent;
 
@@ -625,53 +633,16 @@ class RoutineTimelineViewportState
     required double height,
   }) {
     final color = RoutineCardFactory.colorForType(item.blockType);
-    final stripWidth = width.clamp(44.0, 96.0);
     final label = shortBackLabel(item);
     final icon = backTabIcon(item);
 
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: ClipRect(
-        child: SizedBox(
-          width: stripWidth,
-          height: height,
-          child: Padding(
-            padding: const EdgeInsets.only(left: 6, right: 6),
-            child: Row(
-              children: [
-                Container(
-                  width: 18,
-                  height: 18,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: color.withValues(alpha: 0.16),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.72),
-                      width: 1,
-                    ),
-                  ),
-                  child: Icon(icon, color: color, size: 11),
-                ),
-                const SizedBox(width: 5),
-                Expanded(
-                  child: Text(
-                    label,
-                    key: ValueKey('routine-back-label-${item.id}'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      height: 1.0,
-                      fontWeight: FontWeight.w900,
-                      color: OptivusColors.ink,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return TimelineBackTabStrip(
+      label: label,
+      icon: icon,
+      accent: color,
+      width: width,
+      height: height,
+      labelKey: ValueKey('routine-back-label-${item.id}'),
     );
   }
 }
