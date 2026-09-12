@@ -9,6 +9,7 @@ import 'package:optivus/features/onboarding/timeline/layout/timeline_overlap_eng
 import 'package:optivus/features/onboarding/timeline/models/timeline_entry.dart';
 import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/models/routine_day_entry.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_actions.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_presentation.dart';
@@ -275,7 +276,14 @@ void main() {
             width: testWidth,
             height: testHeight,
             child: RoutineTimelineViewport(
-              items: items,
+              items: legacyRoutineDayEntriesForTesting(
+                items,
+                displayDate: DateTime(
+                  2026,
+                  9,
+                  14,
+                ).add(Duration(days: (selectedDay ?? DateTime.monday) - 1)),
+              ),
               layout:
                   layout ??
                   const TimelineLayout(
@@ -525,46 +533,45 @@ void main() {
       },
     );
 
-    testWidgets(
-      'Back tab strip matches Step 14 ClipRect styling without floating pill container',
-      (tester) async {
-        final item1 = RoutineItem(
-          id: 'bt_1',
-          title: 'First Event',
-          startMinute: 9 * 60,
-          endMinute: 11 * 60,
-          blockType: RoutineBlockType.hardBlock,
-          category: RoutineCategory.classBlock,
-        );
-        final item2 = RoutineItem(
-          id: 'bt_2',
-          title: 'Second Event',
-          startMinute: 9 * 60 + 15,
-          endMinute: 10 * 60,
-          blockType: RoutineBlockType.flexibleTask,
-        );
+    testWidgets('exposed back content is inside real rounded card chrome', (
+      tester,
+    ) async {
+      final item1 = RoutineItem(
+        id: 'bt_1',
+        title: 'First Event',
+        startMinute: 9 * 60,
+        endMinute: 11 * 60,
+        blockType: RoutineBlockType.hardBlock,
+        category: RoutineCategory.classBlock,
+      );
+      final item2 = RoutineItem(
+        id: 'bt_2',
+        title: 'Second Event',
+        startMinute: 9 * 60 + 15,
+        endMinute: 10 * 60,
+        blockType: RoutineBlockType.flexibleTask,
+      );
 
-        await tester.pumpWidget(buildTestableViewport(items: [item1, item2]));
-        await tester.pumpAndSettle();
+      await tester.pumpWidget(buildTestableViewport(items: [item1, item2]));
+      await tester.pumpAndSettle();
 
-        final backTabFinder = find.byKey(
-          const ValueKey('routine-back-label-bt_1'),
-        );
-        expect(backTabFinder, findsOneWidget);
+      final backTabFinder = find.byKey(
+        const ValueKey('routine-back-label-bt_1'),
+      );
+      expect(backTabFinder, findsOneWidget);
 
-        final clipRectAncestor = find.ancestor(
-          of: backTabFinder,
-          matching: find.byType(ClipRect),
-        );
-        expect(clipRectAncestor, findsAtLeastNWidgets(1));
+      final chromeAncestor = find.ancestor(
+        of: backTabFinder,
+        matching: find.byType(TimelineCardChrome),
+      );
+      expect(chromeAncestor, findsOneWidget);
 
-        final clipRRectAncestor = find.ancestor(
-          of: backTabFinder,
-          matching: find.byType(ClipRRect),
-        );
-        expect(clipRRectAncestor, findsNothing);
-      },
-    );
+      final clipRRectAncestor = find.ancestor(
+        of: backTabFinder,
+        matching: find.byType(ClipRRect),
+      );
+      expect(clipRRectAncestor, findsOneWidget);
+    });
 
     testWidgets(
       'Routine timeline viewport reconciles focus when items change',
@@ -2118,7 +2125,7 @@ void main() {
       );
 
       testWidgets(
-        'Routine timeline uses shared TimelineBackTabStrip for gutter tabs',
+        'Routine timeline replaces detached strips with real back-card chrome',
         (tester) async {
           final itemA = RoutineItem(
             id: 'overlap_a',
@@ -2146,7 +2153,14 @@ void main() {
           );
           await tester.pumpAndSettle();
 
-          expect(find.byType(TimelineBackTabStrip), findsOneWidget);
+          expect(find.byType(TimelineBackTabStrip), findsNothing);
+          expect(
+            find.ancestor(
+              of: find.byKey(const ValueKey('routine-back-label-overlap_a')),
+              matching: find.byType(TimelineCardChrome),
+            ),
+            findsOneWidget,
+          );
         },
       );
 
@@ -2781,8 +2795,15 @@ void main() {
         expect(find.text('Done'), findsOneWidget);
         expect(find.text('Move'), findsOneWidget);
 
-        // Back tabs exist in the overlap gutter for the other overlapping items
-        expect(find.byType(TimelineBackTabStrip), findsWidgets);
+        // Real exposed back-card chrome exists for the other overlapping items.
+        expect(find.byType(TimelineBackTabStrip), findsNothing);
+        expect(
+          find.ancestor(
+            of: find.byKey(ValueKey('routine-back-label-${workItem.id}')),
+            matching: find.byType(TimelineCardChrome),
+          ),
+          findsOneWidget,
+        );
 
         // Tapping back tab for Work promotes Work to front
         final workTab = find.byKey(

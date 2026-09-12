@@ -8,6 +8,8 @@ import 'package:optivus/features/routine/sheets/routine_move_sheet.dart';
 import 'package:optivus/features/tracker/money/money_system_mock_flows.dart';
 import 'package:optivus/models/money_models.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/models/routine_occurrence.dart';
+import 'package:optivus/repositories/routine_history_repository.dart';
 
 /// Standard 3 primary footer actions for routine timeline cards:
 /// [ ▶ Start ]   [ ✓ Done ]   [ ↗ Move ]
@@ -36,8 +38,33 @@ class RoutineCardActions extends ConsumerWidget {
               UncontrolledProviderScope
             >() !=
         null;
-    final routineState = hasScope ? ref.watch(routineNotifierProvider) : null;
-    final isPending = routineState?.pendingItemIds.contains(item.id) ?? false;
+    final notifier = hasScope
+        ? ref.read(routineNotifierProvider.notifier)
+        : null;
+    final ownerUid = notifier?.ownerUid;
+    final occurrenceTargetId = ownerUid != null && occurrenceDate != null
+        ? stableRoutineOccurrenceId(
+            ownerUid: ownerUid,
+            routineItemId: item.id,
+            occurrenceDateKey: routineLocalDateKey(occurrenceDate!),
+          )
+        : null;
+    final actionState = hasScope
+        ? ref.watch(
+            routineNotifierProvider.select(
+              (state) => (
+                templatePending: state.pendingItemIds.contains(item.id),
+                occurrencePending:
+                    occurrenceTargetId != null &&
+                    state.pendingOccurrenceIds.contains(occurrenceTargetId),
+                activeTrackerId: state.activeTrackerLaunchIntent?.routineTaskId,
+              ),
+            ),
+          )
+        : null;
+    final isPending =
+        (actionState?.templatePending ?? false) ||
+        (actionState?.occurrencePending ?? false);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -68,15 +95,17 @@ class RoutineCardActions extends ConsumerWidget {
                 routineTaskId: item.id,
                 onSaved: () => ref
                     .read(routineNotifierProvider.notifier)
-                    .completeRoutineItem(item.id, occurrenceDate: occurrenceDate),
+                    .completeRoutineItem(
+                      item.id,
+                      occurrenceDate: occurrenceDate,
+                    ),
               );
             } else if (item.blockType == RoutineBlockType.checkIn &&
                 item.category == RoutineCategory.badHabit) {
               _showBadHabitCheckInSheet(context, ref, item);
             } else if (item.blockType == RoutineBlockType.trackerTask &&
                 (item.status == RoutineStatus.inTracker ||
-                    routineState?.activeTrackerLaunchIntent?.routineTaskId ==
-                        item.id)) {
+                    actionState?.activeTrackerId == item.id)) {
               ref.read(appNavigationProvider.notifier).goToTracker();
             } else if (item.blockType == RoutineBlockType.trackerTask) {
               ref.read(routineNotifierProvider.notifier).startTrackerTask(item);
@@ -117,7 +146,12 @@ class RoutineCardActions extends ConsumerWidget {
           isDisabled: isPending,
           onTap: () {
             if (!hasScope) return;
-            showRoutineMoveSheet(context, ref, item, occurrenceDate: occurrenceDate);
+            showRoutineMoveSheet(
+              context,
+              ref,
+              item,
+              occurrenceDate: occurrenceDate,
+            );
           },
         );
 
@@ -188,7 +222,11 @@ class RoutineCardActions extends ConsumerWidget {
                       Navigator.pop(ctx);
                       ref
                           .read(routineNotifierProvider.notifier)
-                          .checkIn(item.id, 'Avoided', occurrenceDate: occurrenceDate);
+                          .checkIn(
+                            item.id,
+                            'Avoided',
+                            occurrenceDate: occurrenceDate,
+                          );
                     },
                   ),
                   _SheetOptionButton(
@@ -199,7 +237,11 @@ class RoutineCardActions extends ConsumerWidget {
                       Navigator.pop(ctx);
                       ref
                           .read(routineNotifierProvider.notifier)
-                          .checkIn(item.id, 'Craving', occurrenceDate: occurrenceDate);
+                          .checkIn(
+                            item.id,
+                            'Craving',
+                            occurrenceDate: occurrenceDate,
+                          );
                     },
                   ),
                   _SheetOptionButton(
@@ -210,7 +252,11 @@ class RoutineCardActions extends ConsumerWidget {
                       Navigator.pop(ctx);
                       ref
                           .read(routineNotifierProvider.notifier)
-                          .checkIn(item.id, 'Relapsed', occurrenceDate: occurrenceDate);
+                          .checkIn(
+                            item.id,
+                            'Relapsed',
+                            occurrenceDate: occurrenceDate,
+                          );
                     },
                   ),
                 ],

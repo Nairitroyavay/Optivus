@@ -88,7 +88,6 @@ class RoutineCardPresentation {
     fontSize: 10,
     fontWeight: FontWeight.w700,
     color: OptivusColors.textPrimary,
-    height: 1.2,
   );
   static const dishPadding = EdgeInsets.symmetric(horizontal: 8, vertical: 3);
   static final dishBorderRadius = BorderRadius.circular(6);
@@ -110,11 +109,11 @@ class RoutineCardPresentation {
   static const double dishRunSpacing = 6.0;
 
   static const double skinSlotGap = 6.0;
-  static const double skinStepsHeadingGap = 8.0;
+  static const double skinStepsHeadingGap = 9.0;
   static const double skinStepItemGap = 3.0;
-  static const double skinProductsHeadingGap = 8.0;
+  static const double skinProductsHeadingGap = 9.0;
   static const double skinProductItemGap = 3.0;
-  static const double skinMissingHeadingGap = 8.0;
+  static const double skinMissingHeadingGap = 9.0;
   static const double skinMissingItemGap = 3.0;
 
   static const double subtasksHeadingGap = 8.0;

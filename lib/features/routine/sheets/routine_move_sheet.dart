@@ -16,7 +16,8 @@ void showRoutineMoveSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (ctx) => _RoutineMoveSheet(item: item, occurrenceDate: occurrenceDate),
+    builder: (ctx) =>
+        _RoutineMoveSheet(item: item, occurrenceDate: occurrenceDate),
   );
 }
 
@@ -300,6 +301,7 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
           item: widget.item,
           date: _date,
           durationMinutes: _duration,
+          occurrenceDate: widget.occurrenceDate,
         );
     if (start != null) {
       setState(() => _startMinute = start);

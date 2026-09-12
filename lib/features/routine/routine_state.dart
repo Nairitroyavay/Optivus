@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/money_models.dart';
+import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/routine_occurrence.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/tracker_session_link.dart';
@@ -13,6 +15,9 @@ import 'package:optivus/models/routine_event_record.dart';
 import 'package:optivus/repositories/routine_history_repository.dart';
 import 'package:optivus/repositories/routine_transaction_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
+import 'package:optivus/repositories/onboarding_repository.dart';
+import 'package:optivus/services/routine_onboarding_projection.dart';
+import 'package:optivus/services/routine_projection_receipt_validator.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/features/routine/services/routine_validation_service.dart';
 import 'package:optivus/features/routine/services/routine_materializer.dart';
@@ -319,12 +324,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   final RoutineHistoryRepository _historyRepository;
   final RoutineTransactionRepository _transactionRepository;
   final Ref _ref;
+  final OnboardingRepository? _onboardingRepository;
   Future<void> _initialLoad = Future<void>.value();
   String? _ownerUid;
   String? get ownerUid => _ownerUid;
   int _loadGeneration = 0;
   int _eventsGeneration = 0;
   StreamSubscription<RoutineEventFeed>? _eventsSubscription;
+  String? _lastProjectionIntegritySignature;
 
   Map<String, dynamic> _boundedHistorySnapshot(RoutineItem item, String uid) {
     // Only capture the fields required to render history reliably
@@ -416,13 +423,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     this._repository,
     this._historyRepository,
     this._transactionRepository,
-    this._ref,
-  ) : super(
-        RoutineState(
-          items: [],
-          selectedDay: TimelineUtils.dateOnly(DateTime.now()),
-        ),
-      ) {
+    this._ref, [
+    this._onboardingRepository,
+  ]) : super(
+         RoutineState(
+           items: [],
+           selectedDay: TimelineUtils.dateOnly(DateTime.now()),
+         ),
+       ) {
     if (_ref.read(fakeDataAllowedProvider)) {
       final initialUid = _ref.read(userProfileProvider).uid.trim();
       if (initialUid.isNotEmpty) {
@@ -477,18 +485,80 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         state = state.copyWith(loading: true, clearError: true);
       }
       try {
-        final results = await Future.wait<Object>([
+        final results = await Future.wait<Object?>([
           _repository.fetchRoutineItems(uid),
           _historyRepository.fetchHistory(uid),
+          _onboardingRepository == null
+              ? Future<OnboardingCompletionBundle?>.value(null)
+              : _onboardingRepository.fetchCompletionBundle(uid),
         ]);
         if (generation != _loadGeneration || _ownerUid != uid) return;
-        final remoteItems = (results[0] as List<RoutineItem>)
+        var remoteItems = (results[0] as List<RoutineItem>)
             .map(
               (remote) => remote.hasConflict || remote.conflictMessage != null
                   ? remote.copyWith(hasConflict: false, clearConflict: true)
                   : remote,
             )
             .toList();
+        final bundle = results[2];
+        if (bundle is OnboardingCompletionBundle) {
+          final plan = RoutineOnboardingProjection.build(bundle);
+          final receipt = await _repository.fetchProjectionReceipt(
+            uid,
+            plan.projectionId,
+          );
+          if (generation != _loadGeneration || _ownerUid != uid) return;
+          final validation = const RoutineProjectionReceiptValidator().validate(
+            receipt: receipt,
+            actualItems: remoteItems,
+            ownerUid: uid,
+            plan: plan,
+          );
+          final signature = Object.hash(
+            uid,
+            plan.fingerprint,
+            receipt?.sourceBundleFingerprint,
+            Object.hashAll(
+              remoteItems.map(
+                (item) => Object.hash(
+                  item.id,
+                  item.onboardingVisualStyleKey,
+                  item.notes,
+                ),
+              ),
+            ),
+          ).toString();
+          if (kDebugMode) {
+            debugPrint(
+              'RoutineProjectionIntegrity: expected=${plan.items.length} '
+              'persisted=${remoteItems.where((item) => item.source == RoutineSource.onboarding).length} '
+              'expectedIds=${plan.items.map((item) => item.id).join(',')} '
+              'valid=${validation.isValid}',
+            );
+          }
+          if (!validation.isValid &&
+              _lastProjectionIntegritySignature != signature) {
+            _lastProjectionIntegritySignature = signature;
+            final repaired = await _repository.reconcileOnboardingProjection(
+              uid,
+              plan,
+            );
+            if (repaired) {
+              remoteItems = (await _repository.fetchRoutineItems(uid))
+                  .map(
+                    (remote) =>
+                        remote.hasConflict || remote.conflictMessage != null
+                        ? remote.copyWith(
+                            hasConflict: false,
+                            clearConflict: true,
+                          )
+                        : remote,
+                  )
+                  .toList();
+            }
+            if (generation != _loadGeneration || _ownerUid != uid) return;
+          }
+        }
         final localActiveIds = state.pendingItemIds.union(
           state.failedIntentsByItemId.keys.toSet(),
         );
@@ -2071,16 +2141,15 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         ),
       );
     }
-    final anchor = occurrenceDate ?? _occurrenceAnchorDate(itemId, state.selectedDay);
+    final anchor =
+        occurrenceDate ?? _occurrenceAnchorDate(itemId, state.selectedDay);
     final completed = {
       ...?_occurrenceFor(itemId, anchor)?.completedSubtaskIndexes,
     };
     if (!completed.add(subtaskIndex)) completed.remove(subtaskIndex);
     return await _writeOccurrence(
       itemId,
-      status:
-          _occurrenceFor(itemId, anchor)?.status ??
-          RoutineStatus.active,
+      status: _occurrenceFor(itemId, anchor)?.status ?? RoutineStatus.active,
       source: 'routine',
       action: 'toggleSubtask',
       completedSubtaskIndexes: completed.toList()..sort(),
@@ -2297,7 +2366,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       return RoutineWriteResult.validationFailed(validation);
     }
 
-    final anchor = occurrenceDate ?? _occurrenceAnchorDate(itemId, state.selectedDay);
+    final anchor =
+        occurrenceDate ?? _occurrenceAnchorDate(itemId, state.selectedDay);
     if (routineLocalDateKey(date) == routineLocalDateKey(anchor)) {
       return await _writeOccurrence(
         itemId,
@@ -2360,13 +2430,23 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     required RoutineItem item,
     required DateTime date,
     int? durationMinutes,
+    DateTime? occurrenceDate,
   }) {
     final duration = durationMinutes ?? item.durationMinutes;
-    final dayItems = RoutineOccurrenceProjector.itemsForDay(
-      state.items,
-      state.occurrences,
-      date,
-    ).where((candidate) => candidate.id != item.id).toList(growable: false);
+    final targetOccurrenceDateKey = routineLocalDateKey(occurrenceDate ?? date);
+    final dayItems =
+        RoutineOccurrenceProjector.entriesForDay(
+              state.items,
+              state.occurrences,
+              date,
+            )
+            .where(
+              (candidate) =>
+                  candidate.templateId != item.id ||
+                  candidate.occurrenceDateKey != targetOccurrenceDateKey,
+            )
+            .map((candidate) => candidate.item)
+            .toList(growable: false);
     final snap = state.precisionMode ? 1 : 5;
     for (int start = 6 * 60; start + duration <= 23 * 60; start += snap) {
       final end = start + duration;
@@ -2400,20 +2480,40 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
 
 final routineNotifierProvider =
     StateNotifierProvider<RoutineNotifier, RoutineState>((ref) {
+      final routineRepository = ref.watch(routineRepositoryProvider);
+      final onboardingRepository = ref.watch(onboardingRepositoryProvider);
+      final repositoriesShareBackend =
+          routineRepository is FirestoreRoutineRepository &&
+              onboardingRepository is FirestoreOnboardingRepository ||
+          routineRepository is FakeRoutineRepository &&
+              onboardingRepository is FakeOnboardingRepository &&
+              identical(
+                routineRepository.database,
+                onboardingRepository.routineDatabase,
+              );
       return RoutineNotifier(
-        ref.watch(routineRepositoryProvider),
+        routineRepository,
         ref.watch(routineHistoryRepositoryProvider),
         ref.watch(routineTransactionRepositoryProvider),
         ref,
+        repositoriesShareBackend ? onboardingRepository : null,
       );
     });
 
 final selectedDayRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
-  final state = ref.watch(routineNotifierProvider);
-  final day = state.selectedDay;
+  final projection = ref.watch(
+    routineNotifierProvider.select(
+      (state) => (
+        items: state.items,
+        occurrences: state.occurrences,
+        selectedDay: state.selectedDay,
+      ),
+    ),
+  );
+  final day = projection.selectedDay;
   final materialized = RoutineOccurrenceProjector.itemsForDay(
-    state.items,
-    state.occurrences,
+    projection.items,
+    projection.occurrences,
     day,
   );
 
@@ -2429,9 +2529,16 @@ final selectedDayRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
 
 final filteredRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
   final items = ref.watch(selectedDayRoutineItemsProvider);
-  final state = ref.watch(routineNotifierProvider);
-  final primary = TimelineUtils.filterItems(items, state.selectedPrimaryFilter);
-  return RoutineFilters.applyCategory(primary, state.selectedCategoryFilter);
+  final filters = ref.watch(
+    routineNotifierProvider.select(
+      (state) => (
+        primary: state.selectedPrimaryFilter,
+        category: state.selectedCategoryFilter,
+      ),
+    ),
+  );
+  final primary = TimelineUtils.filterItems(items, filters.primary);
+  return RoutineFilters.applyCategory(primary, filters.category);
 });
 
 /// Occurrence-aware entries for the selected day, including stable instanceIds.
@@ -2439,17 +2546,26 @@ final filteredRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
 final selectedDayRoutineEntriesProvider = Provider<List<RoutineDayEntry>>((
   ref,
 ) {
-  final state = ref.watch(routineNotifierProvider);
-  final day = state.selectedDay;
+  final projection = ref.watch(
+    routineNotifierProvider.select(
+      (state) => (
+        items: state.items,
+        occurrences: state.occurrences,
+        selectedDay: state.selectedDay,
+      ),
+    ),
+  );
+  final day = projection.selectedDay;
   final entries = RoutineOccurrenceProjector.entriesForDay(
-    state.items,
-    state.occurrences,
+    projection.items,
+    projection.occurrences,
     day,
   );
-  return entries
-      .map(
-        (entry) =>
-            entry.item.hasConflict || entry.item.conflictMessage != null
+  final result =
+      entries
+          .map(
+            (entry) =>
+                entry.item.hasConflict || entry.item.conflictMessage != null
                 ? RoutineDayEntry(
                     item: entry.item.copyWith(
                       hasConflict: false,
@@ -2463,39 +2579,75 @@ final selectedDayRoutineEntriesProvider = Provider<List<RoutineDayEntry>>((
                     kind: entry.kind,
                   )
                 : entry,
-      )
-      .toList(growable: false)
-    ..sort((a, b) => a.item.startMinute.compareTo(b.item.startMinute));
+          )
+          .toList(growable: false)
+        ..sort((a, b) => a.item.startMinute.compareTo(b.item.startMinute));
+  if (kDebugMode) {
+    debugPrint(
+      'RoutineTimelineEntries: ${_routineCategoryCounts(result.map((e) => e.item))} '
+      'instanceIds=${result.map((e) => e.instanceId).join(',')}',
+    );
+  }
+  return result;
 });
 
 /// Filtered occurrence-aware entries for the selected day.
 /// Apply primary and category filters, preserving stable instanceIds.
 final filteredRoutineEntriesProvider = Provider<List<RoutineDayEntry>>((ref) {
   final entries = ref.watch(selectedDayRoutineEntriesProvider);
-  final state = ref.watch(routineNotifierProvider);
-  final primaryFiltered = entries.where((entry) {
-    final filtered = TimelineUtils.filterItems(
-      [entry.item],
-      state.selectedPrimaryFilter,
-    );
-    return filtered.isNotEmpty;
-  }).toList(growable: false);
-  if (state.selectedCategoryFilter == 'all') return primaryFiltered;
-  return primaryFiltered
-      .where(
-        (entry) => RoutineFilters._matchesCategory(
+  final filters = ref.watch(
+    routineNotifierProvider.select(
+      (state) => (
+        primary: state.selectedPrimaryFilter,
+        category: state.selectedCategoryFilter,
+      ),
+    ),
+  );
+  final primaryFiltered = entries
+      .where((entry) {
+        final filtered = TimelineUtils.filterItems([
           entry.item,
-          state.selectedCategoryFilter,
-        ),
-      )
+        ], filters.primary);
+        return filtered.isNotEmpty;
+      })
       .toList(growable: false);
+  final result = filters.category == 'all'
+      ? primaryFiltered
+      : primaryFiltered
+            .where(
+              (entry) =>
+                  RoutineFilters._matchesCategory(entry.item, filters.category),
+            )
+            .toList(growable: false);
+  if (kDebugMode) {
+    debugPrint(
+      'RoutineTimelineFiltered: ${_routineCategoryCounts(result.map((e) => e.item))} '
+      'instanceIds=${result.map((e) => e.instanceId).join(',')}',
+    );
+  }
+  return result;
 });
 
+String _routineCategoryCounts(Iterable<RoutineItem> items) {
+  final values = items.toList(growable: false);
+  int count(RoutineCategory category) =>
+      values.where((item) => item.category == category).length;
+  return 'classes=${count(RoutineCategory.classBlock)} '
+      'work=${count(RoutineCategory.job)} '
+      'eating=${count(RoutineCategory.eating)} '
+      'fixed=${count(RoutineCategory.fixed)} '
+      'skin=${count(RoutineCategory.skinCare)}';
+}
+
 final todayRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
-  final state = ref.watch(routineNotifierProvider);
+  final projection = ref.watch(
+    routineNotifierProvider.select(
+      (state) => (items: state.items, occurrences: state.occurrences),
+    ),
+  );
   final materialized = RoutineOccurrenceProjector.itemsForDay(
-    state.items,
-    state.occurrences,
+    projection.items,
+    projection.occurrences,
     TimelineUtils.dateOnly(DateTime.now()),
   );
   return materialized

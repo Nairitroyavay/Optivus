@@ -6,6 +6,7 @@ import 'package:optivus/models/conflict_acceptance.dart';
 import 'package:optivus/models/routine_projection_receipt.dart';
 import 'package:optivus/repositories/firestore_paths.dart';
 import 'package:optivus/repositories/routine_firestore_codec.dart';
+import 'package:optivus/services/routine_onboarding_projection.dart';
 
 abstract class RoutineRepository {
   Future<List<RoutineItem>> fetchRoutineItems(String uid);
@@ -24,6 +25,42 @@ abstract class RoutineRepository {
   Future<RoutineProjectionReceipt?> fetchProjectionReceipt(
     String uid,
     String projectionId,
+  );
+
+  /// Repairs only authoritative onboarding-projected templates/receipt.
+  /// Manual templates and occurrence history are outside this contract.
+  Future<bool> reconcileOnboardingProjection(
+    String uid,
+    RoutineOnboardingProjectionPlan plan,
+  );
+}
+
+bool _hasLegacyGeneratedSourceNote(RoutineItem item) {
+  if (item.source != RoutineSource.onboarding) return false;
+  return switch (item.notes?.trim()) {
+    'identity_system' => item.category == RoutineCategory.identity,
+    'merged_habit_system' ||
+    'good_habit' => item.category == RoutineCategory.habit,
+    'bad_habit_check_in' => item.category == RoutineCategory.badHabit,
+    'money' || 'money_task' => item.category == RoutineCategory.finance,
+    _ => false,
+  };
+}
+
+RoutineItem _safeProjectedItem(RoutineItem item) {
+  return _hasLegacyGeneratedSourceNote(item)
+      ? item.copyWith(clearNotes: true)
+      : item;
+}
+
+RoutineItem _reconciledProjectedItem(RoutineItem expected, RoutineItem actual) {
+  return actual.copyWith(
+    onboardingVisualStyleKey:
+        expected.onboardingVisualStyleKey ?? actual.onboardingVisualStyleKey,
+    clearNotes:
+        _hasLegacyGeneratedSourceNote(expected) &&
+        actual.notes?.trim() == expected.notes?.trim(),
+    createdAt: actual.createdAt,
   );
 }
 
@@ -135,6 +172,59 @@ class FakeRoutineRepository implements RoutineRepository {
     validateOwnerUid(uid);
     validateDocumentId(projectionId);
     return database.receiptsByUid[uid]?[projectionId];
+  }
+
+  @override
+  Future<bool> reconcileOnboardingProjection(
+    String uid,
+    RoutineOnboardingProjectionPlan plan,
+  ) async {
+    validateOwnerUid(uid);
+    if (uid != plan.ownerUid) return false;
+    final receipts = database.receiptsByUid.putIfAbsent(uid, () => {});
+    final receipt = receipts[plan.projectionId];
+    if (receipt != null &&
+        (receipt.ownerUid != uid ||
+            receipt.sourceBundleFingerprint != plan.fingerprint)) {
+      return false;
+    }
+    final items = database.itemsByUid.putIfAbsent(uid, () => {});
+    for (final expected in plan.items) {
+      final actual = items[expected.id];
+      if (actual != null &&
+          (actual.source != RoutineSource.onboarding ||
+              actual.onboardingSourceItemId !=
+                  expected.onboardingSourceItemId)) {
+        return false;
+      }
+    }
+    var changed = false;
+    for (final expected in plan.items) {
+      final actual = items[expected.id];
+      if (actual == null) {
+        items[expected.id] = _safeProjectedItem(expected);
+        changed = true;
+        continue;
+      }
+      final repaired = _reconciledProjectedItem(expected, actual);
+      if (repaired.onboardingVisualStyleKey !=
+              actual.onboardingVisualStyleKey ||
+          repaired.notes != actual.notes) {
+        items[expected.id] = repaired;
+        changed = true;
+      }
+    }
+    if (receipt == null) {
+      final now = DateTime.now().toUtc();
+      receipts[plan.projectionId] = plan.receipt.copyWith(
+        status: 'completed',
+        cursor: plan.receipt.totalCount,
+        updatedAt: now,
+        completedAt: now,
+      );
+      changed = true;
+    }
+    return changed;
   }
 }
 
@@ -303,6 +393,102 @@ class FirestoreRoutineRepository implements RoutineRepository {
     final data = snapshot.data();
     if (!snapshot.exists || data == null) return null;
     return _receiptCodec.fromFirestore(documentId: snapshot.id, data: data);
+  }
+
+  @override
+  Future<bool> reconcileOnboardingProjection(
+    String uid,
+    RoutineOnboardingProjectionPlan plan,
+  ) async {
+    validateOwnerUid(uid);
+    if (uid != plan.ownerUid) return false;
+    final receiptRef = _firestore.doc(
+      FirestoreUserPaths.routineProjection(uid, plan.projectionId),
+    );
+    final itemRefs = [
+      for (final item in plan.items)
+        _firestore.doc(FirestoreUserPaths.routineItem(uid, item.id)),
+    ];
+    return _firestore.runTransaction((transaction) async {
+      final receiptSnapshot = await transaction.get(receiptRef);
+      RoutineProjectionReceipt? receipt;
+      final receiptData = receiptSnapshot.data();
+      if (receiptData != null) {
+        receipt = _receiptCodec.fromFirestore(
+          documentId: receiptSnapshot.id,
+          data: receiptData,
+        );
+        if (receipt.ownerUid != uid ||
+            receipt.sourceBundleFingerprint != plan.fingerprint) {
+          return false;
+        }
+      }
+      final snapshots = <DocumentSnapshot<Map<String, dynamic>>>[];
+      for (final ref in itemRefs) {
+        snapshots.add(await transaction.get(ref));
+      }
+      for (var index = 0; index < plan.items.length; index++) {
+        final data = snapshots[index].data();
+        if (data == null) continue;
+        final actual = _codec.fromFirestore(
+          documentId: snapshots[index].id,
+          data: data,
+        );
+        final expected = plan.items[index];
+        if (actual.source != RoutineSource.onboarding ||
+            actual.onboardingSourceItemId != expected.onboardingSourceItemId) {
+          return false;
+        }
+      }
+      var changed = false;
+      for (var index = 0; index < plan.items.length; index++) {
+        final expected = plan.items[index];
+        final snapshot = snapshots[index];
+        final data = snapshot.data();
+        if (data == null) {
+          final created = _codec.toFirestore(
+            ownerUid: uid,
+            item: _safeProjectedItem(expected),
+          );
+          created['createdAt'] = FieldValue.serverTimestamp();
+          created['updatedAt'] = FieldValue.serverTimestamp();
+          transaction.set(itemRefs[index], created);
+          changed = true;
+          continue;
+        }
+        final actual = _codec.fromFirestore(
+          documentId: snapshot.id,
+          data: data,
+        );
+        final repaired = _reconciledProjectedItem(expected, actual);
+        if (repaired.onboardingVisualStyleKey !=
+                actual.onboardingVisualStyleKey ||
+            repaired.notes != actual.notes) {
+          final repairedData = _codec.toFirestore(
+            ownerUid: uid,
+            item: repaired,
+          );
+          repairedData['createdAt'] = data['createdAt'];
+          repairedData['updatedAt'] = FieldValue.serverTimestamp();
+          transaction.set(itemRefs[index], repairedData);
+          changed = true;
+        }
+      }
+      if (receipt == null) {
+        final completed = plan.receipt.copyWith(
+          status: 'completed',
+          cursor: plan.receipt.totalCount,
+          completedAt: DateTime.now().toUtc(),
+        );
+        final data = _receiptCodec.toFirestore(completed);
+        data['createdAt'] = FieldValue.serverTimestamp();
+        data['updatedAt'] = FieldValue.serverTimestamp();
+        data['completedAt'] = FieldValue.serverTimestamp();
+        transaction.set(receiptRef, data);
+        changed = true;
+      }
+      return changed;
+    });
   }
 }
 

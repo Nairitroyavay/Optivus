@@ -141,6 +141,29 @@ class RoutineProjectionReceiptValidator {
           'Routine item schema version mismatch: ${expectedItem.id}',
         );
       }
+      if (expectedItem.onboardingVisualStyleKey != null &&
+          actualItem.onboardingVisualStyleKey !=
+              expectedItem.onboardingVisualStyleKey) {
+        return ReceiptValidationResult.invalid(
+          'Routine item visual identity mismatch: ${expectedItem.id}',
+        );
+      }
+      final expectedHasLegacySourceNote = switch (expectedItem.notes?.trim()) {
+        'identity_system' => expectedItem.category == RoutineCategory.identity,
+        'merged_habit_system' ||
+        'good_habit' => expectedItem.category == RoutineCategory.habit,
+        'bad_habit_check_in' =>
+          expectedItem.category == RoutineCategory.badHabit,
+        'money' ||
+        'money_task' => expectedItem.category == RoutineCategory.finance,
+        _ => false,
+      };
+      if (expectedHasLegacySourceNote &&
+          actualItem.notes?.trim() == expectedItem.notes?.trim()) {
+        return ReceiptValidationResult.invalid(
+          'Routine item contains generated source metadata: ${expectedItem.id}',
+        );
+      }
     }
 
     return const ReceiptValidationResult.valid();

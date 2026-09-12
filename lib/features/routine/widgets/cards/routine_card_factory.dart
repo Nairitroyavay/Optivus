@@ -10,6 +10,7 @@ import 'package:optivus/features/routine/widgets/cards/tracker_task_card.dart';
 import 'package:optivus/features/routine/widgets/cards/check_in_card.dart';
 import 'package:optivus/features/routine/widgets/cards/money_task_card.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_presentation.dart';
+import 'package:optivus/features/routine/widgets/cards/routine_visual_identity.dart';
 
 /// Factory that builds the correct card widget based on RoutineBlockType.
 class RoutineCardFactory {
@@ -99,6 +100,11 @@ class RoutineCardFactory {
       RoutineBlockType.moneyTask => OptivusColors.blockMoney,
     };
   }
+
+  static RoutineVisualIdentity visualIdentityFor(RoutineItem item) =>
+      RoutineVisualIdentityResolver.resolve(item);
+
+  static Color colorForItem(RoutineItem item) => visualIdentityFor(item).accent;
 
   /// Exact formatted time string matching each block's presentation.
   static String formattedTimeString(RoutineItem item) {
@@ -378,7 +384,9 @@ class RoutineCardFactory {
     }
 
     // Notes
-    if (item.notes != null && item.notes!.trim().isNotEmpty) {
+    if (item.notes != null &&
+        item.notes!.trim().isNotEmpty &&
+        !RoutineVisualIdentityResolver.isVerifiedGeneratedSourceNote(item)) {
       height +=
           RoutineCardPresentation.notesGap +
           measure(item.notes!.trim(), detailStyle);

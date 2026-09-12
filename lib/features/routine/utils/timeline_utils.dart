@@ -33,6 +33,7 @@ class TimelineUtils {
     double minuteHeight = 5.0,
     bool showMinuteTicks = true,
     bool compactMode = false,
+    int? requiredMinute,
   }) {
     const defaultLayout = TimelineLayout();
 
@@ -47,7 +48,7 @@ class TimelineUtils {
       );
     }
 
-    if (items.isEmpty) {
+    if (items.isEmpty && requiredMinute == null) {
       return TimelineLayout(
         visibleStartMinute: 360, // 6:00 AM
         visibleEndMinute: 1440, // 12:00 AM
@@ -58,12 +59,24 @@ class TimelineUtils {
       );
     }
 
-    final firstStart = items.map((e) => e.startMinute).reduce(min);
-    final lastEnd = items.map(normalizedEndMinute).reduce(max);
+    final firstStart = items.isEmpty
+        ? requiredMinute!
+        : items.map((e) => e.startMinute).reduce(min);
+    final lastEnd = items.isEmpty
+        ? requiredMinute!
+        : items.map(normalizedEndMinute).reduce(max);
 
     // 30 min buffer, rounded to nearest 10 min
-    final visibleStart = defaultLayout.roundDownToNearestTen(firstStart - 30);
-    final visibleEnd = defaultLayout.roundUpToNearestTen(lastEnd + 30);
+    final includedStart = requiredMinute == null
+        ? firstStart
+        : min(firstStart, requiredMinute);
+    final includedEnd = requiredMinute == null
+        ? lastEnd
+        : max(lastEnd, requiredMinute);
+    final visibleStart = defaultLayout.roundDownToNearestTen(
+      includedStart - 30,
+    );
+    final visibleEnd = defaultLayout.roundUpToNearestTen(includedEnd + 30);
 
     return TimelineLayout(
       visibleStartMinute: max(0, visibleStart),

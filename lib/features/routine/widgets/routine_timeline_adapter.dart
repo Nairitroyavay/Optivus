@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:optivus/core/timeline/timeline_stretch_solver.dart';
 import 'package:optivus/core/timeline/timeline_visual_layout.dart';
 import 'package:optivus/core/timeline/timeline_visual_models.dart';
@@ -8,6 +9,7 @@ import 'package:optivus/models/timeline_layout.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/models/routine_day_entry.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
+import 'package:optivus/features/routine/widgets/cards/routine_visual_identity.dart';
 import 'package:optivus/features/routine/widgets/routine_time_ruler.dart';
 
 /// Item representation for routine timeline positioning.
@@ -65,7 +67,6 @@ class RoutineTimelineItem implements TimelineVisualItem, TimelineInterval {
   }
 }
 
-
 /// An atomic interval with overlapping items on the timeline.
 typedef RoutineOverlapRegion = TimelineOverlapRegion;
 
@@ -76,6 +77,17 @@ typedef RoutineOverlapComponent = TimelineOverlapComponent;
 /// and gutter widths for the Routine timeline.
 @immutable
 class RoutinePreparedTimelineLayout {
+  static int debugPreparationCount = 0;
+  static int debugMeasuredCardCount = 0;
+  static Duration debugPreparationElapsed = Duration.zero;
+
+  @visibleForTesting
+  static void resetDebugInstrumentation() {
+    debugPreparationCount = 0;
+    debugMeasuredCardCount = 0;
+    debugPreparationElapsed = Duration.zero;
+  }
+
   final List<RoutineTimelineItem> items;
   final Map<String, RoutineTimelineItem> itemById;
   final List<RoutineOverlapRegion> regions;
@@ -113,6 +125,8 @@ class RoutinePreparedTimelineLayout {
     required double availableWidth,
     int? selectedDay,
   }) {
+    final stopwatch = Stopwatch()..start();
+    if (!kReleaseMode) debugPreparationCount++;
     final textScaler = MediaQuery.textScalerOf(context);
     final textDirection = Directionality.of(context);
 
@@ -172,7 +186,7 @@ class RoutinePreparedTimelineLayout {
       (val, r) => math.max(val, r.itemIds.length),
     );
 
-    const rightPadding = 12.0;
+    const rightPadding = 14.0;
     const minimumFrontWidth = 120.0;
     final leftOffset =
         kTimelineTimeRailWidth +
@@ -196,7 +210,7 @@ class RoutinePreparedTimelineLayout {
     final tabHeightByRegion = <String, double>{};
 
     for (final region in regions.where((r) => r.itemIds.length > 1)) {
-      final height = region.itemIds.fold<double>(40.0, (cur, id) {
+      final height = region.itemIds.fold<double>(44.0, (cur, id) {
         final it = itemByRawId[id];
         if (it == null) return cur;
         return math.max(
@@ -222,6 +236,7 @@ class RoutinePreparedTimelineLayout {
         it.item,
       );
       measuredItems.add(it.copyWith(minHeight: requiredH));
+      if (!kReleaseMode) debugMeasuredCardCount++;
     }
 
     // 4. Build navigation constraints for back-card tabs
@@ -239,7 +254,7 @@ class RoutinePreparedTimelineLayout {
           startMinute: region.startMinute,
           endMinute: region.endMinute,
           minHeight:
-              (tabHeightByRegion[region.key] ?? 40.0) *
+              (tabHeightByRegion[region.key] ?? 44.0) *
               (region.itemIds.length - 1),
         ),
     ];
@@ -270,7 +285,7 @@ class RoutinePreparedTimelineLayout {
 
     final itemById = {for (final it in measuredItems) it.id: it};
 
-    return RoutinePreparedTimelineLayout(
+    final result = RoutinePreparedTimelineLayout(
       items: List.unmodifiable(measuredItems),
       itemById: Map.unmodifiable(itemById),
       regions: regions,
@@ -285,6 +300,15 @@ class RoutinePreparedTimelineLayout {
       gutterWidth: gutterWidth,
       totalHeight: maxCardBottom,
     );
+    if (!kReleaseMode) {
+      stopwatch.stop();
+      debugPreparationElapsed += stopwatch.elapsed;
+      debugPrint(
+        'RoutineTimelinePrepare: invocation=$debugPreparationCount '
+        'measured=${measuredItems.length} elapsedUs=${stopwatch.elapsedMicroseconds}',
+      );
+    }
+    return result;
   }
 }
 
@@ -351,89 +375,9 @@ int _priorityFor(RoutineItem item) {
 }
 
 String shortBackLabel(RoutineItem item) {
-  final raw = item.title.trim();
-  final lower = raw.toLowerCase();
-
-  if (item.category == RoutineCategory.job ||
-      lower.contains('work') ||
-      lower.contains('office')) {
-    if (lower.contains('office')) return 'Office';
-    if (lower.contains('work') || lower.contains('job')) return 'Job';
-    return raw.length <= 8 ? raw : 'Job';
-  }
-
-  if (item.category == RoutineCategory.classBlock) {
-    if (item.courseCode != null && item.courseCode!.trim().isNotEmpty) {
-      return item.courseCode!.trim();
-    }
-    return raw.length <= 8 ? raw : raw.split(' ').first;
-  }
-
-  if (item.category == RoutineCategory.eating) {
-    final cat = item.mealCategory?.trim();
-    if (cat != null && cat.isNotEmpty && cat.toLowerCase() != 'meal') {
-      return cat.length <= 8 ? cat : cat.split(' ').first;
-    }
-    final slot = item.mealSlot?.trim();
-    if (slot != null && slot.isNotEmpty && slot.toLowerCase() != 'meal') {
-      return slot.length <= 8 ? slot : slot.split(' ').first;
-    }
-    if (lower.contains('breakfast')) return 'Breakfast';
-    if (lower.contains('lunch')) return 'Lunch';
-    if (lower.contains('dinner')) return 'Dinner';
-    if (lower.contains('snack')) return 'Snack';
-    return raw.length <= 8 ? raw : raw.split(' ').first;
-  }
-
-  if (item.category == RoutineCategory.skinCare) {
-    return 'Skin';
-  }
-
-  if (item.category == RoutineCategory.sleep || lower.contains('sleep')) {
-    return 'Sleep';
-  }
-
-  if (item.blockType == RoutineBlockType.trackerTask) {
-    return raw.length <= 8 ? raw : 'Tracker';
-  }
-
-  if (item.blockType == RoutineBlockType.checkIn) {
-    return 'Check-in';
-  }
-
-  if (item.blockType == RoutineBlockType.moneyTask) {
-    return 'Finance';
-  }
-
-  return raw.length <= 8 ? raw : raw.split(' ').first;
+  return RoutineVisualIdentityResolver.resolve(item).shortLabel;
 }
 
 IconData backTabIcon(RoutineItem item) {
-  if (item.category == RoutineCategory.eating) {
-    final title =
-        '${item.mealSlot ?? ''} ${item.mealCategory ?? ''} ${item.title}'
-            .toLowerCase();
-    if (title.contains('breakfast')) return Icons.wb_sunny_rounded;
-    if (title.contains('lunch')) return Icons.lunch_dining_rounded;
-    if (title.contains('dinner')) return Icons.dinner_dining_rounded;
-    if (title.contains('snack')) return Icons.cookie_rounded;
-    return Icons.restaurant_rounded;
-  }
-  return switch (item.blockType) {
-    RoutineBlockType.hardBlock =>
-      item.category == RoutineCategory.sleep ||
-              item.title.toLowerCase().contains('sleep')
-          ? Icons.bedtime_rounded
-          : (item.category == RoutineCategory.classBlock
-                ? Icons.school_rounded
-                : Icons.business_center_rounded),
-    RoutineBlockType.softBlock =>
-      item.category == RoutineCategory.skinCare
-          ? Icons.spa_rounded
-          : Icons.self_improvement_rounded,
-    RoutineBlockType.flexibleTask => Icons.assignment_rounded,
-    RoutineBlockType.trackerTask => Icons.track_changes_rounded,
-    RoutineBlockType.checkIn => Icons.check_circle_outline_rounded,
-    RoutineBlockType.moneyTask => Icons.attach_money_rounded,
-  };
+  return RoutineVisualIdentityResolver.resolve(item).icon;
 }

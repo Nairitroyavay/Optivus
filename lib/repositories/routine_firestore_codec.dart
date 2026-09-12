@@ -45,6 +45,7 @@ class RoutineTemplateFirestoreCodec {
     'baseTimelineSection',
     'onboardingProjectionId',
     'onboardingSourceItemId',
+    'onboardingVisualStyleKey',
     'createdAt',
     'updatedAt',
     'schemaVersion',
@@ -111,6 +112,8 @@ class RoutineTemplateFirestoreCodec {
         'onboardingProjectionId': item.onboardingProjectionId,
       if (_notBlank(item.onboardingSourceItemId))
         'onboardingSourceItemId': item.onboardingSourceItemId,
+      if (_notBlank(item.onboardingVisualStyleKey))
+        'onboardingVisualStyleKey': item.onboardingVisualStyleKey,
       if (_notBlank(item.createdByOperationId))
         'createdByOperationId': item.createdByOperationId,
       if (_notBlank(item.lastMutationOperationId))
@@ -175,6 +178,9 @@ class RoutineTemplateFirestoreCodec {
           : schemaVersion,
       onboardingProjectionId: _optionalString(data['onboardingProjectionId']),
       onboardingSourceItemId: _optionalString(data['onboardingSourceItemId']),
+      onboardingVisualStyleKey: _optionalString(
+        data['onboardingVisualStyleKey'],
+      ),
       createdByOperationId: _optionalString(data['createdByOperationId']),
       lastMutationOperationId: _optionalString(data['lastMutationOperationId']),
       title: _requiredString(data, 'title'),

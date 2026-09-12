@@ -12,6 +12,7 @@ class TimelineCardChrome extends StatelessWidget {
   final bool hasOverlap;
   final BorderRadius? borderRadius;
   final EdgeInsetsGeometry? padding;
+  final bool useGroupedBackdrop;
 
   const TimelineCardChrome({
     super.key,
@@ -21,6 +22,7 @@ class TimelineCardChrome extends StatelessWidget {
     this.hasOverlap = false,
     this.borderRadius,
     this.padding,
+    this.useGroupedBackdrop = false,
   });
 
   @override
@@ -55,12 +57,19 @@ class TimelineCardChrome extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: effectiveRadius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: padding != null
-              ? Padding(padding: padding!, child: child)
-              : child,
-        ),
+        child: useGroupedBackdrop
+            ? BackdropFilter.grouped(
+                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                child: padding != null
+                    ? Padding(padding: padding!, child: child)
+                    : child,
+              )
+            : BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                child: padding != null
+                    ? Padding(padding: padding!, child: child)
+                    : child,
+              ),
       ),
     );
   }

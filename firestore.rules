@@ -210,12 +210,17 @@ service cloud.firestore {
         "baseTimelineSection",
         "onboardingProjectionId",
         "onboardingSourceItemId",
+        "onboardingVisualStyleKey",
         "createdByOperationId",
         "lastMutationOperationId",
         "createdAt",
         "updatedAt",
         "schemaVersion"
       ])
+      && (!data.keys().hasAny(["onboardingVisualStyleKey"])
+        || (data.onboardingVisualStyleKey is string
+          && data.onboardingVisualStyleKey.size() > 0
+          && data.onboardingVisualStyleKey.size() <= 64))
       && !data.keys().hasAny([
         "status",
         "isCompleted",

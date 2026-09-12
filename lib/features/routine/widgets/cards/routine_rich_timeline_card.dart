@@ -7,7 +7,7 @@ import 'package:optivus/features/routine/widgets/cards/routine_card_actions.dart
 import 'package:optivus/features/routine/widgets/cards/routine_card_base.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_presentation.dart';
-import 'package:optivus/features/routine/widgets/routine_timeline_adapter.dart';
+import 'package:optivus/features/routine/widgets/cards/routine_visual_identity.dart';
 import 'package:optivus/models/routine_item.dart';
 
 /// Unified rich routine timeline card implementing Onboarding Step 14's
@@ -37,7 +37,8 @@ class RoutineRichTimelineCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final accent = RoutineCardFactory.colorForType(item.blockType);
+    final identity = RoutineCardFactory.visualIdentityFor(item);
+    final accent = identity.accent;
     final isCompleted =
         item.isCompleted || item.status == RoutineStatus.completed;
 
@@ -80,7 +81,7 @@ class RoutineRichTimelineCard extends ConsumerWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(backTabIcon(item), size: 18, color: accent),
+              Icon(identity.icon, size: 18, color: accent),
               const SizedBox(width: 7),
               Expanded(
                 child: Text(
@@ -279,7 +280,11 @@ class RoutineRichTimelineCard extends ConsumerWidget {
           ],
 
           // Notes
-          if (item.notes != null && item.notes!.trim().isNotEmpty) ...[
+          if (item.notes != null &&
+              item.notes!.trim().isNotEmpty &&
+              !RoutineVisualIdentityResolver.isVerifiedGeneratedSourceNote(
+                item,
+              )) ...[
             const SizedBox(height: RoutineCardPresentation.notesGap),
             Text(item.notes!.trim(), style: detailStyle),
           ],

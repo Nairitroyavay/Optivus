@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/timeline/timeline_visual_layout.dart';
 import 'package:optivus/core/timeline/timeline_visual_models.dart';
@@ -9,22 +10,23 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/routine_occurrence.dart';
 import 'package:optivus/models/timeline_layout.dart';
+import 'package:optivus/repositories/routine_history_repository.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/models/routine_day_entry.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 import 'package:optivus/features/routine/widgets/routine_time_ruler.dart';
 import 'package:optivus/features/routine/widgets/routine_current_time_line.dart';
-import 'package:optivus/core/timeline/widgets/timeline_back_tab_strip.dart';
+import 'package:optivus/core/timeline/widgets/timeline_card_chrome.dart';
 import 'package:optivus/features/routine/widgets/routine_timeline_adapter.dart';
 
 /// Routine timeline viewport redesign based on Onboarding Step 14 layout.
 ///
 /// Features:
 /// - Unchanged 64px rail, hour ruler, hour dots, and coordinate system.
-/// - Unchanged original Routine block colors via RoutineCardFactory.colorForType.
-/// - Single front card + exposed back-card tabs in the overlap gutter.
-/// - Tab promotion on tap brings back card to front without mutating DB.
+/// - Source-authored onboarding colors with Routine-native fallback colors.
+/// - Single front card + exposed real back-card layers in the overlap gutter.
+/// - Exposed-card promotion on tap brings it forward without mutating DB.
 /// - Full-detail rich cards with all dishes, skincare steps, and subtasks.
 /// - Exactly 3 primary footer actions on front cards: [Start] [Done] [Move].
 /// - Content-aware height measurement with constraint-based timeline stretching.
@@ -34,36 +36,20 @@ class RoutineTimelineViewport extends ConsumerStatefulWidget {
   final TimelineLayout layout;
   final bool isToday;
   final bool showCurrentTimeLine;
+  final int? currentMinute;
   final ValueChanged<RoutineItem>? onCardTap;
   final int? selectedDay;
 
-  RoutineTimelineViewport({
+  const RoutineTimelineViewport({
     super.key,
-    required List<dynamic> items,
+    required this.items,
     required this.layout,
     required this.isToday,
     this.showCurrentTimeLine = true,
+    this.currentMinute,
     this.onCardTap,
     this.selectedDay,
-  }) : items = List<RoutineDayEntry>.unmodifiable(
-          items.map((e) {
-            if (e is RoutineDayEntry) return e;
-            if (e is RoutineItem) {
-              final dateKey = routineLocalDateKey(e.date ?? DateTime.now());
-              return RoutineDayEntry(
-                item: e,
-                instanceId: e.id,
-                templateId: e.id,
-                occurrenceDateKey: dateKey,
-                displayDateKey: dateKey,
-                kind: RoutineDayEntryKind.scheduled,
-              );
-            }
-            throw ArgumentError(
-              'RoutineTimelineViewport expects List<RoutineDayEntry> or List<RoutineItem>, got ${e.runtimeType}',
-            );
-          }),
-        );
+  });
 
   @override
   ConsumerState<RoutineTimelineViewport> createState() =>
@@ -77,6 +63,9 @@ class RoutineTimelineViewportState
   bool _hasAutoScrolledForToday = false;
 
   TimelineVisualScale? _lastScale;
+  int? _preparedCacheKey;
+  RoutinePreparedTimelineLayout? _preparedCache;
+  int? _lastDiagnosticKey;
 
   @visibleForTesting
   Map<String, String> get focusedItemIdByComponentForTesting =>
@@ -139,7 +128,7 @@ class RoutineTimelineViewportState
     }
 
     final now = DateTime.now();
-    final currentMinute = now.hour * 60 + now.minute;
+    final currentMinute = widget.currentMinute ?? now.hour * 60 + now.minute;
 
     if (!widget.layout.isMinuteVisible(currentMinute)) return;
 
@@ -166,8 +155,21 @@ class RoutineTimelineViewportState
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding = liquidTabBarReserve(context) + 24;
-    final routineState = ref.watch(routineNotifierProvider);
+    final bottomPadding =
+        liquidTabBarReserve(context) +
+        MediaQuery.viewPaddingOf(context).bottom +
+        36;
+    final writeState = ref.watch(
+      routineNotifierProvider.select(
+        (state) => (
+          selectedDay: state.selectedDay,
+          pendingItemIds: state.pendingItemIds,
+          pendingOccurrenceIds: state.pendingOccurrenceIds,
+          failedIntentsByItemId: state.failedIntentsByItemId,
+          failedOccurrenceIntentsById: state.failedOccurrenceIntentsById,
+        ),
+      ),
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -177,14 +179,31 @@ class RoutineTimelineViewportState
         }
 
         final effectiveDay =
-            widget.selectedDay ?? routineState.selectedDay.weekday;
-        final prepared = RoutinePreparedTimelineLayout.prepare(
-          context: context,
-          rawItems: widget.items,
-          timelineLayout: widget.layout,
-          availableWidth: viewportWidth,
-          selectedDay: effectiveDay,
-        );
+            widget.selectedDay ?? writeState.selectedDay.weekday;
+        final cacheKey = _layoutCacheKey(context, viewportWidth, effectiveDay);
+        final prepared = _preparedCacheKey == cacheKey
+            ? _preparedCache!
+            : RoutinePreparedTimelineLayout.prepare(
+                context: context,
+                rawItems: widget.items,
+                timelineLayout: widget.layout,
+                availableWidth: viewportWidth,
+                selectedDay: effectiveDay,
+              );
+        _preparedCacheKey = cacheKey;
+        _preparedCache = prepared;
+        if (kDebugMode && _lastDiagnosticKey != cacheKey) {
+          _lastDiagnosticKey = cacheKey;
+          debugPrint(
+            'RoutineTimelinePrepared: items=${prepared.items.length} '
+            'classes=${prepared.items.where((e) => e.item.category == RoutineCategory.classBlock).length} '
+            'work=${prepared.items.where((e) => e.item.category == RoutineCategory.job).length} '
+            'eating=${prepared.items.where((e) => e.item.category == RoutineCategory.eating).length} '
+            'fixed=${prepared.items.where((e) => e.item.category == RoutineCategory.fixed).length} '
+            'skin=${prepared.items.where((e) => e.item.category == RoutineCategory.skinCare).length} '
+            'instanceIds=${prepared.items.map((e) => e.id).join(',')}',
+          );
+        }
         _reconcileFocus(prepared);
         _lastScale = prepared.scale;
 
@@ -198,94 +217,103 @@ class RoutineTimelineViewportState
             item.id: _isFrontItem(prepared, item),
         };
 
-        return SingleChildScrollView(
-          controller: _scrollController,
-          physics: const BouncingScrollPhysics(),
-          child: SizedBox(
-            height: timelineHeight + bottomPadding,
-            child: Stack(
-              clipBehavior: Clip.hardEdge,
-              children: [
-                // ── Vertical rail line ──
-                Positioned(
-                  left:
-                      kTimelineTimeRailWidth +
-                      kTimelineRailDotColumnWidth / 2 -
-                      0.6,
-                  top: 0,
-                  height: timelineHeight,
-                  child: Container(
-                    width: 1.2,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          OptivusColors.sub.withValues(alpha: 0.10),
-                          OptivusColors.sub.withValues(alpha: 0.025),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                // ── Time ruler (hour labels + dots) ──
-                Positioned(
-                  left: 0,
-                  top: 0,
-                  height: timelineHeight,
-                  width:
-                      kTimelineTimeRailWidth +
-                      kTimelineRailDotColumnWidth +
-                      kTimelineContentGap,
-                  child: RoutineTimeRuler(
-                    layout: widget.layout,
-                    visualScale: prepared.scale,
-                  ),
-                ),
-
-                // ── Time anchor layer: exact duration rails and start/end lines ──
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: timelineHeight,
-                  child: IgnorePointer(
-                    child: CustomPaint(
-                      painter: _TimelineAnchorPainter(
-                        scale: prepared.scale,
-                        items: prepared.items,
-                        overlapIds: prepared.overlapItemIds,
-                        isFrontById: isFrontById,
-                        leftOffset: prepared.leftOffset,
-                        gutterWidth: prepared.gutterWidth,
-                      ),
-                    ),
-                  ),
-                ),
-
-                // ── Content card layer: back cards painted first, front cards painted last ──
-                for (final item in _cardPaintOrder(prepared))
-                  _buildCard(context, prepared, item, routineState),
-
-                // ── Exposed back tabs in the overlap gutter ──
-                ..._buildExposedBackTabs(prepared),
-
-                // ── Current time indicator ──
-                if (widget.isToday && widget.showCurrentTimeLine)
+        return BackdropGroup(
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            physics: const BouncingScrollPhysics(),
+            child: SizedBox(
+              height: timelineHeight + bottomPadding,
+              child: Stack(
+                clipBehavior: Clip.hardEdge,
+                children: [
+                  // ── Vertical rail line ──
                   Positioned(
+                    left:
+                        kTimelineTimeRailWidth +
+                        kTimelineRailDotColumnWidth / 2 -
+                        0.6,
                     top: 0,
-                    left: 0,
-                    right: 0,
                     height: timelineHeight,
-                    child: IgnorePointer(
-                      child: RoutineCurrentTimeLine(
+                    child: Container(
+                      width: 1.2,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            OptivusColors.sub.withValues(alpha: 0.10),
+                            OptivusColors.sub.withValues(alpha: 0.025),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // ── Time ruler (hour labels + dots) ──
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    height: timelineHeight,
+                    width:
+                        kTimelineTimeRailWidth +
+                        kTimelineRailDotColumnWidth +
+                        kTimelineContentGap,
+                    child: RepaintBoundary(
+                      child: RoutineTimeRuler(
                         layout: widget.layout,
                         visualScale: prepared.scale,
                       ),
                     ),
                   ),
-              ],
+
+                  // ── Time anchor layer: exact duration rails and start/end lines ──
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: timelineHeight,
+                    child: RepaintBoundary(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          painter: _TimelineAnchorPainter(
+                            scale: prepared.scale,
+                            items: prepared.items,
+                            overlapIds: prepared.overlapItemIds,
+                            isFrontById: isFrontById,
+                            leftOffset: prepared.leftOffset,
+                            gutterWidth: prepared.gutterWidth,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Real condensed card layers remain behind the promoted card.
+                  ..._buildExposedBackCards(prepared),
+
+                  // Full-detail front/non-overlapping cards.
+                  for (final item in _cardPaintOrder(prepared))
+                    _buildCard(context, prepared, item, writeState),
+
+                  // ── Current time indicator ──
+                  if (widget.isToday && widget.showCurrentTimeLine)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: timelineHeight,
+                      child: RepaintBoundary(
+                        child: IgnorePointer(
+                          child: RoutineCurrentTimeLine(
+                            layout: widget.layout,
+                            visualScale: prepared.scale,
+                            currentMinute: widget.currentMinute,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         );
@@ -293,11 +321,51 @@ class RoutineTimelineViewportState
     );
   }
 
+  int _layoutCacheKey(
+    BuildContext context,
+    double viewportWidth,
+    int selectedDay,
+  ) {
+    final scaler = MediaQuery.textScalerOf(context);
+    return Object.hash(
+      viewportWidth,
+      selectedDay,
+      widget.layout.visibleStartMinute,
+      widget.layout.visibleEndMinute,
+      widget.layout.minuteHeight,
+      scaler.scale(16),
+      Directionality.of(context),
+      Object.hashAll(
+        widget.items.map(
+          (entry) => Object.hashAll([
+            entry.instanceId,
+            entry.item.title,
+            entry.item.startMinute,
+            entry.item.endMinute,
+            entry.item.location,
+            entry.item.notes,
+            entry.item.onboardingVisualStyleKey,
+            Object.hashAll(entry.item.subtasks ?? const <String>[]),
+            Object.hashAll(entry.item.steps ?? const <String>[]),
+            Object.hashAll(entry.item.dishes ?? const <String>[]),
+          ]),
+        ),
+      ),
+    );
+  }
+
   Widget _buildCard(
     BuildContext context,
     RoutinePreparedTimelineLayout prepared,
     RoutineTimelineItem item,
-    RoutineState routineState,
+    ({
+      DateTime selectedDay,
+      Set<String> pendingItemIds,
+      Set<String> pendingOccurrenceIds,
+      Map<String, RoutineWriteIntent> failedIntentsByItemId,
+      Map<String, RoutineOccurrenceWriteIntent> failedOccurrenceIntentsById,
+    })
+    writeState,
   ) {
     final overlaps = prepared.overlapItemIds.contains(item.id);
     final isFront = _isFrontItem(prepared, item);
@@ -311,15 +379,29 @@ class RoutineTimelineViewportState
     final height = math.max(item.minHeight, exactH);
 
     final now = DateTime.now();
-    final currentMinute = now.hour * 60 + now.minute;
+    final currentMinute = widget.currentMinute ?? now.hour * 60 + now.minute;
     final isNow =
         widget.isToday &&
         TimelineUtils.isMinuteInsideItem(item.item, currentMinute);
 
     // Pending / failed state is tracked by template ID, not by instanceId.
     final templateId = item.entry.templateId;
-    final isPending = routineState.pendingItemIds.contains(templateId);
-    final failedIntent = routineState.failedIntentsByItemId[templateId];
+    final occurrenceId = item.entry.occurrenceId;
+    final ownerUid = item.item.userId?.trim();
+    final occurrenceTargetId =
+        occurrenceId ??
+        (ownerUid != null && ownerUid.isNotEmpty
+            ? stableRoutineOccurrenceId(
+                ownerUid: ownerUid,
+                routineItemId: templateId,
+                occurrenceDateKey: item.entry.occurrenceDateKey,
+              )
+            : null);
+    final isPending =
+        writeState.pendingItemIds.contains(templateId) ||
+        (occurrenceTargetId != null &&
+            writeState.pendingOccurrenceIds.contains(occurrenceTargetId));
+    final failedIntent = writeState.failedIntentsByItemId[templateId];
 
     return Positioned(
       key: ValueKey('routine-timeline-card-${item.id}'),
@@ -506,7 +588,7 @@ class RoutineTimelineViewportState
       if (startCmp != 0) return startCmp;
       return a.id.compareTo(b.id);
     });
-    return items;
+    return items.where((item) => _isFrontItem(prepared, item)).toList();
   }
 
   bool _isFrontItem(
@@ -575,7 +657,7 @@ class RoutineTimelineViewportState
     return a.id.compareTo(b.id);
   }
 
-  List<Widget> _buildExposedBackTabs(RoutinePreparedTimelineLayout prepared) {
+  List<Widget> _buildExposedBackCards(RoutinePreparedTimelineLayout prepared) {
     final widgets = <Widget>[];
 
     for (final component in prepared.components) {
@@ -627,7 +709,7 @@ class RoutineTimelineViewportState
             tabHeight:
                 prepared.tabHeightByRegionKey[firstRegionByItemId[item.id]!
                     .key] ??
-                40.0,
+                44.0,
           ),
       ];
       final topOffsets = computeBackTabTopOffsets(placementRequests);
@@ -635,7 +717,7 @@ class RoutineTimelineViewportState
       for (final item in backItems) {
         final firstRegion = firstRegionByItemId[item.id]!;
         final regionKey = firstRegion.key;
-        final tabHeight = prepared.tabHeightByRegionKey[regionKey] ?? 40.0;
+        final tabHeight = prepared.tabHeightByRegionKey[regionKey] ?? 44.0;
         final top = topOffsets[item.id]!;
 
         widgets.add(
@@ -643,7 +725,7 @@ class RoutineTimelineViewportState
             key: ValueKey('routine-timeline-back-tab-${item.id}-$regionKey'),
             top: top,
             left: prepared.leftOffset,
-            width: prepared.gutterWidth,
+            width: prepared.fullWidth,
             height: tabHeight,
             child: Semantics(
               excludeSemantics: true,
@@ -657,10 +739,45 @@ class RoutineTimelineViewportState
                     _focusedItemIdByComponent[componentId] = item.id;
                   });
                 },
-                child: _buildBackTabStrip(
-                  item: item.item,
-                  width: prepared.gutterWidth,
-                  height: tabHeight,
+                child: TimelineCardChrome(
+                  baseColor: RoutineCardFactory.colorForItem(item.item),
+                  isFront: false,
+                  hasOverlap: true,
+                  useGroupedBackdrop: true,
+                  borderRadius: BorderRadius.circular(20),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SizedBox(
+                      width: math.max(44, prepared.gutterWidth - 16),
+                      child: Row(
+                        children: [
+                          Icon(
+                            backTabIcon(item.item),
+                            size: 16,
+                            color: RoutineCardFactory.colorForItem(item.item),
+                          ),
+                          const SizedBox(width: 5),
+                          Expanded(
+                            child: Text(
+                              shortBackLabel(item.item),
+                              key: ValueKey(
+                                'routine-back-label-${item.item.id}',
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                height: 1,
+                                fontWeight: FontWeight.w900,
+                                color: OptivusColors.ink,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -670,25 +787,6 @@ class RoutineTimelineViewportState
     }
 
     return widgets;
-  }
-
-  Widget _buildBackTabStrip({
-    required RoutineItem item,
-    required double width,
-    required double height,
-  }) {
-    final color = RoutineCardFactory.colorForType(item.blockType);
-    final label = shortBackLabel(item);
-    final icon = backTabIcon(item);
-
-    return TimelineBackTabStrip(
-      label: label,
-      icon: icon,
-      accent: color,
-      width: width,
-      height: height,
-      labelKey: ValueKey('routine-back-label-${item.id}'),
-    );
   }
 }
 
@@ -714,7 +812,7 @@ class _TimelineAnchorPainter extends CustomPainter {
     for (final it in items) {
       final isOverlapping = overlapIds.contains(it.id);
       final isFront = isFrontById[it.id] ?? true;
-      final color = RoutineCardFactory.colorForType(it.item.blockType);
+      final color = RoutineCardFactory.colorForItem(it.item);
       final startY = scale.yForMinute(it.startMinute);
       final endY = scale.yForMinute(it.endMinute);
 

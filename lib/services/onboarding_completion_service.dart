@@ -465,6 +465,15 @@ class OnboardingCompletionService {
     List<TimelineBlockDraft> baseBlocks,
     List<FinalTimelineItem> previewItems,
   ) {
+    final classOrdinalById = <String, int>{};
+    final workOrdinalById = <String, int>{};
+    for (final block in baseBlocks) {
+      if (block.section == 'classes') {
+        classOrdinalById.putIfAbsent(block.id, () => classOrdinalById.length);
+      } else if (block.section == 'job_work_business') {
+        workOrdinalById.putIfAbsent(block.id, () => workOrdinalById.length);
+      }
+    }
     // Generate base routines
     final scheduled = baseBlocks.map((b) {
       final blockType = _routineBlockTypeForDraft(b.blockType);
@@ -491,6 +500,18 @@ class OnboardingCompletionService {
         location: b.location,
         notes: b.notes,
         baseTimelineSection: b.section,
+        onboardingVisualStyleKey: switch (b.section) {
+          'classes' => 'class:${classOrdinalById[b.id] ?? 0}',
+          'job_work_business' => 'work:${workOrdinalById[b.id] ?? 0}',
+          'eating' => 'eating:default',
+          'fixed' => 'fixed:default',
+          'skin_care' => switch (draft.baseTimeline.skinCareSetupPath) {
+            'has_products' => 'skin:has-products',
+            'no_products' => 'skin:no-products',
+            _ => 'skin:default',
+          },
+          _ => null,
+        },
         professor: b.professor,
         courseCode: b.courseCode,
         classType: b.classType,
@@ -579,7 +600,7 @@ class OnboardingCompletionService {
             source: RoutineSource.onboarding,
             priority: _priorityForBlockType(blockType),
             hardBlock: blockType == RoutineBlockType.hardBlock,
-            notes: flex.source,
+            // `source` is an internal taxonomy token, not user-facing notes.
           ),
         );
         if (startMinute != flex.startMinute) {

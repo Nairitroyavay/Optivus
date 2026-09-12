@@ -165,6 +165,46 @@ void main() {
     expect(occurrences.first.movedToDateKey, isNotNull);
   });
 
+  test(
+    'find-free-slot excludes only the targeted occurrence, not a moved-in sibling',
+    () async {
+      final notifier = container.read(routineNotifierProvider.notifier);
+      const uid = 'user_1';
+      final template = createTemplate(
+        uid,
+        'same_template',
+      ).copyWith(startMinute: 8 * 60, endMinute: 9 * 60, repeatDays: const [3]);
+      await repo.createRoutineItem(uid, template);
+      await historyRepo.appendHistory(
+        uid,
+        RoutineOccurrenceRecord(
+          id: 'moved_sibling',
+          ownerUid: uid,
+          routineItemId: template.id,
+          source: 'routine',
+          action: 'move',
+          operationKey: 'move_sibling',
+          occurrenceDateKey: '2026-09-14',
+          movedToDateKey: '2026-09-16',
+          movedStartMinute: 6 * 60,
+          movedEndMinute: 7 * 60,
+          status: RoutineStatus.moved,
+          createdAt: DateTime(2026, 9, 14),
+          updatedAt: DateTime(2026, 9, 14),
+        ),
+      );
+      await notifier.loadForOwner(uid);
+
+      final slot = notifier.findFreeSlot(
+        item: template,
+        date: DateTime(2026, 9, 16),
+        occurrenceDate: DateTime(2026, 9, 16),
+      );
+
+      expect(slot, 7 * 60);
+    },
+  );
+
   test('Undo-to-planned', () async {
     final notifier = container.read(routineNotifierProvider.notifier);
     const uid = 'user_1';

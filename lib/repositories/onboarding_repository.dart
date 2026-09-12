@@ -169,6 +169,7 @@ class FakeOnboardingRepository
     final failedItemIds = <String>[];
     const codec = RoutineTemplateFirestoreCodec();
     for (final item in plan.items) {
+      final safeItem = _safeProjectedRoutineItem(item);
       final existingItem = userItems[item.id];
       if (existingItem != null) {
         if (_isExpectedProjectedRoutineItem(
@@ -189,8 +190,8 @@ class FakeOnboardingRepository
           continue;
         }
         try {
-          codec.toFirestore(ownerUid: bundle.uid, item: item);
-          userItems[item.id] = item;
+          codec.toFirestore(ownerUid: bundle.uid, item: safeItem);
+          userItems[item.id] = safeItem;
           repairedItemIds.add(item.id);
           continue;
         } catch (_) {
@@ -199,8 +200,8 @@ class FakeOnboardingRepository
         }
       }
       try {
-        codec.toFirestore(ownerUid: bundle.uid, item: item);
-        userItems[item.id] = item;
+        codec.toFirestore(ownerUid: bundle.uid, item: safeItem);
+        userItems[item.id] = safeItem;
         createdItemIds.add(item.id);
       } catch (_) {
         failedItemIds.add(item.id);
@@ -298,13 +299,30 @@ bool _isExpectedProjectedRoutineItem({
   required String ownerUid,
   required String projectionId,
 }) {
+  final safeExpected = _safeProjectedRoutineItem(expectedItem);
   return actualItem.id == expectedItem.id &&
       actualItem.userId == ownerUid &&
       actualItem.onboardingProjectionId == projectionId &&
       actualItem.onboardingSourceItemId ==
           expectedItem.onboardingSourceItemId &&
       actualItem.source == RoutineSource.onboarding &&
-      actualItem.schemaVersion == RoutineItem.currentSchemaVersion;
+      actualItem.schemaVersion == RoutineItem.currentSchemaVersion &&
+      actualItem.onboardingVisualStyleKey ==
+          safeExpected.onboardingVisualStyleKey &&
+      actualItem.notes == safeExpected.notes;
+}
+
+RoutineItem _safeProjectedRoutineItem(RoutineItem item) {
+  final token = item.notes?.trim();
+  final generated = switch (token) {
+    'identity_system' => item.category == RoutineCategory.identity,
+    'merged_habit_system' ||
+    'good_habit' => item.category == RoutineCategory.habit,
+    'bad_habit_check_in' => item.category == RoutineCategory.badHabit,
+    'money' || 'money_task' => item.category == RoutineCategory.finance,
+    _ => false,
+  };
+  return generated ? item.copyWith(clearNotes: true) : item;
 }
 
 bool _hasExpectedRoutineProjectionIdentity({
@@ -606,6 +624,7 @@ class FirestoreOnboardingRepository
 
         for (var index = 0; index < plan.items.length; index++) {
           final item = plan.items[index];
+          final safeItem = _safeProjectedRoutineItem(item);
           if (itemSnapshots[index].exists) {
             final existingItem = _routineItemFromSnapshot(
               itemSnapshots[index],
@@ -633,7 +652,7 @@ class FirestoreOnboardingRepository
             try {
               final data = _routineCodec.toFirestore(
                 ownerUid: bundle.uid,
-                item: item,
+                item: safeItem,
               );
               final existingData = itemSnapshots[index].data();
               if (existingData != null && existingData['createdAt'] != null) {
@@ -651,7 +670,7 @@ class FirestoreOnboardingRepository
           try {
             final data = _routineCodec.toFirestore(
               ownerUid: bundle.uid,
-              item: item,
+              item: safeItem,
             );
             data['createdAt'] = FieldValue.serverTimestamp();
             data['updatedAt'] = FieldValue.serverTimestamp();
@@ -841,6 +860,7 @@ class FirestoreOnboardingRepository
     batch.set(profileReference, profilePatch, SetOptions(merge: true));
 
     for (final item in plan.items) {
+      final safeItem = _safeProjectedRoutineItem(item);
       final snapshot = itemSnapshots[item.id];
       final existing = snapshot == null
           ? null
@@ -868,7 +888,7 @@ class FirestoreOnboardingRepository
       try {
         final data = _routineCodec.toFirestore(
           ownerUid: bundle.uid,
-          item: item,
+          item: safeItem,
         );
         data['createdAt'] = snapshot == null
             ? FieldValue.serverTimestamp()

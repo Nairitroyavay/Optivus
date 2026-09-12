@@ -99,6 +99,10 @@ class RoutineItem {
   final int schemaVersion;
   final String? onboardingProjectionId;
   final String? onboardingSourceItemId;
+
+  /// Stable source-authored visual identity for onboarding-projected items.
+  /// Examples: `class:0`, `work:2`, `eating:default`.
+  final String? onboardingVisualStyleKey;
   final String? createdByOperationId;
   final String? lastMutationOperationId;
   final String title;
@@ -170,6 +174,7 @@ class RoutineItem {
     this.schemaVersion = currentSchemaVersion,
     this.onboardingProjectionId,
     this.onboardingSourceItemId,
+    this.onboardingVisualStyleKey,
     this.createdByOperationId,
     this.lastMutationOperationId,
     required this.title,
@@ -310,6 +315,7 @@ class RoutineItem {
     int? schemaVersion,
     String? onboardingProjectionId,
     String? onboardingSourceItemId,
+    String? onboardingVisualStyleKey,
     String? createdByOperationId,
     String? lastMutationOperationId,
     String? title,
@@ -330,6 +336,7 @@ class RoutineItem {
     bool? isTrackerLinked,
     TrackerType? trackerType,
     String? notes,
+    bool clearNotes = false,
     String? bestTime,
     String? baseTimelineSection,
     bool clearBaseTimelineSection = false,
@@ -369,6 +376,8 @@ class RoutineItem {
           onboardingProjectionId ?? this.onboardingProjectionId,
       onboardingSourceItemId:
           onboardingSourceItemId ?? this.onboardingSourceItemId,
+      onboardingVisualStyleKey:
+          onboardingVisualStyleKey ?? this.onboardingVisualStyleKey,
       createdByOperationId: createdByOperationId ?? this.createdByOperationId,
       lastMutationOperationId:
           lastMutationOperationId ?? this.lastMutationOperationId,
@@ -389,7 +398,7 @@ class RoutineItem {
       priority: priority ?? this.priority,
       isTrackerLinked: isTrackerLinked ?? this.isTrackerLinked,
       trackerType: trackerType ?? this.trackerType,
-      notes: notes ?? this.notes,
+      notes: clearNotes ? null : (notes ?? this.notes),
       bestTime: bestTime ?? this.bestTime,
       baseTimelineSection: clearBaseTimelineSection
           ? null
@@ -434,6 +443,7 @@ class RoutineItem {
       'schemaVersion': schemaVersion,
       'onboardingProjectionId': onboardingProjectionId,
       'onboardingSourceItemId': onboardingSourceItemId,
+      'onboardingVisualStyleKey': onboardingVisualStyleKey,
       'createdByOperationId': createdByOperationId,
       'lastMutationOperationId': lastMutationOperationId,
       'title': title,
@@ -548,6 +558,9 @@ class RoutineItem {
       if (onboardingSourceItemId != null &&
           onboardingSourceItemId!.trim().isNotEmpty)
         'onboardingSourceItemId': onboardingSourceItemId,
+      if (onboardingVisualStyleKey != null &&
+          onboardingVisualStyleKey!.trim().isNotEmpty)
+        'onboardingVisualStyleKey': onboardingVisualStyleKey!.trim(),
       if (createdByOperationId != null &&
           createdByOperationId!.trim().isNotEmpty)
         'createdByOperationId': createdByOperationId,
@@ -568,6 +581,7 @@ class RoutineItem {
           (map['schemaVersion'] as num?)?.toInt() ?? currentSchemaVersion,
       onboardingProjectionId: map['onboardingProjectionId'] as String?,
       onboardingSourceItemId: map['onboardingSourceItemId'] as String?,
+      onboardingVisualStyleKey: map['onboardingVisualStyleKey'] as String?,
       createdByOperationId: map['createdByOperationId'] as String?,
       lastMutationOperationId: map['lastMutationOperationId'] as String?,
       title: map['title'] as String? ?? '',

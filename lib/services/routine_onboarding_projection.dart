@@ -42,6 +42,7 @@ class RoutineOnboardingProjection {
     DateTime? now,
   }) {
     validateOwnerUid(bundle.uid);
+    final visualStyleBySourceId = _visualStyleBySourceId(bundle);
     final resolvedSlot =
         slot ??
         (bundle.runId.isEmpty
@@ -75,6 +76,9 @@ class RoutineOnboardingProjection {
           userId: bundle.uid,
           schemaVersion: RoutineItem.currentSchemaVersion,
           onboardingSourceItemId: sourceKey,
+          onboardingVisualStyleKey:
+              source.onboardingVisualStyleKey ??
+              visualStyleBySourceId[sourceKey],
           source: RoutineSource.onboarding,
           status: RoutineStatus.planned,
           isCompleted: false,
@@ -158,6 +162,10 @@ class RoutineOnboardingProjection {
             final data = codec.toFirestore(ownerUid: bundle.uid, item: item);
             data.remove('createdAt');
             data.remove('updatedAt');
+            // Visual identity was added after the projection fingerprint
+            // contract shipped. Excluding it keeps existing completed
+            // receipts valid while reconciliation backfills the new field.
+            data.remove('onboardingVisualStyleKey');
             return Map<String, dynamic>.fromEntries(
               data.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
             );
@@ -195,6 +203,40 @@ class RoutineOnboardingProjection {
       item.endMinute,
       [...item.repeatDays]..sort(),
     ].join('\u001f');
+  }
+
+  static Map<String, String> _visualStyleBySourceId(
+    OnboardingCompletionBundle bundle,
+  ) {
+    final result = <String, String>{};
+    final skinMode = bundle.uploadedAssetReferences
+        .where((asset) => asset.section == 'skin_care')
+        .map((asset) => asset.mode)
+        .where((mode) => mode == 'has_products' || mode == 'no_products')
+        .firstOrNull;
+    var classOrdinal = 0;
+    var workOrdinal = 0;
+    for (final block in bundle.baseTimelineBlocks) {
+      switch (block.section) {
+        case 'classes':
+          result[block.id] = 'class:$classOrdinal';
+          classOrdinal++;
+        case 'job_work_business':
+          result[block.id] = 'work:$workOrdinal';
+          workOrdinal++;
+        case 'eating':
+          result[block.id] = 'eating:default';
+        case 'fixed':
+          result[block.id] = 'fixed:default';
+        case 'skin_care':
+          if (skinMode == 'has_products') {
+            result[block.id] = 'skin:has-products';
+          } else if (skinMode == 'no_products') {
+            result[block.id] = 'skin:no-products';
+          }
+      }
+    }
+    return result;
   }
 
   static List<ConflictAcceptance> _projectAcceptances(

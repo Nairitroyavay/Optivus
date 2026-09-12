@@ -106,3 +106,36 @@ class RoutineDayEntry {
     }
   }
 }
+
+/// Explicit compatibility adapter for presentation-only tests.
+///
+/// It cannot represent duplicate visible instances of one template.
+/// Production callers must use `RoutineOccurrenceProjector.entriesForDay`.
+@visibleForTesting
+List<RoutineDayEntry> legacyRoutineDayEntriesForTesting(
+  List<RoutineItem> items, {
+  DateTime? displayDate,
+}) {
+  assert(
+    items.map((item) => item.id).toSet().length == items.length,
+    'Legacy testing adapter cannot represent duplicate template instances.',
+  );
+  final day = displayDate ?? DateTime(2026, 9, 14);
+  final dateKey =
+      '${day.year.toString().padLeft(4, '0')}-'
+      '${day.month.toString().padLeft(2, '0')}-'
+      '${day.day.toString().padLeft(2, '0')}';
+  return List.unmodifiable([
+    for (final item in items)
+      RoutineDayEntry(
+        item: item,
+        instanceId: item.id,
+        templateId: item.id,
+        occurrenceDateKey: dateKey,
+        displayDateKey: dateKey,
+        kind: item.isContinuation
+            ? RoutineDayEntryKind.continuation
+            : RoutineDayEntryKind.scheduled,
+      ),
+  ]);
+}

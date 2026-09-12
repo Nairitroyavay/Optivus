@@ -37,6 +37,7 @@ class RoutineTab extends ConsumerStatefulWidget {
 
 class _RoutineTabState extends ConsumerState<RoutineTab> {
   Timer? _minuteTimer;
+  late int _currentMinute;
   final List<RoutineDetailTarget> _detailStack = [];
   RoutineDetailTarget get _activeDetail =>
       _detailStack.isEmpty ? RoutineDetailTarget.none : _detailStack.last;
@@ -45,13 +46,23 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
   @override
   void initState() {
     super.initState();
-    // Refresh every 60 seconds for the current time indicator
-    _minuteTimer = Timer.periodic(const Duration(seconds: 60), (_) {
-      if (mounted) setState(() {});
+    _currentMinute = _minuteOfDay(DateTime.now());
+    _minuteTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (!mounted) return;
+      final next = _minuteOfDay(DateTime.now());
+      if (next != _currentMinute) setState(() => _currentMinute = next);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_ensureCompletedAccountRoutinesLoaded());
     });
+  }
+
+  static int _minuteOfDay(DateTime value) => value.hour * 60 + value.minute;
+
+  @override
+  void dispose() {
+    _minuteTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _ensureCompletedAccountRoutinesLoaded() async {
@@ -72,12 +83,6 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
     } catch (_) {
       // RoutineState retains the safe loading error and normal recovery UI.
     }
-  }
-
-  @override
-  void dispose() {
-    _minuteTimer?.cancel();
-    super.dispose();
   }
 
   void _openDetail(RoutineDetailTarget target) {
@@ -136,7 +141,18 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
       );
     }
 
-    final state = ref.watch(routineNotifierProvider);
+    final state = ref.watch(
+      routineNotifierProvider.select(
+        (state) => (
+          selectedDay: state.selectedDay,
+          showFullDay: state.showFullDay,
+          showMinuteTicks: state.showMinuteTicks,
+          showCurrentTimeLine: state.showCurrentTimeLine,
+          compactMode: state.compactMode,
+          loading: state.loading,
+        ),
+      ),
+    );
     final selectedDay = state.selectedDay;
     final showFullDay = state.showFullDay;
     final showMinuteTicks = state.showMinuteTicks;
@@ -156,6 +172,7 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
       showFullDay: showFullDay,
       showMinuteTicks: showMinuteTicks,
       compactMode: compactMode,
+      requiredMinute: isToday && showCurrentTimeLine ? _currentMinute : null,
     );
 
     // ── Layout matches old: LiquidBg → Scaffold(transparent) → Stack ──
@@ -197,6 +214,7 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                               layout: layout,
                               isToday: isToday,
                               showCurrentTimeLine: showCurrentTimeLine,
+                              currentMinute: _currentMinute,
                               selectedDay: state.selectedDay.weekday,
                             ),
                             Positioned.fill(
@@ -209,6 +227,7 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                           layout: layout,
                           isToday: isToday,
                           showCurrentTimeLine: showCurrentTimeLine,
+                          currentMinute: _currentMinute,
                           selectedDay: state.selectedDay.weekday,
                         ),
                 ),

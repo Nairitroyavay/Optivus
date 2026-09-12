@@ -43,13 +43,8 @@ class RoutineCardBase extends StatelessWidget {
         hasOverlap: hasOverlap,
         borderRadius: BorderRadius.circular(24),
         padding: const EdgeInsets.all(12),
-        child: Offstage(
-          offstage: hasOverlap && !isFront,
-          child: SingleChildScrollView(
-            physics: const NeverScrollableScrollPhysics(),
-            child: child,
-          ),
-        ),
+        useGroupedBackdrop: true,
+        child: child,
       ),
     );
 

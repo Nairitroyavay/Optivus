@@ -964,6 +964,27 @@ describe("Firestore Rules for Routine durability", () => {
       })));
     });
 
+    it("accepts bounded onboarding visual style metadata and rejects malformed values", async () => {
+      const owner = ownerDb("user123", true);
+      const styledRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-style-1");
+      await assertSucceeds(styledRef.set(routineItemData("user123", "routine-style-1", {
+        source: "onboarding",
+        onboardingProjectionId: "onboarding-initial-v1",
+        onboardingSourceItemId: "class-source-1",
+        onboardingVisualStyleKey: "class:0",
+      })));
+
+      const invalidTypeRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-style-invalid-type");
+      await assertFails(invalidTypeRef.set(routineItemData("user123", "routine-style-invalid-type", {
+        onboardingVisualStyleKey: 0,
+      })));
+
+      const oversizedRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-style-oversized");
+      await assertFails(oversizedRef.set(routineItemData("user123", "routine-style-oversized", {
+        onboardingVisualStyleKey: "x".repeat(65),
+      })));
+    });
+
     it("validates routine occurrence action and enforces immutable occurrence fields", async () => {
       const owner = ownerDb("user123", true);
       const validOccRef = owner.collection("users").doc("user123").collection("routineHistory").doc("occ-valid");
@@ -3379,4 +3400,3 @@ describe("Firestore Rules for baseTimelineSetup", () => {
     await assertFails(baseTimelineSetupRef(anon, "user123").get());
   });
 });
-

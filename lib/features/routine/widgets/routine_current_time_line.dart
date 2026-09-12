@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:optivus/core/timeline/timeline_visual_layout.dart';
 import 'package:optivus/core/timeline/timeline_visual_models.dart';
@@ -11,62 +10,36 @@ import 'package:optivus/features/routine/widgets/routine_time_ruler.dart';
 ///
 /// Uses `OptivusColors.roseAccent` (orange, old `OptivusColors.roseAccent`) — NOT green.
 /// Matches old Optivus `_CurrentTimeLineAtY` exactly.
-class RoutineCurrentTimeLine extends StatefulWidget {
+class RoutineCurrentTimeLine extends StatelessWidget {
   final TimelineLayout layout;
   final TimelineVisualScale? visualScale;
+  final int? currentMinute;
 
   const RoutineCurrentTimeLine({
     super.key,
     required this.layout,
     this.visualScale,
+    this.currentMinute,
   });
 
   @override
-  State<RoutineCurrentTimeLine> createState() => _RoutineCurrentTimeLineState();
-}
-
-class _RoutineCurrentTimeLineState extends State<RoutineCurrentTimeLine> {
-  Timer? _timer;
-  int _currentMinute = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _updateTime();
-    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (mounted) _updateTime();
-    });
-  }
-
-  void _updateTime() {
-    final now = DateTime.now();
-    setState(() {
-      _currentMinute = now.hour * 60 + now.minute;
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final effectiveMinute = currentMinute ?? now.hour * 60 + now.minute;
     // Only show if current time is within visible range
-    if (!widget.layout.isMinuteVisible(_currentMinute)) {
+    if (!layout.isMinuteVisible(effectiveMinute)) {
       return const SizedBox.shrink();
     }
 
-    if (widget.layout.totalMinutes <= 0) return const SizedBox.shrink();
+    if (layout.totalMinutes <= 0) return const SizedBox.shrink();
 
     final topOffset =
-        widget.visualScale?.yForMinute(_currentMinute) ??
-        widget.layout.topForMinute(_currentMinute);
+        visualScale?.yForMinute(effectiveMinute) ??
+        layout.topForMinute(effectiveMinute);
     const dotSize = 8.0;
 
     final displayTimeStr =
-        'Now — ${TimelineUtils.formatMinute(_currentMinute)}';
+        'Now — ${TimelineUtils.formatMinute(effectiveMinute)}';
 
     return Stack(
       clipBehavior: Clip.none,
