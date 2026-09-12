@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/features/routine/routine_state.dart';
-import 'package:optivus/features/routine/sheets/routine_move_sheet.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/features/routine/widgets/cards/routine_card_actions.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_base.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 
-/// Card for soft blocks: Eating (rich with dishes/nutrition) and Skin Care (steps).
+/// Card for soft blocks: Eating (rich with all dishes/nutrition) and Skin Care (all steps/products).
 class SoftBlockCard extends ConsumerWidget {
   final RoutineItem item;
   final bool isNow;
   final double? railHeight;
+  final bool isFront;
+  final bool hasOverlap;
   final VoidCallback? onTap;
 
   const SoftBlockCard({
@@ -20,6 +21,8 @@ class SoftBlockCard extends ConsumerWidget {
     required this.item,
     this.isNow = false,
     this.railHeight,
+    this.isFront = true,
+    this.hasOverlap = false,
     this.onTap,
   });
 
@@ -35,10 +38,11 @@ class SoftBlockCard extends ConsumerWidget {
       railHeight: railHeight,
       isCompleted: item.isCompleted,
       isNow: isNow,
+      isFront: isFront,
+      hasOverlap: hasOverlap,
       onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
@@ -65,7 +69,7 @@ class SoftBlockCard extends ConsumerWidget {
                 ),
                 child: Center(
                   child: Text(
-                    isEating ? '🍽️' : '🧴',
+                    isEating ? '🍽️' : (isSkinCare ? '🧴' : '🌿'),
                     style: const TextStyle(fontSize: 20),
                   ),
                 ),
@@ -78,7 +82,7 @@ class SoftBlockCard extends ConsumerWidget {
                     // Title
                     Text(
                       item.title,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 14.5,
@@ -110,45 +114,163 @@ class SoftBlockCard extends ConsumerWidget {
             ],
           ),
 
-          // Eating: dishes + nutrition
-          if (isEating && item.dishes != null && item.dishes!.isNotEmpty) ...[
-            const SizedBox(height: 7),
+          // Meal slot or category subtitle if distinct from title
+          if (isEating &&
+              item.mealSlot != null &&
+              item.mealSlot!.trim().isNotEmpty &&
+              item.mealSlot!.trim().toLowerCase() !=
+                  item.title.trim().toLowerCase()) ...[
+            const SizedBox(height: 5),
             Text(
-              _formatDishes(item.dishes!),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              item.mealSlot!.trim(),
               style: const TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w600,
                 color: OptivusColors.sub,
               ),
             ),
-            if (item.caloriesEstimate != null || item.proteinEstimate != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Text(
-                  _formatNutrition(item.caloriesEstimate, item.proteinEstimate),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: OptivusColors.sub.withValues(alpha: 0.82),
-                  ),
-                ),
-              ),
           ],
 
-          // Skin care: steps
-          if (isSkinCare && steps != null && steps.isNotEmpty) ...[
+          // Location
+          if (item.location != null && item.location!.trim().isNotEmpty) ...[
             const SizedBox(height: 6),
-            ...steps
-                .take(3)
+            Row(
+              children: [
+                const Icon(
+                  Icons.location_on_outlined,
+                  size: 13,
+                  color: OptivusColors.sub,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    item.location!.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: OptivusColors.sub,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+
+          // Eating: Nutrition
+          if (isEating &&
+              (item.caloriesEstimate != null ||
+                  item.proteinEstimate != null)) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                _formatNutrition(item.caloriesEstimate, item.proteinEstimate),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: OptivusColors.sub.withValues(alpha: 0.95),
+                ),
+              ),
+            ),
+          ],
+
+          // Eating: Full list of Dishes as chips
+          if (isEating && item.dishes != null && item.dishes!.isNotEmpty) ...[
+            const SizedBox(height: 7),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: item.dishes!
+                  .map((v) => v.trim())
+                  .where((v) => v.isNotEmpty)
+                  .map(
+                    (dish) => Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: color.withValues(alpha: 0.22),
+                          width: 0.6,
+                        ),
+                      ),
+                      child: Text(
+                        dish,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: OptivusColors.ink,
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+
+          // Skin care: Steps (all steps rendered)
+          if (isSkinCare && steps != null && steps.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'STEPS',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textSecondary,
+                letterSpacing: 0.6,
+              ),
+            ),
+            const SizedBox(height: 4),
+            ...steps.indexed.map((entry) {
+              final idx = entry.$1;
+              final step = entry.$2.trim();
+              if (step.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Text(
+                  '${idx + 1}. $step',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: OptivusColors.sub,
+                  ),
+                ),
+              );
+            }),
+          ],
+
+          // Skin care: Products (all products rendered)
+          if (isSkinCare &&
+              item.skincareProducts != null &&
+              item.skincareProducts!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'PRODUCTS',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textSecondary,
+                letterSpacing: 0.6,
+              ),
+            ),
+            const SizedBox(height: 4),
+            ...item.skincareProducts!
+                .map((p) => p.trim())
+                .where((p) => p.isNotEmpty)
                 .map(
-                  (step) => Padding(
+                  (product) => Padding(
                     padding: const EdgeInsets.only(bottom: 2),
                     child: Text(
-                      step,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      '• $product',
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -157,63 +279,45 @@ class SoftBlockCard extends ConsumerWidget {
                     ),
                   ),
                 ),
-            if (steps.length > 3)
-              Text(
-                '${steps.length} steps',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: OptivusColors.sub.withValues(alpha: 0.7),
-                ),
-              ),
           ],
 
-          // Action buttons
+          // Notes
+          if (item.notes != null && item.notes!.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.notes_rounded,
+                  size: 13,
+                  color: OptivusColors.sub,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    item.notes!.trim(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                      color: OptivusColors.sub,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+
+          // Three Primary Footer Actions: Start, Done, Move
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 4,
-            children: [
-              CardActionButton(
-                label: 'Done',
-                color: color,
-                icon: Icons.check_rounded,
-                onTap: () => ref
-                    .read(routineNotifierProvider.notifier)
-                    .markCompleted(item.id),
-              ),
-              if (isEating && item.dishes != null)
-                CardActionButton(
-                  label: 'View dishes',
-                  color: color,
-                  icon: Icons.restaurant_menu_rounded,
-                  onTap: onTap,
-                ),
-              if (isSkinCare)
-                CardActionButton(
-                  label: 'View steps',
-                  color: color,
-                  icon: Icons.format_list_numbered_rounded,
-                  onTap: onTap,
-                ),
-              CardActionButton(
-                label: 'Move',
-                color: OptivusColors.textSecondary,
-                icon: Icons.schedule_rounded,
-                onTap: () => showRoutineMoveSheet(context, ref, item),
-              ),
-            ],
-          ),
+          RoutineCardActions(item: item, color: color),
         ],
       ),
     );
   }
 
-  String _formatDishes(List<String> dishes) {
-    if (dishes.length <= 3) return dishes.join(' • ');
-    return '${dishes.take(3).join(' • ')} + ${dishes.length - 3} more';
-  }
-
-  String _formatNutrition(double? cal, double? protein) {
+  static String _formatNutrition(double? cal, double? protein) {
     final parts = <String>[];
     if (cal != null) parts.add('${cal.toInt()} kcal');
     if (protein != null) parts.add('${protein.toInt()}g protein');

@@ -490,6 +490,7 @@ class OnboardingCompletionService {
         hardBlock: blockType == RoutineBlockType.hardBlock,
         location: b.location,
         notes: b.notes,
+        baseTimelineSection: b.section,
         professor: b.professor,
         courseCode: b.courseCode,
         classType: b.classType,

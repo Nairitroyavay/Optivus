@@ -511,6 +511,8 @@ class RoutineItem {
       if (steps != null) 'steps': List<String>.from(steps!),
       if (mealCategory != null && mealCategory!.trim().isNotEmpty)
         'mealCategory': mealCategory!.trim(),
+      if (mealSlot != null && mealSlot!.trim().isNotEmpty)
+        'mealSlot': mealSlot!.trim(),
       if (dishes != null) 'dishes': List<String>.from(dishes!),
       if (caloriesEstimate != null) 'caloriesEstimate': caloriesEstimate,
       if (proteinEstimate != null) 'proteinEstimate': proteinEstimate,

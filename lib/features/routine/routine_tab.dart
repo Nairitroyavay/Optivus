@@ -22,7 +22,6 @@ import 'package:optivus/features/routine/widgets/routine_timeline_viewport.dart'
 import 'package:optivus/features/routine/widgets/routine_write_status_banner.dart';
 import 'package:optivus/features/routine/sheets/add_routine_sheet.dart';
 import 'package:optivus/features/routine/sheets/ai_assistant_sheet.dart';
-import 'package:optivus/features/routine/sheets/routine_detail_sheet.dart';
 import 'package:optivus/state/app_state.dart';
 
 /// The rebuilt Routine tab — full timeline control center.
@@ -208,8 +207,6 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                           layout: layout,
                           isToday: isToday,
                           showCurrentTimeLine: showCurrentTimeLine,
-                          onCardTap: (item) =>
-                              showRoutineDetailSheet(context, ref, item),
                         ),
                 ),
               ],

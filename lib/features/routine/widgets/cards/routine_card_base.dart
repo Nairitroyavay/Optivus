@@ -1,21 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/timeline/widgets/timeline_card_chrome.dart';
 
 /// Shared glass card wrapper for all routine timeline cards.
 ///
-/// Matches old Optivus `_EventCard` styling exactly:
+/// Matches luminous frosted glass styling:
 /// - Border radius: 20
-/// - Normal: white@0.55, border white@0.80 1.2px, shadow black@0.06
-/// - isNow: accentColor@0.10, border accent@0.45 1.5px, glow shadow
-/// - Press animation: scale 1.0→0.97
 /// - Accent bar: 3.5px with glow shadow
+/// - Press animation: scale 1.0→0.97
 class RoutineCardBase extends StatefulWidget {
   final Widget child;
   final Color railColor;
   final double? railHeight;
   final bool isCompleted;
   final bool isNow;
+  final bool isFront;
+  final bool hasOverlap;
   final VoidCallback? onTap;
 
   const RoutineCardBase({
@@ -25,6 +26,8 @@ class RoutineCardBase extends StatefulWidget {
     this.railHeight,
     this.isCompleted = false,
     this.isNow = false,
+    this.isFront = true,
+    this.hasOverlap = false,
     this.onTap,
   });
 
@@ -58,63 +61,7 @@ class _RoutineCardBaseState extends State<RoutineCardBase>
 
   @override
   Widget build(BuildContext context) {
-    // Determine card styling based on state
-    final Color bgColor;
-    final Color borderColor;
-    final double borderWidth;
-    final List<BoxShadow> shadows;
-
-    if (widget.isCompleted) {
-      bgColor = OptivusColors.success.withValues(alpha: 0.08);
-      borderColor = OptivusColors.success;
-      borderWidth = 1.2;
-      shadows = [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.06),
-          blurRadius: 14,
-          offset: const Offset(0, 4),
-        ),
-        BoxShadow(
-          color: Colors.white.withValues(alpha: 0.55),
-          blurRadius: 0,
-          offset: const Offset(-1, -1),
-        ),
-      ];
-    } else if (widget.isNow) {
-      bgColor = widget.railColor.withValues(alpha: 0.10);
-      borderColor = widget.railColor.withValues(alpha: 0.45);
-      borderWidth = 1.5;
-      shadows = [
-        BoxShadow(
-          color: widget.railColor.withValues(alpha: 0.22),
-          blurRadius: 18,
-          offset: const Offset(0, 6),
-        ),
-        BoxShadow(
-          color: Colors.white.withValues(alpha: 0.55),
-          blurRadius: 0,
-          offset: const Offset(-1, -1),
-        ),
-      ];
-    } else {
-      bgColor = Colors.white.withValues(alpha: 0.55);
-      borderColor = Colors.white.withValues(alpha: 0.80);
-      borderWidth = 1.2;
-      shadows = [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.06),
-          blurRadius: 14,
-          offset: const Offset(0, 4),
-        ),
-        BoxShadow(
-          color: Colors.white.withValues(alpha: 0.55),
-          blurRadius: 0,
-          offset: const Offset(-1, -1),
-        ),
-      ];
-    }
-
-    final railColor = widget.isCompleted
+    final effectiveColor = widget.isCompleted
         ? OptivusColors.success
         : widget.railColor;
     final accentRailHeight = (widget.railHeight ?? 42.0)
@@ -135,45 +82,44 @@ class _RoutineCardBaseState extends State<RoutineCardBase>
         animation: _scaleAnim,
         builder: (_, child) =>
             Transform.scale(scale: _scaleAnim.value, child: child),
-        child: Stack(
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              decoration: BoxDecoration(
-                color: bgColor,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: borderColor, width: borderWidth),
-                boxShadow: shadows,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Accent bar — 3.5px with glow shadow
-                    Container(
-                      width: 3.5,
-                      height: accentRailHeight,
-                      margin: const EdgeInsets.only(right: 10, top: 2),
-                      decoration: BoxDecoration(
-                        color: railColor,
-                        borderRadius: BorderRadius.circular(3),
-                        boxShadow: [
-                          BoxShadow(
-                            color: railColor.withValues(alpha: 0.45),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
+        child: TimelineCardChrome(
+          baseColor: effectiveColor,
+          isFront: widget.isFront,
+          hasOverlap: widget.hasOverlap,
+          borderRadius: BorderRadius.circular(20),
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Accent bar — 3.5px with glow shadow
+              Container(
+                width: 3.5,
+                height: accentRailHeight,
+                margin: const EdgeInsets.only(right: 10, top: 2),
+                decoration: BoxDecoration(
+                  color: effectiveColor,
+                  borderRadius: BorderRadius.circular(3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: effectiveColor.withValues(alpha: 0.45),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
                     ),
-                    // Content
-                    Expanded(child: widget.child),
                   ],
                 ),
               ),
-            ),
-          ],
+              // Content
+              Expanded(
+                child: Offstage(
+                  offstage: widget.hasOverlap && !widget.isFront,
+                  child: SingleChildScrollView(
+                    physics: const NeverScrollableScrollPhysics(),
+                    child: widget.child,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

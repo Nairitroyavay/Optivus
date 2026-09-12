@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/features/routine/routine_state.dart';
-import 'package:optivus/features/routine/sheets/add_routine_sheet.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/features/routine/widgets/cards/routine_card_actions.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_base.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 
@@ -14,6 +12,8 @@ class TrackerTaskCard extends ConsumerWidget {
   final RoutineItem item;
   final bool isNow;
   final double? railHeight;
+  final bool isFront;
+  final bool hasOverlap;
   final VoidCallback? onTap;
 
   const TrackerTaskCard({
@@ -21,6 +21,8 @@ class TrackerTaskCard extends ConsumerWidget {
     required this.item,
     this.isNow = false,
     this.railHeight,
+    this.isFront = true,
+    this.hasOverlap = false,
     this.onTap,
   });
 
@@ -36,10 +38,11 @@ class TrackerTaskCard extends ConsumerWidget {
       railHeight: railHeight,
       isCompleted: isComplete,
       isNow: isNow,
+      isFront: isFront,
+      hasOverlap: hasOverlap,
       onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
@@ -75,7 +78,7 @@ class TrackerTaskCard extends ConsumerWidget {
                   children: [
                     Text(
                       item.title,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 14.5,
@@ -91,7 +94,7 @@ class TrackerTaskCard extends ConsumerWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)} • ${item.blockTypeLabel}',
+                      '${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)} • ${item.trackerType != TrackerType.none ? item.trackerType.name : item.blockTypeLabel}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -105,55 +108,84 @@ class TrackerTaskCard extends ConsumerWidget {
               ),
             ],
           ),
+
           if (isInTracker) ...[
             const SizedBox(height: 6),
-            Text(
-              'In progress in Tracker',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: color,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                'In progress in Tracker',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
               ),
             ),
           ],
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 4,
-            children: [
-              if (isInTracker)
-                CardActionButton(
-                  label: 'Open Tracker',
-                  color: color,
-                  icon: Icons.open_in_new,
-                  onTap: () =>
-                      ref.read(appNavigationProvider.notifier).goToTracker(),
-                )
-              else if (!isComplete) ...[
-                CardActionButton(
-                  label: 'Start',
-                  color: color,
-                  icon: Icons.play_arrow,
-                  onTap: () => ref
-                      .read(routineNotifierProvider.notifier)
-                      .startTrackerTask(item),
+
+          // Location
+          if (item.location != null && item.location!.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(
+                  Icons.location_on_outlined,
+                  size: 13,
+                  color: OptivusColors.sub,
                 ),
-                CardActionButton(
-                  label: 'Edit',
-                  color: OptivusColors.textSecondary,
-                  icon: Icons.edit_rounded,
-                  onTap: () =>
-                      showAddRoutineSheet(context, ref, editItem: item),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    item.location!.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: OptivusColors.sub,
+                    ),
+                  ),
                 ),
               ],
-              if (isComplete)
-                CardActionButton(
-                  label: 'Completed',
-                  color: OptivusColors.success,
-                  icon: Icons.check,
+            ),
+          ],
+
+          // Notes
+          if (item.notes != null && item.notes!.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.notes_rounded,
+                  size: 13,
+                  color: OptivusColors.sub,
                 ),
-            ],
-          ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    item.notes!.trim(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                      color: OptivusColors.sub,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+
+          // Three Primary Footer Actions: Start, Done, Move
+          const SizedBox(height: 8),
+          RoutineCardActions(item: item, color: color),
         ],
       ),
     );

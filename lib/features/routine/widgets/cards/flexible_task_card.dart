@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
-import 'package:optivus/features/routine/sheets/routine_move_sheet.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/features/routine/widgets/cards/routine_card_actions.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_base.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 
@@ -13,6 +13,8 @@ class FlexibleTaskCard extends ConsumerWidget {
   final RoutineItem item;
   final bool isNow;
   final double? railHeight;
+  final bool isFront;
+  final bool hasOverlap;
   final VoidCallback? onTap;
 
   const FlexibleTaskCard({
@@ -20,6 +22,8 @@ class FlexibleTaskCard extends ConsumerWidget {
     required this.item,
     this.isNow = false,
     this.railHeight,
+    this.isFront = true,
+    this.hasOverlap = false,
     this.onTap,
   });
 
@@ -34,10 +38,11 @@ class FlexibleTaskCard extends ConsumerWidget {
       railHeight: railHeight,
       isCompleted: item.isCompleted,
       isNow: isNow,
+      isFront: isFront,
+      hasOverlap: hasOverlap,
       onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
@@ -73,7 +78,7 @@ class FlexibleTaskCard extends ConsumerWidget {
                   children: [
                     Text(
                       item.title,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 14.5,
@@ -103,18 +108,48 @@ class FlexibleTaskCard extends ConsumerWidget {
               ),
             ],
           ),
-          // Subtask preview
+
+          // Location
+          if (item.location != null && item.location!.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(
+                  Icons.location_on_outlined,
+                  size: 13,
+                  color: OptivusColors.sub,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    item.location!.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: OptivusColors.sub,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+
+          // Full subtasks list with interactive checkboxes
           if (item.subtasks != null && item.subtasks!.isNotEmpty) ...[
-            const SizedBox(height: 7),
+            const SizedBox(height: 8),
             Text(
-              '${item.subtasks!.length} subtasks',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: color,
+              'SUBTASKS (${item.subtasks!.length})',
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textSecondary,
+                letterSpacing: 0.6,
               ),
             ),
-            ...item.subtasks!.take(2).indexed.map((entry) {
+            const SizedBox(height: 4),
+            ...item.subtasks!.indexed.map((entry) {
               final idx = entry.$1;
               final task = entry.$2;
               final done =
@@ -123,75 +158,75 @@ class FlexibleTaskCard extends ConsumerWidget {
                   item.subtasksCompleted![idx];
               return Padding(
                 padding: const EdgeInsets.only(top: 3),
-                child: Row(
-                  children: [
-                    Icon(
-                      done ? Icons.check_box : Icons.check_box_outline_blank,
-                      size: 13,
-                      color: done
-                          ? OptivusColors.success
-                          : OptivusColors.sub.withValues(alpha: 0.7),
-                    ),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(
-                        task,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w500,
-                          color: done ? OptivusColors.sub : OptivusColors.ink,
-                          decoration: done ? TextDecoration.lineThrough : null,
-                          decorationColor: OptivusColors.sub,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => ref
+                      .read(routineNotifierProvider.notifier)
+                      .toggleSubtask(item.id, idx),
+                  child: Row(
+                    children: [
+                      Icon(
+                        done ? Icons.check_box : Icons.check_box_outline_blank,
+                        size: 15,
+                        color: done
+                            ? OptivusColors.success
+                            : OptivusColors.sub.withValues(alpha: 0.7),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          task,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
+                            color: done ? OptivusColors.sub : OptivusColors.ink,
+                            decoration: done
+                                ? TextDecoration.lineThrough
+                                : null,
+                            decorationColor: OptivusColors.sub,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               );
             }),
-            if (item.subtasks!.length > 2)
-              Padding(
-                padding: const EdgeInsets.only(top: 3),
-                child: Text(
-                  '+${item.subtasks!.length - 2} more',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: OptivusColors.sub.withValues(alpha: 0.7),
+          ],
+
+          // Notes
+          if (item.notes != null && item.notes!.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.notes_rounded,
+                  size: 13,
+                  color: OptivusColors.sub,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    item.notes!.trim(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                      color: OptivusColors.sub,
+                    ),
                   ),
                 ),
-              ),
+              ],
+            ),
           ],
+
+          // Three Primary Footer Actions: Start, Done, Move
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 4,
-            children: [
-              CardActionButton(
-                label: 'Start',
-                color: color,
-                icon: Icons.play_arrow_rounded,
-                onTap: () => ref
-                    .read(routineNotifierProvider.notifier)
-                    .startFlexibleTask(item.id),
-              ),
-              CardActionButton(
-                label: 'Done',
-                color: OptivusColors.success,
-                icon: Icons.check_rounded,
-                onTap: () => ref
-                    .read(routineNotifierProvider.notifier)
-                    .markCompleted(item.id),
-              ),
-              CardActionButton(
-                label: 'Move',
-                color: OptivusColors.textSecondary,
-                icon: Icons.schedule_rounded,
-                onTap: () => showRoutineMoveSheet(context, ref, item),
-              ),
-            ],
-          ),
+          RoutineCardActions(item: item, color: color),
         ],
       ),
     );

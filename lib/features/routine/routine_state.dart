@@ -1990,6 +1990,43 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return selected;
   }
 
+  Future<RoutineWriteResult> startRoutineItem(String itemId) async {
+    final targetIndex = state.items.indexWhere((e) => e.id == itemId);
+    if (targetIndex != -1) {
+      final item = state.items[targetIndex];
+      if (item.blockType == RoutineBlockType.flexibleTask) {
+        return await startFlexibleTask(itemId);
+      }
+      if (item.blockType == RoutineBlockType.trackerTask) {
+        return await startTrackerTask(item);
+      }
+    }
+    return await _writeOccurrence(
+      itemId,
+      status: RoutineStatus.active,
+      source: 'routine',
+      action: 'start',
+    );
+  }
+
+  Future<RoutineWriteResult> completeRoutineItem(String itemId) async {
+    final targetIndex = state.items.indexWhere((e) => e.id == itemId);
+    if (targetIndex != -1) {
+      final item = state.items[targetIndex];
+      if (item.blockType == RoutineBlockType.trackerTask) {
+        return await completeTrackerSession(itemId);
+      }
+      if (item.blockType == RoutineBlockType.moneyTask) {
+        return await alreadySaved(itemId);
+      }
+      if (item.blockType == RoutineBlockType.checkIn &&
+          item.category == RoutineCategory.badHabit) {
+        return await checkIn(itemId, 'Avoided');
+      }
+    }
+    return await markCompleted(itemId);
+  }
+
   Future<RoutineWriteResult> startFlexibleTask(String itemId) async {
     return await _writeOccurrence(
       itemId,

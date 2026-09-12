@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/features/routine/sheets/add_routine_sheet.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/features/routine/widgets/cards/routine_card_actions.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_base.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 
@@ -12,6 +12,8 @@ class HardBlockCard extends ConsumerWidget {
   final RoutineItem item;
   final bool isNow;
   final double? railHeight;
+  final bool isFront;
+  final bool hasOverlap;
   final VoidCallback? onTap;
 
   const HardBlockCard({
@@ -19,24 +21,40 @@ class HardBlockCard extends ConsumerWidget {
     required this.item,
     this.isNow = false,
     this.railHeight,
+    this.isFront = true,
+    this.hasOverlap = false,
     this.onTap,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final color = RoutineCardFactory.colorForType(RoutineBlockType.hardBlock);
+
+    final classDetails = [
+      if (item.professor != null && item.professor!.trim().isNotEmpty)
+        item.professor!.trim(),
+      if (item.courseCode != null && item.courseCode!.trim().isNotEmpty)
+        item.courseCode!.trim(),
+      if (item.classType != null && item.classType!.trim().isNotEmpty)
+        item.classType!.trim(),
+      if (item.sectionLabel != null && item.sectionLabel!.trim().isNotEmpty)
+        item.sectionLabel!.trim(),
+    ].join(' • ');
+
     return RoutineCardBase(
       railColor: color,
       railHeight: railHeight,
       isCompleted: item.isCompleted,
       isNow: isNow,
+      isFront: isFront,
+      hasOverlap: hasOverlap,
       onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Emoji icon box
               Container(
@@ -59,7 +77,7 @@ class HardBlockCard extends ConsumerWidget {
                 ),
                 child: Center(
                   child: Text(
-                    _isSleepItem(item) ? '🌙' : '🔒',
+                    _emojiFor(item),
                     style: const TextStyle(fontSize: 20),
                   ),
                 ),
@@ -73,7 +91,7 @@ class HardBlockCard extends ConsumerWidget {
                       item.isContinuation
                           ? '${item.title} continues'
                           : item.title,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 14.5,
@@ -129,33 +147,109 @@ class HardBlockCard extends ConsumerWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 4,
-            children: [
-              CardActionButton(
-                label: 'View',
-                color: color,
-                icon: Icons.visibility_rounded,
-                onTap: onTap,
-              ),
-              if (!item.isContinuation)
-                CardActionButton(
-                  label: 'Edit base',
-                  color: OptivusColors.textSecondary,
-                  icon: Icons.edit_calendar_rounded,
-                  onTap: () =>
-                      showAddRoutineSheet(context, ref, editItem: item),
+
+          // Location
+          if (item.location != null && item.location!.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(
+                  Icons.location_on_outlined,
+                  size: 13,
+                  color: OptivusColors.sub,
                 ),
-            ],
-          ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    item.location!.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: OptivusColors.sub,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+
+          // Structured Class Details: Professor, Course, Class Type
+          if (classDetails.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(
+                  Icons.school_outlined,
+                  size: 13,
+                  color: OptivusColors.sub,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    classDetails,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: OptivusColors.sub,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+
+          // Notes
+          if (item.notes != null && item.notes!.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.notes_rounded,
+                  size: 13,
+                  color: OptivusColors.sub,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    item.notes!.trim(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                      color: OptivusColors.sub,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+
+          // Three Primary Footer Actions: Start, Done, Move
+          const SizedBox(height: 8),
+          RoutineCardActions(item: item, color: color),
         ],
       ),
     );
   }
 
-  static bool _isSleepItem(RoutineItem item) =>
-      item.category == RoutineCategory.sleep ||
-      item.title.toLowerCase().contains('sleep');
+  static String _emojiFor(RoutineItem item) {
+    if (item.category == RoutineCategory.sleep ||
+        item.title.toLowerCase().contains('sleep')) {
+      return '🌙';
+    }
+    if (item.category == RoutineCategory.classBlock) {
+      return '🎓';
+    }
+    if (item.category == RoutineCategory.job ||
+        item.title.toLowerCase().contains('work')) {
+      return '💼';
+    }
+    return '🔒';
+  }
 }

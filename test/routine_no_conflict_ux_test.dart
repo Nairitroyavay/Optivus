@@ -1097,9 +1097,9 @@ void main() {
     },
   );
 
-  group('D: Drag into Overlap Accepts Target Time', () {
+  group('D: Move into Overlap Accepts Target Time', () {
     testWidgets(
-      'Drag drop to overlapping position saves without error snackbar',
+      'Move action to overlapping position saves without error snackbar',
       (tester) async {
         tester.view.physicalSize = const Size(800, 1400);
         tester.view.devicePixelRatio = 1.0;
@@ -1145,14 +1145,18 @@ void main() {
         final dragFinder = find.text('Draggable Task');
         expect(dragFinder, findsOneWidget);
 
-        // Start long press to trigger drag
-        final gesture = await tester.startGesture(tester.getCenter(dragFinder));
-        await tester.pump(const Duration(milliseconds: 600));
+        // Tap the canonical Move button on the card
+        final moveActionFinder = find.byKey(
+          const ValueKey('routine-action-move-drag_item'),
+        );
+        expect(moveActionFinder, findsOneWidget);
+        await tester.tap(moveActionFinder);
+        await tester.pumpAndSettle();
 
-        // Drag upwards towards 9:30 AM
-        await gesture.moveBy(const Offset(0, -120));
-        await tester.pump();
-        await gesture.up();
+        // Move sheet opens, confirm move task
+        final moveTaskButton = find.text('Move task');
+        expect(moveTaskButton, findsOneWidget);
+        await tester.tap(moveTaskButton);
         await tester.pumpAndSettle();
 
         expect(moveCalled, isTrue);

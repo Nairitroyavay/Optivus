@@ -1,26 +1,31 @@
-import 'dart:math';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/timeline/timeline_visual_layout.dart';
 import 'package:optivus/core/timeline/timeline_visual_models.dart';
 import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/timeline_layout.dart';
+import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 import 'package:optivus/features/routine/widgets/routine_time_ruler.dart';
 import 'package:optivus/features/routine/widgets/routine_current_time_line.dart';
-import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
+import 'package:optivus/features/routine/widgets/routine_timeline_adapter.dart';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:optivus/features/routine/routine_state.dart';
-
-/// Timeline viewport — scrollable stack with ruler, cards, and current time.
+/// Routine timeline viewport redesign based on Onboarding Step 14 layout.
 ///
-/// Matches old Optivus `TimelineDaySchedule` layout:
-/// - Stack with ruler on left, positioned cards, current time overlay
-/// - Cards at exact minute positions
-/// - Auto-scrolls to current time on init
+/// Features:
+/// - Unchanged 64px rail, hour ruler, hour dots, and coordinate system.
+/// - Unchanged original Routine block colors via RoutineCardFactory.colorForType.
+/// - Single front card + exposed back-card tabs in the overlap gutter.
+/// - Tab promotion on tap brings back card to front without mutating DB.
+/// - Full-detail rich cards with all dishes, skincare steps, and subtasks.
+/// - Exactly 3 primary footer actions on front cards: [Start] [Done] [Move].
+/// - Content-aware height measurement with constraint-based timeline stretching.
+/// - Zero conflict UX: no conflict badges, warnings, or blocking dialogs.
 class RoutineTimelineViewport extends ConsumerStatefulWidget {
   final List<RoutineItem> items;
   final TimelineLayout layout;
@@ -45,12 +50,9 @@ class RoutineTimelineViewport extends ConsumerStatefulWidget {
 class _RoutineTimelineViewportState
     extends ConsumerState<RoutineTimelineViewport> {
   late ScrollController _scrollController;
+  final Map<String, String> _focusedItemIdByComponent = {};
 
-  String? _dragItemId;
-  double _dragTop = 0.0;
-  double _dragStartTop = 0.0;
-  double _dragInitialGlobalY = 0.0;
-  String? _focusedItemId;
+  TimelineVisualScale? _lastScale;
 
   @override
   void initState() {
@@ -75,7 +77,10 @@ class _RoutineTimelineViewportState
 
     if (!widget.layout.isMinuteVisible(currentMinute)) return;
 
-    final targetScroll = widget.layout.topForMinute(currentMinute) - 100;
+    final targetY = _lastScale != null
+        ? _lastScale!.yForMinute(currentMinute)
+        : widget.layout.topForMinute(currentMinute);
+    final targetScroll = targetY - 100;
     final maxScroll = _scrollController.position.maxScrollExtent;
 
     _scrollController.animateTo(
@@ -96,21 +101,24 @@ class _RoutineTimelineViewportState
         if (!viewportWidth.isFinite || viewportWidth <= 0) {
           return const SizedBox.shrink();
         }
-        final visualBuild = _buildItemLayouts(viewportWidth);
-        final itemLayouts = visualBuild.entries;
-        final visualScale = visualBuild.scale;
-        final timelineHeight = max(
-          visualBuild.totalHeight,
-          itemLayouts.fold<double>(
-            visualBuild.totalHeight,
-            (height, entry) => max(height, entry.cardTop + entry.cardHeight),
-          ),
+
+        final prepared = RoutinePreparedTimelineLayout.prepare(
+          context: context,
+          rawItems: widget.items,
+          timelineLayout: widget.layout,
+          availableWidth: viewportWidth,
         );
-        final paintedItemLayouts = [...itemLayouts]
-          ..sort((a, b) {
-            if (a.isFront != b.isFront) return a.isFront ? 1 : -1;
-            return a.order.compareTo(b.order);
-          });
+        _lastScale = prepared.scale;
+
+        final timelineHeight = math.max(
+          prepared.totalHeight,
+          prepared.scale.yForMinute(widget.layout.visibleEndMinute),
+        );
+
+        final isFrontById = <String, bool>{
+          for (final item in prepared.items)
+            item.id: _isFrontItem(prepared, item),
+        };
 
         return SingleChildScrollView(
           controller: _scrollController,
@@ -154,7 +162,7 @@ class _RoutineTimelineViewportState
                       kTimelineContentGap,
                   child: RoutineTimeRuler(
                     layout: widget.layout,
-                    visualScale: visualScale,
+                    visualScale: prepared.scale,
                   ),
                 ),
 
@@ -167,302 +175,23 @@ class _RoutineTimelineViewportState
                   child: IgnorePointer(
                     child: CustomPaint(
                       painter: _TimelineAnchorPainter(
-                        scale: visualScale,
-                        entries: itemLayouts,
+                        scale: prepared.scale,
+                        items: prepared.items,
+                        overlapIds: prepared.overlapItemIds,
+                        isFrontById: isFrontById,
+                        leftOffset: prepared.leftOffset,
+                        gutterWidth: prepared.gutterWidth,
                       ),
                     ),
                   ),
                 ),
 
-                // ── Content card layer: readable overlays that do not affect anchors ──
-                // Long press drag moves cards with 5 min or precision-mode snapping.
-                ...paintedItemLayouts.map((entry) {
-                  final item = entry.item;
-                  final now = DateTime.now();
-                  final currentMinute = now.hour * 60 + now.minute;
-                  final isNow =
-                      widget.isToday &&
-                      TimelineUtils.isMinuteInsideItem(item, currentMinute);
+                // ── Content card layer: back cards painted first, front cards painted last ──
+                for (final item in _cardPaintOrder(prepared))
+                  _buildCard(context, prepared, item, routineState),
 
-                  final isDragging = _dragItemId == item.id;
-                  final top = isDragging ? _dragTop : entry.cardTop;
-
-                  return Positioned(
-                    top: top,
-                    left: entry.left,
-                    right: entry.right,
-                    child: GestureDetector(
-                      onLongPressStart: (details) {
-                        setState(() {
-                          _dragItemId = item.id;
-                          _focusedItemId = item.id;
-                          _dragStartTop = entry.cardTop;
-                          _dragTop = entry.cardTop;
-                          _dragInitialGlobalY = details.globalPosition.dy;
-                        });
-                      },
-                      onLongPressMoveUpdate: (details) {
-                        if (_dragItemId == item.id) {
-                          setState(() {
-                            _dragTop =
-                                _dragStartTop +
-                                (details.globalPosition.dy -
-                                    _dragInitialGlobalY);
-                          });
-                        }
-                      },
-                      onLongPressEnd: (details) async {
-                        if (_dragItemId == item.id) {
-                          final snap =
-                              ref.read(routineNotifierProvider).precisionMode
-                              ? 1
-                              : 5;
-                          int newMinute = widget.layout
-                              .clampMinuteToVisibleRange(
-                                visualScale.minuteForY(_dragTop).round(),
-                              )
-                              .clamp(0, 1439);
-                          newMinute = (newMinute / snap).round() * snap;
-
-                          final result = await ref
-                              .read(routineNotifierProvider.notifier)
-                              .moveItem(
-                                itemId: item.id,
-                                date:
-                                    item.date ??
-                                    ref
-                                        .read(routineNotifierProvider)
-                                        .selectedDay,
-                                startMinute: newMinute,
-                                durationMinutes: item.durationMinutes,
-                              );
-
-                          if (!context.mounted) return;
-                          if (!result.closesUserFlow) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  result.message ?? 'Failed to move item.',
-                                ),
-                              ),
-                            );
-                          }
-                          if (!mounted) return;
-                          setState(() {
-                            _dragItemId = null;
-                          });
-                        }
-                      },
-                      onLongPressCancel: () {
-                        if (_dragItemId == item.id) {
-                          setState(() {
-                            _dragItemId = null;
-                          });
-                        }
-                      },
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          minHeight: _minimumCardHeightFor(item),
-                        ),
-                        child: Builder(
-                          builder: (context) {
-                            final isPending = routineState.pendingItemIds
-                                .contains(item.id);
-                            final failedIntent =
-                                routineState.failedIntentsByItemId[item.id];
-                            return Opacity(
-                              opacity: isDragging || isPending ? 0.6 : 1.0,
-                              child: Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  RoutineCardFactory.buildCard(
-                                    item: item,
-                                    isNow: isNow,
-                                    railHeight: entry.railHeight,
-                                    onTap: isPending
-                                        ? null
-                                        : () => widget.onCardTap?.call(item),
-                                  ),
-                                  if (entry.hiddenOverlapCount > 0 &&
-                                      entry.isFront)
-                                    Positioned(
-                                      right: 10,
-                                      bottom: 10,
-                                      child: Semantics(
-                                        button: true,
-                                        label:
-                                            'Show ${entry.hiddenOverlapCount} hidden overlapping routine tasks',
-                                        child: GestureDetector(
-                                          behavior: HitTestBehavior.opaque,
-                                          onTap: () =>
-                                              _showHiddenOverlapChooser(
-                                                entry,
-                                                itemLayouts,
-                                              ),
-                                          child: ConstrainedBox(
-                                            constraints: const BoxConstraints(
-                                              minWidth: 44,
-                                              minHeight: 44,
-                                            ),
-                                            child: Align(
-                                              alignment: Alignment.bottomRight,
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 7,
-                                                      vertical: 3,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.black
-                                                      .withValues(alpha: 0.56),
-                                                  borderRadius:
-                                                      BorderRadius.circular(10),
-                                                ),
-                                                child: Text(
-                                                  '+${entry.hiddenOverlapCount} more',
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.w900,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  if (isPending)
-                                    const Positioned(
-                                      top: 12,
-                                      right: 12,
-                                      child: SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      ),
-                                    ),
-                                  if (failedIntent != null && !isPending)
-                                    Positioned(
-                                      top: 8,
-                                      right: 8,
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          if (failedIntent.action ==
-                                              RoutineWriteAction.create) ...[
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 6,
-                                                    vertical: 2,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: Colors.red.shade50,
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                                border: Border.all(
-                                                  color: Colors.red.shade200,
-                                                ),
-                                              ),
-                                              child: const Text(
-                                                'Not saved',
-                                                style: TextStyle(
-                                                  color: Colors.red,
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 4),
-                                          ],
-                                          GestureDetector(
-                                            behavior: HitTestBehavior.opaque,
-                                            onTap: () => ref
-                                                .read(
-                                                  routineNotifierProvider
-                                                      .notifier,
-                                                )
-                                                .retryFailedOperation(item.id),
-                                            child: Container(
-                                              padding: const EdgeInsets.all(4),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white,
-                                                shape: BoxShape.circle,
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: Colors.black
-                                                        .withValues(alpha: 0.1),
-                                                    blurRadius: 2,
-                                                  ),
-                                                ],
-                                              ),
-                                              child: const Icon(
-                                                Icons.refresh,
-                                                color: Colors.red,
-                                                size: 16,
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          GestureDetector(
-                                            behavior: HitTestBehavior.opaque,
-                                            onTap: () {
-                                              if (failedIntent.action ==
-                                                  RoutineWriteAction.create) {
-                                                ref
-                                                    .read(
-                                                      routineNotifierProvider
-                                                          .notifier,
-                                                    )
-                                                    .discardFailedCreate(
-                                                      item.id,
-                                                    );
-                                              } else {
-                                                ref
-                                                    .read(
-                                                      routineNotifierProvider
-                                                          .notifier,
-                                                    )
-                                                    .dismissFailedOperation(
-                                                      item.id,
-                                                    );
-                                              }
-                                            },
-                                            child: Container(
-                                              padding: const EdgeInsets.all(4),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white,
-                                                shape: BoxShape.circle,
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: Colors.black
-                                                        .withValues(alpha: 0.1),
-                                                    blurRadius: 2,
-                                                  ),
-                                                ],
-                                              ),
-                                              child: const Icon(
-                                                Icons.close,
-                                                color: Colors.red,
-                                                size: 16,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  );
-                }),
+                // ── Exposed back tabs in the overlap gutter ──
+                ..._buildExposedBackTabs(prepared),
 
                 // ── Current time indicator ──
                 if (widget.isToday && widget.showCurrentTimeLine)
@@ -474,7 +203,7 @@ class _RoutineTimelineViewportState
                     child: IgnorePointer(
                       child: RoutineCurrentTimeLine(
                         layout: widget.layout,
-                        visualScale: visualScale,
+                        visualScale: prepared.scale,
                       ),
                     ),
                   ),
@@ -486,287 +215,479 @@ class _RoutineTimelineViewportState
     );
   }
 
-  _TimelineBuildResult _buildItemLayouts(double viewportWidth) {
-    final visualItems = <_RoutineTimelineVisualItem>[];
+  Widget _buildCard(
+    BuildContext context,
+    RoutinePreparedTimelineLayout prepared,
+    RoutineTimelineItem item,
+    RoutineState routineState,
+  ) {
+    final overlaps = prepared.overlapItemIds.contains(item.id);
+    final isFront = _isFrontItem(prepared, item);
+    final isFrontCard = overlaps && isFront;
+    final cardLeft =
+        prepared.leftOffset + (isFrontCard ? prepared.gutterWidth : 0);
+    final cardWidth = isFrontCard ? prepared.frontWidth : prepared.fullWidth;
 
-    for (final item in widget.items) {
-      final normalizedEndMinute = TimelineUtils.normalizedEndMinute(item);
-      final startMinute = item.startMinute;
+    final top = prepared.scale.yForMinute(item.startMinute);
+    final exactH = prepared.scale.yForMinute(item.endMinute) - top;
+    final height = math.max(item.minHeight, exactH);
 
-      if (normalizedEndMinute <= widget.layout.visibleStartMinute ||
-          startMinute >= widget.layout.visibleEndMinute) {
-        continue;
-      }
+    final now = DateTime.now();
+    final currentMinute = now.hour * 60 + now.minute;
+    final isNow =
+        widget.isToday &&
+        TimelineUtils.isMinuteInsideItem(item.item, currentMinute);
 
-      final visibleStartMinute = max(
-        startMinute,
-        widget.layout.visibleStartMinute,
-      );
-      final visibleEndMinute = min(
-        normalizedEndMinute,
-        widget.layout.visibleEndMinute,
-      );
+    final isPending = routineState.pendingItemIds.contains(item.id);
+    final failedIntent = routineState.failedIntentsByItemId[item.id];
 
-      visualItems.add(
-        _RoutineTimelineVisualItem(
-          item: item,
-          startMinute: visibleStartMinute,
-          endMinute: visibleEndMinute,
-          minHeight: _minimumCardHeightFor(item),
-          priority: _priorityFor(item),
+    return Positioned(
+      key: ValueKey('routine-timeline-card-${item.id}'),
+      top: top,
+      left: cardLeft,
+      width: cardWidth,
+      height: height,
+      child: GestureDetector(
+        key: ValueKey('routine-card-gesture-${item.id}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          if (overlaps && !isFront) {
+            final componentId = prepared.componentIdByItemId[item.id];
+            if (componentId != null) {
+              setState(() {
+                _focusedItemIdByComponent[componentId] = item.id;
+              });
+            }
+          }
+        },
+        child: ExcludeSemantics(
+          key: ValueKey('routine-timeline-card-semantics-${item.id}'),
+          excluding: overlaps && !isFront,
+          child: Opacity(
+            opacity: isPending ? 0.6 : 1.0,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                RoutineCardFactory.buildCard(
+                  item: item.item,
+                  isNow: isNow,
+                  railHeight: exactH,
+                  isFront: isFront,
+                  hasOverlap: overlaps,
+                  onTap: isPending
+                      ? null
+                      : () {
+                          if (overlaps && !isFront) {
+                            final componentId =
+                                prepared.componentIdByItemId[item.id];
+                            if (componentId != null) {
+                              setState(() {
+                                _focusedItemIdByComponent[componentId] =
+                                    item.id;
+                              });
+                            }
+                          }
+                        },
+                ),
+
+                // Pending operation spinner
+                if (isPending && isFront)
+                  const Positioned(
+                    top: 12,
+                    right: 12,
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+
+                // Failed operation banner & retry/dismiss
+                if (failedIntent != null && !isPending && isFront)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (failedIntent.action ==
+                            RoutineWriteAction.create) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.red.shade200),
+                            ),
+                            child: const Text(
+                              'Not saved',
+                              style: TextStyle(
+                                color: Colors.red,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => ref
+                              .read(routineNotifierProvider.notifier)
+                              .retryFailedOperation(item.id),
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.1),
+                                  blurRadius: 2,
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.refresh,
+                              color: Colors.red,
+                              size: 16,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            if (failedIntent.action ==
+                                RoutineWriteAction.create) {
+                              ref
+                                  .read(routineNotifierProvider.notifier)
+                                  .discardFailedCreate(item.id);
+                            } else {
+                              ref
+                                  .read(routineNotifierProvider.notifier)
+                                  .dismissFailedOperation(item.id);
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.1),
+                                  blurRadius: 2,
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              color: Colors.red,
+                              size: 16,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
-      );
+      ),
+    );
+  }
+
+  List<RoutineTimelineItem> _cardPaintOrder(
+    RoutinePreparedTimelineLayout prepared,
+  ) {
+    final items = List<RoutineTimelineItem>.from(prepared.items);
+    items.sort((a, b) {
+      final aFront = _isFrontItem(prepared, a);
+      final bFront = _isFrontItem(prepared, b);
+      if (aFront != bFront) {
+        // Back cards painted first (-1), front cards painted last (1)
+        return aFront ? 1 : -1;
+      }
+      final aDuration = a.endMinute - a.startMinute;
+      final bDuration = b.endMinute - b.startMinute;
+      if (aDuration != bDuration) {
+        // Longer duration painted earlier so shorter overlaps on top
+        return bDuration.compareTo(aDuration);
+      }
+      final startCmp = a.startMinute.compareTo(b.startMinute);
+      if (startCmp != 0) return startCmp;
+      return a.id.compareTo(b.id);
+    });
+    return items;
+  }
+
+  bool _isFrontItem(
+    RoutinePreparedTimelineLayout prepared,
+    RoutineTimelineItem item,
+  ) {
+    final overlaps = prepared.overlapItemIds.contains(item.id);
+    if (!overlaps) return true;
+
+    final componentId = prepared.componentIdByItemId[item.id];
+    final focusedId = componentId == null
+        ? null
+        : _focusedItemIdByComponent[componentId];
+
+    if (focusedId != null) {
+      if (item.id == focusedId) return true;
+      final focusedItem = prepared.itemById[focusedId];
+      if (focusedItem != null &&
+          item.startMinute < focusedItem.endMinute &&
+          item.endMinute > focusedItem.startMinute) {
+        return false;
+      }
     }
 
-    final visualLayout = TimelineVisualLayout.build<_RoutineTimelineVisualItem>(
-      items: visualItems,
-      pixelsPerMinute: widget.layout.minuteHeight,
-      timelineWidth: viewportWidth,
-      focusedItemId: _focusedItemId,
-      visibleStartMinute: widget.layout.visibleStartMinute,
-      visibleEndMinute: widget.layout.visibleEndMinute,
-      leftOffset:
-          kTimelineTimeRailWidth +
-          kTimelineRailDotColumnWidth +
-          kTimelineContentGap,
-      rightPadding: 12,
-      maxOverlapLane: 2,
-    );
-    final overlapCounts = _overlapCounts(visualLayout.entries);
+    final contestedRegions = prepared.regions
+        .where((r) => r.itemIds.contains(item.id) && r.itemIds.length > 1)
+        .toList();
+    if (contestedRegions.isEmpty) return true;
 
-    final entries = [
-      for (final entry in visualLayout.entries)
-        _TimelineItemLayout(
-          item: entry.item.item,
-          lane: entry.lane,
-          order: entry.order,
-          top: entry.top,
-          cardTop: entry.top,
-          cardHeight: entry.height,
-          railHeight:
-              visualLayout.scale.yForMinute(entry.item.endMinute) -
-              visualLayout.scale.yForMinute(entry.item.startMinute),
-          normalizedEndMinute: entry.item.endMinute,
-          left: entry.left,
-          right: entry.right,
-          hasOverlap: entry.hasOverlap,
-          isFront: entry.isFront,
-          hiddenOverlapCount: max(0, (overlapCounts[entry.item.id] ?? 1) - 1),
-        ),
-    ];
-    return _TimelineBuildResult(
-      entries: entries,
-      scale: visualLayout.scale,
-      totalHeight: visualLayout.totalHeight,
+    return contestedRegions.every(
+      (r) => _frontForRegion(prepared, r).id == item.id,
     );
   }
 
-  double _minimumCardHeightFor(RoutineItem item) {
-    if (widget.layout.compactMode) return 88;
-    return kTimelineMinimumTaskCardHeight;
-  }
-
-  int _priorityFor(RoutineItem item) {
-    return switch (item.blockType) {
-      RoutineBlockType.hardBlock => 90,
-      RoutineBlockType.trackerTask => 80,
-      RoutineBlockType.checkIn => 70,
-      RoutineBlockType.moneyTask => 65,
-      RoutineBlockType.softBlock => 60,
-      RoutineBlockType.flexibleTask => 50,
-    };
-  }
-
-  Map<String, int> _overlapCounts(
-    List<TimelineVisualEntry<_RoutineTimelineVisualItem>> entries,
+  RoutineTimelineItem _frontForRegion(
+    RoutinePreparedTimelineLayout prepared,
+    RoutineOverlapRegion region,
   ) {
-    final counts = <String, int>{};
-    for (final entry in entries) {
-      var count = 1;
-      for (final other in entries) {
-        if (entry.item.id == other.item.id) continue;
-        if (entry.item.startMinute < other.item.endMinute &&
-            entry.item.endMinute > other.item.startMinute) {
-          count++;
+    final componentId = prepared.componentIdByItemId[region.itemIds.first];
+    final focused = componentId == null
+        ? null
+        : _focusedItemIdByComponent[componentId];
+    if (focused != null && region.itemIds.contains(focused)) {
+      return prepared.itemById[focused]!;
+    }
+    return _defaultFront(
+      region.itemIds.map((id) => prepared.itemById[id]!).toList(),
+    );
+  }
+
+  RoutineTimelineItem _defaultFront(List<RoutineTimelineItem> candidates) {
+    final sorted = List<RoutineTimelineItem>.from(candidates)
+      ..sort(_compareFrontPriority);
+    return sorted.first;
+  }
+
+  int _compareFrontPriority(RoutineTimelineItem a, RoutineTimelineItem b) {
+    final duration = (a.endMinute - a.startMinute).compareTo(
+      b.endMinute - b.startMinute,
+    );
+    if (duration != 0) return duration;
+    final prio = b.priority.compareTo(a.priority);
+    if (prio != 0) return prio;
+    final start = a.startMinute.compareTo(b.startMinute);
+    if (start != 0) return start;
+    return a.id.compareTo(b.id);
+  }
+
+  List<Widget> _buildExposedBackTabs(RoutinePreparedTimelineLayout prepared) {
+    final widgets = <Widget>[];
+
+    for (final component in prepared.components) {
+      final componentId = component.id;
+      final componentRegions = prepared.regions
+          .where(
+            (r) =>
+                r.itemIds.any((id) => component.itemIds.contains(id)) &&
+                r.itemIds.length > 1,
+          )
+          .toList();
+
+      final backItems = <RoutineTimelineItem>[];
+      final firstRegionByItemId = <String, RoutineOverlapRegion>{};
+
+      for (final id in component.itemIds) {
+        final item = prepared.itemById[id];
+        if (item == null) continue;
+        for (final region in componentRegions) {
+          if (!region.itemIds.contains(id)) continue;
+          final front = _frontForRegion(prepared, region);
+          if (front.id != id) {
+            firstRegionByItemId.putIfAbsent(id, () => region);
+            if (!backItems.contains(item)) {
+              backItems.add(item);
+            }
+            break;
+          }
         }
       }
-      counts[entry.item.id] = count;
-    }
-    return counts;
-  }
 
-  void _showHiddenOverlapChooser(
-    _TimelineItemLayout entry,
-    List<_TimelineItemLayout> layouts,
-  ) {
-    final overlapping =
-        layouts
-            .where(
-              (candidate) =>
-                  candidate.item.id != entry.item.id &&
-                  entry.item.startMinute < candidate.normalizedEndMinute &&
-                  entry.normalizedEndMinute > candidate.item.startMinute,
-            )
-            .toList()
-          ..sort((a, b) {
-            final start = a.item.startMinute.compareTo(b.item.startMinute);
-            if (start != 0) return start;
-            return a.item.title.compareTo(b.item.title);
-          });
-    if (overlapping.isEmpty) return;
+      backItems.sort((a, b) {
+        final regA = firstRegionByItemId[a.id]!;
+        final regB = firstRegionByItemId[b.id]!;
+        final startComp = regA.startMinute.compareTo(regB.startMinute);
+        if (startComp != 0) return startComp;
+        final itemComp = a.startMinute.compareTo(b.startMinute);
+        if (itemComp != 0) return itemComp;
+        return a.id.compareTo(b.id);
+      });
 
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return SafeArea(
-          child: Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.96),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.white),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Overlapping tasks',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                    color: OptivusColors.textPrimary,
-                  ),
+      double lastBottom = -1.0;
+
+      for (final item in backItems) {
+        final firstRegion = firstRegionByItemId[item.id]!;
+        final regionKey = firstRegion.key;
+        final tabHeight = prepared.tabHeightByRegionKey[regionKey] ?? 40.0;
+        final startY = prepared.scale.yForMinute(firstRegion.startMinute);
+
+        final top = math.max(startY, lastBottom);
+        lastBottom = top + tabHeight + 2.0;
+
+        widgets.add(
+          Positioned(
+            key: ValueKey('routine-timeline-back-tab-${item.id}-$regionKey'),
+            top: top,
+            left: prepared.leftOffset,
+            width: prepared.gutterWidth,
+            height: tabHeight,
+            child: Semantics(
+              excludeSemantics: true,
+              button: true,
+              label:
+                  'Show ${item.item.title} in front, ${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)}',
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  setState(() {
+                    _focusedItemIdByComponent[componentId] = item.id;
+                  });
+                },
+                child: _buildBackTabStrip(
+                  item: item.item,
+                  width: prepared.gutterWidth,
+                  height: tabHeight,
                 ),
-                const SizedBox(height: 8),
-                for (final candidate in overlapping)
-                  Semantics(
-                    button: true,
-                    label:
-                        'Select ${candidate.item.title}, ${TimelineUtils.formatTimeRange(candidate.item.startMinute, candidate.normalizedEndMinute)}',
-                    child: ListTile(
-                      minVerticalPadding: 12,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        candidate.item.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      subtitle: Text(
-                        TimelineUtils.formatTimeRange(
-                          candidate.item.startMinute,
-                          candidate.normalizedEndMinute,
-                        ),
-                      ),
-                      onTap: () {
-                        Navigator.of(context).pop();
-                        widget.onCardTap?.call(candidate.item);
-                      },
-                    ),
-                  ),
-              ],
+              ),
             ),
           ),
         );
-      },
+      }
+    }
+
+    return widgets;
+  }
+
+  Widget _buildBackTabStrip({
+    required RoutineItem item,
+    required double width,
+    required double height,
+  }) {
+    final color = RoutineCardFactory.colorForType(item.blockType);
+    final stripWidth = math.max(24.0, width - 4.0);
+    final tabHeight = math.max(32.0, height - 4.0);
+    final label = shortBackLabel(item);
+    final icon = backTabIcon(item);
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: stripWidth,
+          height: tabHeight,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.90),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.16),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Row(
+            children: [
+              Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color.withValues(alpha: 0.16),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.72),
+                    width: 1,
+                  ),
+                ),
+                child: Icon(icon, color: color, size: 11),
+              ),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  label,
+                  key: ValueKey('routine-back-label-${item.id}'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    height: 1.0,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.ink,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
-}
-
-class _TimelineBuildResult {
-  final List<_TimelineItemLayout> entries;
-  final TimelineVisualScale scale;
-  final double totalHeight;
-
-  const _TimelineBuildResult({
-    required this.entries,
-    required this.scale,
-    required this.totalHeight,
-  });
-}
-
-class _TimelineItemLayout {
-  final RoutineItem item;
-  final int lane;
-  final int order;
-  final double top;
-  final double cardTop;
-  final double cardHeight;
-  final double railHeight;
-  final int normalizedEndMinute;
-  final double left;
-  final double right;
-  final bool hasOverlap;
-  final bool isFront;
-  final int hiddenOverlapCount;
-
-  const _TimelineItemLayout({
-    required this.item,
-    required this.lane,
-    required this.order,
-    required this.top,
-    required this.cardTop,
-    required this.cardHeight,
-    required this.railHeight,
-    required this.normalizedEndMinute,
-    required this.left,
-    required this.right,
-    required this.hasOverlap,
-    required this.isFront,
-    required this.hiddenOverlapCount,
-  });
-}
-
-class _RoutineTimelineVisualItem implements TimelineVisualItem {
-  final RoutineItem item;
-  @override
-  final int startMinute;
-  @override
-  final int endMinute;
-  @override
-  final double minHeight;
-  @override
-  final int priority;
-
-  const _RoutineTimelineVisualItem({
-    required this.item,
-    required this.startMinute,
-    required this.endMinute,
-    required this.minHeight,
-    required this.priority,
-  });
-
-  @override
-  String get id => item.id;
 }
 
 class _TimelineAnchorPainter extends CustomPainter {
   final TimelineVisualScale scale;
-  final List<_TimelineItemLayout> entries;
+  final List<RoutineTimelineItem> items;
+  final Set<String> overlapIds;
+  final Map<String, bool> isFrontById;
+  final double leftOffset;
+  final double gutterWidth;
 
-  const _TimelineAnchorPainter({required this.scale, required this.entries});
+  const _TimelineAnchorPainter({
+    required this.scale,
+    required this.items,
+    required this.overlapIds,
+    required this.isFrontById,
+    required this.leftOffset,
+    required this.gutterWidth,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
-    for (final entry in entries) {
-      if (entry.railHeight <= 0) continue;
-
-      final color = RoutineCardFactory.colorForType(entry.item.blockType);
-      final startY = entry.top;
-      final endY = scale.yForMinute(entry.normalizedEndMinute);
+    for (final it in items) {
+      final isOverlapping = overlapIds.contains(it.id);
+      final isFront = isFrontById[it.id] ?? true;
+      final color = RoutineCardFactory.colorForType(it.item.blockType);
+      final startY = scale.yForMinute(it.startMinute);
+      final endY = scale.yForMinute(it.endMinute);
 
       if (endY < -20 || startY > size.height + 20) continue;
 
-      final railX = entry.left - 6;
+      final cardLeft =
+          leftOffset + (isOverlapping && isFront ? gutterWidth : 0);
+      final railX = cardLeft - 6;
 
       final railPaint = Paint()
-        ..color = color.withValues(alpha: 0.82)
+        ..color = color.withValues(alpha: isFront ? 0.82 : 0.44)
         ..style = PaintingStyle.fill;
       final linePaint = Paint()
-        ..color = color.withValues(alpha: 0.44)
+        ..color = color.withValues(alpha: isFront ? 0.44 : 0.22)
         ..strokeWidth = 1.1
         ..strokeCap = StrokeCap.round;
 
@@ -800,6 +721,8 @@ class _TimelineAnchorPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _TimelineAnchorPainter oldDelegate) {
-    return scale != oldDelegate.scale || entries != oldDelegate.entries;
+    return scale != oldDelegate.scale ||
+        items != oldDelegate.items ||
+        isFrontById != oldDelegate.isFrontById;
   }
 }
