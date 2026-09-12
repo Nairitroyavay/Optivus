@@ -220,41 +220,32 @@ class RoutineCardFactory {
     final timeH = measure(timeText, timeStyle);
     height += RoutineCardPresentation.headerToTimeGap + timeH;
 
-    // Continuation
-    final continuation = item.isContinuation
-        ? 'Continued from yesterday'
-        : ((item.crossesMidnight ||
-                  item.endsNextDay ||
-                  item.endMinute <= item.startMinute)
-              ? 'Continues tomorrow'
-              : null);
-    if (continuation != null) {
-      height += RoutineCardPresentation.continuationGap +
-          measure(continuation, detailStyle);
-    }
-
     // Location
     if (item.location != null && item.location!.trim().isNotEmpty) {
-      height += RoutineCardPresentation.locationGap +
+      height +=
+          RoutineCardPresentation.locationGap +
           measure(item.location!.trim(), detailStyle);
     }
 
     // Class details
     final classInfo = classDetailsString(item);
     if (classInfo != null) {
-      height += RoutineCardPresentation.classInfoGap +
+      height +=
+          RoutineCardPresentation.classInfoGap +
           measure(classInfo, detailStyle);
     }
 
     // In-tracker progress badge
     if (item.status == RoutineStatus.inTracker) {
-      height += RoutineCardPresentation.trackerBadgeGap +
+      height +=
+          RoutineCardPresentation.trackerBadgeGap +
           measure('In progress in Tracker', detailStyle);
     }
 
     // Tracker details / type
     if (item.trackerType != TrackerType.none) {
-      height += RoutineCardPresentation.trackerTypeGap +
+      height +=
+          RoutineCardPresentation.trackerTypeGap +
           measure(item.trackerType.name, detailStyle);
     }
 
@@ -262,21 +253,33 @@ class RoutineCardFactory {
     final isEating = item.category == RoutineCategory.eating;
     if (isEating || item.dishes != null || item.mealSlot != null) {
       if (shouldShowMealSlot(item)) {
-        height += RoutineCardPresentation.mealSlotGap +
+        height +=
+            RoutineCardPresentation.mealSlotGap +
             measure(item.mealSlot!.trim(), detailStyle);
       }
       if (shouldShowMealCategory(item)) {
-        height += RoutineCardPresentation.mealCategoryGap +
+        height +=
+            RoutineCardPresentation.mealCategoryGap +
             measure(item.mealCategory!.trim(), detailStyle);
       }
       final nutrition = nutritionString(item);
       if (nutrition != null) {
+        final customNutWidth = math.max(
+          0.0,
+          contentWidth -
+              RoutineCardPresentation.nutritionPadding.horizontal -
+              RoutineCardPresentation.nutritionBorderTotal,
+        );
         final pillTextH = measure(
           nutrition,
-          const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+          RoutineCardPresentation.nutritionTextStyle,
+          customWidth: customNutWidth,
         );
-        height += RoutineCardPresentation.nutritionPillGap +
-            (pillTextH + 10.0);
+        final nutTotal =
+            pillTextH +
+            RoutineCardPresentation.nutritionPadding.vertical +
+            RoutineCardPresentation.nutritionBorderTotal;
+        height += RoutineCardPresentation.nutritionPillGap + nutTotal;
       }
       if (item.dishes != null && item.dishes!.isNotEmpty) {
         final cleanDishes = item.dishes!
@@ -286,7 +289,9 @@ class RoutineCardFactory {
         if (cleanDishes.isNotEmpty) {
           final dishesH = RoutineCardPresentation.measureWrapRowByRow(
             items: cleanDishes,
-            textStyle: defaultStyle.merge(RoutineCardPresentation.dishTextStyle),
+            textStyle: defaultStyle.merge(
+              RoutineCardPresentation.dishTextStyle,
+            ),
             chipPadding: RoutineCardPresentation.dishPadding,
             spacing: RoutineCardPresentation.dishSpacing,
             runSpacing: RoutineCardPresentation.dishRunSpacing,
@@ -306,40 +311,44 @@ class RoutineCardFactory {
         item.skincareProducts != null ||
         item.skincareSlotLabel != null) {
       if (shouldShowSkincareSlot(item)) {
-        height += RoutineCardPresentation.skinSlotGap +
+        height +=
+            RoutineCardPresentation.skinSlotGap +
             measure(item.skincareSlotLabel!.trim(), detailStyle);
       }
       final steps = item.displaySteps;
       if (steps != null && steps.isNotEmpty) {
-        height += RoutineCardPresentation.skinStepsHeadingGap +
+        height +=
+            RoutineCardPresentation.skinStepsHeadingGap +
             measure('STEPS', headingStyle);
         for (var i = 0; i < steps.length; i++) {
           if (steps[i].trim().isNotEmpty) {
-            height += RoutineCardPresentation.skinStepItemGap +
+            height +=
+                RoutineCardPresentation.skinStepItemGap +
                 measure('${i + 1}. ${steps[i].trim()}', detailStyle);
           }
         }
       }
       if (item.skincareProducts != null && item.skincareProducts!.isNotEmpty) {
-        height += RoutineCardPresentation.skinProductsHeadingGap +
+        height +=
+            RoutineCardPresentation.skinProductsHeadingGap +
             measure('PRODUCTS', headingStyle);
         for (final p in item.skincareProducts!) {
           if (p.trim().isNotEmpty) {
-            height += RoutineCardPresentation.skinProductItemGap +
+            height +=
+                RoutineCardPresentation.skinProductItemGap +
                 measure(p.trim(), detailStyle);
           }
         }
       }
       if (item.skincareMissingItems != null &&
           item.skincareMissingItems!.isNotEmpty) {
-        height += RoutineCardPresentation.skinMissingHeadingGap +
-            measure(
-              'MISSING',
-              RoutineCardPresentation.missingHeadingStyle,
-            );
+        height +=
+            RoutineCardPresentation.skinMissingHeadingGap +
+            measure('MISSING', RoutineCardPresentation.missingHeadingStyle);
         for (final m in item.skincareMissingItems!) {
           if (m.trim().isNotEmpty) {
-            height += RoutineCardPresentation.skinMissingItemGap +
+            height +=
+                RoutineCardPresentation.skinMissingItemGap +
                 measure(
                   '⚠ ${m.trim()}',
                   RoutineCardPresentation.missingDetailStyle,
@@ -351,44 +360,71 @@ class RoutineCardFactory {
 
     // Subtasks
     if (item.subtasks != null && item.subtasks!.isNotEmpty) {
-      height += RoutineCardPresentation.subtasksHeadingGap +
+      height +=
+          RoutineCardPresentation.subtasksHeadingGap +
           measure('SUBTASKS (${item.subtasks!.length})', headingStyle);
       for (final s in item.subtasks!) {
-        final textH = measure(
-          s,
-          detailStyle,
-          customWidth: contentWidth - 21.0,
-        );
-        height += RoutineCardPresentation.subtaskItemGap +
-            math.max(16.0, textH);
+        final textH = measure(s, detailStyle, customWidth: contentWidth - 21.0);
+        height +=
+            RoutineCardPresentation.subtaskItemGap + math.max(16.0, textH);
       }
     }
 
     // Notes
     if (item.notes != null && item.notes!.trim().isNotEmpty) {
-      height += RoutineCardPresentation.notesGap +
+      height +=
+          RoutineCardPresentation.notesGap +
           measure(item.notes!.trim(), detailStyle);
     }
 
+    // Overnight continuation (matches Step 14 position and 8px gap)
+    final continuation = item.isContinuation
+        ? 'Continued from yesterday'
+        : ((item.crossesMidnight ||
+                  item.endsNextDay ||
+                  item.endMinute <= item.startMinute)
+              ? 'Continues tomorrow'
+              : null);
+    if (continuation != null) {
+      height +=
+          RoutineCardPresentation.continuationGap +
+          measure(continuation, detailStyle);
+    }
+
     // Three Primary Actions footer (min 44px, scaling with textScaler)
+    final hideActionIcon = scaler.scale(12) > 15;
     final actionTextPainter = TextPainter(
       text: TextSpan(
         text: 'Start',
-        style: defaultStyle.merge(
-          const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
-        ),
+        style: defaultStyle.merge(RoutineCardPresentation.actionLabelStyle),
       ),
       textDirection: textDirection,
       textScaler: scaler,
       maxLines: 1,
     )..layout();
-    final actionButtonHeight = math.max(
-      44.0,
-      math.max(14.0, actionTextPainter.height) + 16.0 + 2.8,
+    const actionBorderTotal =
+        RoutineCardPresentation.actionButtonBorderWidth * 2.0;
+    final singleButtonHeight = math.max(
+      RoutineCardPresentation.actionButtonMinHeight,
+      math.max(hideActionIcon ? 0.0 : 14.0, actionTextPainter.height) +
+          (RoutineCardPresentation.actionButtonPaddingVertical * 2) +
+          actionBorderTotal,
     );
-    height += RoutineCardPresentation.actionsFooterGap + actionButtonHeight;
 
-    // Card padding (12 top + 12 bottom = 24) + subpixel rounding tolerance (2.0)
+    final actionLayout = RoutineCardPresentation.resolveRoutineCardActionLayout(
+      availableWidth: contentWidth,
+      textScaler: scaler,
+      textDirection: textDirection,
+    );
+
+    final actionFooterHeight = switch (actionLayout) {
+      RoutineCardActionLayout.horizontal => singleButtonHeight,
+      RoutineCardActionLayout.stacked =>
+        (singleButtonHeight * 3) + (2 * RoutineCardPresentation.actionGap),
+    };
+    height += RoutineCardPresentation.actionsFooterGap + actionFooterHeight;
+
+    // Card padding (12 top + 12 bottom = 24) + subpixel rounding tolerance (1.0)
     return math.max(
       RoutineCardPresentation.cardMinInteractiveHeight,
       height +

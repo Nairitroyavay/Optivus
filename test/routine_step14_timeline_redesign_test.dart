@@ -11,6 +11,7 @@ import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_actions.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
+import 'package:optivus/features/routine/widgets/cards/routine_card_presentation.dart';
 import 'package:optivus/features/routine/widgets/routine_timeline_adapter.dart';
 import 'package:optivus/features/routine/widgets/routine_timeline_viewport.dart';
 import 'package:optivus/models/routine_item.dart';
@@ -2474,6 +2475,314 @@ void main() {
         // Measured height must be >= rendered height at 2.5x scale
         expect(measuredHeight, greaterThanOrEqualTo(renderedHeight));
         expect(measuredHeight - renderedHeight, lessThan(12.0));
+      },
+    );
+
+    testWidgets(
+      'Overnight continuation is positioned after notes/subtasks and before actions footer with 8px gap',
+      (tester) async {
+        final overnightItem = RoutineItem(
+          id: 'overnight_pos_test',
+          title: 'Night Shift Study',
+          startMinute: 23 * 60,
+          endMinute: 2 * 60, // Crosses midnight
+          blockType: RoutineBlockType.flexibleTask,
+          location: 'Library',
+          notes: 'Prepare final revision notes',
+          subtasks: const ['Read Chapter 4'],
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 320,
+                child: RoutineRichTimelineCard(item: overnightItem),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Continues tomorrow'), findsOneWidget);
+        expect(find.text('Prepare final revision notes'), findsOneWidget);
+
+        // Find the inner Column
+        final innerColumn = tester.widget<Column>(
+          find
+              .descendant(
+                of: find.byType(RoutineRichTimelineCard),
+                matching: find.byType(Column),
+              )
+              .first,
+        );
+
+        var notesIndex = -1;
+        var continuationIndex = -1;
+        var actionsIndex = -1;
+
+        for (var i = 0; i < innerColumn.children.length; i++) {
+          final child = innerColumn.children[i];
+          if (child is Text && child.data == 'Prepare final revision notes') {
+            notesIndex = i;
+          } else if (child is Text && child.data == 'Continues tomorrow') {
+            continuationIndex = i;
+          } else if (child is RoutineCardActions) {
+            actionsIndex = i;
+          }
+        }
+
+        expect(notesIndex, greaterThanOrEqualTo(0));
+        expect(continuationIndex, greaterThan(notesIndex));
+        expect(actionsIndex, greaterThan(continuationIndex));
+
+        // The SizedBox immediately before 'Continues tomorrow' has height == 8.0 (continuationGap)
+        final gapBeforeContinuation =
+            innerColumn.children[continuationIndex - 1];
+        expect(gapBeforeContinuation, isA<SizedBox>());
+        expect(
+          (gapBeforeContinuation as SizedBox).height,
+          RoutineCardPresentation.continuationGap,
+        );
+        expect(RoutineCardPresentation.continuationGap, 8.0);
+      },
+    );
+
+    testWidgets(
+      'Narrow overlap front-card width (180px) renders at 1.0x, 2.0x, and 2.5x without overflow and footer stacks',
+      (tester) async {
+        final richMeal = RoutineItem(
+          id: 'overlap_front_meal',
+          title: 'Post-Workout High Protein Recovery Meal',
+          startMinute: 12 * 60,
+          endMinute: 13 * 60,
+          blockType: RoutineBlockType.softBlock,
+          category: RoutineCategory.eating,
+          mealSlot: 'Lunch',
+          mealCategory: 'High Protein',
+          caloriesEstimate: 820,
+          proteinEstimate: 56,
+          dishes: const [
+            'Pan-Seared Atlantic Salmon Fillet with Garlic Butter and Fresh Lemon Herbs',
+            'Steamed Organic Jasmine Rice Bowl',
+            'Roasted Broccoli Florets',
+            'Fresh Haas Avocado Slices',
+          ],
+          notes: 'Take omega-3 supplement with first bite of meal.',
+        );
+
+        const frontWidth = 180.0;
+
+        for (final scale in [1.0, 2.0, 2.5]) {
+          double measuredHeight = 0.0;
+
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Scaffold(
+                body: MediaQuery(
+                  data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+                  child: Builder(
+                    builder: (context) {
+                      measuredHeight = RoutineCardFactory.measureHeight(
+                        context,
+                        frontWidth,
+                        richMeal,
+                      );
+                      return SingleChildScrollView(
+                        child: SizedBox(
+                          width: frontWidth,
+                          child: RoutineRichTimelineCard(item: richMeal),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final exc = tester.takeException();
+          if (exc != null) {
+            if (exc is FlutterError) {
+              for (final d in exc.diagnostics) {
+                debugPrint('DIAG: ${d.toString()}');
+              }
+            }
+          }
+          expect(exc, isNull);
+
+          // All dishes, nutrition, and notes are rendered
+          expect(find.text('820 kcal • 56g protein'), findsOneWidget);
+          expect(
+            find.text(
+              'Pan-Seared Atlantic Salmon Fillet with Garlic Butter and Fresh Lemon Herbs',
+            ),
+            findsOneWidget,
+          );
+          expect(
+            find.text('Steamed Organic Jasmine Rice Bowl'),
+            findsOneWidget,
+          );
+          expect(
+            find.text('Take omega-3 supplement with first bite of meal.'),
+            findsOneWidget,
+          );
+
+          // Primary action buttons are visible and NOT truncated with ellipsis
+          expect(find.text('Start'), findsOneWidget);
+          expect(find.text('Done'), findsOneWidget);
+          expect(find.text('Move'), findsOneWidget);
+
+          final startText = tester.widget<Text>(find.text('Start'));
+          expect(startText.overflow, isNull);
+
+          // At 180px frontWidth (< 225px content width), action footer stacks vertically
+          expect(
+            find.descendant(
+              of: find.byType(RoutineCardActions),
+              matching: find.byType(Column),
+            ),
+            findsOneWidget,
+          );
+
+          final renderBox = tester.renderObject<RenderBox>(
+            find.byType(RoutineRichTimelineCard),
+          );
+          final renderedHeight = renderBox.size.height;
+
+          // Measured height must cover rendered height
+          expect(
+            measuredHeight,
+            greaterThanOrEqualTo(renderedHeight),
+            reason:
+                'At scale $scale, measured ($measuredHeight) must be >= rendered ($renderedHeight)',
+          );
+          expect(
+            measuredHeight - renderedHeight,
+            lessThan(12.0),
+            reason:
+                'At scale $scale, drift (${measuredHeight - renderedHeight}) must be < 12.0',
+          );
+        }
+      },
+    );
+
+    testWidgets(
+      'True overlap viewport integration: Work, Meal (multi-dish), Skin Care, Class with Meal promoted to front',
+      (tester) async {
+        final workItem = RoutineItem(
+          id: 'overlap_work',
+          title: 'Deep Work Session',
+          startMinute: 12 * 60,
+          endMinute: 13 * 60,
+          blockType: RoutineBlockType.flexibleTask,
+        );
+
+        final mealItem = RoutineItem(
+          id: 'overlap_meal',
+          title: 'High Protein Lunch',
+          startMinute: 12 * 60 + 5,
+          endMinute: 12 * 60 + 35,
+          blockType: RoutineBlockType.softBlock,
+          category: RoutineCategory.eating,
+          mealSlot: 'Lunch',
+          caloriesEstimate: 750,
+          proteinEstimate: 48,
+          dishes: const [
+            'Grilled Salmon Fillet with Garlic Herbs',
+            'Brown Rice Bowl',
+            'Steamed Broccoli',
+            'Avocado Slices',
+          ],
+        );
+
+        final skinItem = RoutineItem(
+          id: 'overlap_skin',
+          title: 'Midday Skin Refresh',
+          startMinute: 12 * 60 + 15,
+          endMinute: 12 * 60 + 30,
+          blockType: RoutineBlockType.softBlock,
+          category: RoutineCategory.skinCare,
+          steps: const ['Gentle Cleanse', 'Moisturize'],
+        );
+
+        final classItem = RoutineItem(
+          id: 'overlap_class',
+          title: 'Algorithms Lecture',
+          startMinute: 12 * 60 + 20,
+          endMinute: 12 * 60 + 40,
+          blockType: RoutineBlockType.hardBlock,
+          category: RoutineCategory.classBlock,
+        );
+
+        final items = [workItem, mealItem, skinItem, classItem];
+
+        await tester.pumpWidget(
+          buildTestableViewport(
+            items: items,
+            layout: const TimelineLayout(
+              visibleStartMinute: 11 * 60,
+              visibleEndMinute: 14 * 60,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+
+        // Find the back tab for mealItem and tap it to promote it to the front
+        final mealTab = find.byKey(
+          ValueKey('routine-back-label-${mealItem.id}'),
+        );
+        expect(mealTab, findsOneWidget);
+        await tester.tap(mealTab);
+        await tester.pumpAndSettle();
+
+        // Verify Meal is the front card
+        final frontCardFinder = find.byKey(
+          ValueKey('routine-timeline-card-${mealItem.id}'),
+        );
+        expect(frontCardFinder, findsOneWidget);
+
+        final positioned = tester.widget<Positioned>(frontCardFinder);
+
+        // Front card width is the overlap frontWidth (less than fullWidth 290.0)
+        expect(positioned.width, isNotNull);
+        expect(positioned.width!, lessThan(290.0));
+
+        // All dishes are visible and readable
+        expect(
+          find.text('Grilled Salmon Fillet with Garlic Herbs'),
+          findsOneWidget,
+        );
+        expect(find.text('Brown Rice Bowl'), findsOneWidget);
+        expect(find.text('Steamed Broccoli'), findsOneWidget);
+        expect(find.text('Avocado Slices'), findsOneWidget);
+
+        // Action buttons are present and readable
+        expect(find.text('Start'), findsOneWidget);
+        expect(find.text('Done'), findsOneWidget);
+        expect(find.text('Move'), findsOneWidget);
+
+        // Back tabs exist in the overlap gutter for the other overlapping items
+        expect(find.byType(TimelineBackTabStrip), findsWidgets);
+
+        // Tapping back tab for Work promotes Work to front
+        final workTab = find.byKey(
+          ValueKey('routine-back-label-${workItem.id}'),
+        );
+        expect(workTab, findsOneWidget);
+        await tester.tap(workTab);
+        await tester.pumpAndSettle();
+
+        // Now Work is the front card
+        expect(
+          find.descendant(
+            of: find.byKey(ValueKey('routine-timeline-card-${workItem.id}')),
+            matching: find.text('Deep Work Session'),
+          ),
+          findsOneWidget,
+        );
       },
     );
   });

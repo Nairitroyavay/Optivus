@@ -105,12 +105,6 @@ class RoutineRichTimelineCard extends ConsumerWidget {
             ),
           ),
 
-          // Overnight continuation
-          if (continuation != null) ...[
-            const SizedBox(height: 6),
-            Text(continuation, style: detailStyle),
-          ],
-
           // Location
           if (item.location != null && item.location!.trim().isNotEmpty) ...[
             const SizedBox(height: RoutineCardPresentation.locationGap),
@@ -119,36 +113,36 @@ class RoutineRichTimelineCard extends ConsumerWidget {
 
           // Class details (professor • course • type • section)
           if (classInfo != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: RoutineCardPresentation.classInfoGap),
             Text(classInfo, style: detailStyle),
           ],
 
           // In-tracker progress badge
           if (item.status == RoutineStatus.inTracker) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: RoutineCardPresentation.trackerBadgeGap),
             Text('In progress in Tracker', style: detailStyle),
           ],
 
           // Tracker details / type
           if (item.trackerType != TrackerType.none) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: RoutineCardPresentation.trackerTypeGap),
             Text(item.trackerType.name, style: detailStyle),
           ],
 
           // Eating details
           if (isEating || item.dishes != null || item.mealSlot != null) ...[
             if (RoutineCardFactory.shouldShowMealSlot(item)) ...[
-              const SizedBox(height: 6),
+              const SizedBox(height: RoutineCardPresentation.mealSlotGap),
               Text(item.mealSlot!.trim(), style: detailStyle),
             ],
             if (RoutineCardFactory.shouldShowMealCategory(item)) ...[
-              const SizedBox(height: 6),
+              const SizedBox(height: RoutineCardPresentation.mealCategoryGap),
               Text(item.mealCategory!.trim(), style: detailStyle),
             ],
             if (nutrition != null) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: RoutineCardPresentation.nutritionPillGap),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: RoutineCardPresentation.nutritionPadding,
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.85),
                   borderRadius: BorderRadius.circular(8),
@@ -159,9 +153,7 @@ class RoutineRichTimelineCard extends ConsumerWidget {
                 ),
                 child: Text(
                   nutrition,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
+                  style: RoutineCardPresentation.nutritionTextStyle.copyWith(
                     color: accent,
                   ),
                 ),
@@ -213,7 +205,9 @@ class RoutineRichTimelineCard extends ConsumerWidget {
               Text(item.skincareSlotLabel!.trim(), style: detailStyle),
             ],
             if (item.displaySteps != null && item.displaySteps!.isNotEmpty) ...[
-              const SizedBox(height: RoutineCardPresentation.skinStepsHeadingGap),
+              const SizedBox(
+                height: RoutineCardPresentation.skinStepsHeadingGap,
+              ),
               const Text('STEPS', style: headingStyle),
               for (
                 var index = 0;
@@ -221,7 +215,9 @@ class RoutineRichTimelineCard extends ConsumerWidget {
                 index++
               ) ...[
                 if (item.displaySteps![index].trim().isNotEmpty) ...[
-                  const SizedBox(height: RoutineCardPresentation.skinStepItemGap),
+                  const SizedBox(
+                    height: RoutineCardPresentation.skinStepItemGap,
+                  ),
                   Text(
                     '${index + 1}. ${item.displaySteps![index].trim()}',
                     style: detailStyle,
@@ -231,25 +227,33 @@ class RoutineRichTimelineCard extends ConsumerWidget {
             ],
             if (item.skincareProducts != null &&
                 item.skincareProducts!.isNotEmpty) ...[
-              const SizedBox(height: RoutineCardPresentation.skinProductsHeadingGap),
+              const SizedBox(
+                height: RoutineCardPresentation.skinProductsHeadingGap,
+              ),
               const Text('PRODUCTS', style: headingStyle),
               for (final product in item.skincareProducts!) ...[
                 if (product.trim().isNotEmpty) ...[
-                  const SizedBox(height: RoutineCardPresentation.skinProductItemGap),
+                  const SizedBox(
+                    height: RoutineCardPresentation.skinProductItemGap,
+                  ),
                   Text(product.trim(), style: detailStyle),
                 ],
               ],
             ],
             if (item.skincareMissingItems != null &&
                 item.skincareMissingItems!.isNotEmpty) ...[
-              const SizedBox(height: RoutineCardPresentation.skinMissingHeadingGap),
+              const SizedBox(
+                height: RoutineCardPresentation.skinMissingHeadingGap,
+              ),
               const Text(
                 'MISSING',
                 style: RoutineCardPresentation.missingHeadingStyle,
               ),
               for (final missing in item.skincareMissingItems!) ...[
                 if (missing.trim().isNotEmpty) ...[
-                  const SizedBox(height: RoutineCardPresentation.skinMissingItemGap),
+                  const SizedBox(
+                    height: RoutineCardPresentation.skinMissingItemGap,
+                  ),
                   Text(
                     '⚠ ${missing.trim()}',
                     style: RoutineCardPresentation.missingDetailStyle,
@@ -261,22 +265,28 @@ class RoutineRichTimelineCard extends ConsumerWidget {
 
           // Subtasks
           if (item.subtasks != null && item.subtasks!.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: RoutineCardPresentation.subtasksHeadingGap),
             Text('SUBTASKS (${item.subtasks!.length})', style: headingStyle),
             for (var index = 0; index < item.subtasks!.length; index++) ...[
-              const SizedBox(height: 4),
+              const SizedBox(height: RoutineCardPresentation.subtaskItemGap),
               _buildSubtaskRow(context, ref, item, index, detailStyle),
             ],
           ],
 
           // Notes
           if (item.notes != null && item.notes!.trim().isNotEmpty) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: RoutineCardPresentation.notesGap),
             Text(item.notes!.trim(), style: detailStyle),
           ],
 
+          // Overnight continuation (matches Step 14 position and 8px gap)
+          if (continuation != null) ...[
+            const SizedBox(height: RoutineCardPresentation.continuationGap),
+            Text(continuation, style: detailStyle),
+          ],
+
           // Three Primary Actions footer
-          const SizedBox(height: 8),
+          const SizedBox(height: RoutineCardPresentation.actionsFooterGap),
           RoutineCardActions(item: item, color: accent),
         ],
       ),
