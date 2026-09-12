@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+export 'timeline_tab_placement.dart';
 
 /// Represents an item with a time interval in minutes.
 abstract interface class TimelineInterval {

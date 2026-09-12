@@ -16,6 +16,7 @@ import 'package:optivus/features/routine/widgets/routine_timeline_viewport.dart'
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/timeline_layout.dart';
 import 'package:optivus/core/timeline/widgets/timeline_back_tab_strip.dart';
+import 'package:optivus/features/routine/widgets/cards/routine_card_base.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_rich_timeline_card.dart';
 import 'package:optivus/repositories/routine_firestore_codec.dart';
 import 'package:optivus/repositories/routine_repository.dart';
@@ -922,10 +923,11 @@ void main() {
       expect(find.text('3. Vitamin C Serum'), findsOneWidget);
       expect(find.text('4. Night Moisturizer'), findsOneWidget);
 
-      // PRODUCTS header and products present
+      // PRODUCTS header and products present (no Routine-only bullet per Step 14 parity)
       expect(find.text('PRODUCTS'), findsOneWidget);
-      expect(find.text('• CeraVe Hydrating'), findsOneWidget);
-      expect(find.text('• Klairs Supple Prep'), findsOneWidget);
+      expect(find.text('CeraVe Hydrating'), findsOneWidget);
+      expect(find.text('Klairs Supple Prep'), findsOneWidget);
+      expect(find.text('• CeraVe Hydrating'), findsNothing);
 
       // Old View steps footer removed
       expect(find.text('View steps'), findsNothing);
@@ -1973,8 +1975,10 @@ void main() {
       );
 
       testWidgets(
-        'Extra long dish name wraps gracefully without horizontal overflow',
+        'Extra long dish name wraps gracefully without horizontal overflow, truncation, or ellipsis',
         (tester) async {
+          const longDish =
+              'Ultra Long Free-Range Herb Roasted Organic Rosemary Chicken Breast with Lemon Infused Glaze and Garlic Mashed Potatoes';
           final mealItem = RoutineItem(
             id: 'meal_long_dish',
             title: 'Post-Workout Meal',
@@ -1982,9 +1986,7 @@ void main() {
             endMinute: 14 * 60,
             blockType: RoutineBlockType.softBlock,
             category: RoutineCategory.eating,
-            dishes: const [
-              'Ultra Long Free-Range Herb Roasted Organic Rosemary Chicken Breast with Lemon Infused Glaze and Garlic Mashed Potatoes',
-            ],
+            dishes: const [longDish],
           );
 
           await tester.pumpWidget(
@@ -1999,10 +2001,59 @@ void main() {
           await tester.pumpAndSettle();
 
           expect(tester.takeException(), isNull);
-          expect(
-            find.textContaining('Ultra Long Free-Range Herb Roasted'),
-            findsOneWidget,
+          final dishFinder = find.text(longDish);
+          expect(dishFinder, findsOneWidget);
+
+          final textWidget = tester.widget<Text>(dishFinder);
+          expect(textWidget.maxLines, isNull);
+          expect(textWidget.overflow, isNot(equals(TextOverflow.ellipsis)));
+
+          final cardBox = tester.renderObject<RenderBox>(
+            find.byKey(const ValueKey('routine-timeline-card-meal_long_dish')),
           );
+          expect(cardBox.size.height, greaterThan(110.0));
+        },
+      );
+
+      testWidgets(
+        'Extra long dish name at 2.5x accessibility text scale renders complete string without overflow',
+        (tester) async {
+          const longDish =
+              'Ultra Long Free-Range Herb Roasted Organic Rosemary Chicken Breast with Lemon Infused Glaze and Garlic Mashed Potatoes';
+          final mealItem = RoutineItem(
+            id: 'meal_long_dish_scale',
+            title: 'Post-Workout Meal',
+            startMinute: 13 * 60,
+            endMinute: 14 * 60,
+            blockType: RoutineBlockType.softBlock,
+            category: RoutineCategory.eating,
+            dishes: const [longDish],
+          );
+
+          await tester.pumpWidget(
+            MediaQuery(
+              data: const MediaQueryData(
+                size: Size(390, 844),
+                textScaler: TextScaler.linear(2.5),
+              ),
+              child: buildTestableViewport(
+                items: [mealItem],
+                layout: const TimelineLayout(
+                  visibleStartMinute: 12 * 60,
+                  visibleEndMinute: 15 * 60,
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          expect(tester.takeException(), isNull);
+          final dishFinder = find.text(longDish);
+          expect(dishFinder, findsOneWidget);
+
+          final textWidget = tester.widget<Text>(dishFinder);
+          expect(textWidget.maxLines, isNull);
+          expect(textWidget.overflow, isNot(equals(TextOverflow.ellipsis)));
         },
       );
 
@@ -2080,6 +2131,350 @@ void main() {
           expect(find.byType(TimelineBackTabStrip), findsOneWidget);
         },
       );
+
+      testWidgets(
+        'Nested action taps and front-card body taps do not trigger whole-card press scale or feedback',
+        (tester) async {
+          final item = RoutineItem(
+            id: 'test_actions_card',
+            title: 'Design Review',
+            startMinute: 10 * 60,
+            endMinute: 11 * 60,
+            blockType: RoutineBlockType.flexibleTask,
+          );
+
+          _MockRoutineNotifier? notifier;
+          await tester.pumpWidget(
+            buildTestableViewport(
+              items: [item],
+              layout: const TimelineLayout(
+                visibleStartMinute: 10 * 60,
+                visibleEndMinute: 13 * 60,
+              ),
+              onNotifierCreated: (n) => notifier = n,
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          // 1. Verify RoutineCardBase is a StatelessWidget with no scale transition/controller
+          final cardBaseWidget = tester.widget<RoutineCardBase>(
+            find.byType(RoutineCardBase),
+          );
+          expect(cardBaseWidget, isA<StatelessWidget>());
+          expect(
+            find.descendant(
+              of: find.byType(RoutineCardBase),
+              matching: find.byType(ScaleTransition),
+            ),
+            findsNothing,
+          );
+
+          // 2. Tap Start button: only Start action occurs
+          final startFinder = find.byKey(
+            const ValueKey('routine-action-start-test_actions_card'),
+          );
+          expect(startFinder, findsOneWidget);
+          await tester.tap(startFinder);
+          await tester.pumpAndSettle();
+          expect(notifier!.startedItemIds, contains('test_actions_card'));
+
+          // 3. Tap Done button: only Done action occurs
+          final doneFinder = find.byKey(
+            const ValueKey('routine-action-done-test_actions_card'),
+          );
+          expect(doneFinder, findsOneWidget);
+          await tester.tap(doneFinder);
+          await tester.pumpAndSettle();
+          expect(notifier!.completedItemIds, contains('test_actions_card'));
+
+          // 4. Tap Move button: move sheet opens
+          final moveFinder = find.byKey(
+            const ValueKey('routine-action-move-test_actions_card'),
+          );
+          expect(moveFinder, findsOneWidget);
+          await tester.tap(moveFinder);
+          await tester.pumpAndSettle();
+          expect(find.text('Move Design Review'), findsOneWidget);
+
+          // Dismiss sheet
+          await tester.tapAt(const Offset(20, 20));
+          await tester.pumpAndSettle();
+
+          // 5. Normal front-card body tap does nothing (no sheet, no movement)
+          final cardTitle = find.text('Design Review');
+          await tester.tap(cardTitle);
+          await tester.pumpAndSettle();
+          expect(find.text('Move Design Review'), findsNothing);
+        },
+      );
     },
   );
+
+  group('Back-Tab Vertical Placement Parity (computeBackTabTopOffsets)', () {
+    test('same-start overlapping items stack sequentially', () {
+      const requests = [
+        TimelineBackTabPlacementRequest(
+          id: 'a',
+          startY: 100.0,
+          tabHeight: 44.0,
+        ),
+        TimelineBackTabPlacementRequest(
+          id: 'b',
+          startY: 100.0,
+          tabHeight: 44.0,
+        ),
+        TimelineBackTabPlacementRequest(
+          id: 'c',
+          startY: 100.0,
+          tabHeight: 44.0,
+        ),
+      ];
+      final offsets = computeBackTabTopOffsets(requests);
+      expect(offsets['a'], 100.0);
+      expect(offsets['b'], 144.0);
+      expect(offsets['c'], 188.0);
+    });
+
+    test('starts 2 minutes apart (|Δy| < 4.0) stack sequentially', () {
+      // 2 minutes apart with scale 1.4 px/min = 2.8px delta < 4.0
+      const requests = [
+        TimelineBackTabPlacementRequest(
+          id: 'a',
+          startY: 100.0,
+          tabHeight: 44.0,
+        ),
+        TimelineBackTabPlacementRequest(
+          id: 'b',
+          startY: 102.8,
+          tabHeight: 44.0,
+        ),
+      ];
+      final offsets = computeBackTabTopOffsets(requests);
+      expect(offsets['a'], 100.0);
+      expect(offsets['b'], 102.8 + 44.0);
+    });
+
+    test('starts 5 minutes apart (|Δy| >= 4.0) anchor independently', () {
+      // 5 minutes apart with scale 1.4 px/min = 7.0px delta >= 4.0
+      const requests = [
+        TimelineBackTabPlacementRequest(
+          id: 'a',
+          startY: 100.0,
+          tabHeight: 44.0,
+        ),
+        TimelineBackTabPlacementRequest(
+          id: 'b',
+          startY: 107.0,
+          tabHeight: 44.0,
+        ),
+      ];
+      final offsets = computeBackTabTopOffsets(requests);
+      expect(offsets['a'], 100.0);
+      expect(offsets['b'], 107.0);
+    });
+
+    test('later overlapping region anchors to its own startY', () {
+      const requests = [
+        TimelineBackTabPlacementRequest(
+          id: 'a',
+          startY: 200.0,
+          tabHeight: 44.0,
+        ),
+        TimelineBackTabPlacementRequest(
+          id: 'b',
+          startY: 201.0,
+          tabHeight: 44.0,
+        ),
+        TimelineBackTabPlacementRequest(
+          id: 'c',
+          startY: 450.0,
+          tabHeight: 44.0,
+        ),
+      ];
+      final offsets = computeBackTabTopOffsets(requests);
+      expect(offsets['a'], 200.0);
+      expect(offsets['b'], 245.0);
+      expect(offsets['c'], 450.0);
+    });
+
+    test('4+ back items stack and reset based on timing accurately', () {
+      const requests = [
+        TimelineBackTabPlacementRequest(
+          id: 't1',
+          startY: 100.0,
+          tabHeight: 40.0,
+        ),
+        TimelineBackTabPlacementRequest(
+          id: 't2',
+          startY: 100.0,
+          tabHeight: 40.0,
+        ),
+        TimelineBackTabPlacementRequest(
+          id: 't3',
+          startY: 102.0,
+          tabHeight: 40.0,
+        ),
+        TimelineBackTabPlacementRequest(
+          id: 't4',
+          startY: 250.0,
+          tabHeight: 40.0,
+        ),
+        TimelineBackTabPlacementRequest(
+          id: 't5',
+          startY: 250.0,
+          tabHeight: 40.0,
+        ),
+      ];
+      final offsets = computeBackTabTopOffsets(requests);
+      expect(offsets['t1'], 100.0);
+      expect(offsets['t2'], 140.0);
+      expect(offsets['t3'], 182.0);
+      expect(offsets['t4'], 250.0);
+      expect(offsets['t5'], 290.0);
+    });
+  });
+
+  group('Measurement and Render Parity Verification', () {
+    testWidgets(
+      'Measured height covers actual rendered card height without overflow for rich card at 1.0x scale',
+      (tester) async {
+        final richItem = RoutineItem(
+          id: 'rich_test_meal',
+          title: 'Comprehensive Nutrition Feast and Hydration Session',
+          startMinute: 12 * 60,
+          endMinute: 13 * 60,
+          blockType: RoutineBlockType.softBlock,
+          category: RoutineCategory.eating,
+          mealCategory: 'Lunch',
+          mealSlot: 'Midday Refuel',
+          location: 'Building 4 Cafe • 2nd Floor Dining Area',
+          caloriesEstimate: 750,
+          proteinEstimate: 48,
+          dishes: const [
+            'Quinoa Salad with Roasted Chickpeas and Lemon Vinaigrette',
+            'Grilled Atlantic Salmon Filet with Herb Butter',
+            'Steamed Broccoli Florets',
+            'Ultra Long Free-Range Herb Roasted Organic Rosemary Chicken Breast with Lemon Infused Glaze and Garlic Mashed Potatoes',
+            'Sparkling Water with Lime',
+          ],
+          subtasks: const [
+            'Log calories in tracker',
+            'Take daily multivitamins and omega-3 capsule',
+            'Drink 500ml water before eating',
+          ],
+          notes:
+              'Take digestive enzymes before meal and review notes afterwards.',
+        );
+
+        const cardWidth = 350.0;
+        double measuredHeight = 0.0;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) {
+                  measuredHeight = RoutineCardFactory.measureHeight(
+                    context,
+                    cardWidth,
+                    richItem,
+                  );
+                  return SingleChildScrollView(
+                    child: SizedBox(
+                      width: cardWidth,
+                      child: RoutineRichTimelineCard(item: richItem),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        final renderBox = tester.renderObject<RenderBox>(
+          find.byType(RoutineRichTimelineCard),
+        );
+        final renderedHeight = renderBox.size.height;
+        expect(measuredHeight, greaterThanOrEqualTo(renderedHeight));
+        expect(measuredHeight - renderedHeight, lessThan(8.0));
+      },
+    );
+
+    testWidgets(
+      'Measured height covers actual rendered card height for rich skincare card at 2.5x text scale',
+      (tester) async {
+        final richSkinItem = RoutineItem(
+          id: 'rich_test_skin',
+          title: 'Evening Dermatology Regimen and Skin Barrier Repair',
+          startMinute: 21 * 60,
+          endMinute: 22 * 60,
+          blockType: RoutineBlockType.softBlock,
+          category: RoutineCategory.skinCare,
+          skincareSlotLabel: 'Night Regimen',
+          location: 'Master Bathroom',
+          steps: const [
+            'Oil Cleanse with gentle balm',
+            'Hydrating foaming cleanser massage for 60 seconds',
+            'Soothing Centella Asiatica calming toner pad application',
+            'Multi-peptide barrier support serum',
+            'Ceramide rich night repair cream',
+          ],
+          skincareProducts: const [
+            'Kose Softymo Deep Cleansing Oil',
+            'CeraVe Hydrating Facial Cleanser',
+            'Skin1004 Madagascar Centella Toner',
+            'The Ordinary Multi-Peptide + HA Serum',
+            'Illiyoon Ceramide Ato Concentrate Cream',
+          ],
+          skincareMissingItems: const [
+            'Replacement micellar water',
+            'Mineral SPF sunscreen for morning',
+          ],
+          notes:
+              'Allow 3 minutes between serum and moisturizer for maximum absorption.',
+        );
+
+        const cardWidth = 360.0;
+        double measuredHeight = 0.0;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: MediaQuery(
+                data: const MediaQueryData(textScaler: TextScaler.linear(2.5)),
+                child: Builder(
+                  builder: (context) {
+                    measuredHeight = RoutineCardFactory.measureHeight(
+                      context,
+                      cardWidth,
+                      richSkinItem,
+                    );
+                    return SingleChildScrollView(
+                      child: SizedBox(
+                        width: cardWidth,
+                        child: RoutineRichTimelineCard(item: richSkinItem),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        final renderBox = tester.renderObject<RenderBox>(
+          find.byType(RoutineRichTimelineCard),
+        );
+        final renderedHeight = renderBox.size.height;
+
+        // Measured height must be >= rendered height at 2.5x scale
+        expect(measuredHeight, greaterThanOrEqualTo(renderedHeight));
+        expect(measuredHeight - renderedHeight, lessThan(12.0));
+      },
+    );
+  });
 }

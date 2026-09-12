@@ -946,25 +946,26 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
         return a.canonicalOrdinal.compareTo(b.canonicalOrdinal);
       });
 
-      var lastStartY = -1.0;
-      var stackIndex = 0;
+      final placementRequests = [
+        for (final item in backItems)
+          TimelineBackTabPlacementRequest(
+            id: item.entry.id,
+            startY: prepared.layout.scale.yForMinute(
+              firstRegionByItemId[item.entry.id]!.startMinute,
+            ),
+            tabHeight: prepared.tabHeightByRegionKey[
+                    firstRegionByItemId[item.entry.id]!
+                        .keyForDay(prepared.selectedDay)] ??
+                44.0,
+          ),
+      ];
+      final topOffsets = computeBackTabTopOffsets(placementRequests);
 
       for (final item in backItems) {
         final firstRegion = firstRegionByItemId[item.entry.id]!;
         final regionKey = firstRegion.keyForDay(prepared.selectedDay);
         final tabHeight = prepared.tabHeightByRegionKey[regionKey] ?? 44.0;
-        final startY = prepared.layout.scale.yForMinute(
-          firstRegion.startMinute,
-        );
-
-        if (lastStartY >= 0 && (startY - lastStartY).abs() < 4.0) {
-          stackIndex++;
-        } else {
-          stackIndex = 0;
-          lastStartY = startY;
-        }
-
-        final top = startY + stackIndex * tabHeight;
+        final top = topOffsets[item.entry.id]!;
 
         widgets.add(
           Positioned(

@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
@@ -7,6 +6,7 @@ import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_actions.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_base.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
+import 'package:optivus/features/routine/widgets/cards/routine_card_presentation.dart';
 import 'package:optivus/features/routine/widgets/routine_timeline_adapter.dart';
 import 'package:optivus/models/routine_item.dart';
 
@@ -36,19 +36,8 @@ class RoutineRichTimelineCard extends ConsumerWidget {
     final isCompleted =
         item.isCompleted || item.status == RoutineStatus.completed;
 
-    const headingStyle = TextStyle(
-      fontSize: 9.5,
-      fontWeight: FontWeight.w900,
-      color: OptivusColors.textSecondary,
-      letterSpacing: 0.8,
-      height: 1.2,
-    );
-    const detailStyle = TextStyle(
-      fontSize: 11,
-      fontWeight: FontWeight.w600,
-      color: OptivusColors.textPrimary,
-      height: 1.25,
-    );
+    const headingStyle = RoutineCardPresentation.headingStyle;
+    const detailStyle = RoutineCardPresentation.detailStyle;
 
     final classInfo = RoutineCardFactory.classDetailsString(item);
     final isEating = item.category == RoutineCategory.eating;
@@ -124,7 +113,7 @@ class RoutineRichTimelineCard extends ConsumerWidget {
 
           // Location
           if (item.location != null && item.location!.trim().isNotEmpty) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: RoutineCardPresentation.locationGap),
             Text(item.location!.trim(), style: detailStyle),
           ],
 
@@ -179,42 +168,31 @@ class RoutineRichTimelineCard extends ConsumerWidget {
               ),
             ],
             if (cleanDishes.isNotEmpty) ...[
-              const SizedBox(height: 6),
+              const SizedBox(height: RoutineCardPresentation.dishesWrapGap),
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final maxChipWidth = math.max(
-                    40.0,
-                    constraints.maxWidth - 4.0,
-                  );
+                  final maxChipWidth = constraints.maxWidth;
                   return Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
+                    spacing: RoutineCardPresentation.dishSpacing,
+                    runSpacing: RoutineCardPresentation.dishRunSpacing,
                     children: [
                       for (final dish in cleanDishes)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.9),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: const Color(0xFFD4D7E2),
-                              width: 1,
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: maxChipWidth),
+                          child: Container(
+                            padding: RoutineCardPresentation.dishPadding,
+                            decoration: BoxDecoration(
+                              color: RoutineCardPresentation.dishBgColor,
+                              borderRadius:
+                                  RoutineCardPresentation.dishBorderRadius,
+                              border: Border.all(
+                                color: RoutineCardPresentation.dishBorderColor,
+                                width: 1,
+                              ),
                             ),
-                          ),
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(maxWidth: maxChipWidth),
                             child: Text(
                               dish,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
-                                color: OptivusColors.textPrimary,
-                              ),
+                              style: RoutineCardPresentation.dishTextStyle,
                             ),
                           ),
                         ),
@@ -231,11 +209,11 @@ class RoutineRichTimelineCard extends ConsumerWidget {
               item.skincareProducts != null ||
               item.skincareSlotLabel != null) ...[
             if (RoutineCardFactory.shouldShowSkincareSlot(item)) ...[
-              const SizedBox(height: 6),
+              const SizedBox(height: RoutineCardPresentation.skinSlotGap),
               Text(item.skincareSlotLabel!.trim(), style: detailStyle),
             ],
             if (item.displaySteps != null && item.displaySteps!.isNotEmpty) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: RoutineCardPresentation.skinStepsHeadingGap),
               const Text('STEPS', style: headingStyle),
               for (
                 var index = 0;
@@ -243,7 +221,7 @@ class RoutineRichTimelineCard extends ConsumerWidget {
                 index++
               ) ...[
                 if (item.displaySteps![index].trim().isNotEmpty) ...[
-                  const SizedBox(height: 3),
+                  const SizedBox(height: RoutineCardPresentation.skinStepItemGap),
                   Text(
                     '${index + 1}. ${item.displaySteps![index].trim()}',
                     style: detailStyle,
@@ -253,39 +231,28 @@ class RoutineRichTimelineCard extends ConsumerWidget {
             ],
             if (item.skincareProducts != null &&
                 item.skincareProducts!.isNotEmpty) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: RoutineCardPresentation.skinProductsHeadingGap),
               const Text('PRODUCTS', style: headingStyle),
               for (final product in item.skincareProducts!) ...[
                 if (product.trim().isNotEmpty) ...[
-                  const SizedBox(height: 3),
-                  Text('• ${product.trim()}', style: detailStyle),
+                  const SizedBox(height: RoutineCardPresentation.skinProductItemGap),
+                  Text(product.trim(), style: detailStyle),
                 ],
               ],
             ],
             if (item.skincareMissingItems != null &&
                 item.skincareMissingItems!.isNotEmpty) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: RoutineCardPresentation.skinMissingHeadingGap),
               const Text(
                 'MISSING',
-                style: TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w900,
-                  color: OptivusColors.warning,
-                  letterSpacing: 0.7,
-                  height: 1.2,
-                ),
+                style: RoutineCardPresentation.missingHeadingStyle,
               ),
               for (final missing in item.skincareMissingItems!) ...[
                 if (missing.trim().isNotEmpty) ...[
-                  const SizedBox(height: 3),
+                  const SizedBox(height: RoutineCardPresentation.skinMissingItemGap),
                   Text(
                     '⚠ ${missing.trim()}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: OptivusColors.warning,
-                      height: 1.25,
-                    ),
+                    style: RoutineCardPresentation.missingDetailStyle,
                   ),
                 ],
               ],

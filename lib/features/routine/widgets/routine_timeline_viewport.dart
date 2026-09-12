@@ -582,16 +582,26 @@ class RoutineTimelineViewportState
         return a.id.compareTo(b.id);
       });
 
-      double lastBottom = -1.0;
+      final placementRequests = [
+        for (final item in backItems)
+          TimelineBackTabPlacementRequest(
+            id: item.id,
+            startY: prepared.scale.yForMinute(
+              firstRegionByItemId[item.id]!.startMinute,
+            ),
+            tabHeight:
+                prepared.tabHeightByRegionKey[firstRegionByItemId[item.id]!
+                    .key] ??
+                40.0,
+          ),
+      ];
+      final topOffsets = computeBackTabTopOffsets(placementRequests);
 
       for (final item in backItems) {
         final firstRegion = firstRegionByItemId[item.id]!;
         final regionKey = firstRegion.key;
         final tabHeight = prepared.tabHeightByRegionKey[regionKey] ?? 40.0;
-        final startY = prepared.scale.yForMinute(firstRegion.startMinute);
-
-        final top = math.max(startY, lastBottom);
-        lastBottom = top + tabHeight + 2.0;
+        final top = topOffsets[item.id]!;
 
         widgets.add(
           Positioned(

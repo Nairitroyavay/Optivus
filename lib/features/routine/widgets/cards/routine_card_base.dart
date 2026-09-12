@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:optivus/core/timeline/widgets/timeline_card_chrome.dart';
 
 /// Shared glass card wrapper for all routine timeline cards.
 ///
 /// Matches luminous frosted glass styling:
-/// - Border radius: 20
-/// - Accent bar: 3.5px with glow shadow
-/// - Press animation: scale 1.0→0.97
-class RoutineCardBase extends StatefulWidget {
+/// - Border radius: 24
+/// - Accent bar and glow shadow via [TimelineCardChrome]
+/// - Visually stable like Step 14 (zero whole-card press scale or haptic drift)
+class RoutineCardBase extends StatelessWidget {
   final Widget child;
   final Color railColor;
   final double? railHeight;
@@ -31,72 +30,37 @@ class RoutineCardBase extends StatefulWidget {
   });
 
   @override
-  State<RoutineCardBase> createState() => _RoutineCardBaseState();
-}
-
-class _RoutineCardBaseState extends State<RoutineCardBase>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _pressCtrl;
-  late Animation<double> _scaleAnim;
-
-  @override
-  void initState() {
-    super.initState();
-    _pressCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 100),
-    );
-    _scaleAnim = Tween<double>(
-      begin: 1.0,
-      end: 0.97,
-    ).animate(CurvedAnimation(parent: _pressCtrl, curve: Curves.easeOut));
-  }
-
-  @override
-  void dispose() {
-    _pressCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     // Routine original category colors strictly preserved even when completed.
-    final effectiveColor = widget.railColor;
+    final effectiveColor = railColor;
 
-    return GestureDetector(
-      onTapDown: (_) {
-        HapticFeedback.lightImpact();
-        _pressCtrl.forward();
-      },
-      onTapUp: (_) {
-        _pressCtrl.reverse();
-        widget.onTap?.call();
-      },
-      onTapCancel: () => _pressCtrl.reverse(),
-      child: AnimatedBuilder(
-        animation: _scaleAnim,
-        builder: (_, child) =>
-            Transform.scale(scale: _scaleAnim.value, child: child),
-        child: AnimatedOpacity(
-          opacity: widget.isCompleted ? 0.88 : 1.0,
-          duration: const Duration(milliseconds: 200),
-          child: TimelineCardChrome(
-            baseColor: effectiveColor,
-            isFront: widget.isFront,
-            hasOverlap: widget.hasOverlap,
-            borderRadius: BorderRadius.circular(24),
-            padding: const EdgeInsets.all(12),
-            child: Offstage(
-              offstage: widget.hasOverlap && !widget.isFront,
-              child: SingleChildScrollView(
-                physics: const NeverScrollableScrollPhysics(),
-                child: widget.child,
-              ),
-            ),
+    final card = AnimatedOpacity(
+      opacity: isCompleted ? 0.88 : 1.0,
+      duration: const Duration(milliseconds: 200),
+      child: TimelineCardChrome(
+        baseColor: effectiveColor,
+        isFront: isFront,
+        hasOverlap: hasOverlap,
+        borderRadius: BorderRadius.circular(24),
+        padding: const EdgeInsets.all(12),
+        child: Offstage(
+          offstage: hasOverlap && !isFront,
+          child: SingleChildScrollView(
+            physics: const NeverScrollableScrollPhysics(),
+            child: child,
           ),
         ),
       ),
     );
+
+    if (onTap != null) {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: card,
+      );
+    }
+    return card;
   }
 }
 
