@@ -149,6 +149,14 @@ class RoutineImportAiController extends StateNotifier<RoutineImportAiState> {
     return result;
   }
 
+  /// Explicitly cancels any active in-flight extraction, invalidating late
+  /// responses and resetting the shared lifecycle to idle immediately so
+  /// a subsequent extraction can begin without delay.
+  void cancelCurrentExtraction() {
+    _lifecycle.cancel();
+    state = const RoutineImportAiState();
+  }
+
   void reset() {
     _lifecycle.reset();
     state = const RoutineImportAiState();

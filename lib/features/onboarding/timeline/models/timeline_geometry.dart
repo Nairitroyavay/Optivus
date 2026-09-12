@@ -78,6 +78,15 @@ enum TimelineVisibleRangePolicy { legacy, contentAdaptive }
 
 enum TimelineStretchPolicy { legacy, constraintBased }
 
+/// Overlap presentation mode for the timeline.
+enum TimelineOverlapPresentation {
+  /// Concurrently overlapping items are partitioned into side-by-side columns.
+  sideBySide,
+
+  /// Overlapping items present as a readable front card with exposed back card strip(s).
+  frontAndExposed,
+}
+
 /// A segment of the timeline that has been stretched vertically to fit content.
 @immutable
 class TimelineStretchedSegment {
@@ -169,6 +178,8 @@ class PositionedTimelineEntry {
   final double width;
   final int column;
   final int columnCount;
+  final bool isFront;
+  final bool hasOverlap;
 
   const PositionedTimelineEntry({
     required this.entry,
@@ -178,6 +189,8 @@ class PositionedTimelineEntry {
     required this.width,
     required this.column,
     required this.columnCount,
+    this.isFront = true,
+    this.hasOverlap = false,
   });
 
   String get id => entry.id;
@@ -194,6 +207,8 @@ class PositionedTimelineEntry {
     double? width,
     int? column,
     int? columnCount,
+    bool? isFront,
+    bool? hasOverlap,
   }) {
     return PositionedTimelineEntry(
       entry: entry ?? this.entry,
@@ -203,12 +218,14 @@ class PositionedTimelineEntry {
       width: width ?? this.width,
       column: column ?? this.column,
       columnCount: columnCount ?? this.columnCount,
+      isFront: isFront ?? this.isFront,
+      hasOverlap: hasOverlap ?? this.hasOverlap,
     );
   }
 
   @override
   String toString() =>
-      'PositionedTimelineEntry(${entry.id}, col: $column/$columnCount, top: $top, h: $height, left: $left, w: $width)';
+      'PositionedTimelineEntry(${entry.id}, col: $column/$columnCount, front: $isFront, overlap: $hasOverlap, top: $top, h: $height, left: $left, w: $width)';
 }
 
 /// The result of timeline layout calculation.

@@ -11,7 +11,7 @@ import 'package:optivus/features/routine/managers/base_timeline/widgets/class_de
 import 'package:optivus/features/routine/managers/base_timeline/widgets/class_timeline_card.dart';
 
 /// Read-only Current Setup view for Classes Base Timeline.
-class ClassesCurrentSetupView extends StatelessWidget {
+class ClassesCurrentSetupView extends StatefulWidget {
   final BaseTimelineSetup setup;
   final List<ClassRoutineBlock> routineBlocks;
   final int selectedDay;
@@ -32,15 +32,25 @@ class ClassesCurrentSetupView extends StatelessWidget {
   });
 
   @override
+  State<ClassesCurrentSetupView> createState() =>
+      _ClassesCurrentSetupViewState();
+}
+
+class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
+  String? _frontBlockId;
+
+  @override
   Widget build(BuildContext context) {
-    final snapshot = setup.snapshotFor(BaseTimelineSection.classes);
+    final snapshot = widget.setup.snapshotFor(BaseTimelineSection.classes);
 
     const adapter = ClassTimelineAdapter(
       accent: OptivusColors.blueAccent,
       defaultEditable: false,
     );
-    final entries = routineBlocks.expand((b) => adapter.toEntries(b)).toList();
-    final blockMap = {for (final b in routineBlocks) b.id: b};
+    final entries = widget.routineBlocks
+        .expand((b) => adapter.toEntries(b))
+        .toList();
+    final blockMap = {for (final b in widget.routineBlocks) b.id: b};
 
     return SafeArea(
       bottom: false,
@@ -57,7 +67,7 @@ class ClassesCurrentSetupView extends StatelessWidget {
                     Icons.arrow_back_rounded,
                     color: OptivusColors.textPrimary,
                   ),
-                  onPressed: onBack,
+                  onPressed: widget.onBack,
                   style: IconButton.styleFrom(
                     backgroundColor: Colors.white.withValues(alpha: 0.1),
                   ),
@@ -77,7 +87,8 @@ class ClassesCurrentSetupView extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        (snapshot.isConfigured || routineBlocks.isNotEmpty)
+                        (snapshot.isConfigured ||
+                                widget.routineBlocks.isNotEmpty)
                             ? 'Your current setup'
                             : 'Set up your timetable',
                         style: const TextStyle(
@@ -88,7 +99,7 @@ class ClassesCurrentSetupView extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (snapshot.isConfigured || routineBlocks.isNotEmpty)
+                if (snapshot.isConfigured || widget.routineBlocks.isNotEmpty)
                   PopupMenuButton<String>(
                     icon: const Icon(
                       Icons.more_vert_rounded,
@@ -103,7 +114,7 @@ class ClassesCurrentSetupView extends StatelessWidget {
                     ),
                     onSelected: (val) {
                       if (val == 'remove') {
-                        onRemoveSetup();
+                        widget.onRemoveSetup();
                       }
                     },
                     itemBuilder: (ctx) => [
@@ -134,16 +145,16 @@ class ClassesCurrentSetupView extends StatelessWidget {
             ),
           ),
 
-          // Source Photo Preview (Truthful Presigned R2)
-          if (snapshot.sourceR2Key != null)
+          // Source Photo Preview (Truthful Presigned R2 or saved asset)
+          if (snapshot.sourceR2Key != null || snapshot.sourceAssetId != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: BaseTimelinePhotoPreviewCard(
                 r2Key: snapshot.sourceR2Key,
                 assetId: snapshot.sourceAssetId,
                 title: 'Timetable photo',
-                subtitle: routineBlocks.isNotEmpty
-                    ? '${routineBlocks.length} weekly classes'
+                subtitle: widget.routineBlocks.isNotEmpty
+                    ? '${widget.routineBlocks.length} weekly classes'
                     : null,
                 height: 110,
               ),
@@ -153,8 +164,11 @@ class ClassesCurrentSetupView extends StatelessWidget {
           Expanded(
             child: FullScreenTimelineScaffold(
               entries: entries,
-              selectedDay: selectedDay,
-              onDayChanged: onDayChanged,
+              selectedDay: widget.selectedDay,
+              onDayChanged: widget.onDayChanged,
+              overlapPresentation: TimelineOverlapPresentation.frontAndExposed,
+              frontEntryId: _frontBlockId,
+              onFrontSelected: (id) => setState(() => _frontBlockId = id),
               styleBuilder: (entry) => adapter.styleForEntry(entry),
               blockBuilder: (context, positioned) {
                 final block = blockMap[positioned.entry.sourceId];
@@ -164,7 +178,9 @@ class ClassesCurrentSetupView extends StatelessWidget {
                   isEditable: false,
                   accent: OptivusColors.blueAccent,
                   onTap: () {
-                    if (block != null) {
+                    if (positioned.hasOverlap && !positioned.isFront) {
+                      setState(() => _frontBlockId = positioned.entry.id);
+                    } else if (block != null) {
                       ClassDetailSheet.show(context, block);
                     }
                   },
@@ -204,7 +220,7 @@ class ClassesCurrentSetupView extends StatelessWidget {
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                onPressed: onChangeSetup,
+                onPressed: widget.onChangeSetup,
               ),
             ),
           ),

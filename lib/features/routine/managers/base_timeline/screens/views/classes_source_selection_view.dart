@@ -11,6 +11,7 @@ class ClassesSourceSelectionView extends StatelessWidget {
   final VoidCallback onCancel;
   final void Function(ImageSource source) onPickPhoto;
   final VoidCallback onManualSetup;
+  final VoidCallback? onEditCurrent;
 
   const ClassesSourceSelectionView({
     super.key,
@@ -18,6 +19,7 @@ class ClassesSourceSelectionView extends StatelessWidget {
     required this.onCancel,
     required this.onPickPhoto,
     required this.onManualSetup,
+    this.onEditCurrent,
   });
 
   @override
@@ -73,7 +75,8 @@ class ClassesSourceSelectionView extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                if (snapshot.sourceR2Key != null) ...[
+                if (snapshot.sourceR2Key != null ||
+                    snapshot.sourceAssetId != null) ...[
                   const Text(
                     'CURRENT PHOTO',
                     style: TextStyle(
@@ -93,7 +96,8 @@ class ClassesSourceSelectionView extends StatelessWidget {
                   const SizedBox(height: 16),
                 ],
                 Text(
-                  snapshot.sourceR2Key != null
+                  (snapshot.sourceR2Key != null ||
+                          snapshot.sourceAssetId != null)
                       ? 'USE A NEW TIMETABLE PHOTO'
                       : 'USE A TIMETABLE PHOTO',
                   style: const TextStyle(
@@ -130,13 +134,33 @@ class ClassesSourceSelectionView extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                _buildSourceActionCard(
-                  icon: Icons.edit_calendar_rounded,
-                  title: 'Set up manually',
-                  subtitle: 'Add or adjust classes day by day',
-                  accent: OptivusColors.routineAccent,
-                  onTap: onManualSetup,
-                ),
+                if ((snapshot.sourceR2Key != null ||
+                        snapshot.sourceAssetId != null) &&
+                    onEditCurrent != null) ...[
+                  _buildSourceActionCard(
+                    icon: Icons.edit_calendar_rounded,
+                    title: 'Edit current timetable',
+                    subtitle: 'Keep timetable photo and adjust classes',
+                    accent: OptivusColors.routineAccent,
+                    onTap: onEditCurrent!,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildSourceActionCard(
+                    icon: Icons.tune_rounded,
+                    title: 'Set up manually',
+                    subtitle: 'Adjust classes without linked photo',
+                    accent: OptivusColors.textSecondary,
+                    onTap: onManualSetup,
+                  ),
+                ] else ...[
+                  _buildSourceActionCard(
+                    icon: Icons.edit_calendar_rounded,
+                    title: 'Set up manually',
+                    subtitle: 'Add or adjust classes day by day',
+                    accent: OptivusColors.routineAccent,
+                    onTap: onManualSetup,
+                  ),
+                ],
               ],
             ),
           ),

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/repositories/uploaded_asset_repository.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/upload_state.dart';
 
@@ -81,7 +82,8 @@ class _BaseTimelinePhotoPreviewCardState
 
   Future<void> _loadPreview() async {
     final key = widget.r2Key?.trim();
-    if (key == null || key.isEmpty) {
+    final assetId = widget.assetId?.trim();
+    if ((key == null || key.isEmpty) && (assetId == null || assetId.isEmpty)) {
       if (mounted) {
         setState(() {
           _previewUri = null;
@@ -97,11 +99,36 @@ class _BaseTimelinePhotoPreviewCardState
       _failed = false;
     });
 
-    final resolver = ref.read(uploadedAssetPreviewResolverProvider);
     final uid = ref.read(userProfileProvider).uid;
+    String? resolvedKey = key;
+
+    if (resolvedKey == null || resolvedKey.isEmpty) {
+      if (assetId != null && assetId.isNotEmpty) {
+        try {
+          final assetRepo = ref.read(uploadedAssetRepositoryProvider);
+          final asset = await assetRepo.fetchAsset(uid: uid, assetId: assetId);
+          if (asset != null && asset.r2Key.isNotEmpty) {
+            resolvedKey = asset.r2Key;
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (resolvedKey == null || resolvedKey.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _previewUri = null;
+          _loading = false;
+          _failed = true;
+        });
+      }
+      return;
+    }
+
+    final resolver = ref.read(uploadedAssetPreviewResolverProvider);
 
     try {
-      final uri = await resolver.resolveKey(uid: uid, objectKey: key);
+      final uri = await resolver.resolveKey(uid: uid, objectKey: resolvedKey);
       if (mounted) {
         setState(() {
           _previewUri = uri;
@@ -180,7 +207,10 @@ class _BaseTimelinePhotoPreviewCardState
   Widget build(BuildContext context) {
     final hasLocal = _hasValidLocalPreview;
     final key = widget.r2Key?.trim();
-    if (!hasLocal && (key == null || key.isEmpty)) {
+    final assetId = widget.assetId?.trim();
+    if (!hasLocal &&
+        (key == null || key.isEmpty) &&
+        (assetId == null || assetId.isEmpty)) {
       return const SizedBox.shrink();
     }
 
@@ -350,6 +380,9 @@ class _BaseTimelinePhotoPreviewCardState
 
   Widget _buildFallbackContent() {
     final isCompact = widget.height < 120;
+    final isPhotoSavedUnavailable =
+        widget.assetId != null && (widget.r2Key == null || _failed);
+
     return Center(
       child: Padding(
         padding: EdgeInsets.symmetric(
@@ -373,27 +406,24 @@ class _BaseTimelinePhotoPreviewCardState
                 fontWeight: FontWeight.w700,
               ),
             ),
-            if (widget.subtitle != null &&
-                widget.subtitle!.trim().isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text(
-                widget.subtitle!.trim(),
-                style: const TextStyle(
-                  color: OptivusColors.textSecondary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
+            const SizedBox(height: 2),
+            Text(
+              isPhotoSavedUnavailable
+                  ? (widget.subtitle != null &&
+                            widget.subtitle!.trim().isNotEmpty
+                        ? 'Preview unavailable · ${widget.subtitle!.trim()}'
+                        : 'Timetable photo saved · Preview unavailable')
+                  : (widget.subtitle != null &&
+                            widget.subtitle!.trim().isNotEmpty
+                        ? widget.subtitle!.trim()
+                        : (_failed
+                              ? 'Preview unavailable'
+                              : 'Secure cloud storage')),
+              style: const TextStyle(
+                color: OptivusColors.textSecondary,
+                fontSize: 11,
               ),
-            ] else ...[
-              const SizedBox(height: 2),
-              Text(
-                _failed ? 'Preview unavailable' : 'Secure cloud storage',
-                style: const TextStyle(
-                  color: OptivusColors.textSecondary,
-                  fontSize: 11,
-                ),
-              ),
-            ],
+            ),
           ],
         ),
       ),

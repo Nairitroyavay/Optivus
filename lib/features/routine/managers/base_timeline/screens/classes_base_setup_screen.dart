@@ -4,59 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_step4_candidate_mapping.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/class_timeline_adapter.dart';
-import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/classes_current_setup_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/classes_review_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/classes_source_selection_view.dart';
-import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
-import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_upload_lifecycle_helper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/class_schedule_draft_mapper.dart';
-import 'package:optivus/features/routine/managers/base_timeline/services/class_setup_error_mapper.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/classes_setup_controller.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_ai_thinking_view.dart';
-import 'package:optivus/models/routine_import_review.dart';
-import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/repositories/base_timeline_setup_repository.dart';
 import 'package:optivus/state/app_state.dart';
-import 'package:optivus/state/auth_generation.dart';
-import 'package:optivus/state/routine_import_ai_state.dart';
-import 'package:optivus/state/upload_state.dart';
-
-/// Explicit staged state machine for Classes Base Timeline setup.
-enum ClassesSetupStage {
-  currentSetup,
-  chooseSource,
-  uploading,
-  extracting,
-  review,
-  editingBlock,
-  saving,
-  saveSuccess,
-  error,
-}
-
-/// Computes the initial weekday tab to display for a list of class blocks.
-///
-/// Rules:
-/// 1. If today's weekday has classes, select today.
-/// 2. If today has no classes, select the earliest scheduled weekday (1-7).
-/// 3. If there are no scheduled classes, default to today.
-int computeInitialClassWeekday(
-  List<ClassRoutineBlock> blocks, {
-  DateTime? now,
-}) {
-  final currentWeekday = (now ?? DateTime.now()).weekday;
-  final activeDays = blocks
-      .expand((b) => b.repeatDays)
-      .where((d) => d >= 1 && d <= 7)
-      .toSet();
-  if (activeDays.contains(currentWeekday)) return currentWeekday;
-  if (activeDays.isNotEmpty) return (activeDays.toList()..sort()).first;
-  return currentWeekday;
-}
 
 /// Host coordinator screen for Base Timeline Classes setup.
 class ClassesBaseSetupScreen extends ConsumerStatefulWidget {
@@ -71,53 +29,34 @@ class ClassesBaseSetupScreen extends ConsumerStatefulWidget {
 
 class _ClassesBaseSetupScreenState
     extends ConsumerState<ClassesBaseSetupScreen> {
-  ClassesSetupStage _stage = ClassesSetupStage.currentSetup;
-  int? _currentSelectedDay;
-  int? _workingSelectedDay;
-
-  // Working state (isolated from durable setup until save commits)
-  List<ClassRoutineBlock> _workingBlocks = [];
-  String? _workingAssetId;
-  String? _workingR2Key;
-  String? _workingLocalPreviewPath;
-
-  // Candidate upload state (isolated while in upload/extraction)
-  String? _candidateAssetId;
-  String? _candidateR2Key;
-
-  int _droppedCount = 0;
-  List<String> _droppedExamples = const [];
-  bool _isDirty = false;
-  String? _errorMessage;
-
-  int _aiSessionGeneration = 0;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final uid = ref.read(userProfileProvider).uid;
-      final setupAsync = ref.read(baseTimelineSetupNotifierProvider);
-      final setup =
-          setupAsync.value ??
-          BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
-      ref
-          .read(baseTimelineUploadLifecycleHelperProvider)
-          .cleanupStaleUncommittedAssets(
-            uid: uid,
-            committedAssetId: setup.classLogicalAssetId,
-          );
+      final setup = ref.read(baseTimelineSetupNotifierProvider).value;
+      if (setup != null) {
+        final uid = ref.read(userProfileProvider).uid;
+        ref
+            .read(classesSetupControllerProvider.notifier)
+            .performStartupCleanup(setup, uid: uid);
+        ref
+            .read(classesSetupControllerProvider.notifier)
+            .initDayIfNeeded(setup);
+      }
     });
   }
 
-  Future<bool> _confirmDiscard(BaseTimelineSetup setup) async {
+  Future<bool> _confirmDiscard(
+    BaseTimelineSetup setup,
+    ClassesSetupState state,
+  ) async {
     final hasUnsavedPhoto =
-        (_workingAssetId != null &&
-            _workingAssetId != setup.classLogicalAssetId) ||
-        (_candidateAssetId != null &&
-            _candidateAssetId != setup.classLogicalAssetId);
-    if (!_isDirty && !hasUnsavedPhoto) {
+        (state.workingAssetId != null &&
+            state.workingAssetId != setup.classLogicalAssetId) ||
+        (state.candidateAssetId != null &&
+            state.candidateAssetId != setup.classLogicalAssetId);
+    if (!state.isDirty && !hasUnsavedPhoto) {
       return true;
     }
     final res = await showDialog<bool>(
@@ -154,500 +93,170 @@ class _ClassesBaseSetupScreenState
     return res ?? false;
   }
 
-  Future<void> _retireCandidateUpload(BaseTimelineSetup setup) async {
-    if (_candidateAssetId != null &&
-        _candidateAssetId != setup.classLogicalAssetId) {
-      final uid = ref.read(userProfileProvider).uid;
-      final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
-      final assetToRetire = _candidateAssetId;
-      final keyToRetire = _candidateR2Key;
-      _candidateAssetId = null;
-      _candidateR2Key = null;
-      try {
-        await helper.retireUncommittedUpload(
-          uid: uid,
-          assetId: assetToRetire,
-          objectKey: keyToRetire,
-        );
-      } catch (_) {}
-    }
-  }
+  Future<void> _handleClassesBack(
+    BaseTimelineSetup setup,
+    ClassesSetupState state,
+    String uid,
+  ) async {
+    final controller = ref.read(classesSetupControllerProvider.notifier);
 
-  Future<void> _cancelWorkingSetup(BaseTimelineSetup setup) async {
-    if (_stage == ClassesSetupStage.saving ||
-        _stage == ClassesSetupStage.saveSuccess) {
+    if (state.stage == ClassesSetupStage.saving ||
+        state.stage == ClassesSetupStage.saveSuccess) {
       return;
     }
 
-    if (_stage == ClassesSetupStage.uploading ||
-        _stage == ClassesSetupStage.extracting) {
-      _aiSessionGeneration++;
-      await _retireCandidateUpload(setup);
-      if (mounted) {
-        setState(() {
-          _stage = _workingBlocks.isNotEmpty
-              ? ClassesSetupStage.review
-              : ClassesSetupStage.chooseSource;
-        });
+    if (state.stage == ClassesSetupStage.uploading ||
+        state.stage == ClassesSetupStage.extracting) {
+      await controller.cancelCurrentExtraction(setup, uid: uid);
+      return;
+    }
+
+    if (state.stage == ClassesSetupStage.chooseSource) {
+      controller.cancelChooseSource();
+      return;
+    }
+
+    if (state.stage == ClassesSetupStage.error) {
+      if (state.workingBlocks.isNotEmpty) {
+        controller.keepPreviousDraft(setup, uid: uid);
+      } else {
+        await controller.resetWorkingDraft(setup, uid: uid);
       }
       return;
     }
 
-    if (_stage == ClassesSetupStage.chooseSource) {
-      await _retireCandidateUpload(setup);
-      if (mounted) {
-        setState(() {
-          _stage = _workingBlocks.isNotEmpty
-              ? ClassesSetupStage.review
-              : ClassesSetupStage.currentSetup;
-        });
-      }
-      return;
-    }
-
-    if (_stage == ClassesSetupStage.error) {
-      await _retireCandidateUpload(setup);
-      if (mounted) {
-        setState(() {
-          if (_workingBlocks.isNotEmpty) {
-            _stage = ClassesSetupStage.review;
-          } else {
-            _stage = ClassesSetupStage.currentSetup;
-            _workingBlocks = [];
-            _workingAssetId = null;
-            _workingR2Key = null;
-            _workingLocalPreviewPath = null;
-            _candidateAssetId = null;
-            _candidateR2Key = null;
-            _isDirty = false;
-            _droppedCount = 0;
-            _droppedExamples = const [];
-          }
-          _errorMessage = null;
-        });
-      }
-      return;
-    }
-
-    if (_stage == ClassesSetupStage.review ||
-        _stage == ClassesSetupStage.editingBlock) {
-      final canDiscard = await _confirmDiscard(setup);
+    if (state.stage == ClassesSetupStage.review ||
+        state.stage == ClassesSetupStage.editingBlock) {
+      final canDiscard = await _confirmDiscard(setup, state);
       if (!canDiscard || !mounted) return;
-
-      final uid = ref.read(userProfileProvider).uid;
-      final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
-
-      if (_workingAssetId != null &&
-          _workingAssetId != setup.classLogicalAssetId) {
-        try {
-          await helper.retireUncommittedUpload(
-            uid: uid,
-            assetId: _workingAssetId,
-            objectKey: _workingR2Key,
-          );
-        } catch (_) {}
-      }
-
-      await _retireCandidateUpload(setup);
-
-      if (mounted) {
-        setState(() {
-          _stage = ClassesSetupStage.currentSetup;
-          _workingBlocks = [];
-          _workingAssetId = null;
-          _workingR2Key = null;
-          _workingLocalPreviewPath = null;
-          _isDirty = false;
-          _errorMessage = null;
-          _droppedCount = 0;
-          _droppedExamples = const [];
-        });
-      }
+      await controller.resetWorkingDraft(setup, uid: uid);
       return;
     }
 
-    if (_stage == ClassesSetupStage.currentSetup) {
+    if (state.stage == ClassesSetupStage.currentSetup) {
       widget.onBack();
     }
   }
 
-  Future<void> _handleClassesBack(BaseTimelineSetup setup) =>
-      _cancelWorkingSetup(setup);
-
-  void _startManualSetup(BaseTimelineSetup setup) {
-    _retireCandidateUpload(setup);
-    final existing = ClassScheduleDraftMapper.toClassRoutineBlocks(
-      setup.classBlocks,
+  Future<void> _addNewBlock(int selectedDay) async {
+    final controller = ref.read(classesSetupControllerProvider.notifier);
+    final newBlock = ClassRoutineBlock(
+      id: 'cls_${DateTime.now().millisecondsSinceEpoch}',
+      subject: '',
+      room: '',
+      professor: '',
+      courseCode: '',
+      classType: '',
+      section: '',
+      notes: '',
+      startMinute: 9 * 60,
+      endMinute: 10 * 60,
+      repeatDays: [selectedDay],
     );
-    setState(() {
-      _workingBlocks = List.of(existing);
-      _workingAssetId = setup.classLogicalAssetId;
-      _workingR2Key = setup.classLogicalAssetR2Key;
-      _workingLocalPreviewPath = null;
-      _isDirty = false;
-      _errorMessage = null;
-      _droppedCount = 0;
-      _droppedExamples = const [];
-      _workingSelectedDay = computeInitialClassWeekday(_workingBlocks);
-      _stage = ClassesSetupStage.review;
-    });
-  }
 
-  Future<void> _pickAndUploadPhoto(
-    ImageSource source,
-    BaseTimelineSetup setup,
-  ) async {
-    final uid = ref.read(userProfileProvider).uid;
-    if (uid.trim().isEmpty) return;
-    final currentAuthGen = ref.read(authGenerationProvider);
-    final sessionGen = ++_aiSessionGeneration;
-
-    setState(() {
-      _stage = ClassesSetupStage.uploading;
-      _errorMessage = null;
-    });
-
-    try {
-      final uploadNotifier = ref.read(uploadControllerProvider.notifier);
-      final asset = await uploadNotifier.startUpload(
-        uid: uid,
-        purpose: UploadedAssetPurpose.classTimetable,
-        sourceFeature: UploadSourceFeature.routineBaseTimeline,
-        source: source,
-      );
-
-      if (!mounted ||
-          _aiSessionGeneration != sessionGen ||
-          ref.read(authGenerationProvider) != currentAuthGen ||
-          ref.read(userProfileProvider).uid != uid) {
-        if (asset != null) {
-          ref
-              .read(baseTimelineUploadLifecycleHelperProvider)
-              .retireUncommittedUpload(
-                uid: uid,
-                assetId: asset.assetId,
-                objectKey: asset.r2Key,
-              );
-        }
-        return;
-      }
-
-      if (asset == null) {
-        if (mounted) {
-          setState(() {
-            _stage = _workingBlocks.isNotEmpty
-                ? ClassesSetupStage.review
-                : ClassesSetupStage.chooseSource;
-          });
-        }
-        return;
-      }
-
-      _candidateAssetId = asset.assetId;
-      _candidateR2Key = asset.r2Key;
-
-      if (mounted) {
-        setState(() {
-          _stage = ClassesSetupStage.extracting;
-        });
-      }
-
-      final reviewDraft = RoutineImportReviewDraft(
-        id: 'rev_${asset.assetId}',
-        uid: uid,
-        source: RoutineImportReviewSource.classes,
-        status: RoutineImportReviewStatus.draft,
-        sourceLabel: 'Classes',
-        uploadedAssetId: asset.assetId,
-        uploadedAssetR2Key: asset.r2Key,
-        uploadedAssetStatus: 'uploaded',
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-
-      final aiController = ref.read(routineImportAiControllerProvider.notifier);
-      final result = await aiController
-          .runExtraction(reviewDraft)
-          .timeout(
-            const Duration(seconds: 45),
-            onTimeout: () =>
-                throw TimeoutException('AI timetable extraction timed out.'),
-          );
-
-      if (!mounted ||
-          _aiSessionGeneration != sessionGen ||
-          ref.read(authGenerationProvider) != currentAuthGen ||
-          ref.read(userProfileProvider).uid != uid ||
-          _candidateAssetId != asset.assetId) {
-        ref
-            .read(baseTimelineUploadLifecycleHelperProvider)
-            .retireUncommittedUpload(
-              uid: uid,
-              assetId: asset.assetId,
-              objectKey: asset.r2Key,
-            );
-        return;
-      }
-
-      if (result != null && result.candidates.isNotEmpty) {
-        final mappingResult = mapOnboarding4Candidates(
-          candidates: result.candidates,
-          config: ScheduleSetupConfig.classSetup,
-        );
-
-        if (mappingResult.blocks.isNotEmpty) {
-          if (_workingAssetId != null &&
-              _workingAssetId != setup.classLogicalAssetId &&
-              _workingAssetId != asset.assetId) {
-            try {
-              final helper = ref.read(
-                baseTimelineUploadLifecycleHelperProvider,
-              );
-              await helper.retireUncommittedUpload(
-                uid: uid,
-                assetId: _workingAssetId,
-                objectKey: _workingR2Key,
-              );
-            } catch (_) {}
-          }
-
-          if (mounted) {
-            setState(() {
-              _workingAssetId = asset.assetId;
-              _workingR2Key = asset.r2Key;
-              _workingLocalPreviewPath = asset.localPreviewPath;
-              _candidateAssetId = null;
-              _candidateR2Key = null;
-              _workingBlocks = mappingResult.blocks;
-              _droppedCount = mappingResult.droppedTotal;
-              _droppedExamples = mappingResult.droppedExamples;
-              _isDirty = true;
-              _workingSelectedDay = computeInitialClassWeekday(_workingBlocks);
-              _stage = ClassesSetupStage.review;
-            });
-          }
-          return;
-        }
-      }
-
-      if (mounted) {
-        setState(() {
-          _errorMessage = ClassSetupErrorMapper.mapAiExtractionError(
-            null,
-            warnings: result?.warnings,
-          );
-          _stage = ClassesSetupStage.error;
-        });
-      }
-    } catch (e) {
-      if (!mounted || _aiSessionGeneration != sessionGen) return;
-
-      if (ref.read(authGenerationProvider) == currentAuthGen &&
-          ref.read(userProfileProvider).uid == uid) {
-        setState(() {
-          _errorMessage = ClassSetupErrorMapper.mapAiExtractionError(e);
-          _stage = ClassesSetupStage.error;
-        });
-      }
+    controller.startEditingBlock();
+    await ClassTimelineAdapter.showClassEditSheet(
+      context: context,
+      block: newBlock,
+      accent: OptivusColors.blueAccent,
+      onSave: (updated) async {
+        controller.addBlock(updated);
+        return true;
+      },
+    );
+    if (mounted) {
+      controller.stopEditingBlock();
     }
   }
 
-  Future<void> _retryCandidateExtraction(BaseTimelineSetup setup) async {
-    final assetId = _candidateAssetId;
-    final r2Key = _candidateR2Key;
-    if (assetId == null || r2Key == null) {
-      setState(() => _stage = ClassesSetupStage.chooseSource);
-      return;
-    }
-    final uid = ref.read(userProfileProvider).uid;
-    final currentAuthGen = ref.read(authGenerationProvider);
-    final sessionGen = ++_aiSessionGeneration;
-
-    setState(() {
-      _stage = ClassesSetupStage.extracting;
-      _errorMessage = null;
-    });
-
-    try {
-      final reviewDraft = RoutineImportReviewDraft(
-        id: 'rev_$assetId',
-        uid: uid,
-        source: RoutineImportReviewSource.classes,
-        status: RoutineImportReviewStatus.draft,
-        sourceLabel: 'Classes',
-        uploadedAssetId: assetId,
-        uploadedAssetR2Key: r2Key,
-        uploadedAssetStatus: 'uploaded',
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-
-      final aiController = ref.read(routineImportAiControllerProvider.notifier);
-      final result = await aiController
-          .runExtraction(reviewDraft)
-          .timeout(
-            const Duration(seconds: 45),
-            onTimeout: () =>
-                throw TimeoutException('AI timetable extraction timed out.'),
-          );
-
-      if (!mounted ||
-          _aiSessionGeneration != sessionGen ||
-          ref.read(authGenerationProvider) != currentAuthGen ||
-          ref.read(userProfileProvider).uid != uid ||
-          _candidateAssetId != assetId) {
-        return;
-      }
-
-      if (result != null && result.candidates.isNotEmpty) {
-        final mappingResult = mapOnboarding4Candidates(
-          candidates: result.candidates,
-          config: ScheduleSetupConfig.classSetup,
-        );
-
-        if (mappingResult.blocks.isNotEmpty) {
-          if (_workingAssetId != null &&
-              _workingAssetId != setup.classLogicalAssetId &&
-              _workingAssetId != assetId) {
-            try {
-              final helper = ref.read(
-                baseTimelineUploadLifecycleHelperProvider,
-              );
-              await helper.retireUncommittedUpload(
-                uid: uid,
-                assetId: _workingAssetId,
-                objectKey: _workingR2Key,
-              );
-            } catch (_) {}
-          }
-
-          if (mounted) {
-            setState(() {
-              _workingAssetId = assetId;
-              _workingR2Key = r2Key;
-              _workingLocalPreviewPath = null;
-              _candidateAssetId = null;
-              _candidateR2Key = null;
-              _workingBlocks = mappingResult.blocks;
-              _droppedCount = mappingResult.droppedTotal;
-              _droppedExamples = mappingResult.droppedExamples;
-              _isDirty = true;
-              _workingSelectedDay = computeInitialClassWeekday(_workingBlocks);
-              _stage = ClassesSetupStage.review;
-            });
-          }
-          return;
-        }
-      }
-
-      if (mounted) {
-        setState(() {
-          _errorMessage = ClassSetupErrorMapper.mapAiExtractionError(
-            null,
-            warnings: result?.warnings,
-          );
-          _stage = ClassesSetupStage.error;
-        });
-      }
-    } catch (e) {
-      if (!mounted || _aiSessionGeneration != sessionGen) return;
-
-      if (ref.read(authGenerationProvider) == currentAuthGen &&
-          ref.read(userProfileProvider).uid == uid) {
-        setState(() {
-          _errorMessage = ClassSetupErrorMapper.mapAiExtractionError(e);
-          _stage = ClassesSetupStage.error;
-        });
-      }
+  Future<void> _editBlock(ClassRoutineBlock block) async {
+    final controller = ref.read(classesSetupControllerProvider.notifier);
+    controller.startEditingBlock();
+    await ClassTimelineAdapter.showClassEditSheet(
+      context: context,
+      block: block,
+      accent: OptivusColors.blueAccent,
+      onSave: (updated) async {
+        controller.updateBlock(updated);
+        return true;
+      },
+      onDelete: (toDelete) async {
+        controller.deleteBlock(toDelete.id);
+        return true;
+      },
+    );
+    if (mounted) {
+      controller.stopEditingBlock();
     }
   }
 
-  Future<void> _handleSave(BaseTimelineSetup setup) async {
-    if (_stage == ClassesSetupStage.saving ||
-        _stage == ClassesSetupStage.saveSuccess) {
-      return;
-    }
-
-    setState(() {
-      _stage = ClassesSetupStage.saving;
-      _errorMessage = null;
-    });
-
-    try {
-      final uid = ref.read(userProfileProvider).uid;
-      final coordinator = ref.read(baseTimelineTransactionCoordinatorProvider);
-
-      final drafts = ClassScheduleDraftMapper.toTimelineDrafts(
-        _workingBlocks,
-        section: BaseTimelineSection.classes.name,
-        provenanceAssetId: _workingAssetId,
-        provenanceR2Key: _workingR2Key,
-      );
-
-      await coordinator.replaceSection(
-        uid: uid,
-        section: BaseTimelineSection.classes,
-        newBlocks: drafts,
-        updateSetup: (current) => current.copyWith(
-          classBlocks: drafts,
-          classLogicalAssetId: _workingAssetId,
-          clearClassLogicalAssetId: _workingAssetId == null,
-          classLogicalAssetR2Key: _workingR2Key,
-          clearClassLogicalAssetR2Key: _workingR2Key == null,
-          updatedAt: DateTime.now(),
+  void _showScanAgainSheet(BaseTimelineSetup setup, String uid) {
+    final controller = ref.read(classesSetupControllerProvider.notifier);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: OptivusColors.backgroundBottom,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Scan Timetable Photo',
+                style: TextStyle(
+                  color: OptivusColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(
+                  Icons.photo_library_rounded,
+                  color: OptivusColors.aquaAccent,
+                ),
+                title: const Text(
+                  'Choose from Gallery',
+                  style: TextStyle(color: OptivusColors.textPrimary),
+                ),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  controller.pickAndUploadPhoto(
+                    uid: uid,
+                    source: ImageSource.gallery,
+                    setup: setup,
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.camera_alt_rounded,
+                  color: OptivusColors.aquaAccent,
+                ),
+                title: const Text(
+                  'Take a Photo',
+                  style: TextStyle(color: OptivusColors.textPrimary),
+                ),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  controller.pickAndUploadPhoto(
+                    uid: uid,
+                    source: ImageSource.camera,
+                    setup: setup,
+                  );
+                },
+              ),
+            ],
+          ),
         ),
-      );
-
-      final updatedSetup = await ref
-          .read(baseTimelineSetupRepositoryProvider)
-          .fetchSetup(uid);
-      ref
-          .read(baseTimelineSetupNotifierProvider.notifier)
-          .updateInMemory(updatedSetup);
-
-      if (setup.classLogicalAssetId != null &&
-          setup.classLogicalAssetId != _workingAssetId) {
-        try {
-          final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
-          await helper.retireReplacedAsset(
-            uid: uid,
-            oldAssetId: setup.classLogicalAssetId!,
-            oldObjectKey: setup.classLogicalAssetR2Key,
-          );
-        } catch (_) {}
-      }
-
-      if (mounted) {
-        final savedBlocks = ClassScheduleDraftMapper.toClassRoutineBlocks(
-          drafts,
-        );
-        final newInitialDay = computeInitialClassWeekday(savedBlocks);
-        setState(() {
-          _currentSelectedDay = newInitialDay;
-          _stage = ClassesSetupStage.saveSuccess;
-          _workingBlocks = [];
-          _workingAssetId = null;
-          _workingR2Key = null;
-          _workingLocalPreviewPath = null;
-          _candidateAssetId = null;
-          _candidateR2Key = null;
-          _isDirty = false;
-          _errorMessage = null;
-          _droppedCount = 0;
-          _droppedExamples = const [];
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _stage = ClassesSetupStage.review;
-          _errorMessage = ClassSetupErrorMapper.mapSaveError(e);
-        });
-      }
-    }
+      ),
+    );
   }
 
-  Future<void> _handleRemoveSetup(BaseTimelineSetup setup) async {
+  Future<void> _handleRemoveSetup(BaseTimelineSetup setup, String uid) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -682,192 +291,38 @@ class _ClassesBaseSetupScreenState
 
     if (confirmed != true || !mounted) return;
 
-    try {
-      final uid = ref.read(userProfileProvider).uid;
-      final coordinator = ref.read(baseTimelineTransactionCoordinatorProvider);
+    final controller = ref.read(classesSetupControllerProvider.notifier);
+    await controller.removeSetup(uid: uid, setup: setup);
 
-      await coordinator.replaceSection(
-        uid: uid,
-        section: BaseTimelineSection.classes,
-        newBlocks: const [],
-        updateSetup: (current) => current.copyWith(
-          classBlocks: const [],
-          clearClassLogicalAssetId: true,
-          clearClassLogicalAssetR2Key: true,
-          updatedAt: DateTime.now(),
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Classes setup removed.'),
+          duration: Duration(seconds: 3),
         ),
       );
-
-      final updatedSetup = await ref
-          .read(baseTimelineSetupRepositoryProvider)
-          .fetchSetup(uid);
-      ref
-          .read(baseTimelineSetupNotifierProvider.notifier)
-          .updateInMemory(updatedSetup);
-
-      if (setup.classLogicalAssetId != null) {
-        try {
-          final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
-          await helper.retireReplacedAsset(
-            uid: uid,
-            oldAssetId: setup.classLogicalAssetId!,
-            oldObjectKey: setup.classLogicalAssetR2Key,
-          );
-        } catch (_) {}
-      }
-
-      if (mounted) {
-        setState(() {
-          _currentSelectedDay = 1;
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Classes setup removed.'),
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(ClassSetupErrorMapper.mapSaveError(e)),
-            backgroundColor: OptivusColors.danger,
-          ),
-        );
-      }
-    }
-  }
-
-  void _showScanAgainSheet(BaseTimelineSetup setup) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: OptivusColors.backgroundBottom,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Scan Timetable Photo',
-                style: TextStyle(
-                  color: OptivusColors.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: const Icon(
-                  Icons.photo_library_rounded,
-                  color: OptivusColors.aquaAccent,
-                ),
-                title: const Text(
-                  'Choose from Gallery',
-                  style: TextStyle(color: OptivusColors.textPrimary),
-                ),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  _pickAndUploadPhoto(ImageSource.gallery, setup);
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.camera_alt_rounded,
-                  color: OptivusColors.aquaAccent,
-                ),
-                title: const Text(
-                  'Take a Photo',
-                  style: TextStyle(color: OptivusColors.textPrimary),
-                ),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  _pickAndUploadPhoto(ImageSource.camera, setup);
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _addNewBlock() async {
-    final initialDay = _workingSelectedDay ?? 1;
-    final newBlock = ClassRoutineBlock(
-      id: 'cls_${DateTime.now().millisecondsSinceEpoch}',
-      subject: '',
-      room: '',
-      professor: '',
-      courseCode: '',
-      classType: '',
-      section: '',
-      notes: '',
-      startMinute: 9 * 60,
-      endMinute: 10 * 60,
-      repeatDays: [initialDay],
-    );
-
-    setState(() => _stage = ClassesSetupStage.editingBlock);
-    await ClassTimelineAdapter.showClassEditSheet(
-      context: context,
-      block: newBlock,
-      accent: OptivusColors.blueAccent,
-      onSave: (updated) async {
-        setState(() {
-          _workingBlocks = [..._workingBlocks, updated];
-          _isDirty = true;
-        });
-        return true;
-      },
-    );
-    if (mounted && _stage == ClassesSetupStage.editingBlock) {
-      setState(() => _stage = ClassesSetupStage.review);
-    }
-  }
-
-  Future<void> _editBlock(ClassRoutineBlock block) async {
-    setState(() => _stage = ClassesSetupStage.editingBlock);
-    await ClassTimelineAdapter.showClassEditSheet(
-      context: context,
-      block: block,
-      accent: OptivusColors.blueAccent,
-      onSave: (updated) async {
-        setState(() {
-          final index = _workingBlocks.indexWhere((b) => b.id == block.id);
-          if (index != -1) {
-            _workingBlocks[index] = updated;
-          } else {
-            _workingBlocks.add(updated);
-          }
-          _isDirty = true;
-        });
-        return true;
-      },
-      onDelete: (toDelete) async {
-        setState(() {
-          _workingBlocks.removeWhere((b) => b.id == toDelete.id);
-          _isDirty = true;
-        });
-        return true;
-      },
-    );
-    if (mounted && _stage == ClassesSetupStage.editingBlock) {
-      setState(() => _stage = ClassesSetupStage.review);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final setupAsync = ref.watch(baseTimelineSetupNotifierProvider);
+    final state = ref.watch(classesSetupControllerProvider);
+    final controller = ref.read(classesSetupControllerProvider.notifier);
     final uid = ref.watch(userProfileProvider).uid;
 
-    if (_stage == ClassesSetupStage.currentSetup &&
+    ref.listen<AsyncValue<BaseTimelineSetup>>(
+      baseTimelineSetupNotifierProvider,
+      (prev, next) {
+        final setup = next.value;
+        if (setup != null) {
+          controller.performStartupCleanup(setup, uid: uid);
+          controller.initDayIfNeeded(setup);
+        }
+      },
+    );
+
+    if (state.stage == ClassesSetupStage.currentSetup &&
         setupAsync.isLoading &&
         !setupAsync.hasValue) {
       return PopScope(
@@ -891,22 +346,28 @@ class _ClassesBaseSetupScreenState
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-        _handleClassesBack(setup);
+        _handleClassesBack(setup, state, uid);
       },
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        body: _buildStageContent(setup),
+        body: _buildStageContent(setup, state, uid),
       ),
     );
   }
 
-  Widget _buildStageContent(BaseTimelineSetup setup) {
-    switch (_stage) {
+  Widget _buildStageContent(
+    BaseTimelineSetup setup,
+    ClassesSetupState state,
+    String uid,
+  ) {
+    final controller = ref.read(classesSetupControllerProvider.notifier);
+
+    switch (state.stage) {
       case ClassesSetupStage.uploading:
         return SafeArea(
           child: Column(
             children: [
-              _buildTopCancelBar(() => _handleClassesBack(setup)),
+              _buildTopCancelBar(() => _handleClassesBack(setup, state, uid)),
               const Expanded(
                 child: BaseTimelineAiThinkingView(
                   initialMessage: 'Uploading timetable photo...',
@@ -924,7 +385,7 @@ class _ClassesBaseSetupScreenState
         return SafeArea(
           child: Column(
             children: [
-              _buildTopCancelBar(() => _handleClassesBack(setup)),
+              _buildTopCancelBar(() => _handleClassesBack(setup, state, uid)),
               const Expanded(
                 child: BaseTimelineAiThinkingView(
                   initialMessage: 'Reading your timetable',
@@ -944,21 +405,24 @@ class _ClassesBaseSetupScreenState
       case ClassesSetupStage.chooseSource:
         return ClassesSourceSelectionView(
           setup: setup,
-          onCancel: () => _handleClassesBack(setup),
-          onPickPhoto: (source) => _pickAndUploadPhoto(source, setup),
-          onManualSetup: () => _startManualSetup(setup),
+          onCancel: () => _handleClassesBack(setup, state, uid),
+          onPickPhoto: (source) => controller.pickAndUploadPhoto(
+            uid: uid,
+            source: source,
+            setup: setup,
+          ),
+          onManualSetup: () => controller.startManualSetup(setup),
+          onEditCurrent: () => controller.editCurrentTimetable(setup),
         );
 
       case ClassesSetupStage.error:
-        return _buildErrorView(setup);
+        return _buildErrorView(setup, state, uid);
 
       case ClassesSetupStage.saveSuccess:
         return _ClassesSaveSuccessView(
           onComplete: () {
             if (!mounted) return;
-            setState(() {
-              _stage = ClassesSetupStage.currentSetup;
-            });
+            controller.dismissSuccess();
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text(
@@ -974,63 +438,40 @@ class _ClassesBaseSetupScreenState
       case ClassesSetupStage.review:
       case ClassesSetupStage.editingBlock:
       case ClassesSetupStage.saving:
-        final activeWorkingDays = _workingBlocks
-            .expand((b) => b.repeatDays)
-            .where((d) => d >= 1 && d <= 7)
-            .toSet();
-        final isWorkingDayValid =
-            activeWorkingDays.isEmpty ||
-            (_workingSelectedDay != null &&
-                activeWorkingDays.contains(_workingSelectedDay));
-        final reviewSelectedDay = isWorkingDayValid
-            ? (_workingSelectedDay ??
-                  computeInitialClassWeekday(_workingBlocks))
-            : computeInitialClassWeekday(_workingBlocks);
-
         return ClassesReviewView(
-          workingBlocks: _workingBlocks,
-          workingAssetId: _workingAssetId,
-          workingR2Key: _workingR2Key,
-          workingLocalPreviewPath: _workingLocalPreviewPath,
-          selectedDay: reviewSelectedDay,
-          onDayChanged: (d) => setState(() => _workingSelectedDay = d),
-          droppedCount: _droppedCount,
-          droppedExamples: _droppedExamples,
-          errorMessage: _errorMessage,
-          onClearError: () => setState(() => _errorMessage = null),
-          isSaving: _stage == ClassesSetupStage.saving,
-          onCancel: () => _handleClassesBack(setup),
-          onScanAgain: () => _showScanAgainSheet(setup),
-          onAddClass: _addNewBlock,
+          workingBlocks: state.workingBlocks,
+          workingAssetId: state.workingAssetId,
+          workingR2Key: state.workingR2Key,
+          workingLocalPreviewPath: state.workingLocalPreviewPath,
+          selectedDay: state.selectedDay,
+          onDayChanged: (d) => controller.selectDay(d),
+          droppedCount: state.droppedCount,
+          droppedExamples: state.droppedExamples,
+          errorMessage: state.errorMessage,
+          onClearError: () => controller.clearError(),
+          isSaving: state.isSaving,
+          onCancel: () => _handleClassesBack(setup, state, uid),
+          onScanAgain: () => _showScanAgainSheet(setup, uid),
+          onAddClass: () => _addNewBlock(state.selectedDay),
           onEditBlock: _editBlock,
-          onSave: () => _handleSave(setup),
+          onSave: () => controller.save(uid: uid, setup: setup),
+          frontBlockId: state.frontBlockId,
+          onFrontSelected: (id) => controller.selectFrontBlock(id),
         );
 
       case ClassesSetupStage.currentSetup:
         final routineBlocks = ClassScheduleDraftMapper.toClassRoutineBlocks(
           setup.classBlocks,
         );
-        final activeDays = routineBlocks
-            .expand((b) => b.repeatDays)
-            .where((d) => d >= 1 && d <= 7)
-            .toSet();
-        final isCurrentDayValid =
-            activeDays.isEmpty ||
-            (_currentSelectedDay != null &&
-                activeDays.contains(_currentSelectedDay));
-        final initialDay = isCurrentDayValid
-            ? (_currentSelectedDay ?? computeInitialClassWeekday(routineBlocks))
-            : computeInitialClassWeekday(routineBlocks);
 
         return ClassesCurrentSetupView(
           setup: setup,
           routineBlocks: routineBlocks,
-          selectedDay: initialDay,
-          onDayChanged: (d) => setState(() => _currentSelectedDay = d),
-          onBack: () => _handleClassesBack(setup),
-          onChangeSetup: () =>
-              setState(() => _stage = ClassesSetupStage.chooseSource),
-          onRemoveSetup: () => _handleRemoveSetup(setup),
+          selectedDay: state.selectedDay,
+          onDayChanged: (d) => controller.selectDay(d),
+          onBack: () => _handleClassesBack(setup, state, uid),
+          onChangeSetup: () => controller.chooseSource(setup, uid: uid),
+          onRemoveSetup: () => _handleRemoveSetup(setup, uid),
         );
     }
   }
@@ -1155,7 +596,13 @@ class _ClassesBaseSetupScreenState
     );
   }
 
-  Widget _buildErrorView(BaseTimelineSetup setup) {
+  Widget _buildErrorView(
+    BaseTimelineSetup setup,
+    ClassesSetupState state,
+    String uid,
+  ) {
+    final controller = ref.read(classesSetupControllerProvider.notifier);
+
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -1201,7 +648,7 @@ class _ClassesBaseSetupScreenState
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  _errorMessage ??
+                  state.errorMessage ??
                       'An error occurred while processing the photo.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
@@ -1211,7 +658,8 @@ class _ClassesBaseSetupScreenState
                   ),
                 ),
                 const SizedBox(height: 24),
-                if (_candidateAssetId != null && _candidateR2Key != null) ...[
+                if (state.candidateAssetId != null &&
+                    state.candidateR2Key != null) ...[
                   Row(
                     children: [
                       Expanded(
@@ -1223,7 +671,10 @@ class _ClassesBaseSetupScreenState
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
-                          onPressed: () => _retryCandidateExtraction(setup),
+                          onPressed: () => controller.retryCandidateExtraction(
+                            uid: uid,
+                            setup: setup,
+                          ),
                           child: const Text('Retry AI'),
                         ),
                       ),
@@ -1236,13 +687,8 @@ class _ClassesBaseSetupScreenState
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
-                          onPressed: () {
-                            _retireCandidateUpload(setup);
-                            setState(() {
-                              _stage = ClassesSetupStage.chooseSource;
-                              _errorMessage = null;
-                            });
-                          },
+                          onPressed: () =>
+                              controller.chooseSource(setup, uid: uid),
                           child: const Text('Choose another photo'),
                         ),
                       ),
@@ -1258,7 +704,7 @@ class _ClassesBaseSetupScreenState
                         ),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
-                      onPressed: () => _startManualSetup(setup),
+                      onPressed: () => controller.startManualSetup(setup),
                       child: const Text('Add Manually'),
                     ),
                   ),
@@ -1273,13 +719,8 @@ class _ClassesBaseSetupScreenState
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
-                          onPressed: () {
-                            _retireCandidateUpload(setup);
-                            setState(() {
-                              _stage = ClassesSetupStage.chooseSource;
-                              _errorMessage = null;
-                            });
-                          },
+                          onPressed: () =>
+                              controller.chooseSource(setup, uid: uid),
                           child: const Text('Try Again'),
                         ),
                       ),
@@ -1293,14 +734,14 @@ class _ClassesBaseSetupScreenState
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
-                          onPressed: () => _startManualSetup(setup),
+                          onPressed: () => controller.startManualSetup(setup),
                           child: const Text('Add Manually'),
                         ),
                       ),
                     ],
                   ),
                 ],
-                if (_workingBlocks.isNotEmpty) ...[
+                if (state.workingBlocks.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
@@ -1311,20 +752,15 @@ class _ClassesBaseSetupScreenState
                         ),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
-                      onPressed: () {
-                        _retireCandidateUpload(setup);
-                        setState(() {
-                          _stage = ClassesSetupStage.review;
-                          _errorMessage = null;
-                        });
-                      },
+                      onPressed: () =>
+                          controller.keepPreviousDraft(setup, uid: uid),
                       child: const Text('Keep previous draft'),
                     ),
                   ),
                 ],
                 const SizedBox(height: 8),
                 TextButton(
-                  onPressed: () => _handleClassesBack(setup),
+                  onPressed: () => _handleClassesBack(setup, state, uid),
                   child: const Text(
                     'Cancel',
                     style: TextStyle(color: OptivusColors.textSecondary),
@@ -1360,7 +796,7 @@ class _ClassesSaveSuccessViewState extends State<_ClassesSaveSuccessView>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 400),
     );
     _scaleAnimation = CurvedAnimation(
       parent: _controller,

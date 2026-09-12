@@ -49,33 +49,85 @@ class ClassSetupErrorMapper {
         'Your current setup is still active. Please try again.';
   }
 
+  /// Maps photo selection, permission, and cloud storage upload errors into user-facing messages.
+  static String mapUploadError(Object error) {
+    final errStr = error.toString().toLowerCase();
+
+    if (errStr.contains('permission') ||
+        errStr.contains('denied') ||
+        errStr.contains('access') ||
+        errStr.contains('camera_access') ||
+        errStr.contains('photo_access')) {
+      return 'Camera or photo access was denied.\n'
+          'Please allow access in your device Settings and try again.';
+    }
+
+    if (errStr.contains('network') ||
+        errStr.contains('connection') ||
+        errStr.contains('offline') ||
+        errStr.contains('r2') ||
+        errStr.contains('upload') ||
+        errStr.contains('timeout')) {
+      return "We couldn't upload this timetable photo.\n\n"
+          'Check your connection and try again.';
+    }
+
+    if (errStr.contains('format') ||
+        errStr.contains('corrupt') ||
+        errStr.contains('decode') ||
+        errStr.contains('image')) {
+      return "We couldn't read this photo.\n"
+          'Please choose a different photo or format.';
+    }
+
+    return "We couldn't upload this timetable photo.\n\n"
+        'Check your connection and try again.';
+  }
+
   /// Maps AI timetable extraction errors or warnings into user-safe explanations.
   static String mapAiExtractionError(Object? error, {List<String>? warnings}) {
     if (warnings != null && warnings.isNotEmpty) {
-      final firstWarn = warnings.first.trim();
-      if (firstWarn.isNotEmpty &&
-          !firstWarn.contains('{') &&
-          !firstWarn.contains('code:') &&
-          !firstWarn.contains('worker') &&
-          !firstWarn.contains('snippet')) {
-        return firstWarn;
+      final firstWarn = warnings.first.trim().toLowerCase();
+      // Strictly prevent internal worker terminology, fallback model notices,
+      // candidate validation messages, JSON fragments, and developer codes from leaking.
+      final isInternal =
+          firstWarn.contains('{') ||
+          firstWarn.contains('code:') ||
+          firstWarn.contains('worker') ||
+          firstWarn.contains('snippet') ||
+          firstWarn.contains('fallback') ||
+          firstWarn.contains('model') ||
+          firstWarn.contains('repair') ||
+          firstWarn.contains('candidate') ||
+          firstWarn.contains('validation') ||
+          firstWarn.contains('json') ||
+          firstWarn.contains('schema') ||
+          firstWarn.contains('internal') ||
+          firstWarn.contains('parse');
+
+      if (!isInternal && firstWarn.length > 5 && firstWarn.length < 100) {
+        return warnings.first.trim();
       }
-      return "We couldn't read enough classes from this timetable.\n"
+
+      return "We couldn't read enough classes from this timetable.\n\n"
           'Try a clearer photo with the full timetable visible.';
     }
 
     if (error == null) {
-      return 'No class blocks detected in photo. You can try another photo or add classes manually.';
+      return "We couldn't read enough classes from this timetable.\n\n"
+          'Try a clearer photo with the full timetable visible.';
     }
 
     if (error is TimeoutException) {
-      return 'Timetable extraction timed out. Please try again or add classes manually.';
+      return 'Timetable analysis timed out.\n'
+          'Try a clearer photo or add classes manually.';
     }
 
     final errStr = error.toString().toLowerCase();
 
     if (errStr.contains('timeout')) {
-      return 'Timetable extraction timed out. Please try again or add classes manually.';
+      return 'Timetable analysis timed out.\n'
+          'Try a clearer photo or add classes manually.';
     }
 
     if (errStr.contains('unauthenticated') || errStr.contains('session')) {
@@ -88,7 +140,8 @@ class ClassSetupErrorMapper {
       return 'The timetable service is temporarily unavailable. Please retry or add classes manually.';
     }
 
-    return 'Failed to analyze timetable photo. Please try a clearer photo or add classes manually.';
+    return "We couldn't read enough classes from this timetable.\n\n"
+        'Try a clearer photo with the full timetable visible.';
   }
 
   /// Sanitizes raw debug dropped-candidate strings for user presentation.
@@ -142,6 +195,9 @@ class ClassSetupErrorMapper {
     final exampleText = sanitizedExamples.isNotEmpty
         ? ' (${sanitizedExamples.first})'
         : '';
-    return '$droppedCount timetable entry(ies) skipped$exampleText. Please verify your classes.';
+    final countLabel = droppedCount == 1
+        ? '1 timetable entry was skipped'
+        : '$droppedCount timetable entries were skipped';
+    return '$countLabel$exampleText. Please verify your classes.';
   }
 }

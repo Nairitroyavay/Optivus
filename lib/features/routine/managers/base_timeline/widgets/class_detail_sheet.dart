@@ -42,137 +42,143 @@ class ClassDetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.85;
+
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(2),
+      bottom: true,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: OptivusColors.blueAccent.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: OptivusColors.blueAccent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.school_rounded,
+                      color: OptivusColors.blueAccent,
+                      size: 24,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.school_rounded,
-                    color: OptivusColors.blueAccent,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        block.subject,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: OptivusColors.textPrimary,
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          block.subject,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: OptivusColors.textPrimary,
+                          ),
                         ),
-                      ),
-                      if (block.courseCode.isNotEmpty ||
-                          block.classType.isNotEmpty ||
-                          block.section.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          children: [
-                            if (block.courseCode.isNotEmpty)
-                              _buildBadge(
-                                block.courseCode,
-                                OptivusColors.blueAccent,
-                              ),
-                            if (block.classType.isNotEmpty)
-                              _buildBadge(
-                                block.classType,
-                                OptivusColors.routineAccent,
-                              ),
-                            if (block.section.isNotEmpty)
-                              _buildBadge(
-                                block.section.toLowerCase().startsWith('sec')
-                                    ? block.section
-                                    : 'Sec ${block.section}',
-                                OptivusColors.aquaAccent,
-                              ),
-                          ],
-                        ),
+                        if (block.courseCode.isNotEmpty ||
+                            block.classType.isNotEmpty ||
+                            block.section.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: [
+                              if (block.courseCode.isNotEmpty)
+                                _buildBadge(
+                                  block.courseCode,
+                                  OptivusColors.blueAccent,
+                                ),
+                              if (block.classType.isNotEmpty)
+                                _buildBadge(
+                                  block.classType,
+                                  OptivusColors.routineAccent,
+                                ),
+                              if (block.section.isNotEmpty)
+                                _buildBadge(
+                                  block.section.toLowerCase().startsWith('sec')
+                                      ? block.section
+                                      : 'Sec ${block.section}',
+                                  OptivusColors.aquaAccent,
+                                ),
+                            ],
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
+                  IconButton(
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: OptivusColors.textSecondary,
+                    ),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Divider(color: OptivusColors.borderStandard, height: 1),
+              const SizedBox(height: 16),
+              _buildDetailRow(
+                icon: Icons.access_time_rounded,
+                label: 'Time',
+                value: TimelineUtils.formatTimeRange(
+                  block.startMinute,
+                  block.endMinute,
                 ),
-                IconButton(
-                  icon: const Icon(
-                    Icons.close_rounded,
-                    color: OptivusColors.textSecondary,
-                  ),
-                  onPressed: () => Navigator.of(context).pop(),
+              ),
+              const SizedBox(height: 12),
+              _buildDetailRow(
+                icon: Icons.calendar_today_rounded,
+                label: 'Days',
+                value: _formatDays(block.repeatDays),
+              ),
+              if (block.room.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                _buildDetailRow(
+                  icon: Icons.location_on_outlined,
+                  label: 'Location',
+                  value: block.room,
                 ),
               ],
-            ),
-            const SizedBox(height: 16),
-            const Divider(color: OptivusColors.borderStandard, height: 1),
-            const SizedBox(height: 16),
-            _buildDetailRow(
-              icon: Icons.access_time_rounded,
-              label: 'Time',
-              value: TimelineUtils.formatTimeRange(
-                block.startMinute,
-                block.endMinute,
-              ),
-            ),
-            const SizedBox(height: 12),
-            _buildDetailRow(
-              icon: Icons.calendar_today_rounded,
-              label: 'Days',
-              value: _formatDays(block.repeatDays),
-            ),
-            if (block.room.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              _buildDetailRow(
-                icon: Icons.location_on_outlined,
-                label: 'Location',
-                value: block.room,
-              ),
+              if (block.professor.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                _buildDetailRow(
+                  icon: Icons.person_outline_rounded,
+                  label: 'Instructor',
+                  value: block.professor,
+                ),
+              ],
+              if (block.notes.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                _buildDetailRow(
+                  icon: Icons.notes_rounded,
+                  label: 'Notes',
+                  value: block.notes,
+                ),
+              ],
+              const SizedBox(height: 8),
             ],
-            if (block.professor.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              _buildDetailRow(
-                icon: Icons.person_outline_rounded,
-                label: 'Instructor',
-                value: block.professor,
-              ),
-            ],
-            if (block.notes.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              _buildDetailRow(
-                icon: Icons.notes_rounded,
-                label: 'Notes',
-                value: block.notes,
-              ),
-            ],
-            const SizedBox(height: 8),
-          ],
+          ),
         ),
       ),
     );

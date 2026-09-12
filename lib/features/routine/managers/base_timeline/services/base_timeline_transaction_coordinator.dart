@@ -108,7 +108,7 @@ class BaseTimelineTransactionCoordinator {
         : RoutinePriority.goodToDo;
   }
 
-  Future<void> replaceSection({
+  Future<BaseTimelineSectionCommitResult> replaceSection({
     required String uid,
     required BaseTimelineSection section,
     required List<TimelineBlockDraft> newBlocks,
@@ -184,7 +184,7 @@ class BaseTimelineTransactionCoordinator {
     }
 
     // 4. Atomic transaction with live revision optimistic concurrency check
-    await _transactionRepo.replaceBaseTimelineSection(
+    final commitResult = await _transactionRepo.replaceBaseTimelineSection(
       uid: uid,
       section: section,
       expectedRevision: currentSetup.revision,
@@ -195,17 +195,20 @@ class BaseTimelineTransactionCoordinator {
       },
     );
 
-    // 5. Update in-memory state
-    final savedSetup = await _setupRepo.fetchSetup(uid);
+    // 5. Update in-memory state directly from the committed transaction result
     if (_ref != null) {
       _ref
           .read(baseTimelineSetupNotifierProvider.notifier)
-          .updateInMemory(savedSetup);
+          .updateInMemory(commitResult.committedSetup);
 
       try {
         await _ref.read(routineNotifierProvider.notifier).loadForOwner(uid);
-      } catch (_) {}
+      } catch (_) {
+        // Routine refresh failure must NOT invalidate save success.
+      }
     }
+
+    return commitResult;
   }
 }
 

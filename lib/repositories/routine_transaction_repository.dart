@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
@@ -40,9 +41,23 @@ class BaseTimelineConcurrencyException extends StateError {
     required this.actualRevision,
     String? message,
   }) : super(
-          message ??
-              'Base timeline revision mismatch: expected $expectedRevision, actual $actualRevision',
-        );
+         message ??
+             'Base timeline revision mismatch: expected $expectedRevision, actual $actualRevision',
+       );
+}
+
+/// Typed result of a committed Base Timeline section replacement transaction.
+@immutable
+class BaseTimelineSectionCommitResult {
+  final BaseTimelineSetup committedSetup;
+  final List<String> routineItemIds;
+  final int revision;
+
+  const BaseTimelineSectionCommitResult({
+    required this.committedSetup,
+    required this.routineItemIds,
+    required this.revision,
+  });
 }
 
 abstract class RoutineTransactionRepository {
@@ -67,7 +82,7 @@ abstract class RoutineTransactionRepository {
     required List<RoutineEventRecord> addEvents,
   });
 
-  Future<void> replaceBaseTimelineSection({
+  Future<BaseTimelineSectionCommitResult> replaceBaseTimelineSection({
     required String uid,
     required BaseTimelineSection section,
     required int expectedRevision,
@@ -317,7 +332,7 @@ class FirestoreRoutineTransactionRepository
   }
 
   @override
-  Future<void> replaceBaseTimelineSection({
+  Future<BaseTimelineSectionCommitResult> replaceBaseTimelineSection({
     required String uid,
     required BaseTimelineSection section,
     required int expectedRevision,
@@ -329,7 +344,7 @@ class FirestoreRoutineTransactionRepository
     validateOwnerUid(uid);
     final setupRef = _firestore.doc(FirestoreUserPaths.baseTimelineSetup(uid));
 
-    await _firestore.runTransaction((transaction) async {
+    return await _firestore.runTransaction((transaction) async {
       final setupSnap = await transaction.get(setupRef);
       final liveSetup = (setupSnap.exists && setupSnap.data() != null)
           ? BaseTimelineSetup.fromMap(setupSnap.data()!, uid: uid)
@@ -379,6 +394,12 @@ class FirestoreRoutineTransactionRepository
           .withSectionRoutineIds(section, newIds);
 
       transaction.set(setupRef, finalSetup.toMap());
+
+      return BaseTimelineSectionCommitResult(
+        committedSetup: finalSetup,
+        routineItemIds: newIds,
+        revision: finalSetup.revision,
+      );
     });
   }
 
@@ -736,7 +757,7 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
   }
 
   @override
-  Future<void> replaceBaseTimelineSection({
+  Future<BaseTimelineSectionCommitResult> replaceBaseTimelineSection({
     required String uid,
     required BaseTimelineSection section,
     required int expectedRevision,
@@ -805,6 +826,12 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
         if (_setupRepository != null) {
           await _setupRepository.saveSetup(uid, finalSetup);
         }
+
+        return BaseTimelineSectionCommitResult(
+          committedSetup: finalSetup,
+          routineItemIds: newIds,
+          revision: finalSetup.revision,
+        );
       } catch (e) {
         if (_routineRepository != null) {
           final current = await _routineRepository.fetchRoutineItems(uid);

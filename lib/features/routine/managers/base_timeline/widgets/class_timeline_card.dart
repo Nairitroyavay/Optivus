@@ -31,6 +31,10 @@ class ClassTimelineCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (positioned.hasOverlap && !positioned.isFront) {
+      return _buildExposedBackCard(context);
+    }
+
     final height = positioned.height;
     final width = positioned.width;
     final entry = positioned.entry;
@@ -475,6 +479,117 @@ class ClassTimelineCard extends StatelessWidget {
           letterSpacing: 0.2,
         ),
       ),
+    );
+  }
+
+  Widget _buildExposedBackCard(BuildContext context) {
+    final entry = positioned.entry;
+    final subject = block?.subject.isNotEmpty == true
+        ? block!.subject
+        : entry.title;
+    final timeShort = TimelineUtils.formatMinuteShort(entry.startMinute);
+    final timeFull = TimelineUtils.formatTimeRange(
+      entry.startMinute,
+      entry.endMinute,
+    );
+
+    final semanticLabel = 'Show $subject in front, $timeFull';
+
+    final card = Semantics(
+      button: true,
+      label: semanticLabel,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          color: Colors.white.withValues(alpha: 0.88),
+          border: Border.all(color: accent.withValues(alpha: 0.35), width: 1.0),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              accent.withValues(alpha: 0.16),
+              accent.withValues(alpha: 0.04),
+            ],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: accent.withValues(alpha: 0.08),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 64,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 14,
+                          height: 14,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Icon(
+                            Icons.school_rounded,
+                            size: 9,
+                            color: accent,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            subject,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              color: OptivusColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      timeShort,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: accent.withValues(alpha: 0.90),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return RepaintBoundary(
+      child: onTap != null
+          ? GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onTap,
+              child: card,
+            )
+          : card,
     );
   }
 }

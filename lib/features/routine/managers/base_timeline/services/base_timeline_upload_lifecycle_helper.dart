@@ -84,10 +84,14 @@ class BaseTimelineUploadLifecycleHelper {
 
   /// Recovers and retires orphaned temporary uploads older than [graceWindow].
   ///
-  /// Strictly protects [committedAssetId] so current setup photos are never deleted.
+  /// Strictly protects [committedAssetId] and [committedR2Key] (and any [activeSessionAssetIds])
+  /// so current setup photos and in-flight session uploads are never deleted.
   Future<int> cleanupStaleUncommittedAssets({
     required String uid,
     required String? committedAssetId,
+    String? committedR2Key,
+    Set<String> activeSessionAssetIds = const {},
+    Set<String> activeSessionR2Keys = const {},
     Duration graceWindow = const Duration(minutes: 15),
   }) async {
     final normalizedUid = uid.trim();
@@ -104,8 +108,19 @@ class BaseTimelineUploadLifecycleHelper {
 
       final now = DateTime.now();
       for (final asset in recent) {
-        // Strictly protect current committed source asset
-        if (asset.assetId == committedAssetId) continue;
+        // Strictly protect current committed source asset identity and R2 key
+        if (committedAssetId != null &&
+            committedAssetId.isNotEmpty &&
+            asset.assetId == committedAssetId) {
+          continue;
+        }
+        if (committedR2Key != null &&
+            committedR2Key.isNotEmpty &&
+            asset.r2Key == committedR2Key) {
+          continue;
+        }
+        if (activeSessionAssetIds.contains(asset.assetId)) continue;
+        if (activeSessionR2Keys.contains(asset.r2Key)) continue;
         if (asset.status == UploadedAssetStatus.deleted) continue;
 
         final age = now.difference(asset.updatedAt);

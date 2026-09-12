@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/base_timeline_screen.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/classes_base_setup_screen.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/classes_setup_controller.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
 import 'package:optivus/features/routine/providers/routine_navigation_provider.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
@@ -876,7 +877,7 @@ void main() {
 class _FailingRoutineTransactionRepository
     extends FakeRoutineTransactionRepository {
   @override
-  Future<void> replaceBaseTimelineSection({
+  Future<BaseTimelineSectionCommitResult> replaceBaseTimelineSection({
     required String uid,
     required BaseTimelineSection section,
     required int expectedRevision,

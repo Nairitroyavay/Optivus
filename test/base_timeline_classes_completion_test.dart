@@ -13,6 +13,7 @@ import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_mod
 import 'package:optivus/features/onboarding/timeline/adapters/class_timeline_adapter.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/classes_base_setup_screen.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/classes_setup_controller.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_upload_lifecycle_helper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/class_schedule_draft_mapper.dart';
@@ -210,7 +211,7 @@ class _CountingCoordinator extends BaseTimelineTransactionCoordinator {
   });
 
   @override
-  Future<void> replaceSection({
+  Future<BaseTimelineSectionCommitResult> replaceSection({
     required String uid,
     required BaseTimelineSection section,
     required List<TimelineBlockDraft> newBlocks,
@@ -1956,7 +1957,10 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        expect(find.text('1 classes found · 2 need attention'), findsOneWidget);
+        expect(
+          find.text('1 classes scheduled · 2 entries were skipped'),
+          findsOneWidget,
+        );
       },
     );
 

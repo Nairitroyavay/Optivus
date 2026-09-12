@@ -20,6 +20,9 @@ class TimelineOverlapEngine {
     TimelineVisibleRangePolicy visibleRangePolicy =
         TimelineVisibleRangePolicy.legacy,
     TimelineStretchPolicy stretchPolicy = TimelineStretchPolicy.legacy,
+    TimelineOverlapPresentation overlapPresentation =
+        TimelineOverlapPresentation.sideBySide,
+    String? frontEntryId,
   }) {
     // 1. Filter entries active on the selected day
     final dayEntries = entries
@@ -84,39 +87,135 @@ class TimelineOverlapEngine {
     final positionedEntries = <PositionedTimelineEntry>[];
     double maxCardBottom = scale.yForMinute(visibleEnd);
 
-    // 8. For each cluster, greedily assign columns (maximum concurrency)
+    // 8. For each cluster, lay out entries based on overlapPresentation
     for (final cluster in clusters) {
-      final (assignments, maxCols) = _assignColumns(cluster);
+      if (cluster.isEmpty) continue;
 
-      final colCount = math.max(1, maxCols);
-      final totalGaps = (colCount - 1) * config.columnGap;
-      final colWidth = math.max(20.0, (usableWidth - totalGaps) / colCount);
+      if (cluster.length == 1 ||
+          overlapPresentation == TimelineOverlapPresentation.sideBySide) {
+        final (assignments, maxCols) = _assignColumns(cluster);
 
-      for (final item in cluster) {
-        final col = assignments[item.id] ?? 0;
-        final left = config.leftOffset + col * (colWidth + config.columnGap);
-        final top = scale.yForMinute(item.startMinute);
-        final bottom = scale.yForMinute(item.endMinute);
-        final durationHeight = bottom - top;
-        final height = math.max(
+        final colCount = math.max(1, maxCols);
+        final totalGaps = (colCount - 1) * config.columnGap;
+        final colWidth = math.max(20.0, (usableWidth - totalGaps) / colCount);
+
+        for (final item in cluster) {
+          final col = assignments[item.id] ?? 0;
+          final left = config.leftOffset + col * (colWidth + config.columnGap);
+          final top = scale.yForMinute(item.startMinute);
+          final bottom = scale.yForMinute(item.endMinute);
+          final durationHeight = bottom - top;
+          final height = math.max(
+            config.minInteractiveHeight,
+            math.max(item.minHeight, durationHeight),
+          );
+
+          final positioned = PositionedTimelineEntry(
+            entry: item,
+            top: top,
+            height: height,
+            left: left,
+            width: colWidth,
+            column: col,
+            columnCount: colCount,
+            isFront: true,
+            hasOverlap: cluster.length > 1,
+          );
+
+          positionedEntries.add(positioned);
+
+          if (top + height > maxCardBottom) {
+            maxCardBottom = top + height;
+          }
+        }
+      } else {
+        // frontAndExposed mode for overlapping cluster
+        final TimelineEntry frontItem;
+        if (frontEntryId != null && cluster.any((e) => e.id == frontEntryId)) {
+          frontItem = cluster.firstWhere((e) => e.id == frontEntryId);
+        } else {
+          // Default priority: cluster is sorted by startMinute ASC, duration DESC (endMinute DESC), id ASC.
+          frontItem = cluster.first;
+        }
+
+        final backItems = cluster.where((e) => e.id != frontItem.id).toList();
+
+        const minFrontWidth = 140.0;
+        const minLabelWidth = 60.0;
+        const maxLabelWidth = 76.0;
+
+        final double exposedLabelWidth;
+        if (usableWidth >= minFrontWidth + maxLabelWidth) {
+          exposedLabelWidth = maxLabelWidth;
+        } else if (usableWidth > minFrontWidth) {
+          exposedLabelWidth = (usableWidth - minFrontWidth).clamp(
+            minLabelWidth,
+            maxLabelWidth,
+          );
+        } else {
+          exposedLabelWidth = math.min(minLabelWidth, usableWidth * 0.35);
+        }
+
+        // Add back items first (painted below front card in the stack)
+        for (var lane = 0; lane < backItems.length; lane++) {
+          final item = backItems[lane];
+          final laneOffset = (lane * 6.0).clamp(0.0, 18.0);
+          final left = config.leftOffset + laneOffset;
+          final width = math.max(30.0, usableWidth - laneOffset);
+          final top = scale.yForMinute(item.startMinute);
+          final bottom = scale.yForMinute(item.endMinute);
+          final durationHeight = bottom - top;
+          final height = math.max(
+            config.minInteractiveHeight,
+            math.max(item.minHeight, durationHeight),
+          );
+
+          final positioned = PositionedTimelineEntry(
+            entry: item,
+            top: top,
+            height: height,
+            left: left,
+            width: width,
+            column: lane,
+            columnCount: cluster.length,
+            isFront: false,
+            hasOverlap: true,
+          );
+
+          positionedEntries.add(positioned);
+
+          if (top + height > maxCardBottom) {
+            maxCardBottom = top + height;
+          }
+        }
+
+        // Add front item last (painted on top of back cards)
+        final frontLeft = config.leftOffset + exposedLabelWidth;
+        final frontWidth = math.max(30.0, usableWidth - exposedLabelWidth);
+        final frontTop = scale.yForMinute(frontItem.startMinute);
+        final frontBottom = scale.yForMinute(frontItem.endMinute);
+        final frontDurationHeight = frontBottom - frontTop;
+        final frontHeight = math.max(
           config.minInteractiveHeight,
-          math.max(item.minHeight, durationHeight),
+          math.max(frontItem.minHeight, frontDurationHeight),
         );
 
-        final positioned = PositionedTimelineEntry(
-          entry: item,
-          top: top,
-          height: height,
-          left: left,
-          width: colWidth,
-          column: col,
-          columnCount: colCount,
+        final frontPositioned = PositionedTimelineEntry(
+          entry: frontItem,
+          top: frontTop,
+          height: frontHeight,
+          left: frontLeft,
+          width: frontWidth,
+          column: 0,
+          columnCount: cluster.length,
+          isFront: true,
+          hasOverlap: true,
         );
 
-        positionedEntries.add(positioned);
+        positionedEntries.add(frontPositioned);
 
-        if (top + height > maxCardBottom) {
-          maxCardBottom = top + height;
+        if (frontTop + frontHeight > maxCardBottom) {
+          maxCardBottom = frontTop + frontHeight;
         }
       }
     }

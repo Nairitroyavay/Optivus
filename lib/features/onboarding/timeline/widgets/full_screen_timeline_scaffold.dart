@@ -47,6 +47,9 @@ class FullScreenTimelineScaffold extends StatelessWidget {
   final Widget Function(BuildContext, PositionedTimelineEntry)? blockBuilder;
   final TimelineVisibleRangePolicy visibleRangePolicy;
   final TimelineStretchPolicy stretchPolicy;
+  final TimelineOverlapPresentation overlapPresentation;
+  final String? frontEntryId;
+  final ValueChanged<String>? onFrontSelected;
 
   const FullScreenTimelineScaffold({
     super.key,
@@ -67,6 +70,9 @@ class FullScreenTimelineScaffold extends StatelessWidget {
     this.blockBuilder,
     this.visibleRangePolicy = TimelineVisibleRangePolicy.legacy,
     this.stretchPolicy = TimelineStretchPolicy.legacy,
+    this.overlapPresentation = TimelineOverlapPresentation.sideBySide,
+    this.frontEntryId,
+    this.onFrontSelected,
   });
 
   @override
@@ -80,6 +86,8 @@ class FullScreenTimelineScaffold extends StatelessWidget {
           config: geometryConfig,
           visibleRangePolicy: visibleRangePolicy,
           stretchPolicy: stretchPolicy,
+          overlapPresentation: overlapPresentation,
+          frontEntryId: frontEntryId,
         );
 
         final dayEntries = layoutResult.entries;
@@ -143,9 +151,17 @@ class FullScreenTimelineScaffold extends StatelessWidget {
                   : TimelineViewport(
                       layoutResult: layoutResult,
                       styleBuilder: styleBuilder,
-                      onEntryTapped: mode == TimelineMode.fullScreenEditable
-                          ? onEntryTapped
-                          : null,
+                      onEntryTapped: (entry) {
+                        final positioned = layoutResult.entryMap[entry.id];
+                        if (positioned != null &&
+                            positioned.hasOverlap &&
+                            !positioned.isFront &&
+                            onFrontSelected != null) {
+                          onFrontSelected!(entry.id);
+                        } else {
+                          onEntryTapped?.call(entry);
+                        }
+                      },
                       accent: accent,
                       scrollController: scrollController,
                       blockBuilder: blockBuilder,

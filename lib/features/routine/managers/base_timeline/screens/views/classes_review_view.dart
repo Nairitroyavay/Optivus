@@ -26,6 +26,8 @@ class ClassesReviewView extends StatelessWidget {
   final VoidCallback onAddClass;
   final void Function(ClassRoutineBlock block) onEditBlock;
   final VoidCallback onSave;
+  final String? frontBlockId;
+  final ValueChanged<String>? onFrontSelected;
 
   const ClassesReviewView({
     super.key,
@@ -45,6 +47,8 @@ class ClassesReviewView extends StatelessWidget {
     required this.onAddClass,
     required this.onEditBlock,
     required this.onSave,
+    this.frontBlockId,
+    this.onFrontSelected,
   });
 
   @override
@@ -101,7 +105,7 @@ class ClassesReviewView extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         droppedCount > 0
-                            ? '${workingBlocks.length} classes found · $droppedCount need attention'
+                            ? '${workingBlocks.length} classes scheduled · $droppedCount ${droppedCount == 1 ? 'entry was skipped' : 'entries were skipped'}'
                             : '${workingBlocks.length} classes scheduled',
                         style: const TextStyle(
                           fontSize: 12,
@@ -287,6 +291,10 @@ class ClassesReviewView extends StatelessWidget {
                     entries: entries,
                     selectedDay: selectedDay,
                     onDayChanged: onDayChanged,
+                    overlapPresentation:
+                        TimelineOverlapPresentation.frontAndExposed,
+                    frontEntryId: frontBlockId,
+                    onFrontSelected: onFrontSelected,
                     styleBuilder: (entry) => adapter.styleForEntry(entry),
                     blockBuilder: (context, positioned) {
                       final block = blockMap[positioned.entry.sourceId];
@@ -296,7 +304,9 @@ class ClassesReviewView extends StatelessWidget {
                         isEditable: true,
                         accent: OptivusColors.blueAccent,
                         onTap: () {
-                          if (block != null) {
+                          if (positioned.hasOverlap && !positioned.isFront) {
+                            onFrontSelected?.call(positioned.entry.id);
+                          } else if (block != null) {
                             onEditBlock(block);
                           }
                         },
@@ -334,13 +344,28 @@ class ClassesReviewView extends StatelessWidget {
                 ),
                 onPressed: (isSaving || workingBlocks.isEmpty) ? null : onSave,
                 child: isSaving
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
+                    ? const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          ),
+                          SizedBox(width: 10),
+                          Text(
+                            'Saving…',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
                       )
                     : const Text(
                         'Use this timetable',
