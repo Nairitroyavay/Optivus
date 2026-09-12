@@ -832,6 +832,39 @@ describe("Firestore Rules for Routine durability", () => {
     })));
   });
 
+  it("allows same-fingerprint completed projection receipt repair", async () => {
+    const db = ownerDb();
+    const docRef = db.collection("users").doc("user123").collection("routineProjections").doc("onboarding-initial-v1");
+
+    await assertSucceeds(docRef.set(projectionData("user123", {
+      sourceBundleId: "legacy-bundle",
+      expectedItemIds: ["routine-item-1", "legacy-item"],
+      createdItemIds: ["routine-item-1", "legacy-item"],
+      projectedItemIds: ["routine-item-1", "legacy-item"],
+      cursor: 2,
+      status: "completed",
+      updatedAt: completedAt,
+      completedAt,
+    })));
+    await assertSucceeds(docRef.update(projectionData("user123", {
+      expectedItemIds: ["routine-item-1", "routine-item-2"],
+      existingItemIds: ["routine-item-1", "routine-item-2"],
+      projectedItemIds: ["routine-item-1", "routine-item-2"],
+      cursor: 2,
+      status: "completed",
+      updatedAt: new Date("2026-07-24T00:15:00.000Z"),
+      completedAt,
+    })));
+    await assertFails(docRef.update(projectionData("user123", {
+      sourceBundleFingerprint: "f".repeat(64),
+      projectedItemIds: ["routine-item-1", "routine-item-3"],
+      cursor: 2,
+      status: "completed",
+      updatedAt: new Date("2026-07-24T00:20:00.000Z"),
+      completedAt,
+    })));
+  });
+
   it("allows verified owner Habit System reads, writes, and updates", async () => {
     const db = ownerDb();
     const docRef = db.collection("users").doc("user123").collection("habitSystems").doc("habitsys-1");

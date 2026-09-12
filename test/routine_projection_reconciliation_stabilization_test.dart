@@ -7,6 +7,7 @@ import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/routine_occurrence.dart';
+import 'package:optivus/models/routine_projection_receipt.dart';
 import 'package:optivus/repositories/firestore_paths.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/routine_firestore_codec.dart';
@@ -344,6 +345,9 @@ void main() {
         expect(storedReceiptDoc['status'], 'completed');
         expect(storedReceiptDoc['cursor'], 82);
         expect(storedReceiptDoc['totalCount'], 82);
+        final expectedIds = plan.items.map((item) => item.id).toList()..sort();
+        expect(storedReceiptDoc['expectedItemIds'], expectedIds);
+        expect(storedReceiptDoc['projectedItemIds'], expectedIds);
 
         // Verify validator now reports valid
         final allStoredItems = await repository.fetchRoutineItems(uid);
@@ -358,8 +362,159 @@ void main() {
           plan: plan,
         );
         expect(validation.isValid, isTrue);
+        expect(
+          allStoredItems
+              .where((item) => expectedIds.contains(item.id))
+              .map((item) => item.onboardingProjectionId)
+              .toSet(),
+          {plan.projectionId},
+        );
 
         // Second run must be an idempotent no-op (returns false, 0 new batch commits)
+        final transactionsBefore = firestore.runTransactionCalls;
+        final batchCommitsBefore = firestore.batchCommitCalls;
+        final secondRun = await repository.reconcileOnboardingProjection(
+          uid,
+          plan,
+        );
+        expect(secondRun, isFalse);
+        expect(firestore.runTransactionCalls, transactionsBefore);
+        expect(firestore.batchCommitCalls, batchCommitsBefore);
+      },
+    );
+
+    test(
+      'repairs stale onboardingProjectionId when deterministic onboarding identity matches',
+      () async {
+        final bundle = _buildRealisticBundle(uid, count: 4);
+        final plan = RoutineOnboardingProjection.build(bundle);
+        final database = FakeRoutineDatabase();
+        final repository = FakeRoutineRepository(database: database);
+
+        for (final item in plan.items) {
+          await repository.createRoutineItem(
+            uid,
+            item.id == plan.items.first.id
+                ? item.copyWith(
+                    onboardingProjectionId: 'legacy-onboarding-projection-v0',
+                    title: 'User preserved title',
+                    notes: 'User preserved note',
+                  )
+                : item,
+          );
+        }
+
+        final repaired = await repository.reconcileOnboardingProjection(
+          uid,
+          plan,
+        );
+        expect(repaired, isTrue);
+
+        final stored = (await repository.fetchRoutineItems(
+          uid,
+        )).firstWhere((item) => item.id == plan.items.first.id);
+        expect(stored.onboardingProjectionId, plan.projectionId);
+        expect(
+          stored.onboardingSourceItemId,
+          plan.items.first.onboardingSourceItemId,
+        );
+        expect(stored.title, 'User preserved title');
+        expect(stored.notes, 'User preserved note');
+
+        final receipt = await repository.fetchProjectionReceipt(
+          uid,
+          plan.projectionId,
+        );
+        final validation = const RoutineProjectionReceiptValidator().validate(
+          receipt: receipt,
+          actualItems: await repository.fetchRoutineItems(uid),
+          ownerUid: uid,
+          plan: plan,
+        );
+        expect(validation.isValid, isTrue);
+
+        final secondRun = await repository.reconcileOnboardingProjection(
+          uid,
+          plan,
+        );
+        expect(secondRun, isFalse);
+      },
+    );
+
+    test(
+      'rewrites legacy completed receipts whose validator-owned fields are stale',
+      () async {
+        final bundle = _buildRealisticBundle(uid, count: 6);
+        final plan = RoutineOnboardingProjection.build(bundle);
+        final expectedIds = plan.items.map((item) => item.id).toList()..sort();
+
+        const codec = RoutineTemplateFirestoreCodec();
+        const receiptCodec = RoutineProjectionReceiptFirestoreCodec();
+        final rawDocs = <String, Map<String, dynamic>>{};
+
+        for (final item in plan.items) {
+          rawDocs[FirestoreUserPaths.routineItem(uid, item.id)] = codec
+              .toFirestore(ownerUid: uid, item: item);
+        }
+
+        final receiptPath = FirestoreUserPaths.routineProjection(
+          uid,
+          plan.projectionId,
+        );
+        final legacyIds = [...expectedIds]..[0] = 'legacy-projected-item';
+        final now = DateTime.utc(2026, 9, 12, 11);
+        final legacyReceipt =
+            routineProjectionReceiptForCategories(
+              plan.receipt,
+              expectedItemIds: legacyIds,
+              createdItemIds: legacyIds,
+              existingItemIds: const [],
+              repairedItemIds: const [],
+              failedItemIds: const [],
+            ).copyWith(
+              revision: plan.revision + 1,
+              sourceBundleSchemaVersion:
+                  plan.receipt.sourceBundleSchemaVersion + 1,
+              sourceBundleId: 'legacy-bundle-metadata',
+              createdAt: now,
+              updatedAt: now,
+              completedAt: now,
+            );
+        rawDocs[receiptPath] = receiptCodec.toFirestore(legacyReceipt);
+
+        final firestore = _RecordingFirestore(rawDocs);
+        final repository = FirestoreRoutineRepository(firestore: firestore);
+
+        final repaired = await repository.reconcileOnboardingProjection(
+          uid,
+          plan,
+        );
+        expect(repaired, isTrue);
+        expect(firestore.batchCommitCalls, 1);
+
+        final storedReceipt = await repository.fetchProjectionReceipt(
+          uid,
+          plan.projectionId,
+        );
+        expect(storedReceipt, isNotNull);
+        expect(storedReceipt!.revision, plan.revision);
+        expect(
+          storedReceipt.sourceBundleSchemaVersion,
+          plan.receipt.sourceBundleSchemaVersion,
+        );
+        expect(storedReceipt.sourceBundleId, plan.sourceBundleId);
+        expect(storedReceipt.expectedItemIds, expectedIds);
+        expect(storedReceipt.projectedItemIds, expectedIds);
+        expect(storedReceipt.status, 'completed');
+
+        final validation = const RoutineProjectionReceiptValidator().validate(
+          receipt: storedReceipt,
+          actualItems: await repository.fetchRoutineItems(uid),
+          ownerUid: uid,
+          plan: plan,
+        );
+        expect(validation.isValid, isTrue);
+
         final batchCommitsBefore = firestore.batchCommitCalls;
         final secondRun = await repository.reconcileOnboardingProjection(
           uid,

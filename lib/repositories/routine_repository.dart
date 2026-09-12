@@ -55,6 +55,8 @@ RoutineItem _safeProjectedItem(RoutineItem item) {
 
 RoutineItem _reconciledProjectedItem(RoutineItem expected, RoutineItem actual) {
   return actual.copyWith(
+    onboardingProjectionId:
+        expected.onboardingProjectionId ?? actual.onboardingProjectionId,
     onboardingVisualStyleKey:
         expected.onboardingVisualStyleKey ?? actual.onboardingVisualStyleKey,
     clearNotes:
@@ -62,6 +64,36 @@ RoutineItem _reconciledProjectedItem(RoutineItem expected, RoutineItem actual) {
         actual.notes?.trim() == expected.notes?.trim(),
     createdAt: actual.createdAt,
   );
+}
+
+bool _sameStringList(List<String> a, List<String> b) {
+  if (a.length != b.length) return false;
+  for (var index = 0; index < a.length; index++) {
+    if (a[index] != b[index]) return false;
+  }
+  return true;
+}
+
+bool _receiptMatchesExpectedProjection(
+  RoutineProjectionReceipt actual,
+  RoutineProjectionReceipt expected,
+) {
+  return actual.id == expected.id &&
+      actual.ownerUid == expected.ownerUid &&
+      actual.slot == expected.slot &&
+      actual.revision == expected.revision &&
+      actual.source == expected.source &&
+      actual.sourceBundleSchemaVersion == expected.sourceBundleSchemaVersion &&
+      actual.sourceBundleId == expected.sourceBundleId &&
+      actual.sourceBundleFingerprint == expected.sourceBundleFingerprint &&
+      actual.eventSchemaVersion == expected.eventSchemaVersion &&
+      actual.totalCount == expected.totalCount &&
+      actual.cursor == expected.cursor &&
+      actual.status == expected.status &&
+      actual.schemaVersion == expected.schemaVersion &&
+      _sameStringList(actual.expectedItemIds, expected.expectedItemIds) &&
+      _sameStringList(actual.failedItemIds, expected.failedItemIds) &&
+      _sameStringList(actual.projectedItemIds, expected.projectedItemIds);
 }
 
 class FakeRoutineDatabase {
@@ -206,16 +238,12 @@ class FakeRoutineRepository implements RoutineRepository {
         continue;
       }
 
-      final hasValidProjection =
-          actual.onboardingProjectionId != null &&
-          actual.onboardingProjectionId!.trim().isNotEmpty;
       final isUnsafe =
           actual.source != RoutineSource.onboarding ||
           actual.onboardingSourceItemId != expected.onboardingSourceItemId ||
           actual.onboardingSourceItemId == null ||
           actual.onboardingSourceItemId!.isEmpty ||
           actual.userId != uid ||
-          !hasValidProjection ||
           actual.schemaVersion < 1 ||
           actual.schemaVersion > RoutineItem.currentSchemaVersion;
 
@@ -225,7 +253,8 @@ class FakeRoutineRepository implements RoutineRepository {
       }
 
       final repaired = _reconciledProjectedItem(expected, actual);
-      if (repaired.onboardingVisualStyleKey !=
+      if (repaired.onboardingProjectionId != actual.onboardingProjectionId ||
+          repaired.onboardingVisualStyleKey !=
               actual.onboardingVisualStyleKey ||
           repaired.notes != actual.notes) {
         items[expected.id] = repaired;
@@ -245,13 +274,11 @@ class FakeRoutineRepository implements RoutineRepository {
       failedItemIds: failedItemIds,
     );
 
-    final isReceiptAlreadyFinalized =
-        receipt != null &&
-        receipt.status == 'completed' &&
-        receipt.cursor == receipt.totalCount &&
-        receipt.failedItemIds.isEmpty;
+    final needsReceiptWrite =
+        receipt == null ||
+        !_receiptMatchesExpectedProjection(receipt, updatedReceipt);
 
-    if (!isReceiptAlreadyFinalized || updatedReceipt.status != receipt.status) {
+    if (needsReceiptWrite) {
       final now = DateTime.now().toUtc();
       receipts[plan.projectionId] = updatedReceipt.copyWith(
         createdAt: receipt?.createdAt ?? now,
@@ -495,16 +522,12 @@ class FirestoreRoutineRepository implements RoutineRepository {
         continue;
       }
 
-      final hasValidProjection =
-          actual.onboardingProjectionId != null &&
-          actual.onboardingProjectionId!.trim().isNotEmpty;
       final isUnsafe =
           actual.source != RoutineSource.onboarding ||
           actual.onboardingSourceItemId != expected.onboardingSourceItemId ||
           actual.onboardingSourceItemId == null ||
           actual.onboardingSourceItemId!.isEmpty ||
           actual.userId != uid ||
-          !hasValidProjection ||
           actual.schemaVersion < 1 ||
           actual.schemaVersion > RoutineItem.currentSchemaVersion;
 
@@ -515,6 +538,7 @@ class FirestoreRoutineRepository implements RoutineRepository {
 
       final repaired = _reconciledProjectedItem(expected, actual);
       final needsRepair =
+          repaired.onboardingProjectionId != actual.onboardingProjectionId ||
           repaired.onboardingVisualStyleKey !=
               actual.onboardingVisualStyleKey ||
           repaired.notes != actual.notes;
@@ -536,16 +560,11 @@ class FirestoreRoutineRepository implements RoutineRepository {
       failedItemIds: failedItemIds,
     );
 
-    final isReceiptAlreadyFinalized =
-        receipt != null &&
-        receipt.status == 'completed' &&
-        receipt.cursor == receipt.totalCount &&
-        receipt.failedItemIds.isEmpty;
-
     final hasItemMutations =
         missingItems.isNotEmpty || repairedItems.isNotEmpty;
     final needsReceiptWrite =
-        !isReceiptAlreadyFinalized || updatedReceipt.status != receipt.status;
+        receipt == null ||
+        !_receiptMatchesExpectedProjection(receipt, updatedReceipt);
 
     if (!hasItemMutations && !needsReceiptWrite) {
       return false;

@@ -186,9 +186,10 @@ void main() {
 
         final decoded = codec.fromFirestore(documentId: 'rec-8a', data: map);
         expect(decoded.expectedItemIds, equals(['item-1', 'item-2', 'item-3']));
-        expect(decoded.createdItemIds, equals(['item-1', 'item-2', 'item-3']));
-        expect(decoded.existingItemIds, isEmpty);
-        expect(decoded.repairedItemIds, isEmpty);
+        expect(decoded.createdItemIds, equals(['item-1']));
+        expect(decoded.existingItemIds, equals(['item-2']));
+        expect(decoded.repairedItemIds, equals(['item-3']));
+        expect(decoded.failedItemIds, isEmpty);
       },
     );
 

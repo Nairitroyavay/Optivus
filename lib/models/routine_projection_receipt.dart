@@ -170,6 +170,11 @@ class RoutineProjectionReceipt {
     if (lastSafeError != null && lastSafeError!.trim().isNotEmpty)
       'lastSafeError': lastSafeError!.trim(),
     'schemaVersion': schemaVersion,
+    'expectedItemIds': expectedItemIds,
+    'createdItemIds': createdItemIds,
+    'existingItemIds': existingItemIds,
+    'repairedItemIds': repairedItemIds,
+    'failedItemIds': failedItemIds,
   };
 
   Map<String, dynamic> toFirestoreMap() {

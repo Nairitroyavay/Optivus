@@ -735,6 +735,11 @@ service cloud.firestore {
           "sourceBundleSchemaVersion",
           "sourceBundleId",
           "sourceBundleFingerprint",
+          "expectedItemIds",
+          "createdItemIds",
+          "existingItemIds",
+          "repairedItemIds",
+          "failedItemIds",
           "projectedItemIds",
           "eventSchemaVersion",
           "totalCount",
@@ -773,6 +778,26 @@ service cloud.firestore {
         && data.projectedItemIds is list
         && data.projectedItemIds.size() <= 450
         && data.projectedItemIds.size() == data.projectedItemIds.toSet().size()
+        && (!data.keys().hasAny(["expectedItemIds"])
+          || (data.expectedItemIds is list
+            && data.expectedItemIds.size() <= 450
+            && data.expectedItemIds.size() == data.expectedItemIds.toSet().size()))
+        && (!data.keys().hasAny(["createdItemIds"])
+          || (data.createdItemIds is list
+            && data.createdItemIds.size() <= 450
+            && data.createdItemIds.size() == data.createdItemIds.toSet().size()))
+        && (!data.keys().hasAny(["existingItemIds"])
+          || (data.existingItemIds is list
+            && data.existingItemIds.size() <= 450
+            && data.existingItemIds.size() == data.existingItemIds.toSet().size()))
+        && (!data.keys().hasAny(["repairedItemIds"])
+          || (data.repairedItemIds is list
+            && data.repairedItemIds.size() <= 450
+            && data.repairedItemIds.size() == data.repairedItemIds.toSet().size()))
+        && (!data.keys().hasAny(["failedItemIds"])
+          || (data.failedItemIds is list
+            && data.failedItemIds.size() <= 450
+            && data.failedItemIds.size() == data.failedItemIds.toSet().size()))
         && (data.status == "pending" || data.status == "completed")
         && (!data.keys().hasAny(["eventSchemaVersion"])
           || data.eventSchemaVersion == 1)
@@ -804,26 +829,28 @@ service cloud.firestore {
       return validRoutineProjectionReceipt(after, projectionId)
         && before.id == after.id
         && before.ownerUid == after.ownerUid
-        && before.slot == after.slot
-        && before.revision == after.revision
         && before.source == after.source
-        && before.sourceBundleSchemaVersion == after.sourceBundleSchemaVersion
-        && before.sourceBundleId == after.sourceBundleId
         && before.sourceBundleFingerprint == after.sourceBundleFingerprint
-        && before.projectedItemIds == after.projectedItemIds
         && before.createdAt == after.createdAt
-        && before.schemaVersion == after.schemaVersion
-        && before.status == "pending"
-        && (after.status == "pending" || after.status == "completed")
-        && (!before.keys().hasAny(["eventSchemaVersion"])
-          || (after.keys().hasAll(["eventSchemaVersion"])
-            && after.eventSchemaVersion == before.eventSchemaVersion))
-        && (!before.keys().hasAny(["totalCount"])
-          || (after.keys().hasAll(["totalCount"])
-            && after.totalCount == before.totalCount))
-        && (!before.keys().hasAny(["cursor"])
-          || (after.keys().hasAll(["cursor"])
-            && after.cursor >= before.cursor));
+        && ((before.status == "pending"
+            && before.slot == after.slot
+            && before.revision == after.revision
+            && before.sourceBundleSchemaVersion == after.sourceBundleSchemaVersion
+            && before.sourceBundleId == after.sourceBundleId
+            && before.projectedItemIds == after.projectedItemIds
+            && before.schemaVersion == after.schemaVersion
+            && (after.status == "pending" || after.status == "completed")
+            && (!before.keys().hasAny(["eventSchemaVersion"])
+              || (after.keys().hasAll(["eventSchemaVersion"])
+                && after.eventSchemaVersion == before.eventSchemaVersion))
+            && (!before.keys().hasAny(["totalCount"])
+              || (after.keys().hasAll(["totalCount"])
+                && after.totalCount == before.totalCount))
+            && (!before.keys().hasAny(["cursor"])
+              || (after.keys().hasAll(["cursor"])
+                && after.cursor >= before.cursor)))
+          || (before.status == "completed"
+            && after.status == "completed"));
     }
 
 
