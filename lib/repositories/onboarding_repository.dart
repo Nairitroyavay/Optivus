@@ -596,6 +596,7 @@ class FirestoreOnboardingRepository
             bundle.uid,
             bundle,
             finalDraft: finalDraft,
+            projectedRoutineItems: plan.items,
           ).toMap(),
         );
         final intermediateProfilePatch =
@@ -846,6 +847,7 @@ class FirestoreOnboardingRepository
         bundle.uid,
         bundle,
         finalDraft: finalDraft,
+        projectedRoutineItems: plan.items,
       ).toMap(),
     );
     final profilePatch = Map<String, dynamic>.from(bundle.userProfilePatch)

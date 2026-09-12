@@ -747,10 +747,10 @@ class _OnboardingStep4UnifiedState
       }
     }
     _photos.sort(_comparePhotoSlots);
-    _syncLogicalAssetsToDraft();
+    _syncLogicalAssetsToDraft(clearMissing: false);
   }
 
-  void _syncLogicalAssetsToDraft() {
+  void _syncLogicalAssetsToDraft({bool clearMissing = true}) {
     final classPhoto = _photoForSource(RoutineImportReviewSource.classes);
     final workPhoto = _photoForSource(RoutineImportReviewSource.work);
     ref.read(onboardingStateProvider.notifier).updateDraft((draft) {
@@ -761,8 +761,8 @@ class _OnboardingStep4UnifiedState
           classLogicalAssetR2Key: classPhoto?.asset.r2Key,
           workLogicalAssetId: workPhoto?.asset.assetId,
           workLogicalAssetR2Key: workPhoto?.asset.r2Key,
-          clearClassLogicalAsset: classPhoto == null,
-          clearWorkLogicalAsset: workPhoto == null,
+          clearClassLogicalAsset: clearMissing && classPhoto == null,
+          clearWorkLogicalAsset: clearMissing && workPhoto == null,
         ),
       );
     });

@@ -74,7 +74,7 @@ void main() {
         : UploadedAssetPurpose.skinFace;
     for (final first in [true, false]) {
       test(
-        '$path ${first ? "unacknowledged newer upload is ignored" : "missing acknowledged source is cleared"} and reconciliation is idempotent',
+        '$path ${first ? "unacknowledged newer upload is ignored" : "confirmed acknowledged source survives missing media"} and reconciliation is idempotent',
         () {
           final a = createAsset(id: 'A', purpose: purpose);
           final b = createAsset(id: 'B', purpose: purpose);
@@ -136,13 +136,13 @@ void main() {
             product
                 ? base.skinCareProductPhotoAssetId
                 : base.skinCareFacePhotoAssetId,
-            isNull,
+            first ? isNull : a.assetId,
           );
           expect(
             product
                 ? base.skinCareProductPhotoR2Key
                 : base.skinCareFacePhotoR2Key,
-            isNull,
+            first ? isNull : a.r2Key,
           );
           expect(
             product
@@ -150,38 +150,26 @@ void main() {
                 : base.skinCareFacePhotoCreatedAt,
             isNull,
           );
-          expect(
-            base.skinCareReviewedProducts,
-            first && product ? isNotEmpty : isEmpty,
-          );
-          expect(base.skinCareSpecialCareNotes, first ? isNotEmpty : isEmpty);
-          expect(base.skinCareSuggestedProducts, first ? isNotEmpty : isEmpty);
-          expect(base.skinCareRoutineFingerprint, first ? 'A' : isNull);
-          expect(base.blocks, first ? isNotEmpty : isEmpty);
+          expect(base.skinCareReviewedProducts, product ? isNotEmpty : isEmpty);
+          expect(base.skinCareSpecialCareNotes, isNotEmpty);
+          expect(base.skinCareSuggestedProducts, isNotEmpty);
+          expect(base.skinCareRoutineFingerprint, 'A');
+          expect(base.blocks, isNotEmpty);
           expect(base.skinCareProductNames, 'Editable text');
           expect(
             result.reconciledDraft.stepCompleted[OnboardingStepId
                 .skinCare
                 .index],
-            first ? isTrue : isFalse,
+            isTrue,
           );
           expect(
             result.reconciledDraft.stepDirty[OnboardingStepId.skinCare.index],
-            first ? isFalse : isTrue,
+            isFalse,
           );
           if (!product) {
-            expect(
-              base.skinCareProductRecommendations,
-              first ? isNotEmpty : isEmpty,
-            );
-            expect(
-              base.skinCareSelectedProductNames,
-              first ? isNotEmpty : isEmpty,
-            );
-            expect(
-              base.skinCareRecommendationFingerprint,
-              first ? 'A' : isNull,
-            );
+            expect(base.skinCareProductRecommendations, isNotEmpty);
+            expect(base.skinCareSelectedProductNames, isNotEmpty);
+            expect(base.skinCareRecommendationFingerprint, 'A');
           }
           expect(
             OnboardingUploadSourceReconciler.reconcile(
@@ -593,33 +581,36 @@ void main() {
           restoredUploads: restored,
         );
 
-        expect(result.changed, isTrue);
-        expect(
-          result.earliestAffectedStep,
-          equals(OnboardingStepId.classesJob.index),
-        );
-        expect(result.reasonCodes, contains('step4_class_source_stale'));
+        expect(result.changed, isFalse);
+        expect(result.earliestAffectedStep, isNull);
+        expect(result.reasonCodes, contains('step4_class_media_unavailable'));
 
         final reconciled = result.reconciledDraft;
         expect(
           reconciled.currentStep,
-          equals(OnboardingStepId.classesJob.index),
+          equals(OnboardingStepId.badHabits.index),
         );
         expect(
           reconciled.stepCompleted[OnboardingStepId.classesJob.index],
+          isTrue,
+        );
+        expect(
+          reconciled.stepDirty[OnboardingStepId.classesJob.index],
           isFalse,
         );
-        expect(reconciled.stepDirty[OnboardingStepId.classesJob.index], isTrue);
         expect(
           reconciled.stepCompleted[OnboardingStepId.todayReady.index],
           isFalse,
         );
-        expect(reconciled.stepDirty[OnboardingStepId.todayReady.index], isTrue);
+        expect(
+          reconciled.stepDirty[OnboardingStepId.todayReady.index],
+          isFalse,
+        );
 
         // Class AI blocks removed
         expect(
           reconciled.baseTimeline.blocks.any((b) => b.section == 'classes'),
-          isFalse,
+          isTrue,
         );
         // Work AI blocks preserved
         expect(
@@ -629,7 +620,7 @@ void main() {
           isTrue,
         );
         // Newer classB is not an acknowledged replacement.
-        expect(reconciled.baseTimeline.classLogicalAssetId, isNull);
+        expect(reconciled.baseTimeline.classLogicalAssetId, classA.assetId);
         expect(
           reconciled.baseTimeline.workLogicalAssetId,
           equals(workW.assetId),
@@ -719,12 +710,9 @@ void main() {
           restoredUploads: restored,
         );
 
-        expect(result.changed, isTrue);
-        expect(
-          result.earliestAffectedStep,
-          equals(OnboardingStepId.classesJob.index),
-        );
-        expect(result.reasonCodes, contains('step4_work_source_stale'));
+        expect(result.changed, isFalse);
+        expect(result.earliestAffectedStep, isNull);
+        expect(result.reasonCodes, contains('step4_work_media_unavailable'));
 
         final reconciled = result.reconciledDraft;
         expect(
@@ -735,7 +723,7 @@ void main() {
           reconciled.baseTimeline.blocks.any(
             (b) => b.section == 'job_work_business',
           ),
-          isFalse,
+          isTrue,
         );
       },
     );
@@ -935,7 +923,7 @@ void main() {
     );
 
     test(
-      '11. Step5 has_routine: draft Menu A + current Menu B -> Eating AI invalidated',
+      '11. Step5 confirmed Menu A survives when only newer Menu B is restored',
       () {
         final menuA = createAsset(
           id: 'menu_A',
@@ -1002,39 +990,39 @@ void main() {
           restoredUploads: restored,
         );
 
-        expect(result.changed, isTrue);
-        expect(
-          result.earliestAffectedStep,
-          equals(OnboardingStepId.eating.index),
-        );
-        expect(result.reasonCodes, contains('step5_eating_source_stale'));
+        expect(result.changed, isFalse);
+        expect(result.earliestAffectedStep, isNull);
+        expect(result.reasonCodes, contains('step5_eating_media_unavailable'));
 
         final reconciled = result.reconciledDraft;
-        expect(reconciled.currentStep, equals(OnboardingStepId.eating.index));
         expect(
-          reconciled.stepCompleted[OnboardingStepId.eating.index],
-          isFalse,
+          reconciled.currentStep,
+          equals(OnboardingStepId.badHabits.index),
         );
-        expect(reconciled.stepDirty[OnboardingStepId.eating.index], isTrue);
+        expect(reconciled.stepCompleted[OnboardingStepId.eating.index], isTrue);
+        expect(reconciled.stepDirty[OnboardingStepId.eating.index], isFalse);
 
         // Old Eating AI block removed
         expect(
           reconciled.baseTimeline.blocks.any((b) => b.section == 'eating'),
-          isFalse,
+          isTrue,
         );
 
         // No applied import is fabricated before Menu B is analyzed.
         final importB = reconciled.baseTimeline.latestImportForSection(
           'Eating',
         );
-        expect(importB, isNull);
+        expect(importB?.uploadedAssetId, menuA.assetId);
         expect(reconciled.baseTimeline.eatingSetupPath, 'has_routine');
         expect(
           reconciled.stepCompleted[OnboardingStepId.todayReady.index],
           isFalse,
         );
-        expect(reconciled.stepDirty[OnboardingStepId.todayReady.index], isTrue);
-        expect(reconciled.baseTimeline.validateEatingSetup(), isNotNull);
+        expect(
+          reconciled.stepDirty[OnboardingStepId.todayReady.index],
+          isFalse,
+        );
+        expect(reconciled.baseTimeline.validateEatingSetup(), isNull);
 
         final second = OnboardingUploadSourceReconciler.reconcile(
           ownerUid: uid,
@@ -1333,6 +1321,101 @@ void main() {
       );
     });
 
+    for (final section in ['Classes', 'Work']) {
+      for (final deleted in [false, true]) {
+        test(
+          'confirmed clean $section keeps schedule and identity when historical media is ${deleted ? "deleted" : "missing"}',
+          () {
+            final purpose = section == 'Classes'
+                ? UploadedAssetPurpose.classTimetable
+                : UploadedAssetPurpose.workSchedule;
+            final asset = createAsset(
+              id: '${section.toLowerCase()}_historical',
+              purpose: purpose,
+            );
+            final completed = List<bool>.filled(
+              OnboardingDraft.stepCount,
+              true,
+            );
+            final dirty = List<bool>.filled(OnboardingDraft.stepCount, false);
+            final isClasses = section == 'Classes';
+            final block = TimelineBlockDraft(
+              id: '${section.toLowerCase()}_block',
+              section: isClasses ? 'classes' : 'job_work_business',
+              title: section,
+              startMinute: 540,
+              endMinute: 600,
+              repeatDays: const [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+              source: 'ai_import',
+              provenanceSourceIds: [asset.assetId, asset.r2Key],
+            );
+            final draft = OnboardingDraft(
+              uid: uid,
+              currentStep: OnboardingStepId.todayReady.index,
+              stepCompleted: completed,
+              stepDirty: dirty,
+              lifeRole: LifeRoleDraft(
+                lifeRole: isClasses
+                    ? LifeRoleDraft.studentKey
+                    : LifeRoleDraft.workingKey,
+              ),
+              baseTimeline: BaseTimelineDraft(
+                classLogicalAssetId: isClasses ? asset.assetId : null,
+                classLogicalAssetR2Key: isClasses ? asset.r2Key : null,
+                workLogicalAssetId: isClasses ? null : asset.assetId,
+                workLogicalAssetR2Key: isClasses ? null : asset.r2Key,
+                blocks: [block],
+              ),
+            );
+
+            final result = OnboardingUploadSourceReconciler.reconcile(
+              ownerUid: uid,
+              draft: draft,
+              restoredUploads: createRestoredUploads(
+                classAsset: deleted && isClasses
+                    ? asset.copyWith(status: UploadedAssetStatus.deleted)
+                    : null,
+                workAsset: deleted && !isClasses
+                    ? asset.copyWith(status: UploadedAssetStatus.deleted)
+                    : null,
+              ),
+            );
+
+            expect(result.changed, isFalse);
+            expect(result.integrityFailure, isFalse);
+            expect(result.reconciledDraft.baseTimeline.blocks, [block]);
+            expect(
+              isClasses
+                  ? result.reconciledDraft.baseTimeline.classLogicalAssetId
+                  : result.reconciledDraft.baseTimeline.workLogicalAssetId,
+              asset.assetId,
+            );
+            expect(
+              result.reconciledDraft.stepCompleted[OnboardingStepId
+                  .classesJob
+                  .index],
+              isTrue,
+            );
+            expect(
+              result.reconciledDraft.stepCompleted[OnboardingStepId
+                  .todayReady
+                  .index],
+              isTrue,
+            );
+            expect(
+              result.reasonCodes,
+              contains(
+                isClasses
+                    ? 'step4_class_media_unavailable'
+                    : 'step4_work_media_unavailable',
+              ),
+            );
+          },
+        );
+      }
+    }
+
     test('Work block with only one provenance token is stale', () {
       final workA = createAsset(
         id: 'work_A',
@@ -1451,104 +1534,109 @@ void main() {
       },
     );
 
-    test('mismatched restored Step 7 face upload reopens and invalidates', () {
-      final faceA = createAsset(
-        id: 'skin_face_A',
-        purpose: UploadedAssetPurpose.skinFace,
-      );
-      final faceB = createAsset(
-        id: 'skin_face_B',
-        purpose: UploadedAssetPurpose.skinFace,
-      );
-      final completed = List<bool>.filled(OnboardingDraft.stepCount, true);
-      final draft = OnboardingDraft(
-        uid: uid,
-        currentStep: OnboardingStepId.todayReady.index,
-        stepCompleted: completed,
-        baseTimeline: BaseTimelineDraft(
-          skinCareSetupPath: 'no_products',
-          skinCareFacePhotoAssetId: faceA.assetId,
-          skinCareFacePhotoR2Key: faceA.r2Key,
-          skinCareFacePhotoStatus: 'uploaded',
-          skinCareProductRecommendations: const [
-            SkinCareProductRecommendationDraft(name: 'Cleanser'),
-          ],
-          skinCareSelectedProductNames: const ['Cleanser'],
-          skinCareRecommendationFingerprint: 'recommendation-fingerprint',
-          skinCareRoutineFingerprint: 'routine-fingerprint',
-          blocks: const [
-            TimelineBlockDraft(
-              id: 'skin-1',
-              section: 'skin_care',
-              title: 'Skin care',
-              startMinute: 480,
-              endMinute: 490,
-              repeatDays: [1, 2, 3, 4, 5, 6, 7],
-              blockType: TimelineBlockDraft.softBlockKey,
-            ),
-          ],
-        ),
-      );
+    test(
+      'confirmed Step 7 face setup survives unavailable historical media',
+      () {
+        final faceA = createAsset(
+          id: 'skin_face_A',
+          purpose: UploadedAssetPurpose.skinFace,
+        );
+        final faceB = createAsset(
+          id: 'skin_face_B',
+          purpose: UploadedAssetPurpose.skinFace,
+        );
+        final completed = List<bool>.filled(OnboardingDraft.stepCount, true);
+        final draft = OnboardingDraft(
+          uid: uid,
+          currentStep: OnboardingStepId.todayReady.index,
+          stepCompleted: completed,
+          baseTimeline: BaseTimelineDraft(
+            skinCareSetupPath: 'no_products',
+            skinCareFacePhotoAssetId: faceA.assetId,
+            skinCareFacePhotoR2Key: faceA.r2Key,
+            skinCareFacePhotoStatus: 'uploaded',
+            skinCareProductRecommendations: const [
+              SkinCareProductRecommendationDraft(name: 'Cleanser'),
+            ],
+            skinCareSelectedProductNames: const ['Cleanser'],
+            skinCareRecommendationFingerprint: 'recommendation-fingerprint',
+            skinCareRoutineFingerprint: 'routine-fingerprint',
+            blocks: const [
+              TimelineBlockDraft(
+                id: 'skin-1',
+                section: 'skin_care',
+                title: 'Skin care',
+                startMinute: 480,
+                endMinute: 490,
+                repeatDays: [1, 2, 3, 4, 5, 6, 7],
+                blockType: TimelineBlockDraft.softBlockKey,
+              ),
+            ],
+          ),
+        );
 
-      final result = OnboardingUploadSourceReconciler.reconcile(
-        ownerUid: uid,
-        draft: draft,
-        restoredUploads: createRestoredUploads(skinFaceAsset: faceB),
-      );
+        final result = OnboardingUploadSourceReconciler.reconcile(
+          ownerUid: uid,
+          draft: draft,
+          restoredUploads: createRestoredUploads(skinFaceAsset: faceB),
+        );
 
-      expect(result.changed, isTrue);
-      expect(result.earliestAffectedStep, OnboardingStepId.skinCare.index);
-      expect(result.reasonCodes, contains('step7_face_source_stale'));
-      expect(
-        result.reconciledDraft.currentStep,
-        OnboardingStepId.skinCare.index,
-      );
-      expect(
-        result.reconciledDraft.stepCompleted[OnboardingStepId.skinCare.index],
-        isFalse,
-      );
-      expect(
-        result.reconciledDraft.stepDirty[OnboardingStepId.skinCare.index],
-        isTrue,
-      );
-      expect(
-        result.reconciledDraft.stepCompleted[OnboardingStepId.todayReady.index],
-        isFalse,
-      );
-      expect(
-        result.reconciledDraft.stepDirty[OnboardingStepId.todayReady.index],
-        isTrue,
-      );
-      expect(
-        result.reconciledDraft.baseTimeline.skinCareFacePhotoAssetId,
-        isNull,
-      );
-      expect(
-        result.reconciledDraft.baseTimeline.skinCareFacePhotoR2Key,
-        isNull,
-      );
-      expect(
-        result.reconciledDraft.baseTimeline.skinCareProductRecommendations,
-        isEmpty,
-      );
-      expect(
-        result.reconciledDraft.baseTimeline.skinCareSelectedProductNames,
-        isEmpty,
-      );
-      expect(
-        result.reconciledDraft.baseTimeline.skinCareRecommendationFingerprint,
-        isNull,
-      );
-      expect(
-        result.reconciledDraft.baseTimeline.skinCareRoutineFingerprint,
-        isNull,
-      );
-      expect(
-        result.reconciledDraft.baseTimeline.blocks.where(
-          (block) => block.section == 'skin_care',
-        ),
-        isEmpty,
-      );
-    });
+        expect(result.changed, isFalse);
+        expect(result.earliestAffectedStep, isNull);
+        expect(result.reasonCodes, contains('step7_face_media_unavailable'));
+        expect(
+          result.reconciledDraft.currentStep,
+          OnboardingStepId.todayReady.index,
+        );
+        expect(
+          result.reconciledDraft.stepCompleted[OnboardingStepId.skinCare.index],
+          isTrue,
+        );
+        expect(
+          result.reconciledDraft.stepDirty[OnboardingStepId.skinCare.index],
+          isFalse,
+        );
+        expect(
+          result.reconciledDraft.stepCompleted[OnboardingStepId
+              .todayReady
+              .index],
+          isTrue,
+        );
+        expect(
+          result.reconciledDraft.stepDirty[OnboardingStepId.todayReady.index],
+          isFalse,
+        );
+        expect(
+          result.reconciledDraft.baseTimeline.skinCareFacePhotoAssetId,
+          faceA.assetId,
+        );
+        expect(
+          result.reconciledDraft.baseTimeline.skinCareFacePhotoR2Key,
+          faceA.r2Key,
+        );
+        expect(
+          result.reconciledDraft.baseTimeline.skinCareProductRecommendations,
+          isNotEmpty,
+        );
+        expect(
+          result.reconciledDraft.baseTimeline.skinCareSelectedProductNames,
+          isNotEmpty,
+        );
+        expect(
+          result.reconciledDraft.baseTimeline.skinCareRecommendationFingerprint,
+          'recommendation-fingerprint',
+        );
+        expect(
+          result.reconciledDraft.baseTimeline.skinCareRoutineFingerprint,
+          'routine-fingerprint',
+        );
+        expect(
+          result.reconciledDraft.baseTimeline.blocks.where(
+            (block) => block.section == 'skin_care',
+          ),
+          isNotEmpty,
+        );
+      },
+    );
   });
 }

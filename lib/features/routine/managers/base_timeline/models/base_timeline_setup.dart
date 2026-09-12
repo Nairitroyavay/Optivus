@@ -964,6 +964,7 @@ class BaseTimelineSetup {
   factory BaseTimelineSetup.fromOnboardingCompletion({
     required OnboardingDraft finalDraft,
     required OnboardingCompletionBundle bundle,
+    required List<RoutineItem> projectedRoutineItems,
   }) {
     final base = finalDraft.baseTimeline;
     final blocks = bundle.baseTimelineBlocks.isNotEmpty
@@ -1045,7 +1046,7 @@ class BaseTimelineSetup {
       }
     }
 
-    final classRoutineItemIds = bundle.routineItemsForApp
+    final classRoutineItemIds = projectedRoutineItems
         .where(
           (item) =>
               classBlocks.any((b) => b.id == item.id) ||
@@ -1054,7 +1055,7 @@ class BaseTimelineSetup {
         )
         .map((e) => e.id)
         .toList();
-    final workRoutineItemIds = bundle.routineItemsForApp
+    final workRoutineItemIds = projectedRoutineItems
         .where(
           (item) =>
               workBlocks.any((b) => b.id == item.id) ||
@@ -1063,7 +1064,7 @@ class BaseTimelineSetup {
         )
         .map((e) => e.id)
         .toList();
-    final eatingRoutineItemIds = bundle.routineItemsForApp
+    final eatingRoutineItemIds = projectedRoutineItems
         .where(
           (item) =>
               eatingBlocks.any((b) => b.id == item.id) ||
@@ -1072,7 +1073,7 @@ class BaseTimelineSetup {
         )
         .map((e) => e.id)
         .toList();
-    final fixedRoutineItemIds = bundle.routineItemsForApp
+    final fixedRoutineItemIds = projectedRoutineItems
         .where(
           (item) =>
               fixedBlocks.any((b) => b.id == item.id) ||
@@ -1082,7 +1083,7 @@ class BaseTimelineSetup {
         )
         .map((e) => e.id)
         .toList();
-    final skinCareRoutineItemIds = bundle.routineItemsForApp
+    final skinCareRoutineItemIds = projectedRoutineItems
         .where(
           (item) =>
               skinCareBlocks.any((b) => b.id == item.id) ||
@@ -1099,21 +1100,11 @@ class BaseTimelineSetup {
       updatedAt: bundle.updatedAt,
       schemaVersion: currentSchemaVersion,
       revision: 1,
-      classRoutineItemIds: classRoutineItemIds.isNotEmpty
-          ? classRoutineItemIds
-          : classBlocks.map((b) => b.id).toList(),
-      workRoutineItemIds: workRoutineItemIds.isNotEmpty
-          ? workRoutineItemIds
-          : workBlocks.map((b) => b.id).toList(),
-      eatingRoutineItemIds: eatingRoutineItemIds.isNotEmpty
-          ? eatingRoutineItemIds
-          : eatingBlocks.map((b) => b.id).toList(),
-      fixedRoutineItemIds: fixedRoutineItemIds.isNotEmpty
-          ? fixedRoutineItemIds
-          : fixedBlocks.map((b) => b.id).toList(),
-      skinCareRoutineItemIds: skinCareRoutineItemIds.isNotEmpty
-          ? skinCareRoutineItemIds
-          : skinCareBlocks.map((b) => b.id).toList(),
+      classRoutineItemIds: classRoutineItemIds,
+      workRoutineItemIds: workRoutineItemIds,
+      eatingRoutineItemIds: eatingRoutineItemIds,
+      fixedRoutineItemIds: fixedRoutineItemIds,
+      skinCareRoutineItemIds: skinCareRoutineItemIds,
       classLogicalAssetId: classAssetId,
       classLogicalAssetR2Key: classR2Key,
       classBlocks: classBlocks,
@@ -1165,11 +1156,13 @@ class BaseTimelineSetup {
     String uid,
     OnboardingCompletionBundle bundle, {
     OnboardingDraft? finalDraft,
+    required List<RoutineItem> projectedRoutineItems,
   }) {
     if (finalDraft != null) {
       return BaseTimelineSetup.fromOnboardingCompletion(
         finalDraft: finalDraft,
         bundle: bundle,
+        projectedRoutineItems: projectedRoutineItems,
       );
     }
     final blocks = bundle.baseTimelineBlocks;
@@ -1235,7 +1228,7 @@ class BaseTimelineSetup {
       }
     }
 
-    final classRoutineItemIds = bundle.routineItemsForApp
+    final classRoutineItemIds = projectedRoutineItems
         .where(
           (item) =>
               classBlocks.any((b) => b.id == item.id) ||
@@ -1244,7 +1237,7 @@ class BaseTimelineSetup {
         )
         .map((e) => e.id)
         .toList();
-    final workRoutineItemIds = bundle.routineItemsForApp
+    final workRoutineItemIds = projectedRoutineItems
         .where(
           (item) =>
               workBlocks.any((b) => b.id == item.id) ||
@@ -1253,7 +1246,7 @@ class BaseTimelineSetup {
         )
         .map((e) => e.id)
         .toList();
-    final eatingRoutineItemIds = bundle.routineItemsForApp
+    final eatingRoutineItemIds = projectedRoutineItems
         .where(
           (item) =>
               eatingBlocks.any((b) => b.id == item.id) ||
@@ -1262,7 +1255,7 @@ class BaseTimelineSetup {
         )
         .map((e) => e.id)
         .toList();
-    final fixedRoutineItemIds = bundle.routineItemsForApp
+    final fixedRoutineItemIds = projectedRoutineItems
         .where(
           (item) =>
               fixedBlocks.any((b) => b.id == item.id) ||
@@ -1272,7 +1265,7 @@ class BaseTimelineSetup {
         )
         .map((e) => e.id)
         .toList();
-    final skinCareRoutineItemIds = bundle.routineItemsForApp
+    final skinCareRoutineItemIds = projectedRoutineItems
         .where(
           (item) =>
               skinCareBlocks.any((b) => b.id == item.id) ||
@@ -1286,21 +1279,11 @@ class BaseTimelineSetup {
       uid: uid,
       updatedAt: bundle.updatedAt,
       schemaVersion: currentSchemaVersion,
-      classRoutineItemIds: classRoutineItemIds.isNotEmpty
-          ? classRoutineItemIds
-          : classBlocks.map((b) => b.id).toList(),
-      workRoutineItemIds: workRoutineItemIds.isNotEmpty
-          ? workRoutineItemIds
-          : workBlocks.map((b) => b.id).toList(),
-      eatingRoutineItemIds: eatingRoutineItemIds.isNotEmpty
-          ? eatingRoutineItemIds
-          : eatingBlocks.map((b) => b.id).toList(),
-      fixedRoutineItemIds: fixedRoutineItemIds.isNotEmpty
-          ? fixedRoutineItemIds
-          : fixedBlocks.map((b) => b.id).toList(),
-      skinCareRoutineItemIds: skinCareRoutineItemIds.isNotEmpty
-          ? skinCareRoutineItemIds
-          : skinCareBlocks.map((b) => b.id).toList(),
+      classRoutineItemIds: classRoutineItemIds,
+      workRoutineItemIds: workRoutineItemIds,
+      eatingRoutineItemIds: eatingRoutineItemIds,
+      fixedRoutineItemIds: fixedRoutineItemIds,
+      skinCareRoutineItemIds: skinCareRoutineItemIds,
       classLogicalAssetId: classAssetId,
       classLogicalAssetR2Key: classR2Key,
       classBlocks: classBlocks,

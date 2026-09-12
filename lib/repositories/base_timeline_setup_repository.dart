@@ -7,6 +7,7 @@ import 'package:optivus/features/routine/managers/base_timeline/models/base_time
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/repositories/firestore_paths.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
+import 'package:optivus/services/routine_onboarding_projection.dart';
 import 'package:optivus/state/app_state.dart';
 
 abstract class BaseTimelineSetupRepository {
@@ -188,9 +189,11 @@ Future<BaseTimelineSetup?> _fetchOnboardingSource(
     final draft = await onboardingRepo.fetchDraft(uid);
     final bundle = await onboardingRepo.fetchCompletionBundle(uid);
     if (draft != null && bundle != null) {
+      final plan = RoutineOnboardingProjection.build(bundle);
       return BaseTimelineSetup.fromOnboardingCompletion(
         finalDraft: draft,
         bundle: bundle,
+        projectedRoutineItems: plan.items,
       );
     } else if (draft != null &&
         (draft.baseTimeline.blocks.isNotEmpty ||
@@ -198,10 +201,12 @@ Future<BaseTimelineSetup?> _fetchOnboardingSource(
             draft.baseTimeline.skinCareProductPhotoAssetId != null)) {
       return BaseTimelineSetup.fromOnboardingDraft(uid, draft);
     } else if (bundle != null) {
+      final plan = RoutineOnboardingProjection.build(bundle);
       return BaseTimelineSetup.fromCompletionBundle(
         uid,
         bundle,
         finalDraft: draft,
+        projectedRoutineItems: plan.items,
       );
     }
   } catch (_) {}

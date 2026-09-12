@@ -149,6 +149,19 @@ class OnboardingUploadSourceReconciler {
     var step4Affected = false;
     var step5Affected = false;
 
+    bool isConfirmedAndClean(int stepIndex) {
+      return stepIndex >= 0 &&
+          stepIndex < draft.stepCompleted.length &&
+          stepIndex < draft.stepDirty.length &&
+          draft.stepCompleted[stepIndex] &&
+          !draft.stepDirty[stepIndex];
+    }
+
+    bool exactSourceIsUnavailable(String? assetId) {
+      final raw = rawExactAsset(assetId);
+      return raw == null || raw.status == UploadedAssetStatus.deleted;
+    }
+
     final lifeRoleKey = draft.lifeRole.lifeRole;
     final classesRequired =
         lifeRoleKey == LifeRoleDraft.studentKey ||
@@ -253,23 +266,29 @@ class OnboardingUploadSourceReconciler {
       if (!isClassLogicalSourceCurrent &&
           (hasClassAiBlocks ||
               (classLogicalId != null && classLogicalId.trim().isNotEmpty))) {
-        step4Affected = true;
-        reasonCodes.add('step4_class_source_stale');
+        if (isConfirmedAndClean(OnboardingStepId.classesJob.index) &&
+            exactSourceIsUnavailable(classLogicalId)) {
+          reasonCodes.add('step4_class_media_unavailable');
+        } else {
+          step4Affected = true;
+          reasonCodes.add('step4_class_source_stale');
 
-        currentBlocks.removeWhere(
-          (b) => b.section == 'classes' && b.source == 'ai_import',
-        );
+          currentBlocks.removeWhere(
+            (b) => b.section == 'classes' && b.source == 'ai_import',
+          );
 
-        currentImports.removeWhere(
-          (entry) =>
-              entry.section == 'Classes' || entry.section == 'Class Timetable',
-        );
+          currentImports.removeWhere(
+            (entry) =>
+                entry.section == 'Classes' ||
+                entry.section == 'Class Timetable',
+          );
 
-        // The persisted exact identity is authoritative. A newer upload is
-        // only adopted by an explicit user replacement write.
-        currentBaseTimeline = currentBaseTimeline.copyWith(
-          clearClassLogicalAsset: true,
-        );
+          // The persisted exact identity is authoritative. A newer upload is
+          // only adopted by an explicit user replacement write.
+          currentBaseTimeline = currentBaseTimeline.copyWith(
+            clearClassLogicalAsset: true,
+          );
+        }
       }
     }
 
@@ -315,23 +334,28 @@ class OnboardingUploadSourceReconciler {
       if (!isWorkLogicalSourceCurrent &&
           (hasWorkAiBlocks ||
               (workLogicalId != null && workLogicalId.trim().isNotEmpty))) {
-        step4Affected = true;
-        reasonCodes.add('step4_work_source_stale');
+        if (isConfirmedAndClean(OnboardingStepId.classesJob.index) &&
+            exactSourceIsUnavailable(workLogicalId)) {
+          reasonCodes.add('step4_work_media_unavailable');
+        } else {
+          step4Affected = true;
+          reasonCodes.add('step4_work_source_stale');
 
-        currentBlocks.removeWhere(
-          (b) => b.section == 'job_work_business' && b.source == 'ai_import',
-        );
+          currentBlocks.removeWhere(
+            (b) => b.section == 'job_work_business' && b.source == 'ai_import',
+          );
 
-        currentImports.removeWhere(
-          (entry) =>
-              entry.section == 'Work' ||
-              entry.section == 'Work Schedule' ||
-              entry.section == 'Job / Work / Business',
-        );
+          currentImports.removeWhere(
+            (entry) =>
+                entry.section == 'Work' ||
+                entry.section == 'Work Schedule' ||
+                entry.section == 'Job / Work / Business',
+          );
 
-        currentBaseTimeline = currentBaseTimeline.copyWith(
-          clearWorkLogicalAsset: true,
-        );
+          currentBaseTimeline = currentBaseTimeline.copyWith(
+            clearWorkLogicalAsset: true,
+          );
+        }
       }
     }
 
@@ -391,17 +415,22 @@ class OnboardingUploadSourceReconciler {
 
       if (!eatingSetupIsCurrent &&
           (eatingAiBlocks.isNotEmpty || eatingImport != null)) {
-        step5Affected = true;
-        reasonCodes.add('step5_eating_source_stale');
+        if (isConfirmedAndClean(OnboardingStepId.eating.index) &&
+            exactSourceIsUnavailable(eatingImport?.uploadedAssetId)) {
+          reasonCodes.add('step5_eating_media_unavailable');
+        } else {
+          step5Affected = true;
+          reasonCodes.add('step5_eating_source_stale');
 
-        currentBlocks.removeWhere(
-          (b) => b.section == 'eating' && b.source == 'ai_import',
-        );
+          currentBlocks.removeWhere(
+            (b) => b.section == 'eating' && b.source == 'ai_import',
+          );
 
-        currentImports.removeWhere((entry) => entry.section == 'Eating');
+          currentImports.removeWhere((entry) => entry.section == 'Eating');
 
-        // The durable upload is tracked by RestoredUploadsState. A photo import
-        // is only created after AI extraction actually succeeds for that asset.
+          // The durable upload is tracked by RestoredUploadsState. A photo import
+          // is only created after AI extraction actually succeeds for that asset.
+        }
       }
     }
 
@@ -442,16 +471,21 @@ class OnboardingUploadSourceReconciler {
               asset: effectiveProductAsset,
             );
         if (!matchesRestored) {
-          step7Affected = true;
-          reasonCodes.add('step7_product_source_stale');
-          currentBlocks.removeWhere((b) => b.section == 'skin_care');
-          currentBaseTimeline = currentBaseTimeline.copyWith(
-            clearSkinCareProductPhoto: true,
-            clearSkinCareReviewedProducts: true,
-            clearSkinCareSuggestedProducts: true,
-            skinCareSpecialCareNotes: const [],
-            clearSkinCareRoutineFingerprint: true,
-          );
+          if (isConfirmedAndClean(OnboardingStepId.skinCare.index) &&
+              exactSourceIsUnavailable(productAssetId)) {
+            reasonCodes.add('step7_product_media_unavailable');
+          } else {
+            step7Affected = true;
+            reasonCodes.add('step7_product_source_stale');
+            currentBlocks.removeWhere((b) => b.section == 'skin_care');
+            currentBaseTimeline = currentBaseTimeline.copyWith(
+              clearSkinCareProductPhoto: true,
+              clearSkinCareReviewedProducts: true,
+              clearSkinCareSuggestedProducts: true,
+              skinCareSpecialCareNotes: const [],
+              clearSkinCareRoutineFingerprint: true,
+            );
+          }
         }
       }
     } else if (currentBaseTimeline.skinCareSetupPath == 'no_products') {
@@ -484,18 +518,23 @@ class OnboardingUploadSourceReconciler {
               asset: effectiveFaceAsset,
             );
         if (!matchesRestored) {
-          step7Affected = true;
-          reasonCodes.add('step7_face_source_stale');
-          currentBlocks.removeWhere((b) => b.section == 'skin_care');
-          currentBaseTimeline = currentBaseTimeline.copyWith(
-            clearSkinCareFacePhoto: true,
-            clearSkinCareSuggestedProducts: true,
-            skinCareSpecialCareNotes: const [],
-            clearSkinCareRecommendationFingerprint: true,
-            clearSkinCareRoutineFingerprint: true,
-            clearSkinCareProductRecommendations: true,
-            clearSkinCareSelectedProductNames: true,
-          );
+          if (isConfirmedAndClean(OnboardingStepId.skinCare.index) &&
+              exactSourceIsUnavailable(faceAssetId)) {
+            reasonCodes.add('step7_face_media_unavailable');
+          } else {
+            step7Affected = true;
+            reasonCodes.add('step7_face_source_stale');
+            currentBlocks.removeWhere((b) => b.section == 'skin_care');
+            currentBaseTimeline = currentBaseTimeline.copyWith(
+              clearSkinCareFacePhoto: true,
+              clearSkinCareSuggestedProducts: true,
+              skinCareSpecialCareNotes: const [],
+              clearSkinCareRecommendationFingerprint: true,
+              clearSkinCareRoutineFingerprint: true,
+              clearSkinCareProductRecommendations: true,
+              clearSkinCareSelectedProductNames: true,
+            );
+          }
         }
       }
     }
@@ -504,7 +543,7 @@ class OnboardingUploadSourceReconciler {
       return OnboardingUploadSourceReconciliationResult(
         reconciledDraft: draft,
         changed: false,
-        reasonCodes: const [],
+        reasonCodes: reasonCodes,
         integrityFailure: false,
       );
     }

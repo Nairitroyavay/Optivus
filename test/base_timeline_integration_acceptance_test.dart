@@ -16,6 +16,7 @@ import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/repositories/routine_transaction_repository.dart';
 import 'package:optivus/repositories/uploaded_asset_repository.dart';
 import 'package:optivus/services/cloudflare/cloudflare_clients.dart';
+import 'package:optivus/services/routine_onboarding_projection.dart';
 import 'package:optivus/services/uploads/authenticated_r2_preview_resolver.dart';
 import 'package:optivus/state/upload_state.dart';
 
@@ -161,12 +162,15 @@ void main() {
         );
 
         await onboardingRepo.saveCompletionBundle(bundle);
-        await routineRepo.createRoutineItem(uid, initialClassRoutineItem);
-        await routineRepo.createRoutineItem(uid, initialSleepRoutineItem);
+        final plan = RoutineOnboardingProjection.build(bundle);
+        for (final item in plan.items) {
+          await routineRepo.createRoutineItem(uid, item);
+        }
 
         final initialSetup = BaseTimelineSetup.fromOnboardingCompletion(
           finalDraft: draft,
           bundle: bundle,
+          projectedRoutineItems: plan.items,
         );
         await setupRepo.saveSetup(uid, initialSetup);
 
@@ -175,11 +179,21 @@ void main() {
         expect(initialSetup.revision, 1);
         expect(
           initialSetup.classRoutineItemIds,
-          contains('initial-class-item-1'),
+          contains(
+            RoutineOnboardingProjection.stableRoutineDocumentId(
+              ownerUid: uid,
+              sourceItemId: 'initial-class-item-1',
+            ),
+          ),
         );
         expect(
           initialSetup.fixedRoutineItemIds,
-          contains('initial-sleep-item-1'),
+          contains(
+            RoutineOnboardingProjection.stableRoutineDocumentId(
+              ownerUid: uid,
+              sourceItemId: 'initial-sleep-item-1',
+            ),
+          ),
         );
         expect(
           initialSetup.snapshotFor(BaseTimelineSection.classes).configured,
@@ -311,11 +325,25 @@ void main() {
 
         // Survivor check: Classes item and Sleep item from onboarding survived!
         expect(
-          allRoutineItems.any((i) => i.id == 'initial-class-item-1'),
+          allRoutineItems.any(
+            (i) =>
+                i.id ==
+                RoutineOnboardingProjection.stableRoutineDocumentId(
+                  ownerUid: uid,
+                  sourceItemId: 'initial-class-item-1',
+                ),
+          ),
           isTrue,
         );
         expect(
-          allRoutineItems.any((i) => i.id == 'initial-sleep-item-1'),
+          allRoutineItems.any(
+            (i) =>
+                i.id ==
+                RoutineOnboardingProjection.stableRoutineDocumentId(
+                  ownerUid: uid,
+                  sourceItemId: 'initial-sleep-item-1',
+                ),
+          ),
           isTrue,
         );
 

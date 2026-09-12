@@ -652,7 +652,7 @@ void main() {
     );
 
     test(
-      'deleted exact A with newer B reopens Step 5 without adopting B',
+      'deleted exact A preserves confirmed Step 5 without adopting newer B',
       () async {
         const uid = 'deleted-source-user';
         final a = _asset(uid, 'menu-A', UploadedAssetPurpose.eatingMenu);
@@ -681,10 +681,12 @@ void main() {
           profileRepository: profiles,
           uploadRepository: uploads,
         );
-        expect(restored.auth.sessionDestination.resumeStep, 5);
+        expect(restored.auth.sessionDestination.resumeStep, 6);
         expect(
-          restored.draft.baseTimeline.latestImportForSection('Eating'),
-          isNull,
+          restored.draft.baseTimeline
+              .latestImportForSection('Eating')
+              ?.uploadedAssetId,
+          a.assetId,
         );
         expect(
           restored.draft.referencedUploadAssetIds,

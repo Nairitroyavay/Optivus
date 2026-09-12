@@ -18,6 +18,7 @@ import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/repositories/routine_transaction_repository.dart';
 import 'package:optivus/services/cloudflare/cloudflare_clients.dart';
 import 'package:optivus/services/nutrition_ai_client.dart';
+import 'package:optivus/services/routine_onboarding_projection.dart';
 import 'package:optivus/services/skin_care_ai_client.dart';
 import 'package:optivus/services/uploads/authenticated_r2_preview_resolver.dart';
 
@@ -339,6 +340,9 @@ void main() {
         final setup = BaseTimelineSetup.fromCompletionBundle(
           'bundle-user',
           bundle,
+          projectedRoutineItems: RoutineOnboardingProjection.build(
+            bundle,
+          ).items,
         );
 
         expect(setup.uid, 'bundle-user');

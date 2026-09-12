@@ -249,6 +249,46 @@ void _expectScreenStartsInTopContentRegion(
 
 void main() {
   group('Onboarding Step 4 & Step 5 UX Closure Contract', () {
+    testWidgets(
+      'Step 4 preview hydration with no restored photo preserves durable logical identity',
+      (tester) async {
+        const assetId = 'historical-class-asset';
+        const r2Key =
+            'users/test-user-ux/onboarding/class_timetable/historical.jpg';
+        final draft = _buildDraftForStep(
+          targetStep: onboardingClassJobStepIndex,
+          role: LifeRoleDraft.studentKey,
+          baseTimeline: const BaseTimelineDraft(
+            classJobSetupStep: 1,
+            classLogicalAssetId: assetId,
+            classLogicalAssetR2Key: r2Key,
+          ),
+        );
+        final notifier = OnboardingNotifier()..loadSeedData(draft);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              onboardingStateProvider.overrideWith((_) => notifier),
+              restoredUploadsProvider.overrideWith(
+                (_) => _SeededRestoredUploadsController(
+                  uid: 'test-user-ux',
+                  assets: const {},
+                ),
+              ),
+              onboardingClassTimelineProvider.overrideWith((_) => []),
+              onboardingWorkTimelineProvider.overrideWith((_) => []),
+            ],
+            child: const MaterialApp(home: OnboardingFlow()),
+          ),
+        );
+        await _settle(tester, 500);
+
+        expect(notifier.state.draft.baseTimeline.classLogicalAssetId, assetId);
+        expect(notifier.state.draft.baseTimeline.classLogicalAssetR2Key, r2Key);
+      },
+    );
+
     testWidgets('Step 4 AI screen is top-aligned inside switcher body', (
       tester,
     ) async {

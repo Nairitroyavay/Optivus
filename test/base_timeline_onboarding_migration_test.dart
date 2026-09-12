@@ -7,6 +7,7 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/repositories/base_timeline_setup_repository.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
+import 'package:optivus/services/routine_onboarding_projection.dart';
 
 void main() {
   group('Base Timeline Onboarding Migration and Builder Tests', () {
@@ -142,9 +143,11 @@ void main() {
           duplicateSystemKeysMerged: const [],
         );
 
+        final plan = RoutineOnboardingProjection.build(bundle);
         final setup = BaseTimelineSetup.fromOnboardingCompletion(
           finalDraft: draft,
           bundle: bundle,
+          projectedRoutineItems: plan.items,
         );
 
         expect(setup.uid, uid);
@@ -159,8 +162,26 @@ void main() {
         expect(setup.targetCalories, isNotNull);
         expect(setup.targetProtein, isNotNull);
         expect(setup.skinCareProductNames, 'Toner, Serum, Moisturizer');
-        expect(setup.classRoutineItemIds, contains('class-item-1'));
-        expect(setup.workRoutineItemIds, contains('work-item-1'));
+        expect(
+          setup.classRoutineItemIds,
+          contains(
+            RoutineOnboardingProjection.stableRoutineDocumentId(
+              ownerUid: uid,
+              sourceItemId: 'class-item-1',
+            ),
+          ),
+        );
+        expect(setup.classRoutineItemIds, isNot(contains('class-item-1')));
+        expect(
+          setup.workRoutineItemIds,
+          contains(
+            RoutineOnboardingProjection.stableRoutineDocumentId(
+              ownerUid: uid,
+              sourceItemId: 'work-item-1',
+            ),
+          ),
+        );
+        expect(setup.workRoutineItemIds, isNot(contains('work-item-1')));
 
         final sleepBlock = setup.fixedBlocks.firstWhere(
           (b) => b.id == BaseTimelineDraft.fixedSleepId,
@@ -172,6 +193,85 @@ void main() {
           (b) => b.id == BaseTimelineDraft.fixedBathId,
         );
         expect(bathBlock.startMinute, 1260);
+      },
+    );
+
+    test(
+      'all five sections track projected document IDs, never source IDs',
+      () {
+        const uid = 'five-section-projection-user';
+        final now = DateTime.utc(2026, 1, 1);
+        RoutineItem source(String id, RoutineCategory category) => RoutineItem(
+          id: id,
+          userId: uid,
+          title: id,
+          category: category,
+          blockType: RoutineBlockType.hardBlock,
+          startMinute: 480,
+          endMinute: 540,
+          repeatDays: const [1],
+          createdAt: now,
+          updatedAt: now,
+          source: RoutineSource.onboarding,
+        );
+
+        final sources = [
+          source('class-source', RoutineCategory.classBlock),
+          source('work-source', RoutineCategory.job),
+          source('eating-source', RoutineCategory.eating),
+          source('fixed-source', RoutineCategory.fixed),
+          source('skin-source', RoutineCategory.skinCare),
+        ];
+        final bundle = OnboardingCompletionBundle(
+          uid: uid,
+          createdAt: now,
+          updatedAt: now,
+          userProfilePatch: const {},
+          baseTimelineBlocks: const [],
+          finalTimelineItems: const [],
+          routineItemsForApp: sources,
+          goodHabitTemplates: const [],
+          badHabitCheckIns: const [],
+          identityGoalSystems: const [],
+          notificationPreferences: NotificationPreferences(),
+          coachPreferences: CoachPreferences(),
+          moneyGoal: null,
+          uploadedAssetReferences: const [],
+          warnings: const [],
+          duplicateSystemKeysMerged: const [],
+        );
+        final plan = RoutineOnboardingProjection.build(bundle);
+        final setup = BaseTimelineSetup.fromCompletionBundle(
+          uid,
+          bundle,
+          projectedRoutineItems: plan.items,
+        );
+
+        final idsByCategory = {
+          for (final item in plan.items) item.category: item.id,
+        };
+        expect(setup.classRoutineItemIds, [
+          idsByCategory[RoutineCategory.classBlock],
+        ]);
+        expect(setup.workRoutineItemIds, [idsByCategory[RoutineCategory.job]]);
+        expect(setup.eatingRoutineItemIds, [
+          idsByCategory[RoutineCategory.eating],
+        ]);
+        expect(setup.fixedRoutineItemIds, [
+          idsByCategory[RoutineCategory.fixed],
+        ]);
+        expect(setup.skinCareRoutineItemIds, [
+          idsByCategory[RoutineCategory.skinCare],
+        ]);
+        final trackedIds =
+            setup.classRoutineItemIds +
+            setup.workRoutineItemIds +
+            setup.eatingRoutineItemIds +
+            setup.fixedRoutineItemIds +
+            setup.skinCareRoutineItemIds;
+        for (final sourceItem in sources) {
+          expect(trackedIds, isNot(contains(sourceItem.id)));
+        }
       },
     );
 
@@ -297,7 +397,15 @@ void main() {
         // UNCONFIGURED SECTION BACKFILLED FROM ONBOARDING
         expect(migrated.workBlocks.isNotEmpty, isTrue);
         expect(migrated.workBlocks.first.title, 'Onboarding Job');
-        expect(migrated.workRoutineItemIds, contains('onboarding-work-item'));
+        expect(
+          migrated.workRoutineItemIds,
+          contains(
+            RoutineOnboardingProjection.stableRoutineDocumentId(
+              ownerUid: uid,
+              sourceItemId: 'onboarding-work-item',
+            ),
+          ),
+        );
       },
     );
 
