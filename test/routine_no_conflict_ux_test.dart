@@ -75,6 +75,7 @@ class _FakeNotifier extends RoutineNotifier {
     required DateTime date,
     required int startMinute,
     required int durationMinutes,
+    DateTime? occurrenceDate,
   }) async {
     final updated = state.items.map((i) {
       if (i.id == itemId) {
@@ -1508,6 +1509,7 @@ class _DragTestNotifier extends RoutineNotifier {
     required DateTime date,
     required int startMinute,
     required int durationMinutes,
+    DateTime? occurrenceDate,
   }) async {
     onMove(itemId, startMinute);
     final updated = state.items.map((i) {

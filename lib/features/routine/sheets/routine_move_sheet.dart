@@ -9,20 +9,22 @@ import 'package:optivus/features/routine/models/routine_write_result.dart';
 void showRoutineMoveSheet(
   BuildContext context,
   WidgetRef ref,
-  RoutineItem item,
-) {
+  RoutineItem item, {
+  DateTime? occurrenceDate,
+}) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (ctx) => _RoutineMoveSheet(item: item),
+    builder: (ctx) => _RoutineMoveSheet(item: item, occurrenceDate: occurrenceDate),
   );
 }
 
 class _RoutineMoveSheet extends ConsumerStatefulWidget {
   final RoutineItem item;
+  final DateTime? occurrenceDate;
 
-  const _RoutineMoveSheet({required this.item});
+  const _RoutineMoveSheet({required this.item, this.occurrenceDate});
 
   @override
   ConsumerState<_RoutineMoveSheet> createState() => _RoutineMoveSheetState();
@@ -170,8 +172,8 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                     onTap: _pending ? null : _findFreeSlot,
                   ),
                   _ActionPill(
-                    label: 'Make tiny version',
-                    color: OptivusColors.warning,
+                    label: 'Make tiny version (5-10m)',
+                    color: OptivusColors.routineAccent,
                     icon: Icons.compress_rounded,
                     pending: _pending,
                     onTap: _pending
@@ -179,7 +181,10 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                         : () => _runWrite(
                             () => ref
                                 .read(routineNotifierProvider.notifier)
-                                .makeTinyVersion(widget.item),
+                                .makeTinyVersion(
+                                  widget.item,
+                                  occurrenceDate: widget.occurrenceDate,
+                                ),
                           ),
                   ),
                   _ActionPill(
@@ -192,7 +197,10 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                         : () => _runWrite(
                             () => ref
                                 .read(routineNotifierProvider.notifier)
-                                .moveToTomorrow(widget.item),
+                                .moveToTomorrow(
+                                  widget.item,
+                                  occurrenceDate: widget.occurrenceDate,
+                                ),
                           ),
                   ),
                 ],
@@ -231,6 +239,7 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                                 date: _date,
                                 startMinute: _startMinute,
                                 durationMinutes: _duration,
+                                occurrenceDate: widget.occurrenceDate,
                               ),
                         ),
                   child: _pending

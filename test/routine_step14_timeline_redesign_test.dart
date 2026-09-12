@@ -55,7 +55,10 @@ class _MockRoutineNotifier extends RoutineNotifier {
   }
 
   @override
-  Future<RoutineWriteResult> startRoutineItem(String itemId) async {
+  Future<RoutineWriteResult> startRoutineItem(
+    String itemId, {
+    DateTime? occurrenceDate,
+  }) async {
     startedItemIds.add(itemId);
     final targetIndex = state.items.indexWhere((e) => e.id == itemId);
     if (targetIndex != -1) {
@@ -71,7 +74,10 @@ class _MockRoutineNotifier extends RoutineNotifier {
   }
 
   @override
-  Future<RoutineWriteResult> startFlexibleTask(String itemId) async {
+  Future<RoutineWriteResult> startFlexibleTask(
+    String itemId, {
+    DateTime? occurrenceDate,
+  }) async {
     startedItemIds.add(itemId);
     return RoutineWriteResult.saved(
       operationId: 'start-flex-$itemId',
@@ -141,7 +147,11 @@ class _MockRoutineNotifier extends RoutineNotifier {
   }
 
   @override
-  Future<RoutineWriteResult> checkIn(String itemId, String response) async {
+  Future<RoutineWriteResult> checkIn(
+    String itemId,
+    String response, {
+    DateTime? occurrenceDate,
+  }) async {
     checkInCalls.add((itemId, response));
     completedItemIds.add(itemId);
     state = state.copyWith(
@@ -160,7 +170,10 @@ class _MockRoutineNotifier extends RoutineNotifier {
   }
 
   @override
-  Future<RoutineWriteResult> completeRoutineItem(String itemId) async {
+  Future<RoutineWriteResult> completeRoutineItem(
+    String itemId, {
+    DateTime? occurrenceDate,
+  }) async {
     final targetIndex = state.items.indexWhere((e) => e.id == itemId);
     if (targetIndex != -1) {
       final item = state.items[targetIndex];
@@ -172,14 +185,17 @@ class _MockRoutineNotifier extends RoutineNotifier {
       }
       if (item.blockType == RoutineBlockType.checkIn &&
           item.category == RoutineCategory.badHabit) {
-        return await checkIn(itemId, 'Avoided');
+        return await checkIn(itemId, 'Avoided', occurrenceDate: occurrenceDate);
       }
     }
-    return await markCompleted(itemId);
+    return await markCompleted(itemId, occurrenceDate: occurrenceDate);
   }
 
   @override
-  Future<RoutineWriteResult> markCompleted(String itemId) async {
+  Future<RoutineWriteResult> markCompleted(
+    String itemId, {
+    DateTime? occurrenceDate,
+  }) async {
     completedItemIds.add(itemId);
     final updated = state.items.map((i) {
       if (i.id == itemId) {
@@ -197,8 +213,9 @@ class _MockRoutineNotifier extends RoutineNotifier {
   @override
   Future<RoutineWriteResult> toggleSubtask(
     String itemId,
-    int subtaskIndex,
-  ) async {
+    int subtaskIndex, {
+    DateTime? occurrenceDate,
+  }) async {
     toggledSubtasks.add((itemId, subtaskIndex));
     final updated = state.items.map((i) {
       if (i.id == itemId && i.subtasks != null) {

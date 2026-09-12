@@ -20,6 +20,10 @@ class RoutineRichTimelineCard extends ConsumerWidget {
   final bool hasOverlap;
   final VoidCallback? onTap;
 
+  /// When non-null, passed through to [RoutineCardActions] and subtask toggles
+  /// for correct occurrence targeting.
+  final DateTime? occurrenceDate;
+
   const RoutineRichTimelineCard({
     super.key,
     required this.item,
@@ -28,6 +32,7 @@ class RoutineRichTimelineCard extends ConsumerWidget {
     this.isFront = true,
     this.hasOverlap = false,
     this.onTap,
+    this.occurrenceDate,
   });
 
   @override
@@ -287,7 +292,11 @@ class RoutineRichTimelineCard extends ConsumerWidget {
 
           // Three Primary Actions footer
           const SizedBox(height: RoutineCardPresentation.actionsFooterGap),
-          RoutineCardActions(item: item, color: accent),
+          RoutineCardActions(
+            item: item,
+            color: accent,
+            occurrenceDate: occurrenceDate,
+          ),
         ],
       ),
     );
@@ -318,7 +327,7 @@ class RoutineRichTimelineCard extends ConsumerWidget {
         if (hasScope) {
           ref
               .read(routineNotifierProvider.notifier)
-              .toggleSubtask(item.id, index);
+              .toggleSubtask(item.id, index, occurrenceDate: occurrenceDate);
         }
       },
       child: Row(

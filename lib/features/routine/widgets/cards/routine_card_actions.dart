@@ -15,10 +15,17 @@ class RoutineCardActions extends ConsumerWidget {
   final RoutineItem item;
   final Color color;
 
+  /// When non-null, this date is passed explicitly to all notifier action
+  /// calls. This ensures that overnight continuation segments and moved-in
+  /// occurrences write to the correct occurrence record rather than relying
+  /// on the ambiguous _occurrenceAnchorDate inference.
+  final DateTime? occurrenceDate;
+
   const RoutineCardActions({
     super.key,
     required this.item,
     required this.color,
+    this.occurrenceDate,
   });
 
   @override
@@ -61,7 +68,7 @@ class RoutineCardActions extends ConsumerWidget {
                 routineTaskId: item.id,
                 onSaved: () => ref
                     .read(routineNotifierProvider.notifier)
-                    .completeRoutineItem(item.id),
+                    .completeRoutineItem(item.id, occurrenceDate: occurrenceDate),
               );
             } else if (item.blockType == RoutineBlockType.checkIn &&
                 item.category == RoutineCategory.badHabit) {
@@ -76,7 +83,7 @@ class RoutineCardActions extends ConsumerWidget {
             } else {
               ref
                   .read(routineNotifierProvider.notifier)
-                  .startRoutineItem(item.id);
+                  .startRoutineItem(item.id, occurrenceDate: occurrenceDate);
             }
           },
         );
@@ -97,7 +104,7 @@ class RoutineCardActions extends ConsumerWidget {
             } else {
               ref
                   .read(routineNotifierProvider.notifier)
-                  .completeRoutineItem(item.id);
+                  .completeRoutineItem(item.id, occurrenceDate: occurrenceDate);
             }
           },
         );
@@ -110,7 +117,7 @@ class RoutineCardActions extends ConsumerWidget {
           isDisabled: isPending,
           onTap: () {
             if (!hasScope) return;
-            showRoutineMoveSheet(context, ref, item);
+            showRoutineMoveSheet(context, ref, item, occurrenceDate: occurrenceDate);
           },
         );
 
@@ -181,7 +188,7 @@ class RoutineCardActions extends ConsumerWidget {
                       Navigator.pop(ctx);
                       ref
                           .read(routineNotifierProvider.notifier)
-                          .checkIn(item.id, 'Avoided');
+                          .checkIn(item.id, 'Avoided', occurrenceDate: occurrenceDate);
                     },
                   ),
                   _SheetOptionButton(
@@ -192,7 +199,7 @@ class RoutineCardActions extends ConsumerWidget {
                       Navigator.pop(ctx);
                       ref
                           .read(routineNotifierProvider.notifier)
-                          .checkIn(item.id, 'Craving');
+                          .checkIn(item.id, 'Craving', occurrenceDate: occurrenceDate);
                     },
                   ),
                   _SheetOptionButton(
@@ -203,7 +210,7 @@ class RoutineCardActions extends ConsumerWidget {
                       Navigator.pop(ctx);
                       ref
                           .read(routineNotifierProvider.notifier)
-                          .checkIn(item.id, 'Relapsed');
+                          .checkIn(item.id, 'Relapsed', occurrenceDate: occurrenceDate);
                     },
                   ),
                 ],

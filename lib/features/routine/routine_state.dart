@@ -17,6 +17,7 @@ import 'package:optivus/state/app_state.dart';
 import 'package:optivus/features/routine/services/routine_validation_service.dart';
 import 'package:optivus/features/routine/services/routine_materializer.dart';
 import 'package:optivus/features/routine/models/routine_write_result.dart';
+import 'package:optivus/features/routine/models/routine_day_entry.dart';
 
 enum RoutineWriteAction { create, update, delete, moveTemplate, batchCreate }
 
@@ -1990,12 +1991,15 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return selected;
   }
 
-  Future<RoutineWriteResult> startRoutineItem(String itemId) async {
+  Future<RoutineWriteResult> startRoutineItem(
+    String itemId, {
+    DateTime? occurrenceDate,
+  }) async {
     final targetIndex = state.items.indexWhere((e) => e.id == itemId);
     if (targetIndex != -1) {
       final item = state.items[targetIndex];
       if (item.blockType == RoutineBlockType.flexibleTask) {
-        return await startFlexibleTask(itemId);
+        return await startFlexibleTask(itemId, occurrenceDate: occurrenceDate);
       }
       if (item.blockType == RoutineBlockType.trackerTask) {
         return await startTrackerTask(item);
@@ -2006,10 +2010,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       status: RoutineStatus.active,
       source: 'routine',
       action: 'start',
+      occurrenceDate: occurrenceDate,
     );
   }
 
-  Future<RoutineWriteResult> completeRoutineItem(String itemId) async {
+  Future<RoutineWriteResult> completeRoutineItem(
+    String itemId, {
+    DateTime? occurrenceDate,
+  }) async {
     final targetIndex = state.items.indexWhere((e) => e.id == itemId);
     if (targetIndex != -1) {
       final item = state.items[targetIndex];
@@ -2021,25 +2029,30 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       }
       if (item.blockType == RoutineBlockType.checkIn &&
           item.category == RoutineCategory.badHabit) {
-        return await checkIn(itemId, 'Avoided');
+        return await checkIn(itemId, 'Avoided', occurrenceDate: occurrenceDate);
       }
     }
-    return await markCompleted(itemId);
+    return await markCompleted(itemId, occurrenceDate: occurrenceDate);
   }
 
-  Future<RoutineWriteResult> startFlexibleTask(String itemId) async {
+  Future<RoutineWriteResult> startFlexibleTask(
+    String itemId, {
+    DateTime? occurrenceDate,
+  }) async {
     return await _writeOccurrence(
       itemId,
       status: RoutineStatus.active,
       source: 'routine',
       action: 'start',
+      occurrenceDate: occurrenceDate,
     );
   }
 
   Future<RoutineWriteResult> toggleSubtask(
     String itemId,
-    int subtaskIndex,
-  ) async {
+    int subtaskIndex, {
+    DateTime? occurrenceDate,
+  }) async {
     RoutineItem? item;
     for (final candidate in state.items) {
       if (candidate.id == itemId) {
@@ -2058,37 +2071,40 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         ),
       );
     }
+    final anchor = occurrenceDate ?? _occurrenceAnchorDate(itemId, state.selectedDay);
     final completed = {
-      ...?_occurrenceFor(
-        itemId,
-        _occurrenceAnchorDate(itemId, state.selectedDay),
-      )?.completedSubtaskIndexes,
+      ...?_occurrenceFor(itemId, anchor)?.completedSubtaskIndexes,
     };
     if (!completed.add(subtaskIndex)) completed.remove(subtaskIndex);
     return await _writeOccurrence(
       itemId,
       status:
-          _occurrenceFor(
-            itemId,
-            _occurrenceAnchorDate(itemId, state.selectedDay),
-          )?.status ??
+          _occurrenceFor(itemId, anchor)?.status ??
           RoutineStatus.active,
       source: 'routine',
       action: 'toggleSubtask',
       completedSubtaskIndexes: completed.toList()..sort(),
+      occurrenceDate: occurrenceDate,
     );
   }
 
-  Future<RoutineWriteResult> markCompleted(String itemId) async {
+  Future<RoutineWriteResult> markCompleted(
+    String itemId, {
+    DateTime? occurrenceDate,
+  }) async {
     return await _writeOccurrence(
       itemId,
       status: RoutineStatus.completed,
       source: 'routine',
       action: 'complete',
+      occurrenceDate: occurrenceDate,
     );
   }
 
-  Future<RoutineWriteResult> markSkipped(String itemId) async {
+  Future<RoutineWriteResult> markSkipped(
+    String itemId, {
+    DateTime? occurrenceDate,
+  }) async {
     try {
       final item = state.items.firstWhere((e) => e.id == itemId);
       if (item.blockType == RoutineBlockType.moneyTask) {
@@ -2105,6 +2121,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       status: RoutineStatus.skipped,
       source: 'routine',
       action: 'skip',
+      occurrenceDate: occurrenceDate,
     );
   }
 
@@ -2128,7 +2145,11 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
   }
 
-  Future<RoutineWriteResult> checkIn(String itemId, String response) async {
+  Future<RoutineWriteResult> checkIn(
+    String itemId,
+    String response, {
+    DateTime? occurrenceDate,
+  }) async {
     final normalized = response.toLowerCase();
     final status = normalized == 'relapsed'
         ? RoutineStatus.missed
@@ -2139,6 +2160,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       source: 'checkIn',
       action: 'checkIn',
       note: 'Check-in: $response',
+      occurrenceDate: occurrenceDate,
     );
   }
 
@@ -2243,6 +2265,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     required DateTime date,
     required int startMinute,
     required int durationMinutes,
+    DateTime? occurrenceDate,
   }) async {
     _requireOwnerUid();
     final targetIndex = state.items.indexWhere((e) => e.id == itemId);
@@ -2274,7 +2297,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       return RoutineWriteResult.validationFailed(validation);
     }
 
-    final anchor = _occurrenceAnchorDate(itemId, state.selectedDay);
+    final anchor = occurrenceDate ?? _occurrenceAnchorDate(itemId, state.selectedDay);
     if (routineLocalDateKey(date) == routineLocalDateKey(anchor)) {
       return await _writeOccurrence(
         itemId,
@@ -2300,23 +2323,31 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     }
   }
 
-  Future<RoutineWriteResult> moveToTomorrow(RoutineItem item) async {
+  Future<RoutineWriteResult> moveToTomorrow(
+    RoutineItem item, {
+    DateTime? occurrenceDate,
+  }) async {
     return await moveItem(
       itemId: item.id,
       date: TimelineUtils.dateOnly(DateTime.now()).add(const Duration(days: 1)),
       startMinute: item.startMinute,
       durationMinutes: item.durationMinutes,
+      occurrenceDate: occurrenceDate,
     );
   }
 
-  Future<RoutineWriteResult> makeTinyVersion(RoutineItem item) async {
+  Future<RoutineWriteResult> makeTinyVersion(
+    RoutineItem item, {
+    DateTime? occurrenceDate,
+  }) async {
     final tinyDuration = item.durationMinutes.clamp(5, 10);
     return await _writeOccurrence(
       item.id,
       status: RoutineStatus.moved,
       source: 'routine',
       action: 'makeTiny',
-      movedToDateKey: routineLocalDateKey(state.selectedDay),
+      occurrenceDate: occurrenceDate,
+      movedToDateKey: routineLocalDateKey(occurrenceDate ?? state.selectedDay),
       movedStartMinute: item.startMinute,
       movedEndMinute: (item.startMinute + tinyDuration).clamp(1, 1440),
       displayTitleOverride: item.title.startsWith('[Tiny]')
@@ -2401,6 +2432,63 @@ final filteredRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
   final state = ref.watch(routineNotifierProvider);
   final primary = TimelineUtils.filterItems(items, state.selectedPrimaryFilter);
   return RoutineFilters.applyCategory(primary, state.selectedCategoryFilter);
+});
+
+/// Occurrence-aware entries for the selected day, including stable instanceIds.
+/// Prefer this over [filteredRoutineItemsProvider] for the live timeline.
+final selectedDayRoutineEntriesProvider = Provider<List<RoutineDayEntry>>((
+  ref,
+) {
+  final state = ref.watch(routineNotifierProvider);
+  final day = state.selectedDay;
+  final entries = RoutineOccurrenceProjector.entriesForDay(
+    state.items,
+    state.occurrences,
+    day,
+  );
+  return entries
+      .map(
+        (entry) =>
+            entry.item.hasConflict || entry.item.conflictMessage != null
+                ? RoutineDayEntry(
+                    item: entry.item.copyWith(
+                      hasConflict: false,
+                      clearConflict: true,
+                    ),
+                    instanceId: entry.instanceId,
+                    templateId: entry.templateId,
+                    occurrenceDateKey: entry.occurrenceDateKey,
+                    displayDateKey: entry.displayDateKey,
+                    occurrenceId: entry.occurrenceId,
+                    kind: entry.kind,
+                  )
+                : entry,
+      )
+      .toList(growable: false)
+    ..sort((a, b) => a.item.startMinute.compareTo(b.item.startMinute));
+});
+
+/// Filtered occurrence-aware entries for the selected day.
+/// Apply primary and category filters, preserving stable instanceIds.
+final filteredRoutineEntriesProvider = Provider<List<RoutineDayEntry>>((ref) {
+  final entries = ref.watch(selectedDayRoutineEntriesProvider);
+  final state = ref.watch(routineNotifierProvider);
+  final primaryFiltered = entries.where((entry) {
+    final filtered = TimelineUtils.filterItems(
+      [entry.item],
+      state.selectedPrimaryFilter,
+    );
+    return filtered.isNotEmpty;
+  }).toList(growable: false);
+  if (state.selectedCategoryFilter == 'all') return primaryFiltered;
+  return primaryFiltered
+      .where(
+        (entry) => RoutineFilters._matchesCategory(
+          entry.item,
+          state.selectedCategoryFilter,
+        ),
+      )
+      .toList(growable: false);
 });
 
 final todayRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {

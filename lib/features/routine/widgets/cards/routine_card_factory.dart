@@ -23,6 +23,7 @@ class RoutineCardFactory {
     bool isFront = true,
     bool hasOverlap = false,
     VoidCallback? onTap,
+    DateTime? occurrenceDate,
   }) {
     return switch (item.blockType) {
       RoutineBlockType.hardBlock => HardBlockCard(
@@ -32,6 +33,7 @@ class RoutineCardFactory {
         isFront: isFront,
         hasOverlap: hasOverlap,
         onTap: onTap,
+        occurrenceDate: occurrenceDate,
       ),
       RoutineBlockType.softBlock => SoftBlockCard(
         item: item,
@@ -40,6 +42,7 @@ class RoutineCardFactory {
         isFront: isFront,
         hasOverlap: hasOverlap,
         onTap: onTap,
+        occurrenceDate: occurrenceDate,
       ),
       RoutineBlockType.flexibleTask => FlexibleTaskCard(
         item: item,
@@ -48,6 +51,7 @@ class RoutineCardFactory {
         isFront: isFront,
         hasOverlap: hasOverlap,
         onTap: onTap,
+        occurrenceDate: occurrenceDate,
       ),
       RoutineBlockType.trackerTask => TrackerTaskCard(
         item: item,
@@ -56,6 +60,7 @@ class RoutineCardFactory {
         isFront: isFront,
         hasOverlap: hasOverlap,
         onTap: onTap,
+        occurrenceDate: occurrenceDate,
       ),
       RoutineBlockType.checkIn => CheckInCard(
         item: item,
@@ -64,6 +69,7 @@ class RoutineCardFactory {
         isFront: isFront,
         hasOverlap: hasOverlap,
         onTap: onTap,
+        occurrenceDate: occurrenceDate,
       ),
       RoutineBlockType.moneyTask => MoneyTaskCard(
         item: item,
@@ -72,6 +78,7 @@ class RoutineCardFactory {
         isFront: isFront,
         hasOverlap: hasOverlap,
         onTap: onTap,
+        occurrenceDate: occurrenceDate,
       ),
     };
   }

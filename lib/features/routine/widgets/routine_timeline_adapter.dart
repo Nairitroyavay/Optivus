@@ -6,14 +6,28 @@ import 'package:optivus/core/timeline/timeline_visual_models.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/timeline_layout.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/features/routine/models/routine_day_entry.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 import 'package:optivus/features/routine/widgets/routine_time_ruler.dart';
 
 /// Item representation for routine timeline positioning.
+///
+/// The [id] is [RoutineDayEntry.instanceId] — NOT [RoutineItem.id] (the
+/// template ID). This ensures that two instances of the same template (e.g.
+/// an overnight continuation and the native same-day segment) receive
+/// different keys and never collide in the Flutter widget tree.
 class RoutineTimelineItem implements TimelineVisualItem, TimelineInterval {
-  final RoutineItem item;
+  /// The occurrence-aware day entry this item was built from.
+  final RoutineDayEntry entry;
+
+  /// Convenience accessor for the display-ready RoutineItem.
+  RoutineItem get item => entry.item;
+
+  /// Unique display-instance identity (= [RoutineDayEntry.instanceId]).
+  /// Never equals a raw template ID.
   @override
   final String id;
+
   @override
   final int startMinute;
   @override
@@ -24,7 +38,7 @@ class RoutineTimelineItem implements TimelineVisualItem, TimelineInterval {
   final int priority;
 
   const RoutineTimelineItem({
-    required this.item,
+    required this.entry,
     required this.id,
     required this.startMinute,
     required this.endMinute,
@@ -33,7 +47,7 @@ class RoutineTimelineItem implements TimelineVisualItem, TimelineInterval {
   });
 
   RoutineTimelineItem copyWith({
-    RoutineItem? item,
+    RoutineDayEntry? entry,
     String? id,
     int? startMinute,
     int? endMinute,
@@ -41,7 +55,7 @@ class RoutineTimelineItem implements TimelineVisualItem, TimelineInterval {
     int? priority,
   }) {
     return RoutineTimelineItem(
-      item: item ?? this.item,
+      entry: entry ?? this.entry,
       id: id ?? this.id,
       startMinute: startMinute ?? this.startMinute,
       endMinute: endMinute ?? this.endMinute,
@@ -50,6 +64,7 @@ class RoutineTimelineItem implements TimelineVisualItem, TimelineInterval {
     );
   }
 }
+
 
 /// An atomic interval with overlapping items on the timeline.
 typedef RoutineOverlapRegion = TimelineOverlapRegion;
@@ -93,7 +108,7 @@ class RoutinePreparedTimelineLayout {
 
   static RoutinePreparedTimelineLayout prepare({
     required BuildContext context,
-    required List<RoutineItem> rawItems,
+    required List<RoutineDayEntry> rawItems,
     required TimelineLayout timelineLayout,
     required double availableWidth,
     int? selectedDay,
@@ -101,9 +116,10 @@ class RoutinePreparedTimelineLayout {
     final textScaler = MediaQuery.textScalerOf(context);
     final textDirection = Directionality.of(context);
 
-    // 1. Filter and normalize items in the visible range
+    // 1. Filter and normalize entries in the visible range
     final activeItems = <RoutineTimelineItem>[];
-    for (final item in rawItems) {
+    for (final entry in rawItems) {
+      final item = entry.item;
       final normEnd = TimelineUtils.normalizedEndMinute(item);
       final start = item.startMinute;
       if (normEnd <= timelineLayout.visibleStartMinute ||
@@ -115,8 +131,8 @@ class RoutinePreparedTimelineLayout {
 
       activeItems.add(
         RoutineTimelineItem(
-          item: item,
-          id: item.id,
+          entry: entry,
+          id: entry.instanceId, // ← instanceId, NOT item.id
           startMinute: visibleStart,
           endMinute: visibleEnd,
           minHeight: 88.0,
@@ -124,6 +140,15 @@ class RoutinePreparedTimelineLayout {
         ),
       );
     }
+
+    assert(
+      () {
+        final ids = activeItems.map((e) => e.id).toSet();
+        return ids.length == activeItems.length;
+      }(),
+      'RoutinePreparedTimelineLayout.prepare: duplicate instanceIds detected. '
+      'This is a bug in RoutineOccurrenceProjector.entriesForDay().',
+    );
 
     // 2. Build atomic regions and components
     final regions = buildRoutineOverlapRegions(activeItems);

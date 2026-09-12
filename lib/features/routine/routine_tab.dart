@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
-import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/features/routine/models/routine_day_entry.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/base_timeline_screen.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/classes_base_setup_screen.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/eating_base_setup_screen.dart';
@@ -143,11 +143,12 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
     final showCurrentTimeLine = state.showCurrentTimeLine;
     final compactMode = state.compactMode;
     final isToday = TimelineUtils.isToday(selectedDay);
-    final filteredItems = ref.watch(filteredRoutineItemsProvider);
+    final filteredEntries = ref.watch(filteredRoutineEntriesProvider);
 
     // Sort by start time
-    final sortedItems = List<RoutineItem>.from(filteredItems)
+    final sortedEntries = List<RoutineDayEntry>.from(filteredEntries)
       ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
+    final sortedItems = sortedEntries.map((e) => e.item).toList();
 
     // Calculate visible range
     final layout = TimelineUtils.calculateVisibleRange(
@@ -188,7 +189,7 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                 Expanded(
                   child: state.loading
                       ? const Center(child: CircularProgressIndicator())
-                      : sortedItems.isEmpty
+                      : sortedEntries.isEmpty
                       ? Stack(
                           children: [
                             RoutineTimelineViewport(
@@ -204,7 +205,7 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                           ],
                         )
                       : RoutineTimelineViewport(
-                          items: sortedItems,
+                          items: sortedEntries,
                           layout: layout,
                           isToday: isToday,
                           showCurrentTimeLine: showCurrentTimeLine,

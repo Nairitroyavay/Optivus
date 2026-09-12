@@ -11,6 +11,7 @@ class FlexibleTaskCard extends ConsumerWidget {
   final bool isFront;
   final bool hasOverlap;
   final VoidCallback? onTap;
+  final DateTime? occurrenceDate;
 
   const FlexibleTaskCard({
     super.key,
@@ -20,6 +21,7 @@ class FlexibleTaskCard extends ConsumerWidget {
     this.isFront = true,
     this.hasOverlap = false,
     this.onTap,
+    this.occurrenceDate,
   });
 
   @override
@@ -31,6 +33,7 @@ class FlexibleTaskCard extends ConsumerWidget {
       isFront: isFront,
       hasOverlap: hasOverlap,
       onTap: onTap,
+      occurrenceDate: occurrenceDate,
     );
   }
 }

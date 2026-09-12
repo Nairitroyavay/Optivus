@@ -7,9 +7,11 @@ import 'package:optivus/core/timeline/timeline_visual_models.dart';
 import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/models/routine_occurrence.dart';
 import 'package:optivus/models/timeline_layout.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/features/routine/models/routine_day_entry.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 import 'package:optivus/features/routine/widgets/routine_time_ruler.dart';
 import 'package:optivus/features/routine/widgets/routine_current_time_line.dart';
@@ -28,22 +30,40 @@ import 'package:optivus/features/routine/widgets/routine_timeline_adapter.dart';
 /// - Content-aware height measurement with constraint-based timeline stretching.
 /// - Zero conflict UX: no conflict badges, warnings, or blocking dialogs.
 class RoutineTimelineViewport extends ConsumerStatefulWidget {
-  final List<RoutineItem> items;
+  final List<RoutineDayEntry> items;
   final TimelineLayout layout;
   final bool isToday;
   final bool showCurrentTimeLine;
   final ValueChanged<RoutineItem>? onCardTap;
   final int? selectedDay;
 
-  const RoutineTimelineViewport({
+  RoutineTimelineViewport({
     super.key,
-    required this.items,
+    required List<dynamic> items,
     required this.layout,
     required this.isToday,
     this.showCurrentTimeLine = true,
     this.onCardTap,
     this.selectedDay,
-  });
+  }) : items = List<RoutineDayEntry>.unmodifiable(
+          items.map((e) {
+            if (e is RoutineDayEntry) return e;
+            if (e is RoutineItem) {
+              final dateKey = routineLocalDateKey(e.date ?? DateTime.now());
+              return RoutineDayEntry(
+                item: e,
+                instanceId: e.id,
+                templateId: e.id,
+                occurrenceDateKey: dateKey,
+                displayDateKey: dateKey,
+                kind: RoutineDayEntryKind.scheduled,
+              );
+            }
+            throw ArgumentError(
+              'RoutineTimelineViewport expects List<RoutineDayEntry> or List<RoutineItem>, got ${e.runtimeType}',
+            );
+          }),
+        );
 
   @override
   ConsumerState<RoutineTimelineViewport> createState() =>
@@ -103,9 +123,18 @@ class RoutineTimelineViewportState
   }
 
   void _scrollToCurrentTime() {
-    if (!widget.isToday ||
-        !_scrollController.hasClients ||
-        _hasAutoScrolledForToday) {
+    if (!mounted || !widget.isToday || _hasAutoScrolledForToday) {
+      return;
+    }
+    if (!_scrollController.hasClients) {
+      return;
+    }
+    final position = _scrollController.position;
+    if (!position.hasContentDimensions) {
+      // Layout not yet complete; retry after the next frame once only.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToCurrentTime();
+      });
       return;
     }
 
@@ -121,11 +150,12 @@ class RoutineTimelineViewportState
       return;
     }
 
+    // Set AFTER all guard clauses pass.
     _hasAutoScrolledForToday = true;
 
     final targetY = _lastScale!.yForMinute(currentMinute);
     final targetScroll = targetY - 100;
-    final maxScroll = _scrollController.position.maxScrollExtent;
+    final maxScroll = position.maxScrollExtent;
 
     _scrollController.animateTo(
       targetScroll.clamp(0.0, maxScroll).toDouble(),
@@ -286,8 +316,10 @@ class RoutineTimelineViewportState
         widget.isToday &&
         TimelineUtils.isMinuteInsideItem(item.item, currentMinute);
 
-    final isPending = routineState.pendingItemIds.contains(item.id);
-    final failedIntent = routineState.failedIntentsByItemId[item.id];
+    // Pending / failed state is tracked by template ID, not by instanceId.
+    final templateId = item.entry.templateId;
+    final isPending = routineState.pendingItemIds.contains(templateId);
+    final failedIntent = routineState.failedIntentsByItemId[templateId];
 
     return Positioned(
       key: ValueKey('routine-timeline-card-${item.id}'),
@@ -322,6 +354,9 @@ class RoutineTimelineViewportState
                   railHeight: exactH,
                   isFront: isFront,
                   hasOverlap: overlaps,
+                  occurrenceDate: parseRoutineLocalDateKey(
+                    item.entry.occurrenceDateKey,
+                  ),
                   onTap: isPending
                       ? null
                       : () {
@@ -385,7 +420,7 @@ class RoutineTimelineViewportState
                           behavior: HitTestBehavior.opaque,
                           onTap: () => ref
                               .read(routineNotifierProvider.notifier)
-                              .retryFailedOperation(item.id),
+                              .retryFailedOperation(templateId),
                           child: Container(
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
@@ -413,11 +448,11 @@ class RoutineTimelineViewportState
                                 RoutineWriteAction.create) {
                               ref
                                   .read(routineNotifierProvider.notifier)
-                                  .discardFailedCreate(item.id);
+                                  .discardFailedCreate(templateId);
                             } else {
                               ref
                                   .read(routineNotifierProvider.notifier)
-                                  .dismissFailedOperation(item.id);
+                                  .dismissFailedOperation(templateId);
                             }
                           },
                           child: Container(

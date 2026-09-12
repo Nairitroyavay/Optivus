@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/routine_occurrence.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/features/routine/models/routine_day_entry.dart';
 
 class RoutineMaterializer {
   RoutineMaterializer._();
@@ -100,7 +101,13 @@ class RoutineMaterializer {
 class RoutineOccurrenceProjector {
   const RoutineOccurrenceProjector._();
 
-  static List<RoutineItem> itemsForDay(
+  /// Returns occurrence-aware entries for [day], each with a stable
+  /// [RoutineDayEntry.instanceId] that is unique even when the same template
+  /// appears twice (overnight continuation + native, or moved-in + native).
+  ///
+  /// This is the authoritative source for the live timeline. All existing
+  /// callers that only need [RoutineItem] should use [itemsForDay].
+  static List<RoutineDayEntry> entriesForDay(
     List<RoutineItem> templates,
     List<RoutineOccurrenceRecord> occurrences,
     DateTime day,
@@ -111,21 +118,42 @@ class RoutineOccurrenceProjector {
         '${occurrence.routineItemId}\u001f${occurrence.occurrenceDateKey}':
             occurrence,
     };
-    final result = <RoutineItem>[];
+    final result = <RoutineDayEntry>[];
 
     for (final item in RoutineMaterializer.itemsForDay(templates, day)) {
-      final occurrenceDateKey = item.isContinuation
+      final isContinuation = item.isContinuation;
+      final occDateKey = isContinuation
           ? routineLocalDateKey(day.subtract(const Duration(days: 1)))
           : dateKey;
-      final occurrence =
-          byTemplateAndDate['${item.id}\u001f$occurrenceDateKey'];
+      final occurrence = byTemplateAndDate['${item.id}\u001f$occDateKey'];
       if (occurrence?.movedToDateKey != null &&
           occurrence!.movedToDateKey != dateKey) {
         continue;
       }
-      result.add(_applyOccurrence(item, occurrence, day));
+      final kind = isContinuation
+          ? RoutineDayEntryKind.continuation
+          : RoutineDayEntryKind.scheduled;
+      final occId = occurrence?.id;
+      final instanceId = RoutineDayEntry.deriveInstanceId(
+        kind: kind,
+        templateId: item.id,
+        occurrenceDateKey: occDateKey,
+        occurrenceId: occId,
+      );
+      result.add(
+        RoutineDayEntry(
+          item: _applyOccurrence(item, occurrence, day),
+          instanceId: instanceId,
+          templateId: item.id,
+          occurrenceDateKey: occDateKey,
+          displayDateKey: dateKey,
+          occurrenceId: occId,
+          kind: kind,
+        ),
+      );
     }
 
+    // Moved-in occurrences from other dates.
     for (final occurrence in occurrences) {
       if (occurrence.movedToDateKey != dateKey ||
           occurrence.occurrenceDateKey == dateKey) {
@@ -139,10 +167,37 @@ class RoutineOccurrenceProjector {
         }
       }
       if (template == null) continue;
-      result.add(_applyOccurrence(template, occurrence, day));
+      final instanceId = RoutineDayEntry.deriveInstanceId(
+        kind: RoutineDayEntryKind.movedIn,
+        templateId: template.id,
+        occurrenceDateKey: occurrence.occurrenceDateKey,
+        occurrenceId: occurrence.id,
+      );
+      result.add(
+        RoutineDayEntry(
+          item: _applyOccurrence(template, occurrence, day),
+          instanceId: instanceId,
+          templateId: template.id,
+          occurrenceDateKey: occurrence.occurrenceDateKey,
+          displayDateKey: dateKey,
+          occurrenceId: occurrence.id,
+          kind: RoutineDayEntryKind.movedIn,
+        ),
+      );
     }
     return result;
   }
+
+  static List<RoutineItem> itemsForDay(
+    List<RoutineItem> templates,
+    List<RoutineOccurrenceRecord> occurrences,
+    DateTime day,
+  ) {
+    return entriesForDay(templates, occurrences, day)
+        .map((e) => e.item)
+        .toList(growable: false);
+  }
+
 
   static RoutineItem _applyOccurrence(
     RoutineItem item,
