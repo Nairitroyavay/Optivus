@@ -156,7 +156,7 @@ class ClassRoutineBlock {
     this.notes = '',
     required this.startMinute,
     required this.endMinute,
-    this.repeatDays = const [1],
+    this.repeatDays = const [],
     this.icon,
     this.color,
     this.hasTopTape = false,

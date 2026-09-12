@@ -2511,6 +2511,12 @@ class ControlledPreviewResolver implements UploadedAssetPreviewResolver {
     if (future != null) return future;
     return null;
   }
+
+  @override
+  Future<Uri?> resolveKey({
+    required String uid,
+    required String objectKey,
+  }) async => null;
 }
 
 class CleanupFailingRepository extends FakeUploadedAssetRepository {

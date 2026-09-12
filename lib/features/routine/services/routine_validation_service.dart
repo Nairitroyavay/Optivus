@@ -1,16 +1,7 @@
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/routine_occurrence.dart';
-import 'package:optivus/features/routine/domain/routine_conflict.dart';
 
-enum RoutineValidationErrorType {
-  none,
-  invalidTime,
-  overlappingBlocking,
-  missingData,
-  duplicateId,
-  batchConflict,
-  staleConflict,
-}
+enum RoutineValidationErrorType { none, invalidTime, missingData, duplicateId }
 
 enum RoutineValidationOperation { create, update, move, batch }
 
@@ -41,20 +32,17 @@ class RoutineValidationResult {
   final RoutineValidationErrorType errorType;
   final String? userSafeMessage;
   final List<String> affectedItemIds;
-  final List<RoutineConflict> conflicts;
 
   const RoutineValidationResult.valid()
     : isValid = true,
       errorType = RoutineValidationErrorType.none,
       userSafeMessage = null,
-      affectedItemIds = const [],
-      conflicts = const [];
+      affectedItemIds = const [];
 
   const RoutineValidationResult.invalid({
     required this.errorType,
     required this.userSafeMessage,
     this.affectedItemIds = const [],
-    this.conflicts = const [],
   }) : isValid = false;
 }
 

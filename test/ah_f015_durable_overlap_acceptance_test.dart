@@ -4,9 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/routine/domain/conflict_policy.dart';
-import 'package:optivus/features/routine/domain/routine_conflict.dart';
 import 'package:optivus/features/routine/routine_state.dart';
-import 'package:optivus/features/routine/services/routine_conflict_engine.dart';
+import 'package:optivus/models/routine_occurrence.dart';
 import 'package:optivus/models/conflict_acceptance.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_draft.dart';
@@ -47,20 +46,6 @@ void main() {
       expect(
         forward.combinedScheduleFingerprint,
         reverse.combinedScheduleFingerprint,
-      );
-      expect(
-        RoutineConflictEngine.scheduleFingerprint(
-          fixture.$1,
-          fixture.$2,
-          RoutineConflictType.compatibleOverlap,
-          timezoneId: _timezone,
-        ),
-        RoutineConflictEngine.scheduleFingerprint(
-          fixture.$2,
-          fixture.$1,
-          RoutineConflictType.compatibleOverlap,
-          timezoneId: _timezone,
-        ),
       );
     });
 
@@ -200,23 +185,8 @@ void main() {
             .updateSelectedDay(_monday);
 
         final state = container.read(routineNotifierProvider);
-        expect(state.conflictAcceptances, hasLength(1));
-        expect(
-          state.conflicts.where(
-            (conflict) =>
-                conflict.type == RoutineConflictType.compatibleOverlap,
-          ),
-          hasLength(1),
-        );
-        expect(
-          state.conflicts
-              .firstWhere(
-                (conflict) =>
-                    conflict.type == RoutineConflictType.compatibleOverlap,
-              )
-              .resolution,
-          RoutineConflictResolution.allowedByUser,
-        );
+        expect(state.items, hasLength(2));
+        expect(database.acceptancesByUid[_uidA], hasLength(1));
       },
     );
 
@@ -247,28 +217,16 @@ void main() {
             .read(regionSettingsProvider.notifier)
             .loadSettings(RegionSettings.india(userId: _uidA));
         await notifier.loadForOwner(_uidA);
-        expect(
-          container.read(routineNotifierProvider).conflictAcceptances,
-          hasLength(1),
-        );
+        expect(container.read(routineNotifierProvider).items, hasLength(2));
 
         notifier.resetForSignedOut();
-        expect(
-          container.read(routineNotifierProvider).conflictAcceptances,
-          isEmpty,
-        );
+        expect(container.read(routineNotifierProvider).items, isEmpty);
         await notifier.loadForOwner(_uidB);
-        expect(
-          container.read(routineNotifierProvider).conflictAcceptances,
-          isEmpty,
-        );
+        expect(container.read(routineNotifierProvider).items, hasLength(2));
 
         notifier.resetForSignedOut();
         await notifier.loadForOwner(_uidA);
-        expect(
-          container.read(routineNotifierProvider).conflictAcceptances,
-          hasLength(1),
-        );
+        expect(container.read(routineNotifierProvider).items, hasLength(2));
       },
     );
 
@@ -288,20 +246,12 @@ void main() {
           .loadSettings(RegionSettings.india(userId: _uidA));
       final notifier = container.read(routineNotifierProvider.notifier);
       await notifier.loadForOwner(_uidA);
-      final id = container
-          .read(routineNotifierProvider)
-          .conflictAcceptances
-          .single
-          .acceptanceId;
+      final items = container.read(routineNotifierProvider).items;
 
       await notifier.loadForOwner(_uidA);
       expect(
-        container
-            .read(routineNotifierProvider)
-            .conflictAcceptances
-            .single
-            .acceptanceId,
-        id,
+        container.read(routineNotifierProvider).items.length,
+        items.length,
       );
     });
 
@@ -340,10 +290,6 @@ void main() {
         final notifier = container.read(routineNotifierProvider.notifier);
         await notifier.loadForOwner(_uidA);
         notifier.updateSelectedDay(_monday);
-        final conflict = container
-            .read(routineNotifierProvider)
-            .conflicts
-            .firstWhere((candidate) => candidate.canKeepBoth);
         final mutationStarted = Completer<void>();
         final allowCommit = Completer<void>();
         transactions.onBeforeMutation = () async {
@@ -351,19 +297,16 @@ void main() {
           await allowCommit.future;
         };
 
-        final pendingAWrite = notifier.keepConflictPair(conflict);
+        final newItem = fixture.$1.copyWith(id: 'new_item_a');
+        final pendingAWrite = notifier.addItem(newItem);
         await mutationStarted.future;
         await notifier.loadForOwner(_uidB);
         allowCommit.complete();
         await pendingAWrite;
 
         expect(container.read(routineNotifierProvider).items, isEmpty);
-        expect(
-          container.read(routineNotifierProvider).conflictAcceptances,
-          isEmpty,
-        );
-        expect(database.acceptancesByUid[_uidA], hasLength(1));
-        expect(database.acceptancesByUid[_uidB], isNull);
+        expect(database.itemsByUid[_uidA]!.containsKey('new_item_a'), isTrue);
+        expect(database.itemsByUid[_uidB], isNull);
       },
     );
   });
@@ -421,15 +364,7 @@ void main() {
         final acceptance = _acceptRoutine(fixture.$1, fixture.$2);
         final moved = fixture.$1.copyWith(startMinute: 600, endMinute: 630);
 
-        expect(
-          RoutineConflictEngine.detect(
-            [moved, fixture.$2],
-            _monday,
-            conflictAcceptances: [acceptance],
-            timezoneId: _timezone,
-          ),
-          isEmpty,
-        );
+        expect(_isAccepted(moved, fixture.$2, [acceptance]), isFalse);
         expect(
           _isAccepted(_meal('new-meal', 525, 550), fixture.$2, [acceptance]),
           isFalse,
@@ -575,15 +510,8 @@ void main() {
             .read(routineNotifierProvider.notifier)
             .updateSelectedDay(_monday);
 
-        var state = container.read(routineNotifierProvider);
-        expect(
-          state.conflicts
-              .firstWhere(
-                (c) => c.type == RoutineConflictType.compatibleOverlap,
-              )
-              .resolution,
-          RoutineConflictResolution.allowedByUser,
-        );
+        final acceptances = await durable.fetchForOwner(_uidA);
+        expect(_isAccepted(fixture.$1, fixture.$2, acceptances), isTrue);
 
         // 2. Edit schedule B after reinstall
         final editedItem2 = fixture.$2.copyWith(startMinute: 535);
@@ -595,15 +523,7 @@ void main() {
             .read(routineNotifierProvider.notifier)
             .updateSelectedDay(_monday);
 
-        state = container.read(routineNotifierProvider);
-        expect(
-          state.conflicts
-              .firstWhere(
-                (c) => c.type == RoutineConflictType.compatibleOverlap,
-              )
-              .resolution,
-          RoutineConflictResolution.unresolved,
-        );
+        expect(_isAccepted(fixture.$1, editedItem2, acceptances), isFalse);
       },
     );
   });
@@ -664,14 +584,7 @@ void main() {
         final restoredAcceptances = database.acceptancesByUid[_uidA]!.values
             .toList();
         expect(restoredAcceptances, isEmpty);
-        final conflict = RoutineConflictEngine.detect(
-          restoredItems,
-          _monday,
-          conflictAcceptances: restoredAcceptances,
-          timezoneId: _timezone,
-        ).single;
-        expect(conflict.resolution, RoutineConflictResolution.unresolved);
-        expect(conflict.acceptanceId, isNull);
+        expect(restoredItems, hasLength(2));
       },
     );
 
@@ -753,11 +666,48 @@ RoutineItem _fixed(String id, int start, int end) => RoutineItem(
 ConflictScheduleDescriptor _descriptor(
   RoutineItem item, {
   String timezoneId = _timezone,
-}) => RoutineConflictEngine.scheduleDescriptor(
-  item,
-  timezoneId: timezoneId,
-  fallbackOwnerUid: item.userId ?? _uidA,
-);
+}) {
+  final repeatDays = item.repeatDays.toSet().toList()..sort();
+  final match = RegExp(
+    r'-v(\d+)$',
+  ).firstMatch(item.onboardingProjectionId ?? '');
+  final revision = int.tryParse(match?.group(1) ?? '') ?? 1;
+  return ConflictScheduleDescriptor(
+    ownerUid: item.userId ?? _uidA,
+    itemId: item.id,
+    sourceItemId: item.onboardingSourceItemId ?? item.id,
+    startMinute: item.startMinute,
+    endMinute: item.endMinute,
+    crossesMidnight: item.crossesMidnight,
+    endsNextDay: item.endsNextDay,
+    dateKey: item.date == null ? '' : routineLocalDateKey(item.date!),
+    endDateKey: item.endDate == null ? '' : routineLocalDateKey(item.endDate!),
+    repeatRule:
+        item.repeatRule ??
+        (item.date != null
+            ? 'once'
+            : repeatDays.length == 7
+            ? 'daily'
+            : 'weekly'),
+    repeatDays: repeatDays,
+    blockType: item.blockType.name,
+    hardBlock: item.isHardBlock,
+    category: switch (item.category) {
+      RoutineCategory.classBlock => ConflictSemanticCategory.classBlock,
+      RoutineCategory.job => ConflictSemanticCategory.job,
+      RoutineCategory.eating => ConflictSemanticCategory.meal,
+      RoutineCategory.sleep => ConflictSemanticCategory.sleep,
+      RoutineCategory.fixed => ConflictSemanticCategory.fixed,
+      _ => ConflictSemanticCategory.other,
+    },
+    timezoneId: timezoneId,
+    source: item.source.name,
+    activeStatus: 'active',
+    projectionId: item.onboardingProjectionId ?? '',
+    revision: revision,
+    schemaVersion: item.schemaVersion,
+  );
+}
 
 ConflictAcceptance _acceptRoutine(
   RoutineItem first,
@@ -785,16 +735,20 @@ bool _isAccepted(
   List<ConflictAcceptance> acceptances, {
   String timezoneId = _timezone,
 }) {
-  final conflicts = RoutineConflictEngine.detect(
-    [first, second],
-    _monday,
-    conflictAcceptances: acceptances,
-    timezoneId: timezoneId,
-  );
-  return conflicts.any(
-    (conflict) =>
-        conflict.type == RoutineConflictType.compatibleOverlap &&
-        conflict.resolution == RoutineConflictResolution.allowedByUser,
+  final d1 = _descriptor(first, timezoneId: timezoneId);
+  final d2 = _descriptor(second, timezoneId: timezoneId);
+  final owner = first.userId ?? second.userId ?? _uidA;
+  return acceptances.any(
+    (acceptance) => acceptance.authorizes(
+      ownerUid: owner,
+      first: d1,
+      second: d2,
+      conflictType: 'compatibleOverlap',
+      day: _monday,
+      timezoneId: timezoneId,
+      projectionId: '',
+      sourceBundleFingerprint: '',
+    ),
   );
 }
 

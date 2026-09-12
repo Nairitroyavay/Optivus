@@ -168,7 +168,7 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
       );
     }
 
-    final freeGap = _largestFreeGap(items);
+    final freeGap = calculateLargestFreeGap(items);
     if (freeGap.duration >= 15) {
       suggestions.add(
         _RoutineSuggestion(
@@ -225,33 +225,38 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
 
     return suggestions;
   }
+}
 
-  _FreeGap _largestFreeGap(List<RoutineItem> items) {
-    final sorted =
-        items
-            .where(
-              (item) =>
-                  item.allowedOverlaps.isEmpty && item.durationMinutes > 0,
-            )
-            .toList()
-          ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
-    var cursor = 6 * 60;
-    var best = const _FreeGap(18 * 60, 18 * 60);
-    for (final item in sorted) {
-      if (item.startMinute > cursor &&
-          item.startMinute - cursor > best.duration) {
-        best = _FreeGap(cursor, item.startMinute);
-      }
-      final end = TimelineUtils.normalizedEndMinute(
-        item,
-      ).clamp(0, 24 * 60).toInt();
-      if (end > cursor) cursor = end;
+@visibleForTesting
+class FreeGap {
+  final int start;
+  final int end;
+
+  const FreeGap(this.start, this.end);
+
+  int get duration => end - start;
+}
+
+@visibleForTesting
+FreeGap calculateLargestFreeGap(List<RoutineItem> items) {
+  final sorted = items.where((item) => item.durationMinutes > 0).toList()
+    ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
+  var cursor = 6 * 60;
+  var best = const FreeGap(18 * 60, 18 * 60);
+  for (final item in sorted) {
+    if (item.startMinute > cursor &&
+        item.startMinute - cursor > best.duration) {
+      best = FreeGap(cursor, item.startMinute);
     }
-    if (23 * 60 - cursor > best.duration) {
-      best = _FreeGap(cursor, 23 * 60);
-    }
-    return best;
+    final end = TimelineUtils.normalizedEndMinute(
+      item,
+    ).clamp(0, 24 * 60).toInt();
+    if (end > cursor) cursor = end;
   }
+  if (23 * 60 - cursor > best.duration) {
+    best = FreeGap(cursor, 23 * 60);
+  }
+  return best;
 }
 
 class _RoutineSuggestion {
@@ -272,15 +277,6 @@ class _RoutineSuggestion {
     required this.accept,
     required this.edit,
   });
-}
-
-class _FreeGap {
-  final int start;
-  final int end;
-
-  const _FreeGap(this.start, this.end);
-
-  int get duration => end - start;
 }
 
 class _SuggestionShell extends StatelessWidget {

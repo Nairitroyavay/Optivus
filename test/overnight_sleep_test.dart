@@ -3,8 +3,6 @@ import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/timeline_layout.dart';
-import 'package:optivus/features/routine/domain/routine_conflict.dart';
-import 'package:optivus/features/routine/services/routine_conflict_engine.dart';
 import 'package:optivus/features/routine/services/routine_materializer.dart';
 
 void main() {
@@ -226,31 +224,6 @@ void main() {
       expect(layout.visibleStartMinute, 0); // clamped max(0, -30) -> 0
       // normalized end is 450. 450 + 30 = 480.
       expect(layout.visibleEndMinute, 480);
-    });
-
-    test('RoutineConflictEngine ignores self-conflict for continuation', () {
-      final sleepStart = makeSleep();
-      final sleepContinuation = sleepStart.copyWith(
-        date: DateTime(2026, 5, 29),
-        startMinute: 0,
-        endMinute: 450,
-        crossesMidnight: false,
-        endsNextDay: false,
-        isContinuation: true,
-      );
-
-      // Even if both somehow end up in the same list (unlikely since day filtered),
-      // they don't overlap in minute time (1350-1890 vs 0-450)
-      final conflicts = RoutineConflictEngine.detect([
-        sleepStart,
-        sleepContinuation,
-      ], DateTime(2026, 5, 29));
-      expect(
-        conflicts
-            .where((c) => c.type == RoutineConflictType.sleepConflict)
-            .isEmpty,
-        isTrue,
-      );
     });
 
     test('base_timeline filter includes continuation sleep items', () {

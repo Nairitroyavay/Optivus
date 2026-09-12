@@ -254,8 +254,9 @@ void main() {
   );
 
   group('computeInitialClassWeekday tests', () {
-    test('returns 1 when blocks list is empty', () {
-      expect(computeInitialClassWeekday([]), 1);
+    test('returns today when blocks list is empty', () {
+      final now = DateTime(2026, 9, 10); // Thursday = weekday 4
+      expect(computeInitialClassWeekday([], now: now), 4);
     });
 
     test('returns today when today has scheduled classes', () {
@@ -286,7 +287,8 @@ void main() {
       expect(computeInitialClassWeekday(blocks, now: now), 3);
     });
 
-    test('ignores out-of-range days and defaults cleanly', () {
+    test('ignores out-of-range days and defaults cleanly to today', () {
+      final now = DateTime(2026, 9, 10); // Thursday = weekday 4
       final blocks = [
         ClassRoutineBlock(
           id: 'b1',
@@ -296,7 +298,7 @@ void main() {
           repeatDays: [0, 8],
         ),
       ];
-      expect(computeInitialClassWeekday(blocks), 1);
+      expect(computeInitialClassWeekday(blocks, now: now), 4);
     });
   });
 

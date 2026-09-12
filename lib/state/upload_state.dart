@@ -234,6 +234,11 @@ abstract interface class UploadedAssetPreviewResolver {
     required String uid,
     required UploadedAsset asset,
   });
+
+  Future<Uri?> resolveKey({
+    required String uid,
+    required String objectKey,
+  });
 }
 
 /// R2 objects are private and the current upload Worker has no authenticated
@@ -246,6 +251,12 @@ class UnavailableUploadedAssetPreviewResolver
   Future<Uri?> resolvePreview({
     required String uid,
     required UploadedAsset asset,
+  }) async => null;
+
+  @override
+  Future<Uri?> resolveKey({
+    required String uid,
+    required String objectKey,
   }) async => null;
 }
 

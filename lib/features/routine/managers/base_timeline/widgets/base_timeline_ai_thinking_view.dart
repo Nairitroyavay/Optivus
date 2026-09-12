@@ -57,12 +57,15 @@ class _BaseTimelineAiThinkingViewState
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 28.0),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Colors.white.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: OptivusColors.borderStandard, width: 1.2),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.15),
+              width: 1.2,
+            ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
+                color: Colors.black.withValues(alpha: 0.2),
                 blurRadius: 24,
                 offset: const Offset(0, 10),
               ),

@@ -21,16 +21,26 @@ class ClassTimelineAdapter
   /// Translates [ClassRoutineBlock] into neutral [TimelineEntry].
   @override
   List<TimelineEntry> toEntries(ClassRoutineBlock block, {bool? isEditable}) {
-    final hasDetails =
-        block.room.isNotEmpty ||
-        block.professor.isNotEmpty ||
-        block.courseCode.isNotEmpty ||
-        block.classType.isNotEmpty;
-    final hasRichDetails =
-        (block.room.isNotEmpty && block.professor.isNotEmpty) ||
-        ((block.courseCode.isNotEmpty || block.classType.isNotEmpty) &&
-            (block.room.isNotEmpty || block.professor.isNotEmpty));
-    final minHeight = hasRichDetails ? 96.0 : (hasDetails ? 76.0 : 60.0);
+    // Content-aware desired/minimum height calculation:
+    // Base title + time range: 56px
+    // + courseCode / classType: 18px
+    // + section: 16px
+    // + room / professor: 18px
+    // + notes: 20px
+    double minHeight = 56.0;
+    if (block.courseCode.isNotEmpty || block.classType.isNotEmpty) {
+      minHeight += 18.0;
+    }
+    if (block.section.isNotEmpty) {
+      minHeight += 16.0;
+    }
+    if (block.room.isNotEmpty || block.professor.isNotEmpty) {
+      minHeight += 18.0;
+    }
+    if (block.notes.isNotEmpty) {
+      minHeight += 20.0;
+    }
+    minHeight = minHeight.clamp(56.0, 130.0);
 
     String? subtitle;
     if (block.room.isNotEmpty) {
@@ -62,9 +72,7 @@ class ClassTimelineAdapter
       accentColor: accent,
       icon: Icons.school_rounded,
       badgeLabel: 'Class',
-      tags: entry.subtitle != null && entry.subtitle!.isNotEmpty
-          ? [entry.subtitle!]
-          : const [],
+      tags: const [], // Never duplicate subtitle or room into tags
     );
   }
 
@@ -82,6 +90,7 @@ class ClassTimelineAdapter
     required BuildContext context,
     required ClassRoutineBlock block,
     required Future<bool> Function(ClassRoutineBlock updated) onSave,
+    Future<bool> Function(ClassRoutineBlock toDelete)? onDelete,
     Color accent = OptivusColors.aquaAccent,
   }) {
     final titleCtrl = TextEditingController(text: block.subject);
@@ -94,7 +103,7 @@ class ClassTimelineAdapter
     var startMinute = block.startMinute;
     var endMinute = block.endMinute;
     final selectedDays = Set<int>.from(
-      block.repeatDays.isEmpty ? [1] : block.repeatDays,
+      block.repeatDays.where((d) => d >= 1 && d <= 7),
     );
     final formKey = GlobalKey<FormState>();
 
@@ -479,6 +488,79 @@ class ClassTimelineAdapter
                       );
                     }),
                   ),
+                  if (onDelete != null) ...[
+                    const SizedBox(height: 24),
+                    const Divider(
+                      color: OptivusColors.borderStandard,
+                      height: 1,
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        key: const Key('timeline-edit-delete-button'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: OptivusColors.danger,
+                          side: BorderSide(
+                            color: OptivusColors.danger.withValues(alpha: 0.5),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        icon: const Icon(
+                          Icons.delete_outline_rounded,
+                          size: 18,
+                        ),
+                        label: const Text(
+                          'Remove class',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        onPressed: () async {
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              backgroundColor: OptivusColors.backgroundBottom,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              title: const Text(
+                                'Remove this class?',
+                                style: TextStyle(
+                                  color: OptivusColors.textPrimary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              content: const Text(
+                                "This only changes the new timetable you're reviewing.\nYour current live timetable isn't affected until you save.",
+                                style: TextStyle(
+                                  color: OptivusColors.textSecondary,
+                                ),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(ctx).pop(false),
+                                  child: const Text('Keep editing'),
+                                ),
+                                FilledButton(
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: OptivusColors.danger,
+                                  ),
+                                  onPressed: () => Navigator.of(ctx).pop(true),
+                                  child: const Text('Remove'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirmed == true && context.mounted) {
+                            Navigator.of(context).pop(true);
+                            await onDelete(block);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
                 ],
               ),
             );

@@ -420,7 +420,7 @@ class RoutineImportCandidateBlock {
       courseCode: map['courseCode'] as String?,
       classType: map['classType'] as String?,
       instructor: (map['instructor'] ?? map['professor']) as String?,
-      sectionLabel: (map['sectionLabel'] ?? map['section']) as String?,
+      sectionLabel: (map['sectionLabel'] ?? map['classSection']) as String?,
       mealCategory: map['mealCategory'] as String?,
       mealSlot: map['mealSlot'] as String?,
       caloriesEstimate: (map['caloriesEstimate'] as num?)?.toDouble(),

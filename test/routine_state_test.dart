@@ -2,8 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/routine_item.dart';
-import 'package:optivus/features/routine/domain/routine_conflict.dart';
-import 'package:optivus/features/routine/services/routine_conflict_engine.dart';
 import 'package:optivus/features/routine/services/routine_materializer.dart';
 
 void main() {
@@ -64,86 +62,6 @@ void main() {
       expect(tuesdayItems.single.startMinute, 0);
       expect(tuesdayItems.single.endMinute, 7 * 60);
     });
-  });
-
-  group('routine conflicts', () {
-    test('compatible hard blocks require explicit acceptance', () {
-      final conflicts = RoutineConflictEngine.detect([
-        RoutineItem(
-          id: 'class',
-          title: 'Class',
-          startMinute: 9 * 60,
-          endMinute: 17 * 60,
-          blockType: RoutineBlockType.hardBlock,
-          hardBlock: true,
-        ),
-        RoutineItem(
-          id: 'study',
-          title: 'Study',
-          startMinute: 10 * 60,
-          endMinute: 11 * 60,
-          blockType: RoutineBlockType.hardBlock,
-          hardBlock: true,
-        ),
-      ], DateTime.now());
-
-      expect(conflicts, isNotEmpty);
-      expect(conflicts.first.type, RoutineConflictType.compatibleOverlap);
-      expect(conflicts.first.blocking, isTrue);
-      expect(conflicts.first.canKeepBoth, isTrue);
-    });
-
-    test('Keep both enabled for compatible hard-block conflict', () {
-      final conflicts = RoutineConflictEngine.detect([
-        RoutineItem(
-          id: 'class',
-          title: 'Class',
-          startMinute: 9 * 60,
-          endMinute: 17 * 60,
-          blockType: RoutineBlockType.hardBlock,
-          hardBlock: true,
-        ),
-        RoutineItem(
-          id: 'study',
-          title: 'Study',
-          startMinute: 10 * 60,
-          endMinute: 11 * 60,
-          blockType: RoutineBlockType.hardBlock,
-          hardBlock: true,
-        ),
-      ], DateTime.now());
-
-      expect(conflicts, isNotEmpty);
-      expect(conflicts.first.canKeepBoth, isTrue);
-    });
-
-    test(
-      'allows flexible task overlapping single hard block with soft warning',
-      () {
-        final conflicts = RoutineConflictEngine.detect([
-          RoutineItem(
-            id: 'class',
-            title: 'Class',
-            startMinute: 9 * 60,
-            endMinute: 17 * 60,
-            blockType: RoutineBlockType.hardBlock,
-            hardBlock: true,
-          ),
-          RoutineItem(
-            id: 'study',
-            title: 'Study',
-            startMinute: 10 * 60,
-            endMinute: 11 * 60,
-            blockType: RoutineBlockType.flexibleTask,
-          ),
-        ], DateTime.now());
-
-        expect(conflicts, isNotEmpty);
-        expect(conflicts.first.type, RoutineConflictType.timeOverlap);
-        expect(conflicts.first.blocking, isFalse);
-        expect(conflicts.first.canKeepBoth, isFalse);
-      },
-    );
   });
 
   group('tracker and money sync', () {

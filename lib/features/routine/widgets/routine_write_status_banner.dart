@@ -128,7 +128,6 @@ class _RoutineWriteStatusBannerState
         RoutineWriteAction.delete => 'Routine item delete was not saved',
         RoutineWriteAction.moveTemplate => 'Routine move was not saved',
         RoutineWriteAction.batchCreate => 'Routine batch was not saved',
-        RoutineWriteAction.keepBoth => 'Schedule update was not saved',
       };
       return _FailedRoutineWrite(
         key: 'template:${intent.itemId}',
@@ -172,15 +171,11 @@ class _RoutineWriteStatusBannerState
 
     if (state.failedBatchIntentsByOperationId.isNotEmpty) {
       final intent = state.failedBatchIntentsByOperationId.values.first;
-      final isKeepBoth = intent.action == RoutineWriteAction.keepBoth;
       return _FailedRoutineWrite(
         key: 'batch:${intent.operationId}',
-        title: isKeepBoth
-            ? 'Schedule update was not saved'
-            : 'Routine import batch was not saved',
-        subtitle: isKeepBoth
-            ? 'Retry the schedule update.'
-            : 'Retry adding ${intent.attemptedItems.length} imported routine item${intent.attemptedItems.length == 1 ? '' : 's'}.',
+        title: 'Routine import batch was not saved',
+        subtitle:
+            'Retry adding ${intent.attemptedItems.length} imported routine item${intent.attemptedItems.length == 1 ? '' : 's'}.',
         retry: (ref) => ref
             .read(routineNotifierProvider.notifier)
             .retryFailedBatchOperation(intent.operationId),

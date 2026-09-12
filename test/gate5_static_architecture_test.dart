@@ -308,7 +308,6 @@ void main() {
           'onboardingUploadInteractionProvider': 'USER_SCOPED_RESET',
           'restoredUploadsProvider': 'USER_SCOPED_RESET',
           'aiRoutineSuggestionsEnabledProvider': 'SESSION_UI_RESET',
-          'conflictResolverEnabledProvider': 'SESSION_UI_RESET',
           'routineNotificationsEnabledProvider': 'SESSION_UI_RESET',
           'appNavigationProvider': 'SESSION_UI_RESET',
           'toastQueueProvider': 'SESSION_UI_RESET',

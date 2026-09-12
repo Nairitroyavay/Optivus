@@ -296,9 +296,8 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
       setState(() => _startMinute = start);
     } else {
       setState(
-        () =>
-            _error =
-                'No open slot found. You can still choose any time manually.',
+        () => _error =
+            'No open slot found. You can still choose any time manually.',
       );
     }
   }

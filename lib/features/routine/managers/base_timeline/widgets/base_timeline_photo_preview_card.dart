@@ -1,21 +1,34 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/services/uploads/authenticated_r2_preview_resolver.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/upload_state.dart';
 
+/// Card component to display the source photo for a Base Timeline section.
+///
+/// Priority:
+/// 1. If a valid [localPreviewPath] exists on the local filesystem, renders it
+///    immediately without awaiting network or presigned token resolution.
+/// 2. Resolves [r2Key] presigned URL asynchronously via [UploadedAssetPreviewResolver].
+/// 3. Falls back gracefully to a calm placeholder if preview is unavailable.
 class BaseTimelinePhotoPreviewCard extends ConsumerStatefulWidget {
   final String? r2Key;
   final String? assetId;
+  final String? localPreviewPath;
   final String title;
+  final String? subtitle;
   final double height;
 
   const BaseTimelinePhotoPreviewCard({
     super.key,
     this.r2Key,
     this.assetId,
+    this.localPreviewPath,
     this.title = 'Source Photo',
+    this.subtitle,
     this.height = 180,
   });
 
@@ -30,18 +43,39 @@ class _BaseTimelinePhotoPreviewCardState
   bool _loading = false;
   bool _failed = false;
 
+  bool get _hasValidLocalPreview {
+    final path = widget.localPreviewPath?.trim();
+    if (path == null || path.isEmpty) return false;
+    try {
+      return File(path).existsSync();
+    } catch (_) {
+      return false;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-    _loadPreview();
+    if (!_hasValidLocalPreview) {
+      _loadPreview();
+    }
   }
 
   @override
   void didUpdateWidget(covariant BaseTimelinePhotoPreviewCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.r2Key != widget.r2Key ||
+    if (oldWidget.localPreviewPath != widget.localPreviewPath ||
+        oldWidget.r2Key != widget.r2Key ||
         oldWidget.assetId != widget.assetId) {
-      _loadPreview();
+      if (!_hasValidLocalPreview) {
+        _loadPreview();
+      } else {
+        setState(() {
+          _previewUri = null;
+          _loading = false;
+          _failed = false;
+        });
+      }
     }
   }
 
@@ -67,10 +101,7 @@ class _BaseTimelinePhotoPreviewCardState
     final uid = ref.read(userProfileProvider).uid;
 
     try {
-      Uri? uri;
-      if (resolver is AuthenticatedR2PreviewResolver) {
-        uri = await resolver.resolveR2Key(uid: uid, r2Key: key);
-      }
+      final uri = await resolver.resolveKey(uid: uid, objectKey: key);
       if (mounted) {
         setState(() {
           _previewUri = uri;
@@ -88,7 +119,11 @@ class _BaseTimelinePhotoPreviewCardState
     }
   }
 
-  void _showFullImage(BuildContext context, Uri uri) {
+  void _showFullImage(
+    BuildContext context, {
+    Uri? networkUri,
+    String? localPath,
+  }) {
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
@@ -99,17 +134,31 @@ class _BaseTimelinePhotoPreviewCardState
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(16),
-              child: Image.network(
-                uri.toString(),
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) => const Center(
-                  child: Icon(
-                    Icons.broken_image_rounded,
-                    color: Colors.white,
-                    size: 48,
-                  ),
-                ),
-              ),
+              child: localPath != null
+                  ? Image.file(
+                      File(localPath),
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) =>
+                          const Center(
+                            child: Icon(
+                              Icons.broken_image_rounded,
+                              color: Colors.white,
+                              size: 48,
+                            ),
+                          ),
+                    )
+                  : Image.network(
+                      networkUri.toString(),
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) =>
+                          const Center(
+                            child: Icon(
+                              Icons.broken_image_rounded,
+                              color: Colors.white,
+                              size: 48,
+                            ),
+                          ),
+                    ),
             ),
             Padding(
               padding: const EdgeInsets.all(8.0),
@@ -129,8 +178,9 @@ class _BaseTimelinePhotoPreviewCardState
 
   @override
   Widget build(BuildContext context) {
+    final hasLocal = _hasValidLocalPreview;
     final key = widget.r2Key?.trim();
-    if (key == null || key.isEmpty) {
+    if (!hasLocal && (key == null || key.isEmpty)) {
       return const SizedBox.shrink();
     }
 
@@ -151,10 +201,29 @@ class _BaseTimelinePhotoPreviewCardState
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Solid translucent background without expensive backdrop blur
             Container(color: Colors.black.withValues(alpha: 0.25)),
 
-            if (_loading)
+            if (hasLocal)
+              GestureDetector(
+                onTap: () => _showFullImage(
+                  context,
+                  localPath: widget.localPreviewPath!,
+                ),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image.file(
+                      File(widget.localPreviewPath!),
+                      fit: BoxFit.cover,
+                      cacheWidth: 800,
+                      errorBuilder: (context, error, stackTrace) =>
+                          _buildFallbackContent(),
+                    ),
+                    _buildOverlayBar(),
+                  ],
+                ),
+              )
+            else if (_loading)
               Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -181,76 +250,98 @@ class _BaseTimelinePhotoPreviewCardState
               )
             else if (_previewUri != null && !_failed)
               GestureDetector(
-                onTap: () => _showFullImage(context, _previewUri!),
+                onTap: () => _showFullImage(context, networkUri: _previewUri!),
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
                     Image.network(
                       _previewUri.toString(),
                       fit: BoxFit.cover,
-                      cacheWidth: 600,
-                      cacheHeight: 400,
+                      cacheWidth: 800,
                       errorBuilder: (context, error, stackTrace) =>
                           _buildFallbackContent(),
                     ),
-                    // Gradient overlay
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      height: 54,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.bottomCenter,
-                            end: Alignment.topCenter,
-                            colors: [
-                              Colors.black.withValues(alpha: 0.75),
-                              Colors.transparent,
-                            ],
-                          ),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 8,
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.photo_size_select_actual_outlined,
-                              color: Colors.white,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                widget.title,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const Text(
-                              'Tap to expand',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                    _buildOverlayBar(),
                   ],
                 ),
               )
             else
               _buildFallbackContent(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverlayBar() {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: 54,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.bottomCenter,
+            end: Alignment.topCenter,
+            colors: [Colors.black.withValues(alpha: 0.75), Colors.transparent],
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.photo_size_select_actual_outlined,
+              color: Colors.white70,
+              size: 16,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (widget.subtitle != null &&
+                      widget.subtitle!.trim().isNotEmpty) ...[
+                    const SizedBox(height: 1),
+                    Text(
+                      widget.subtitle!.trim(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.fullscreen_rounded,
+              color: Colors.white70,
+              size: 20,
+            ),
+            const SizedBox(width: 4),
+            const Text(
+              'Tap to view',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
       ),
@@ -282,14 +373,27 @@ class _BaseTimelinePhotoPreviewCardState
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 2),
-            const Text(
-              'Secure cloud storage',
-              style: TextStyle(
-                color: OptivusColors.textSecondary,
-                fontSize: 11,
+            if (widget.subtitle != null &&
+                widget.subtitle!.trim().isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                widget.subtitle!.trim(),
+                style: const TextStyle(
+                  color: OptivusColors.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
+            ] else ...[
+              const SizedBox(height: 2),
+              Text(
+                _failed ? 'Preview unavailable' : 'Secure cloud storage',
+                style: const TextStyle(
+                  color: OptivusColors.textSecondary,
+                  fontSize: 11,
+                ),
+              ),
+            ],
           ],
         ),
       ),

@@ -30,6 +30,21 @@ class RoutineEventFeed {
   RoutineEventFeed({required this.validEvents, this.corruptEvents = const []});
 }
 
+/// Typed concurrency exception thrown when BaseTimelineSetup revision has drifted.
+class BaseTimelineConcurrencyException extends StateError {
+  final int expectedRevision;
+  final int actualRevision;
+
+  BaseTimelineConcurrencyException({
+    required this.expectedRevision,
+    required this.actualRevision,
+    String? message,
+  }) : super(
+          message ??
+              'Base timeline revision mismatch: expected $expectedRevision, actual $actualRevision',
+        );
+}
+
 abstract class RoutineTransactionRepository {
   Future<void> commitWrite({
     required String uid,
@@ -326,8 +341,9 @@ class FirestoreRoutineTransactionRepository
             );
 
       if (liveSetup.revision != expectedRevision) {
-        throw StateError(
-          'Base timeline revision mismatch: expected $expectedRevision, actual ${liveSetup.revision}',
+        throw BaseTimelineConcurrencyException(
+          expectedRevision: expectedRevision,
+          actualRevision: liveSetup.revision,
         );
       }
 
@@ -747,8 +763,9 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
             );
 
       if (initialSetup.revision != expectedRevision) {
-        throw StateError(
-          'Base timeline revision mismatch: expected $expectedRevision, actual ${initialSetup.revision}',
+        throw BaseTimelineConcurrencyException(
+          expectedRevision: expectedRevision,
+          actualRevision: initialSetup.revision,
         );
       }
 

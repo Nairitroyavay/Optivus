@@ -920,9 +920,8 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
         );
     if (slot == null) {
       setState(
-        () =>
-            _error =
-                'No open slot found. You can still choose any time manually.',
+        () => _error =
+            'No open slot found. You can still choose any time manually.',
       );
       return;
     }

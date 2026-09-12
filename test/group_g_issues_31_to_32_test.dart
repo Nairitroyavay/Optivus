@@ -1,8 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/services/routine_validation_service.dart';
-import 'package:optivus/features/routine/services/routine_conflict_engine.dart';
-import 'package:optivus/features/routine/domain/routine_conflict.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step4_unified.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
@@ -11,7 +9,7 @@ import 'package:optivus/models/onboarding_draft.dart';
 void main() {
   group('Issue 31: Class timetable overlap detection with routine items', () {
     test(
-      '1.1 Class block (strict hard) overlapping soft block triggers non-blocking timeOverlap conflict (isValid = true)',
+      '1.1 Class block (strict hard) overlapping soft block is valid (isValid = true)',
       () {
         final existingClass = RoutineItem(
           id: 'class_1',
@@ -33,11 +31,6 @@ void main() {
           category: RoutineCategory.eating,
         );
 
-        final engineConflicts = RoutineConflictEngine.detect([
-          existingClass,
-          newLunch,
-        ], DateTime(2026, 7, 27));
-
         final result = RoutineValidationService.validate(
           RoutineValidationContext(
             candidate: newLunch,
@@ -50,15 +43,6 @@ void main() {
         );
 
         expect(result.isValid, isTrue);
-        expect(
-          engineConflicts.any(
-            (c) =>
-                c.type == RoutineConflictType.compatibleOverlap &&
-                c.blocking &&
-                c.canKeepBoth,
-          ),
-          isTrue,
-        );
       },
     );
 
@@ -451,44 +435,41 @@ void main() {
       },
     );
 
-    test(
-      '1.11 Overlap with Sleep category is valid in Routine',
-      () {
-        final sleepBlock = RoutineItem(
-          id: 'sleep_item',
-          title: 'Sleep',
-          startMinute: 23 * 60,
-          endMinute: 7 * 60,
-          repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-          crossesMidnight: true,
-          blockType: RoutineBlockType.hardBlock,
-          category: RoutineCategory.sleep,
-        );
+    test('1.11 Overlap with Sleep category is valid in Routine', () {
+      final sleepBlock = RoutineItem(
+        id: 'sleep_item',
+        title: 'Sleep',
+        startMinute: 23 * 60,
+        endMinute: 7 * 60,
+        repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+        crossesMidnight: true,
+        blockType: RoutineBlockType.hardBlock,
+        category: RoutineCategory.sleep,
+      );
 
-        final lateNightHabit = RoutineItem(
-          id: 'night_habit',
-          title: 'Late Reading',
-          startMinute: 23 * 60 + 30,
-          endMinute: 24 * 60,
-          repeatDays: const [1],
-          blockType: RoutineBlockType.softBlock,
-          category: RoutineCategory.habit,
-        );
+      final lateNightHabit = RoutineItem(
+        id: 'night_habit',
+        title: 'Late Reading',
+        startMinute: 23 * 60 + 30,
+        endMinute: 24 * 60,
+        repeatDays: const [1],
+        blockType: RoutineBlockType.softBlock,
+        category: RoutineCategory.habit,
+      );
 
-        final result = RoutineValidationService.validate(
-          RoutineValidationContext(
-            candidate: lateNightHabit,
-            existingTemplates: [sleepBlock],
-            occurrences: const [],
-            evaluationDate: DateTime(2026, 7, 27),
-            operation: RoutineValidationOperation.create,
-            authenticatedOwnerUid: 'test_user',
-          ),
-        );
+      final result = RoutineValidationService.validate(
+        RoutineValidationContext(
+          candidate: lateNightHabit,
+          existingTemplates: [sleepBlock],
+          occurrences: const [],
+          evaluationDate: DateTime(2026, 7, 27),
+          operation: RoutineValidationOperation.create,
+          authenticatedOwnerUid: 'test_user',
+        ),
+      );
 
-        expect(result.isValid, isTrue);
-      },
-    );
+      expect(result.isValid, isTrue);
+    });
   });
 
   group('Issue 32: Exam schedule priority override during class onboarding import', () {

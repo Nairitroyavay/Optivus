@@ -28,6 +28,7 @@ import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpe
 import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_primary_action.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/class_schedule_draft_mapper.dart';
 import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_controller.dart';
 import 'package:optivus/features/onboarding/steps/skin_care/skin_care_flow_state.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
@@ -1274,38 +1275,13 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     String? provenanceAssetId,
     String? provenanceR2Key,
   ]) {
-    final provenance = <String>[
-      if (provenanceAssetId != null && provenanceAssetId.trim().isNotEmpty)
-        provenanceAssetId.trim(),
-      if (provenanceR2Key != null && provenanceR2Key.trim().isNotEmpty)
-        provenanceR2Key.trim(),
-    ];
-    return localBlocks
-        .where((block) => block.subject.trim().isNotEmpty)
-        .where((block) => block.startMinute < block.endMinute)
-        .expand<TimelineBlockDraft>((block) {
-          final repeatDays = _repeatDaysForClassJobSave(block.repeatDays);
-          if (repeatDays.isEmpty) return const <TimelineBlockDraft>[];
-          return [
-            TimelineBlockDraft(
-              id: block.id,
-              section: section,
-              title: block.subject.trim(),
-              startMinute: block.startMinute,
-              endMinute: block.endMinute,
-              repeatDays: repeatDays,
-              location: block.room.trim().isEmpty ? null : block.room.trim(),
-              blockType: TimelineBlockDraft.hardBlockKey,
-              source: 'ai_import',
-              provenanceSourceIds: provenance,
-            ),
-          ];
-        })
-        .toList(growable: false);
-  }
-
-  List<int> _repeatDaysForClassJobSave(List<int> days) {
-    return days.where((day) => day >= 1 && day <= 7).toSet().toList()..sort();
+    return ClassScheduleDraftMapper.toTimelineDrafts(
+      localBlocks,
+      section: section,
+      provenanceAssetId: provenanceAssetId,
+      provenanceR2Key: provenanceR2Key,
+      source: 'ai_import',
+    );
   }
 
   bool _classJobActionBusy(OnboardingDraft draft, {required bool watch}) {

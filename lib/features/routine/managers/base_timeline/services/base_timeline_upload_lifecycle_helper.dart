@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/uploaded_asset_repository.dart';
 import 'package:optivus/services/cloudflare/cloudflare_clients.dart';
@@ -10,11 +11,11 @@ import 'package:optivus/state/upload_state.dart';
 /// Coordinates lifecycle cleanups for Base Timeline upload assets.
 ///
 /// Responsibilities:
-/// 1. Retiring uncommitted uploads: when a user uploads a photo but cancels or
-///    discards before saving, deletes the R2 object and marks the asset deleted
-///    in Firestore.
+/// 1. Retiring uncommitted uploads: marks Firestore asset deleted FIRST, then
+///    performs best-effort Cloudflare R2 object deletion.
 /// 2. Retiring replaced assets: post-commit cleanup when a section setup replaces
 ///    an older photo asset with a new one.
+/// 3. Cleaning up stale uncommitted uploads left after an app kill or crash.
 class BaseTimelineUploadLifecycleHelper {
   final UploadedAssetRepository _assetRepository;
   final R2UploadClient _r2UploadClient;
@@ -29,8 +30,11 @@ class BaseTimelineUploadLifecycleHelper {
        _authRepository = authRepository;
 
   /// Retires an upload that was not committed to Base Timeline setup.
-  /// Safely deletes the Cloudflare R2 object (if objectKey provided) and
-  /// marks the asset document as deleted in Firestore.
+  ///
+  /// Authoritative order:
+  /// 1. Marks the asset document as deleted in Firestore FIRST. If this fails,
+  ///    throws so the caller can retry without orphaning metadata.
+  /// 2. Best-effort deletes the Cloudflare R2 object (if objectKey provided).
   Future<void> retireUncommittedUpload({
     required String uid,
     String? assetId,
@@ -39,6 +43,16 @@ class BaseTimelineUploadLifecycleHelper {
     final normalizedUid = uid.trim();
     if (normalizedUid.isEmpty) return;
 
+    // 1. Authoritative Firestore tombstone FIRST
+    final trimmedAssetId = assetId?.trim();
+    if (trimmedAssetId != null && trimmedAssetId.isNotEmpty) {
+      await _assetRepository.markDeleted(
+        uid: normalizedUid,
+        assetId: trimmedAssetId,
+      );
+    }
+
+    // 2. Best-effort Cloudflare R2 object deletion
     final trimmedKey = objectKey?.trim();
     if (trimmedKey != null && trimmedKey.isNotEmpty) {
       try {
@@ -50,19 +64,7 @@ class BaseTimelineUploadLifecycleHelper {
           );
         }
       } catch (_) {
-        // Safe fail: firestore tombstone still records deletion intent
-      }
-    }
-
-    final trimmedAssetId = assetId?.trim();
-    if (trimmedAssetId != null && trimmedAssetId.isNotEmpty) {
-      try {
-        await _assetRepository.markDeleted(
-          uid: normalizedUid,
-          assetId: trimmedAssetId,
-        );
-      } catch (_) {
-        // Safe fail
+        // Safe fail: firestore tombstone already recorded deletion intent
       }
     }
   }
@@ -78,6 +80,52 @@ class BaseTimelineUploadLifecycleHelper {
       assetId: oldAssetId,
       objectKey: oldObjectKey,
     );
+  }
+
+  /// Recovers and retires orphaned temporary uploads older than [graceWindow].
+  ///
+  /// Strictly protects [committedAssetId] so current setup photos are never deleted.
+  Future<int> cleanupStaleUncommittedAssets({
+    required String uid,
+    required String? committedAssetId,
+    Duration graceWindow = const Duration(minutes: 15),
+  }) async {
+    final normalizedUid = uid.trim();
+    if (normalizedUid.isEmpty) return 0;
+
+    var cleaned = 0;
+    try {
+      final recent = await _assetRepository.fetchRecentAssets(
+        uid: normalizedUid,
+        sourceFeature: UploadSourceFeature.routineBaseTimeline,
+        purpose: UploadedAssetPurpose.classTimetable,
+        limit: 20,
+      );
+
+      final now = DateTime.now();
+      for (final asset in recent) {
+        // Strictly protect current committed source asset
+        if (asset.assetId == committedAssetId) continue;
+        if (asset.status == UploadedAssetStatus.deleted) continue;
+
+        final age = now.difference(asset.updatedAt);
+        if (age >= graceWindow) {
+          try {
+            await retireUncommittedUpload(
+              uid: normalizedUid,
+              assetId: asset.assetId,
+              objectKey: asset.r2Key,
+            );
+            cleaned++;
+          } catch (_) {
+            // Safe fail per asset
+          }
+        }
+      }
+    } catch (_) {
+      // Best-effort cleanup
+    }
+    return cleaned;
   }
 }
 

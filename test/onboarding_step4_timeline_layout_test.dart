@@ -16,7 +16,6 @@ import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/services/nutrition_ai_client.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
-import 'package:optivus/features/routine/services/routine_conflict_engine.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/services/routine_import_ai_client.dart';
 import 'package:optivus/state/app_state.dart';
@@ -1058,16 +1057,6 @@ void main() {
         containsAll(<String>[classBlock.id, breakfastBlock.id]),
       );
       expect(restoredAcceptances, isEmpty);
-
-      final restoredConflicts = RoutineConflictEngine.detect(
-        restoredItems,
-        DateTime(2026, 8, 31),
-        conflictAcceptances: restoredAcceptances,
-        timezoneId: completedDraft.timezoneId,
-      );
-      expect(restoredConflicts, hasLength(1));
-      expect(restoredConflicts.single.blocking, isTrue);
-      expect(restoredConflicts.single.acceptanceId, isNull);
     },
   );
 

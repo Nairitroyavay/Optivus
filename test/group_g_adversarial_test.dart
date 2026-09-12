@@ -651,10 +651,6 @@ void main() {
         );
 
         expect(result.isValid, isTrue);
-        // Validation only returns conflict details when a blocker prevents the
-        // write. Informational soft/soft overlaps remain valid and are surfaced
-        // by RoutineConflictEngine in the Routine UI.
-        expect(result.conflicts, isEmpty);
       });
     },
   );

@@ -584,7 +584,7 @@ void main() {
 
         final style = adapter.styleForEntry(entry);
         expect(style.icon, equals(Icons.school_rounded));
-        expect(style.tags, equals(['Lab 401']));
+        expect(style.tags, isEmpty);
       },
     );
 

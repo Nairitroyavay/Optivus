@@ -25,6 +25,7 @@ import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step4_candidate_mapping.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/class_schedule_draft_mapper.dart';
 export 'package:optivus/features/onboarding/steps/onboarding_step4_candidate_mapping.dart';
 
 // ---------------------------------------------------------------------------
@@ -772,38 +773,10 @@ class _OnboardingStep4UnifiedState
     List<TimelineBlockDraft> blocks,
     ScheduleSetupConfig config,
   ) {
-    final restored = blocks
-        .asMap()
-        .entries
-        .map(
-          (entry) => ClassRoutineBlock(
-            id: entry.value.id,
-            subject: entry.value.title,
-            room: entry.value.location ?? '',
-            startMinute: entry.value.startMinute.clamp(0, 24 * 60 - 1),
-            endMinute: entry.value.endMinute.clamp(1, 24 * 60),
-            repeatDays: _safeRepeatDays(entry.value.repeatDays),
-            icon: config.icon,
-            color: config.colorCycle[entry.key % config.colorCycle.length],
-            hasTopTape: true,
-            hasBottomTape: true,
-          ),
-        )
-        .where((b) => b.subject.trim().isNotEmpty)
-        .where((b) => b.startMinute < b.endMinute)
-        .toList(growable: false);
-    restored.sort((a, b) {
-      final dayCompare = (a.weekday ?? 1).compareTo(b.weekday ?? 1);
-      return dayCompare != 0
-          ? dayCompare
-          : a.startMinute.compareTo(b.startMinute);
-    });
-    return normalizeScheduleBlockColors(restored, config);
-  }
-
-  List<int> _safeRepeatDays(List<int> days) {
-    final safe = days.where((d) => d >= 1 && d <= 7).toSet().toList()..sort();
-    return safe.isEmpty ? const [1] : safe;
+    return ClassScheduleDraftMapper.toClassRoutineBlocks(
+      blocks,
+      config: config,
+    );
   }
 
   _PhotoSlot? _photoForSource(RoutineImportReviewSource source) {

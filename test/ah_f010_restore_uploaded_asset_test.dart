@@ -1775,6 +1775,15 @@ class FakePreviewResolver implements UploadedAssetPreviewResolver {
     if (shouldFail) throw Exception('Preview resolution failed');
     return fixedUri;
   }
+
+  @override
+  Future<Uri?> resolveKey({
+    required String uid,
+    required String objectKey,
+  }) async {
+    if (shouldFail) throw Exception('Preview resolution failed');
+    return fixedUri;
+  }
 }
 
 class ControlledPreviewResolver implements UploadedAssetPreviewResolver {
@@ -1791,6 +1800,12 @@ class ControlledPreviewResolver implements UploadedAssetPreviewResolver {
     if (future != null) return future;
     return null;
   }
+
+  @override
+  Future<Uri?> resolveKey({
+    required String uid,
+    required String objectKey,
+  }) async => null;
 }
 
 class RecordingRoutineImportAiClient implements RoutineImportAiClient {

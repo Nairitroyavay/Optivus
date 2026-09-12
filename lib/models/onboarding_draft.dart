@@ -4547,7 +4547,7 @@ class TimelineBlockDraft {
       professor: (map['professor'] ?? map['instructor']) as String?,
       courseCode: map['courseCode'] as String?,
       classType: map['classType'] as String?,
-      sectionLabel: (map['sectionLabel'] ?? map['section']) as String?,
+      sectionLabel: (map['sectionLabel'] ?? map['classSection']) as String?,
       notes: map['notes'] as String?,
     );
   }
