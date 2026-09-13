@@ -361,6 +361,38 @@ void main() {
     );
 
     test(
+      'ISSUE-10-01: RoutineNotifier loadForOwner concurrent callers share failure without swallow',
+      () async {
+        final failingRepo = _FailingRoutineFetchRepository();
+        final fakeHistory = FakeRoutineHistoryRepository();
+        final fakeTx = FakeRoutineTransactionRepository();
+
+        final container = ProviderContainer(
+          overrides: [
+            routineRepositoryProvider.overrideWithValue(failingRepo),
+            routineHistoryRepositoryProvider.overrideWithValue(fakeHistory),
+            routineTransactionRepositoryProvider.overrideWithValue(fakeTx),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final notifier = container.read(routineNotifierProvider.notifier);
+        final future1 = notifier.loadForOwner('user_1001');
+        final future2 = notifier.loadForOwner('user_1001');
+
+        await expectLater(future1, throwsA(isA<StateError>()));
+        await expectLater(future2, throwsA(isA<StateError>()));
+        expect(
+          failingRepo.fetchCount,
+          1,
+          reason: 'Duplicate concurrent loads must be deduplicated into one fetch',
+        );
+        expect(container.read(routineNotifierProvider).loading, isFalse);
+        expect(container.read(routineNotifierProvider).error, isNotNull);
+      },
+    );
+
+    test(
       'ISSUE-11-01: OnboardingFrontendHydrationService does not prematurely finalize profile',
       () async {
         final container = ProviderContainer();
@@ -974,4 +1006,14 @@ void main() {
       );
     });
   });
+}
+
+class _FailingRoutineFetchRepository extends FakeRoutineRepository {
+  int fetchCount = 0;
+
+  @override
+  Future<List<RoutineItem>> fetchRoutineItems(String uid) async {
+    fetchCount++;
+    throw StateError('Simulated routine repository fetch failure');
+  }
 }

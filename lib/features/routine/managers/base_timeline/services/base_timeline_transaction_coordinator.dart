@@ -59,14 +59,28 @@ class BaseTimelineSectionReplaceResult {
       BaseTimelineRoutineRefreshStatus.refreshPending;
 }
 
+/// Immutable snapshot pairing a durable Base Timeline revision with its
+/// post-commit frontend Routine reconciliation status and message.
+@immutable
+class BaseTimelineRoutineRefreshState {
+  final int revision;
+  final BaseTimelineRoutineRefreshStatus status;
+  final String? message;
+
+  const BaseTimelineRoutineRefreshState({
+    required this.revision,
+    required this.status,
+    this.message,
+  });
+}
+
 class BaseTimelineTransactionCoordinator {
   final RoutineRepository _routineRepo;
   final RoutineTransactionRepository _transactionRepo;
   final BaseTimelineSetupRepository _setupRepo;
   final Ref? _ref;
   final Map<String, int> _latestCommittedRevisionByUid = {};
-  final Map<String, BaseTimelineRoutineRefreshStatus> _latestRefreshStatusByUid = {};
-  final Map<String, int> _latestStatusRevisionByUid = {};
+  final Map<String, BaseTimelineRoutineRefreshState> _latestRefreshStateByUid = {};
   final Map<String, Future<void>> _reconciliationTailByUid = {};
 
   BaseTimelineTransactionCoordinator({
@@ -80,8 +94,42 @@ class BaseTimelineTransactionCoordinator {
        _ref = ref;
 
   BaseTimelineRoutineRefreshStatus latestRefreshStatusFor(String uid) {
-    return _latestRefreshStatusByUid[uid] ??
+    return _latestRefreshStateByUid[uid]?.status ??
         BaseTimelineRoutineRefreshStatus.notAttempted;
+  }
+
+  int? latestRefreshRevisionFor(String uid) {
+    return _latestRefreshStateByUid[uid]?.revision;
+  }
+
+  /// Centralized revision-monotonic reconciliation status publisher.
+  ///
+  /// Invariant:
+  /// - Only updates shared latest state if [revision] belongs to the newest known
+  ///   durable revision ([latestCommitted]) AND is monotonic with respect to
+  ///   any currently published status revision ([currentStatusRev]).
+  /// - An older revision cannot become current merely because it is newer than
+  ///   an even older status record (requires BOTH monotonic conditions, never OR).
+  bool _recordRefreshStatusIfCurrent({
+    required String uid,
+    required int revision,
+    required BaseTimelineRoutineRefreshStatus status,
+    String? message,
+  }) {
+    final latestCommitted = _latestCommittedRevisionByUid[uid] ?? 0;
+    final currentState = _latestRefreshStateByUid[uid];
+    final currentStatusRev = currentState?.revision ?? 0;
+
+    if (revision < latestCommitted || revision < currentStatusRev) {
+      return false;
+    }
+
+    _latestRefreshStateByUid[uid] = BaseTimelineRoutineRefreshState(
+      revision: revision,
+      status: status,
+      message: message,
+    );
+    return true;
   }
 
   /// Canonical active session validation for post-commit coordinator paths.
@@ -405,6 +453,11 @@ class BaseTimelineTransactionCoordinator {
     // 5. Commit succeeded! Record latest revision for monotonicity protection
     final commitRevision = commitResult.revision;
     _latestCommittedRevisionByUid[uid] = commitRevision;
+    _recordRefreshStatusIfCurrent(
+      uid: uid,
+      revision: commitRevision,
+      status: BaseTimelineRoutineRefreshStatus.notAttempted,
+    );
 
     // 6. Post-commit frontend reconciliation.
     //
@@ -420,6 +473,13 @@ class BaseTimelineTransactionCoordinator {
 
     // Verify current active account still matches commit UID before local publication
     if (!_isSessionValidForOwner(uid)) {
+      _recordRefreshStatusIfCurrent(
+        uid: uid,
+        revision: commitRevision,
+        status: BaseTimelineRoutineRefreshStatus.notAttempted,
+        message:
+            'Saved for the previous account; local refresh was skipped because the active account changed.',
+      );
       return BaseTimelineSectionReplaceResult(
         commit: commitResult,
         routineRefreshStatus: BaseTimelineRoutineRefreshStatus.notAttempted,
@@ -476,6 +536,13 @@ class BaseTimelineTransactionCoordinator {
 
     // 1. Initial active session check before queuing
     if (!_isSessionValidForOwner(uid)) {
+      _recordRefreshStatusIfCurrent(
+        uid: uid,
+        revision: committedRevision,
+        status: BaseTimelineRoutineRefreshStatus.notAttempted,
+        message: accountSwitchedMessage ??
+            'Active session does not match requested owner.',
+      );
       return BaseTimelineRoutineRefreshResult(
         status: BaseTimelineRoutineRefreshStatus.notAttempted,
         message: accountSwitchedMessage ??
@@ -499,6 +566,13 @@ class BaseTimelineTransactionCoordinator {
 
       // 3. Re-verify active session after awaiting prior reconciliation
       if (!_isSessionValidForOwner(uid)) {
+        _recordRefreshStatusIfCurrent(
+          uid: uid,
+          revision: committedRevision,
+          status: BaseTimelineRoutineRefreshStatus.notAttempted,
+          message: accountSwitchedMessage ??
+              'Active session does not match requested owner.',
+        );
         return BaseTimelineRoutineRefreshResult(
           status: BaseTimelineRoutineRefreshStatus.notAttempted,
           message: accountSwitchedMessage ??
@@ -508,37 +582,53 @@ class BaseTimelineTransactionCoordinator {
 
       // 4. Perform fresh-after-commit reload using reloadForOwnerAfterCurrentLoad
       try {
-        await ref
+        final reloadWon = await ref
             .read(routineNotifierProvider.notifier)
             .reloadForOwnerAfterCurrentLoad(uid);
 
-        // 5. Monotonic revision check: if a newer revision was committed,
-        // do not let this older revision downgrade coordinator's latest status.
-        final latestCommitted = _latestCommittedRevisionByUid[uid] ?? 0;
-        final currentStatusRev = _latestStatusRevisionByUid[uid] ?? 0;
-        if (committedRevision >= latestCommitted ||
-            committedRevision >= currentStatusRev) {
-          _latestRefreshStatusByUid[uid] =
-              BaseTimelineRoutineRefreshStatus.refreshed;
-          _latestStatusRevisionByUid[uid] = committedRevision;
+        // Re-verify session and authoritative win after the fresh load completes
+        if (!reloadWon || !_isSessionValidForOwner(uid)) {
+          _recordRefreshStatusIfCurrent(
+            uid: uid,
+            revision: committedRevision,
+            status: BaseTimelineRoutineRefreshStatus.notAttempted,
+            message: accountSwitchedMessage ??
+                'Saved, but local refresh was skipped because the active account changed.',
+          );
+          return BaseTimelineRoutineRefreshResult(
+            status: BaseTimelineRoutineRefreshStatus.notAttempted,
+            message: accountSwitchedMessage ??
+                'Saved, but local refresh was skipped because the active account changed.',
+          );
         }
 
-        return const BaseTimelineRoutineRefreshResult(
+        final recorded = _recordRefreshStatusIfCurrent(
+          uid: uid,
+          revision: committedRevision,
           status: BaseTimelineRoutineRefreshStatus.refreshed,
         );
-      } catch (_) {
-        final latestCommitted = _latestCommittedRevisionByUid[uid] ?? 0;
-        final currentStatusRev = _latestStatusRevisionByUid[uid] ?? 0;
-        if (committedRevision >= latestCommitted ||
-            committedRevision >= currentStatusRev) {
-          _latestRefreshStatusByUid[uid] =
-              BaseTimelineRoutineRefreshStatus.refreshPending;
-          _latestStatusRevisionByUid[uid] = committedRevision;
-        }
 
-        return const BaseTimelineRoutineRefreshResult(
+        return BaseTimelineRoutineRefreshResult(
+          status: recorded
+              ? BaseTimelineRoutineRefreshStatus.refreshed
+              : BaseTimelineRoutineRefreshStatus.notAttempted,
+          message: recorded ? null : 'Superseded by newer revision.',
+        );
+      } catch (_) {
+        final recorded = _recordRefreshStatusIfCurrent(
+          uid: uid,
+          revision: committedRevision,
           status: BaseTimelineRoutineRefreshStatus.refreshPending,
           message: 'Saved, but Routine needs to refresh.',
+        );
+
+        return BaseTimelineRoutineRefreshResult(
+          status: recorded
+              ? BaseTimelineRoutineRefreshStatus.refreshPending
+              : BaseTimelineRoutineRefreshStatus.notAttempted,
+          message: recorded
+              ? 'Saved, but Routine needs to refresh.'
+              : 'Superseded by newer revision.',
         );
       }
     } finally {
@@ -562,6 +652,7 @@ class BaseTimelineTransactionCoordinator {
   /// - Rejects retries if the active session UID no longer matches [uid].
   /// - If [targetRevision] is provided and older than the latest committed revision,
   ///   does not downgrade the latest reconciliation status.
+  /// - If [targetRevision] is greater than the latest committed revision, rejects retry.
   Future<BaseTimelineRoutineRefreshResult> retryRoutineRefresh({
     required String uid,
     int? targetRevision,
@@ -581,21 +672,32 @@ class BaseTimelineTransactionCoordinator {
       );
     }
 
-    // Revision monotonic guard: older retries cannot downgrade newer revisions
     final latestRev = _latestCommittedRevisionByUid[uid];
-    if (targetRevision != null &&
-        latestRev != null &&
-        targetRevision < latestRev) {
-      return BaseTimelineRoutineRefreshResult(
-        status: _latestRefreshStatusByUid[uid] ??
-            BaseTimelineRoutineRefreshStatus.refreshed,
-        message: 'Superseded by newer revision.',
+    if (latestRev == null) {
+      return const BaseTimelineRoutineRefreshResult(
+        status: BaseTimelineRoutineRefreshStatus.notAttempted,
+        message: 'No committed Base Timeline revision found to retry.',
       );
+    }
+
+    if (targetRevision != null) {
+      if (targetRevision < latestRev) {
+        return BaseTimelineRoutineRefreshResult(
+          status: latestRefreshStatusFor(uid),
+          message: 'Superseded by newer revision.',
+        );
+      }
+      if (targetRevision > latestRev) {
+        return const BaseTimelineRoutineRefreshResult(
+          status: BaseTimelineRoutineRefreshStatus.notAttempted,
+          message: 'Target revision exceeds latest committed revision.',
+        );
+      }
     }
 
     return await _reconcileCommittedRoutine(
       uid: uid,
-      committedRevision: targetRevision ?? latestRev ?? 1,
+      committedRevision: targetRevision ?? latestRev,
     );
   }
 }

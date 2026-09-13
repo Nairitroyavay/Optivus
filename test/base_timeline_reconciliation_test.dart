@@ -469,6 +469,10 @@ void main() {
         final delayGate = Completer<void>();
         adversarialRepo.delayFetch3 = delayGate;
 
+        // Also delay commit 2's post-commit routine fetch #6
+        final delayGate6 = Completer<void>();
+        adversarialRepo.delayFetch6 = delayGate6;
+
         // Commit 1: commits revision 2 durably, then pauses inside post-commit routine reload
         final commit1Future = coordinator.replaceSection(
           uid: userA,
@@ -491,18 +495,48 @@ void main() {
           updateSetup: (s) => s.copyWith(workBlocks: const [testBlockB]),
         );
 
-        // Yield turns
+        // Yield turns so commit 2 commits durably
         await Future<void>.delayed(Duration.zero);
+        await Future<void>.delayed(Duration.zero);
+
+        // Confirm revision 3 is already durable in repository!
+        final interimSetup = await fakeSetupRepo.fetchSetup(userA);
+        expect(interimSetup.revision, 3);
 
         // Release delayed post-commit fetch for commit 1
         delayGate.complete();
 
-        final results = await Future.wait([commit1Future, commit2Future]);
-        final res1 = results[0];
-        final res2 = results[1];
-
+        // Await commit 1 explicitly
+        final res1 = await commit1Future;
         expect(res1.revision, 2);
+
+        // CRUCIAL INTERMEDIATE CHECK (Section 15):
+        // Before R3 reconciliation finishes:
+        // revision-2 reconciliation MUST NOT publish "refreshed"
+        // as the latest state after revision 3 has committed!
+        expect(
+          coordinator.latestRefreshStatusFor(userA),
+          isNot(BaseTimelineRoutineRefreshStatus.refreshed),
+          reason: 'Revision 2 must not publish refreshed after revision 3 committed',
+        );
+        expect(
+          coordinator.latestRefreshStatusFor(userA),
+          BaseTimelineRoutineRefreshStatus.notAttempted,
+        );
+        expect(
+          coordinator.latestRefreshRevisionFor(userA),
+          3,
+        );
+
+        // Release commit 2's post-commit reload fetch #6
+        delayGate6.complete();
+
+        final res2 = await commit2Future;
         expect(res2.revision, 3);
+        expect(
+          res2.routineRefreshStatus,
+          BaseTimelineRoutineRefreshStatus.refreshed,
+        );
 
         // Final durable state must be revision 3
         final finalSetup = await fakeSetupRepo.fetchSetup(userA);
@@ -518,6 +552,10 @@ void main() {
         expect(
           coordinator.latestRefreshStatusFor(userA),
           BaseTimelineRoutineRefreshStatus.refreshed,
+        );
+        expect(
+          coordinator.latestRefreshRevisionFor(userA),
+          3,
         );
       },
     );
@@ -666,12 +704,393 @@ void main() {
         expect(retry.status, BaseTimelineRoutineRefreshStatus.notAttempted);
       },
     );
+
+    test(
+      'Req 25: Reconciliation joins in-flight post-commit load, observes failure as refreshPending, and retry succeeds',
+      () async {
+        final fakeSetupRepo = FakeBaseTimelineSetupRepository();
+        final gatedRoutineRepo = _GatedRoutineRepository();
+        final hookTxRepo = _HookableRoutineTransactionRepository(
+          routineRepository: gatedRoutineRepo,
+          setupRepository: fakeSetupRepo,
+        );
+
+        await fakeSetupRepo.saveSetup(
+          userA,
+          BaseTimelineSetup(
+            uid: userA,
+            updatedAt: DateTime.now(),
+            revision: 1,
+            schemaVersion: 3,
+          ),
+        );
+
+        final container = ProviderContainer(
+          overrides: [
+            fakeDataAllowedProvider.overrideWithValue(false),
+            userProfileProvider.overrideWith(
+              (ref) => UserProfileNotifier()
+                ..loadSeedData(
+                  UserProfile(
+                    uid: userA,
+                    email: 'a@optivus.app',
+                    displayName: 'User A',
+                  ),
+                ),
+            ),
+            baseTimelineSetupRepositoryProvider.overrideWithValue(fakeSetupRepo),
+            routineRepositoryProvider.overrideWithValue(gatedRoutineRepo),
+            routineTransactionRepositoryProvider.overrideWithValue(hookTxRepo),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final coordinator = container.read(
+          baseTimelineTransactionCoordinatorProvider,
+        );
+        final routineNotifier = container.read(
+          routineNotifierProvider.notifier,
+        );
+
+        // Pre-load userA
+        await routineNotifier.loadForOwner(userA);
+
+        // Fetch #1: pre-test routineNotifier.loadForOwner
+        // Fetch #2: coordinator pre-commit read
+        // Fetch #3: transaction repo pre-commit snapshot
+        // Fetch #4: coordinator post-commit reload
+        final fetch4Gate = Completer<void>();
+        gatedRoutineRepo.gateForFetchNumber(fetchNum: 4, gate: fetch4Gate);
+        gatedRoutineRepo.failOnFetchNumber(
+          fetchNum: 4,
+          error: StateError('Simulated concurrent post-commit Routine failure'),
+        );
+
+        // When fetch #4 begins (post-commit reload), launch concurrent load L_concurrent.
+        // It must join the already in-flight fetch #4.
+        late Future<void> concurrentPostCommitLoad;
+        gatedRoutineRepo.onFetchStartedForNumber(
+          fetchNum: 4,
+          callback: () {
+            concurrentPostCommitLoad = routineNotifier.loadForOwner(userA);
+          },
+        );
+
+        final replaceFuture = coordinator.replaceSection(
+          uid: userA,
+          section: BaseTimelineSection.work,
+          newBlocks: const [testBlockA],
+          updateSetup: (s) => s.copyWith(workBlocks: const [testBlockA]),
+        );
+
+        // Yield turns so coordinator reaches fetch #4 and triggers concurrent load
+        await Future<void>.delayed(Duration.zero);
+        await Future<void>.delayed(Duration.zero);
+
+        // Release fetch #4 so it fails
+        fetch4Gate.complete();
+
+        // The concurrent load throws because it shared the failed in-flight fetch
+        await expectLater(concurrentPostCommitLoad, throwsA(isA<StateError>()));
+
+        // The coordinator replaceSection finishes with refreshPending (NOT refreshed!)
+        final result = await replaceFuture;
+        expect(result.revision, 2);
+        expect(result.routineRefreshPending, isTrue);
+        expect(
+          result.routineRefreshStatus,
+          BaseTimelineRoutineRefreshStatus.refreshPending,
+        );
+        expect(
+          result.routineRefreshMessage,
+          'Saved, but Routine needs to refresh.',
+        );
+        expect(
+          coordinator.latestRefreshStatusFor(userA),
+          BaseTimelineRoutineRefreshStatus.refreshPending,
+        );
+        expect(
+          coordinator.latestRefreshRevisionFor(userA),
+          2,
+        );
+        expect(hookTxRepo.replaceCallCount, 1);
+
+        // Now retryRoutineRefresh succeeds without repeating transaction
+        final retryResult = await coordinator.retryRoutineRefresh(
+          uid: userA,
+          targetRevision: 2,
+        );
+
+        expect(retryResult.isRefreshed, isTrue);
+        expect(
+          retryResult.status,
+          BaseTimelineRoutineRefreshStatus.refreshed,
+        );
+        expect(
+          coordinator.latestRefreshStatusFor(userA),
+          BaseTimelineRoutineRefreshStatus.refreshed,
+        );
+        expect(
+          coordinator.latestRefreshRevisionFor(userA),
+          2,
+        );
+        // Transaction call count must remain 1
+        expect(hookTxRepo.replaceCallCount, 1);
+        final setup = await fakeSetupRepo.fetchSetup(userA);
+        expect(setup.revision, 2);
+        final items = container.read(routineNotifierProvider).items;
+        expect(items.length, 1);
+        expect(items.first.title, 'Deep Work A');
+      },
+    );
+
+    test(
+      'Req 26: Account switch DURING fresh post-commit fetch skips refresh safely without leaking data into new account',
+      () async {
+        final fakeSetupRepo = FakeBaseTimelineSetupRepository();
+        final gatedRoutineRepo = _GatedRoutineRepository();
+        final hookTxRepo = _HookableRoutineTransactionRepository(
+          routineRepository: gatedRoutineRepo,
+          setupRepository: fakeSetupRepo,
+        );
+
+        await fakeSetupRepo.saveSetup(
+          userA,
+          BaseTimelineSetup(
+            uid: userA,
+            updatedAt: DateTime.now(),
+            revision: 1,
+            schemaVersion: 3,
+          ),
+        );
+        await fakeSetupRepo.saveSetup(
+          userB,
+          BaseTimelineSetup(
+            uid: userB,
+            updatedAt: DateTime.now(),
+            revision: 1,
+            schemaVersion: 3,
+          ),
+        );
+
+        final container = ProviderContainer(
+          overrides: [
+            fakeDataAllowedProvider.overrideWithValue(false),
+            userProfileProvider.overrideWith(
+              (ref) => UserProfileNotifier()
+                ..loadSeedData(
+                  UserProfile(
+                    uid: userA,
+                    email: 'a@optivus.app',
+                    displayName: 'User A',
+                  ),
+                ),
+            ),
+            baseTimelineSetupRepositoryProvider.overrideWithValue(fakeSetupRepo),
+            routineRepositoryProvider.overrideWithValue(gatedRoutineRepo),
+            routineTransactionRepositoryProvider.overrideWithValue(hookTxRepo),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final coordinator = container.read(
+          baseTimelineTransactionCoordinatorProvider,
+        );
+        final routineNotifier = container.read(
+          routineNotifierProvider.notifier,
+        );
+
+        // Pre-load userA
+        await routineNotifier.loadForOwner(userA);
+
+        // Configure gate on fetch #3 (User A post-commit routine reload)
+        final postCommitFetchGate = Completer<void>();
+        gatedRoutineRepo.gateForFetchNumber(fetchNum: 3, gate: postCommitFetchGate);
+
+        // Start replaceSection for User A
+        final replaceFuture = coordinator.replaceSection(
+          uid: userA,
+          section: BaseTimelineSection.work,
+          newBlocks: const [testBlockA],
+          updateSetup: (s) => s.copyWith(workBlocks: const [testBlockA]),
+        );
+
+        // Yield turns so commit completes and post-commit fetch #3 starts and pauses at gate
+        await Future<void>.delayed(Duration.zero);
+        await Future<void>.delayed(Duration.zero);
+
+        // While fetch #3 is blocked: switch profile to User B and start User B Routine load
+        container.read(userProfileProvider.notifier).loadSeedData(
+          UserProfile(
+            uid: userB,
+            email: 'b@optivus.app',
+            displayName: 'User B',
+          ),
+        );
+        final loadBFuture = routineNotifier.loadForOwner(userB);
+
+        // Release User A's blocked fetch #3
+        postCommitFetchGate.complete();
+
+        final result = await replaceFuture;
+        await loadBFuture;
+
+        // 1. User A durable commit remains revision 2
+        expect(result.revision, 2);
+        expect(hookTxRepo.replaceCallCount, 1);
+        final setupA = await fakeSetupRepo.fetchSetup(userA);
+        expect(setupA.revision, 2);
+
+        // 2. A replaceSection does NOT throw as save failure
+        // 3. A reconciliation result is NOT refreshed (is notAttempted)
+        expect(
+          result.routineRefreshStatus,
+          BaseTimelineRoutineRefreshStatus.notAttempted,
+        );
+        expect(result.routineRefreshPending, isFalse);
+        expect(
+          result.routineRefreshMessage,
+          contains('active account changed'),
+        );
+
+        // 4. Latest A refresh state is not falsely refreshed
+        expect(
+          coordinator.latestRefreshStatusFor(userA),
+          BaseTimelineRoutineRefreshStatus.notAttempted,
+        );
+        expect(
+          coordinator.latestRefreshRevisionFor(userA),
+          2,
+        );
+
+        // 5. User B Routine state contains NO User A data
+        final itemsB = container.read(routineNotifierProvider).items;
+        expect(itemsB.any((item) => item.userId == userA), isFalse);
+
+        // 6. No second transaction occurred
+        expect(hookTxRepo.replaceCallCount, 1);
+      },
+    );
+
+    test(
+      'Req 27: Retry revision validation strictly guards real latest committed revision',
+      () async {
+        final fakeSetupRepo = FakeBaseTimelineSetupRepository();
+        final fakeRoutineRepo = FakeRoutineRepository();
+        final fakeTxRepo = FakeRoutineTransactionRepository(
+          routineRepository: fakeRoutineRepo,
+          setupRepository: fakeSetupRepo,
+        );
+
+        await fakeSetupRepo.saveSetup(
+          userA,
+          BaseTimelineSetup(
+            uid: userA,
+            updatedAt: DateTime.now(),
+            revision: 1,
+            schemaVersion: 3,
+          ),
+        );
+
+        final container = ProviderContainer(
+          overrides: [
+            fakeDataAllowedProvider.overrideWithValue(false),
+            userProfileProvider.overrideWith(
+              (ref) => UserProfileNotifier()
+                ..loadSeedData(
+                  UserProfile(
+                    uid: userA,
+                    email: 'a@optivus.app',
+                    displayName: 'User A',
+                  ),
+                ),
+            ),
+            baseTimelineSetupRepositoryProvider.overrideWithValue(fakeSetupRepo),
+            routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
+            routineTransactionRepositoryProvider.overrideWithValue(fakeTxRepo),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final coordinator = container.read(
+          baseTimelineTransactionCoordinatorProvider,
+        );
+
+        // 1. Unknown latest: no commit has occurred yet for userA in coordinator
+        final unknownRetry = await coordinator.retryRoutineRefresh(
+          uid: userA,
+          targetRevision: 1,
+        );
+        expect(
+          unknownRetry.status,
+          BaseTimelineRoutineRefreshStatus.notAttempted,
+        );
+        expect(
+          unknownRetry.message,
+          'No committed Base Timeline revision found to retry.',
+        );
+        expect(
+          coordinator.latestRefreshStatusFor(userA),
+          BaseTimelineRoutineRefreshStatus.notAttempted,
+        );
+
+        // 2. Commit revision 2
+        final replaceRes = await coordinator.replaceSection(
+          uid: userA,
+          section: BaseTimelineSection.work,
+          newBlocks: const [testBlockA],
+          updateSetup: (s) => s.copyWith(workBlocks: const [testBlockA]),
+        );
+        expect(replaceRes.revision, 2);
+        expect(coordinator.latestRefreshRevisionFor(userA), 2);
+
+        // 3. target < latest (target 1, latest 2) -> superseded
+        final supersededRetry = await coordinator.retryRoutineRefresh(
+          uid: userA,
+          targetRevision: 1,
+        );
+        expect(supersededRetry.message, contains('Superseded by newer revision'));
+        expect(
+          supersededRetry.status,
+          coordinator.latestRefreshStatusFor(userA),
+        );
+
+        // 4. target > latest (target 999, latest 2) -> rejected
+        final futureRetry = await coordinator.retryRoutineRefresh(
+          uid: userA,
+          targetRevision: 999,
+        );
+        expect(
+          futureRetry.status,
+          BaseTimelineRoutineRefreshStatus.notAttempted,
+        );
+        expect(
+          futureRetry.message,
+          'Target revision exceeds latest committed revision.',
+        );
+        // Bookkeeping remains unpoisoned:
+        expect(coordinator.latestRefreshRevisionFor(userA), 2);
+        expect(
+          coordinator.latestRefreshStatusFor(userA),
+          BaseTimelineRoutineRefreshStatus.refreshed,
+        );
+
+        // 5. target == latest (target 2, latest 2) -> allowed
+        final validRetry = await coordinator.retryRoutineRefresh(
+          uid: userA,
+          targetRevision: 2,
+        );
+        expect(validRetry.status, BaseTimelineRoutineRefreshStatus.refreshed);
+        expect(coordinator.latestRefreshRevisionFor(userA), 2);
+      },
+    );
   });
 }
 
 class _AdversarialRoutineRepository extends FakeRoutineRepository {
   int fetchCalls = 0;
   Completer<void>? delayFetch3;
+  Completer<void>? delayFetch6;
 
   _AdversarialRoutineRepository();
 
@@ -680,6 +1099,47 @@ class _AdversarialRoutineRepository extends FakeRoutineRepository {
     fetchCalls++;
     if (fetchCalls == 3 && delayFetch3 != null) {
       await delayFetch3!.future;
+    }
+    if (fetchCalls == 6 && delayFetch6 != null) {
+      await delayFetch6!.future;
+    }
+    return super.fetchRoutineItems(uid);
+  }
+}
+
+class _GatedRoutineRepository extends FakeRoutineRepository {
+  int fetchCalls = 0;
+  final Map<int, Completer<void>> _gates = {};
+  final Map<int, Object> _errors = {};
+  final Map<int, void Function()> _onFetchStarted = {};
+
+  void gateForFetchNumber({required int fetchNum, required Completer<void> gate}) {
+    _gates[fetchNum] = gate;
+  }
+
+  void failOnFetchNumber({required int fetchNum, required Object error}) {
+    _errors[fetchNum] = error;
+  }
+
+  void onFetchStartedForNumber({
+    required int fetchNum,
+    required void Function() callback,
+  }) {
+    _onFetchStarted[fetchNum] = callback;
+  }
+
+  @override
+  Future<List<RoutineItem>> fetchRoutineItems(String uid) async {
+    fetchCalls++;
+    final callNum = fetchCalls;
+    _onFetchStarted[callNum]?.call();
+    final gate = _gates[callNum];
+    if (gate != null) {
+      await gate.future;
+    }
+    final err = _errors[callNum];
+    if (err != null) {
+      throw err;
     }
     return super.fetchRoutineItems(uid);
   }

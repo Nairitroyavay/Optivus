@@ -895,6 +895,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
 
   Future<void>? _inFlightLoad;
   String? _inFlightUid;
+  int? _inFlightGeneration;
+  int _lastAuthoritativeLoadGeneration = 0;
+  String? _lastAuthoritativeUid;
 
   /// Post-commit Routine reconciliation reload primitive.
   ///
@@ -906,7 +909,11 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   /// 3. Verifies owner isolation if the active owner changed while waiting.
   /// 4. Initiates a fresh [loadForOwner] after the prior load has completed/cleared.
   /// 5. Propagates any real failure from the new reload.
-  Future<void> reloadForOwnerAfterCurrentLoad(String uid) async {
+  ///
+  /// Returns `true` if a fresh same-owner load completed and remains authoritative.
+  /// Returns `false` if the owner or session changed before it could complete authoritatively.
+  /// Real repository/network failures throw.
+  Future<bool> reloadForOwnerAfterCurrentLoad(String uid) async {
     if (uid.trim().isEmpty || uid.contains('/')) {
       throw ArgumentError('A valid authenticated Routine owner is required.');
     }
@@ -923,183 +930,210 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     }
 
     if (_ownerUid != null && _ownerUid != uid) {
-      return;
+      return false;
     }
 
+    final targetGeneration = _inFlightLoad != null
+        ? (_inFlightGeneration ?? _loadGeneration)
+        : (_loadGeneration + 1);
+
     await loadForOwner(uid);
+
+    if (_ownerUid != uid) {
+      return false;
+    }
+    if (_lastAuthoritativeUid != uid ||
+        _lastAuthoritativeLoadGeneration < targetGeneration) {
+      return false;
+    }
+
+    return true;
   }
 
-  Future<void> loadForOwner(String uid) async {
+  Future<void> loadForOwner(String uid) {
     if (uid.trim().isEmpty || uid.contains('/')) {
       throw ArgumentError('A valid authenticated Routine owner is required.');
     }
-    if (_ownerUid == uid && _inFlightUid == uid && _inFlightLoad != null) {
-      await _inFlightLoad;
-      return;
+    if (_inFlightUid == uid && _inFlightLoad != null) {
+      return _inFlightLoad!;
     }
-    final inFlightCompleter = Completer<void>();
+    final completer = Completer<void>();
     _inFlightUid = uid;
-    _inFlightLoad = inFlightCompleter.future;
+    _inFlightLoad = completer.future;
 
-    try {
-      final isNewOwner = _ownerUid != uid;
-      final generation = ++_loadGeneration;
-      _ownerUid = uid;
-      // Cancel old subscription BEFORE fetch to prevent stale events.
-      _eventsSubscription?.cancel();
-      _eventsSubscription = null;
-      if (isNewOwner) {
-        state = state.copyWith(
-          loading: true,
-          eventsLoading: true,
-          occurrences: const [],
-          events: const [],
-          corruptEvents: const [],
-          pendingItemIds: const {},
-          pendingOccurrenceIds: const {},
-          failedIntentsByItemId: const {},
-          failedOccurrenceIntentsById: const {},
-          queuedOccurrenceIntentsById: const {},
-          failedBatchIntentsByOperationId: const {},
-          items: const [],
-          clearError: true,
-          clearEventsError: true,
-          clearTrackerIntent: true,
-        );
-      } else {
-        state = state.copyWith(loading: true, clearError: true);
+    _performLoadForOwner(uid).then((value) {
+      if (!completer.isCompleted) {
+        completer.complete();
       }
-      try {
-        final results = await Future.wait<Object?>([
-          _repository.fetchRoutineItems(uid),
-          _historyRepository.fetchHistory(uid),
-          _onboardingRepository == null
-              ? Future<OnboardingCompletionBundle?>.value(null)
-              : _onboardingRepository.fetchCompletionBundle(uid),
-        ]);
-        if (generation != _loadGeneration || _ownerUid != uid) return;
-        final remoteItems = (results[0] as List<RoutineItem>)
-            .map(
-              (remote) => remote.hasConflict || remote.conflictMessage != null
-                  ? remote.copyWith(hasConflict: false, clearConflict: true)
-                  : remote,
-            )
-            .toList();
-
-        final localActiveIds = state.pendingItemIds.union(
-          state.failedIntentsByItemId.keys.toSet(),
-        );
-
-        final mergedItems = <RoutineItem>[];
-        for (final remote in remoteItems) {
-          if (!localActiveIds.contains(remote.id)) {
-            mergedItems.add(remote);
-          }
-        }
-        for (final id in localActiveIds) {
-          final localItem = state.items.where((e) => e.id == id).firstOrNull;
-          if (localItem != null) {
-            mergedItems.add(localItem);
-          }
-        }
-
-        final mergedOccurrences = <RoutineOccurrenceRecord>[];
-        final remoteOccurrences = results[1] as List<RoutineOccurrenceRecord>;
-        final localOccurrenceIds = state.pendingOccurrenceIds.union(
-          state.failedOccurrenceIntentsById.keys.toSet(),
-        );
-
-        for (final remote in remoteOccurrences) {
-          if (!localOccurrenceIds.contains(remote.id)) {
-            mergedOccurrences.add(remote);
-          }
-        }
-        for (final id in localOccurrenceIds) {
-          if (state.failedOccurrenceIntentsById.containsKey(id)) {
-            final intent = state.failedOccurrenceIntentsById[id]!;
-            mergedOccurrences.add(
-              intent.previousRecord ?? intent.attemptedRecord,
-            );
-          } else {
-            final localOcc = state.occurrences
-                .where((e) => e.id == id)
-                .firstOrNull;
-            if (localOcc != null) {
-              mergedOccurrences.add(localOcc);
-            }
-          }
-        }
-
-        state = state.copyWith(
-          items: mergedItems,
-          occurrences: mergedOccurrences,
-          loading: false,
-          eventsLoading: true,
-        );
-
-        final eventsGeneration = ++_eventsGeneration;
-        _eventsSubscription = _transactionRepository
-            .watchEvents(uid)
-            .listen(
-              (feed) {
-                if (mounted &&
-                    _ownerUid == uid &&
-                    _eventsGeneration == eventsGeneration &&
-                    _loadGeneration == generation) {
-                  state = state.copyWith(
-                    events: feed.validEvents,
-                    corruptEvents: feed.corruptEvents,
-                    eventsLoading: false,
-                    clearEventsError: true,
-                  );
-                }
-              },
-              onError: (Object error) {
-                if (mounted &&
-                    _ownerUid == uid &&
-                    _eventsGeneration == eventsGeneration &&
-                    _loadGeneration == generation) {
-                  state = state.copyWith(
-                    eventsLoading: false,
-                    eventsError: 'Failed to load history. Please try again.',
-                  );
-                }
-              },
-            );
-
-        final bundle = results[2] is OnboardingCompletionBundle
-            ? results[2] as OnboardingCompletionBundle
-            : null;
-        _scheduleBaseTimelineFoundationRepair(
-          uid: uid,
-          generation: generation,
-          currentRemoteItems: remoteItems,
-          bundle: bundle,
-        );
-        if (bundle != null) {
-          _scheduleProjectionIntegritySelfHeal(
-            uid: uid,
-            bundle: bundle,
-            generation: generation,
-            currentRemoteItems: remoteItems,
-          );
-        }
-      } catch (e) {
-        if (generation != _loadGeneration || _ownerUid != uid) return;
-        state = state.copyWith(
-          loading: false,
-          error: 'Failed to load routine data. Please try again.',
-        );
-        rethrow;
+    }, onError: (Object error, StackTrace stack) {
+      if (!completer.isCompleted) {
+        completer.completeError(error, stack);
       }
-    } finally {
-      if (_inFlightUid == uid) {
+    }).whenComplete(() {
+      if (identical(_inFlightLoad, completer.future)) {
         _inFlightLoad = null;
         _inFlightUid = null;
+        _inFlightGeneration = null;
       }
-      if (!inFlightCompleter.isCompleted) {
-        inFlightCompleter.complete();
+    });
+
+    return completer.future;
+  }
+
+  Future<void> _performLoadForOwner(String uid) async {
+    final isNewOwner = _ownerUid != uid;
+    final generation = ++_loadGeneration;
+    _inFlightGeneration = generation;
+    _ownerUid = uid;
+    // Cancel old subscription BEFORE fetch to prevent stale events.
+    _eventsSubscription?.cancel();
+    _eventsSubscription = null;
+    if (isNewOwner) {
+      state = state.copyWith(
+        loading: true,
+        eventsLoading: true,
+        occurrences: const [],
+        events: const [],
+        corruptEvents: const [],
+        pendingItemIds: const {},
+        pendingOccurrenceIds: const {},
+        failedIntentsByItemId: const {},
+        failedOccurrenceIntentsById: const {},
+        queuedOccurrenceIntentsById: const {},
+        failedBatchIntentsByOperationId: const {},
+        items: const [],
+        clearError: true,
+        clearEventsError: true,
+        clearTrackerIntent: true,
+      );
+    } else {
+      state = state.copyWith(loading: true, clearError: true);
+    }
+    try {
+      final results = await Future.wait<Object?>([
+        _repository.fetchRoutineItems(uid),
+        _historyRepository.fetchHistory(uid),
+        _onboardingRepository == null
+            ? Future<OnboardingCompletionBundle?>.value(null)
+            : _onboardingRepository.fetchCompletionBundle(uid),
+      ]);
+      if (generation != _loadGeneration || _ownerUid != uid) return;
+      final remoteItems = (results[0] as List<RoutineItem>)
+          .map(
+            (remote) => remote.hasConflict || remote.conflictMessage != null
+                ? remote.copyWith(hasConflict: false, clearConflict: true)
+                : remote,
+          )
+          .toList();
+
+      final localActiveIds = state.pendingItemIds.union(
+        state.failedIntentsByItemId.keys.toSet(),
+      );
+
+      final mergedItems = <RoutineItem>[];
+      for (final remote in remoteItems) {
+        if (!localActiveIds.contains(remote.id)) {
+          mergedItems.add(remote);
+        }
       }
+      for (final id in localActiveIds) {
+        final localItem = state.items.where((e) => e.id == id).firstOrNull;
+        if (localItem != null) {
+          mergedItems.add(localItem);
+        }
+      }
+
+      final mergedOccurrences = <RoutineOccurrenceRecord>[];
+      final remoteOccurrences = results[1] as List<RoutineOccurrenceRecord>;
+      final localOccurrenceIds = state.pendingOccurrenceIds.union(
+        state.failedOccurrenceIntentsById.keys.toSet(),
+      );
+
+      for (final remote in remoteOccurrences) {
+        if (!localOccurrenceIds.contains(remote.id)) {
+          mergedOccurrences.add(remote);
+        }
+      }
+      for (final id in localOccurrenceIds) {
+        if (state.failedOccurrenceIntentsById.containsKey(id)) {
+          final intent = state.failedOccurrenceIntentsById[id]!;
+          mergedOccurrences.add(
+            intent.previousRecord ?? intent.attemptedRecord,
+          );
+        } else {
+          final localOcc = state.occurrences
+              .where((e) => e.id == id)
+              .firstOrNull;
+          if (localOcc != null) {
+            mergedOccurrences.add(localOcc);
+          }
+        }
+      }
+
+      state = state.copyWith(
+        items: mergedItems,
+        occurrences: mergedOccurrences,
+        loading: false,
+        eventsLoading: true,
+      );
+
+      _lastAuthoritativeLoadGeneration = generation;
+      _lastAuthoritativeUid = uid;
+
+      final eventsGeneration = ++_eventsGeneration;
+      _eventsSubscription = _transactionRepository
+          .watchEvents(uid)
+          .listen(
+            (feed) {
+              if (mounted &&
+                  _ownerUid == uid &&
+                  _eventsGeneration == eventsGeneration &&
+                  _loadGeneration == generation) {
+                state = state.copyWith(
+                  events: feed.validEvents,
+                  corruptEvents: feed.corruptEvents,
+                  eventsLoading: false,
+                  clearEventsError: true,
+                );
+              }
+            },
+            onError: (Object error) {
+              if (mounted &&
+                  _ownerUid == uid &&
+                  _eventsGeneration == eventsGeneration &&
+                  _loadGeneration == generation) {
+                state = state.copyWith(
+                  eventsLoading: false,
+                  eventsError: 'Failed to load history. Please try again.',
+                );
+              }
+            },
+          );
+
+      final bundle = results[2] is OnboardingCompletionBundle
+          ? results[2] as OnboardingCompletionBundle
+          : null;
+      _scheduleBaseTimelineFoundationRepair(
+        uid: uid,
+        generation: generation,
+        currentRemoteItems: remoteItems,
+        bundle: bundle,
+      );
+      if (bundle != null) {
+        _scheduleProjectionIntegritySelfHeal(
+          uid: uid,
+          bundle: bundle,
+          generation: generation,
+          currentRemoteItems: remoteItems,
+        );
+      }
+    } catch (e) {
+      if (generation != _loadGeneration || _ownerUid != uid) return;
+      state = state.copyWith(
+        loading: false,
+        error: 'Failed to load routine data. Please try again.',
+      );
+      rethrow;
     }
   }
 
@@ -1411,6 +1445,10 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     _loadGeneration++;
     _eventsGeneration++;
     _ownerUid = null;
+    _inFlightLoad = null;
+    _inFlightUid = null;
+    _inFlightGeneration = null;
+    _lastAuthoritativeUid = null;
     _inFlightProjectionIntegritySignature = null;
     _lastSuccessfulProjectionIntegritySignature = null;
     _projectionIntegrityRetryCount.clear();
