@@ -176,8 +176,7 @@ class RoutineOccurrenceRecord {
       operationKey: map['operationKey'] as String? ?? 'op',
       createdAt: parseDate(map['createdAt']),
       updatedAt: parseDate(map['updatedAt']),
-      schemaVersion:
-          (map['schemaVersion'] as num?)?.toInt() ?? currentSchemaVersion,
+      schemaVersion: (map['schemaVersion'] as num?)?.toInt() ?? 1,
       movedToDateKey: map['movedToDateKey'] as String?,
       movedStartMinute: (map['movedStartMinute'] as num?)?.toInt(),
       movedEndMinute: (map['movedEndMinute'] as num?)?.toInt(),

@@ -181,7 +181,11 @@ class RoutineTimelineViewportState
         final effectiveDay =
             widget.selectedDay ?? writeState.selectedDay.weekday;
         final cacheKey = _layoutCacheKey(context, viewportWidth, effectiveDay);
-        final prepared = _preparedCacheKey == cacheKey
+        final cacheHit = _preparedCacheKey == cacheKey;
+        final prepareWatch = kDebugMode && !cacheHit
+            ? (Stopwatch()..start())
+            : null;
+        final prepared = cacheHit
             ? _preparedCache!
             : RoutinePreparedTimelineLayout.prepare(
                 context: context,
@@ -190,18 +194,41 @@ class RoutineTimelineViewportState
                 availableWidth: viewportWidth,
                 selectedDay: effectiveDay,
               );
+        prepareWatch?.stop();
         _preparedCacheKey = cacheKey;
         _preparedCache = prepared;
         if (kDebugMode && _lastDiagnosticKey != cacheKey) {
           _lastDiagnosticKey = cacheKey;
+          final classCount = prepared.items
+              .where((e) => e.item.category == RoutineCategory.classBlock)
+              .length;
+          final workCount = prepared.items
+              .where((e) => e.item.category == RoutineCategory.job)
+              .length;
+          final eatingCount = prepared.items
+              .where((e) => e.item.category == RoutineCategory.eating)
+              .length;
+          final fixedCount = prepared.items
+              .where((e) => e.item.category == RoutineCategory.fixed)
+              .length;
+          final skinCount = prepared.items
+              .where((e) => e.item.category == RoutineCategory.skinCare)
+              .length;
+          final prepareMs = prepareWatch?.elapsedMicroseconds == null
+              ? 0
+              : prepareWatch!.elapsedMicroseconds / 1000.0;
           debugPrint(
             'RoutineTimelinePrepared: items=${prepared.items.length} '
-            'classes=${prepared.items.where((e) => e.item.category == RoutineCategory.classBlock).length} '
-            'work=${prepared.items.where((e) => e.item.category == RoutineCategory.job).length} '
-            'eating=${prepared.items.where((e) => e.item.category == RoutineCategory.eating).length} '
-            'fixed=${prepared.items.where((e) => e.item.category == RoutineCategory.fixed).length} '
-            'skin=${prepared.items.where((e) => e.item.category == RoutineCategory.skinCare).length} '
-            'instanceIds=${prepared.items.map((e) => e.id).join(',')}',
+            'components=${prepared.components.length} '
+            'regions=${prepared.regions.length} '
+            'classes=$classCount '
+            'work=$workCount '
+            'eating=$eatingCount '
+            'fixed=$fixedCount '
+            'skin=$skinCount '
+            'measureMs=${prepareMs.toStringAsFixed(2)} '
+            'prepareMs=${prepareMs.toStringAsFixed(2)} '
+            'cacheHit=$cacheHit',
           );
         }
         _reconcileFocus(prepared);
@@ -362,6 +389,8 @@ class RoutineTimelineViewportState
   ) {
     final overlaps = prepared.overlapItemIds.contains(item.id);
     final isFront = _isFrontItem(prepared, item);
+    final isHiddenBackCard =
+        overlaps && !isFront && _isHiddenByPromotedFront(prepared, item);
     final isFrontCard = overlaps && isFront;
     final cardLeft =
         prepared.leftOffset + (isFrontCard ? prepared.gutterWidth : 0);
@@ -406,7 +435,7 @@ class RoutineTimelineViewportState
         key: ValueKey('routine-card-gesture-${item.id}'),
         behavior: HitTestBehavior.opaque,
         onTap: () {
-          if (overlaps && !isFront) {
+          if (isHiddenBackCard) {
             final componentId = prepared.componentIdByItemId[item.id];
             if (componentId != null) {
               setState(() {
@@ -417,7 +446,7 @@ class RoutineTimelineViewportState
         },
         child: ExcludeSemantics(
           key: ValueKey('routine-timeline-card-semantics-${item.id}'),
-          excluding: overlaps && !isFront,
+          excluding: isHiddenBackCard,
           child: Opacity(
             opacity: isPending ? 0.6 : 1.0,
             child: Stack(
@@ -435,7 +464,7 @@ class RoutineTimelineViewportState
                   onTap: isPending
                       ? null
                       : () {
-                          if (overlaps && !isFront) {
+                          if (isHiddenBackCard) {
                             final componentId =
                                 prepared.componentIdByItemId[item.id];
                             if (componentId != null) {
@@ -581,7 +610,29 @@ class RoutineTimelineViewportState
       if (startCmp != 0) return startCmp;
       return a.id.compareTo(b.id);
     });
-    return items.where((item) => _isFrontItem(prepared, item)).toList();
+    return items
+        .where(
+          (item) =>
+              _isFrontItem(prepared, item) ||
+              !_isHiddenByPromotedFront(prepared, item),
+        )
+        .toList();
+  }
+
+  bool _isHiddenByPromotedFront(
+    RoutinePreparedTimelineLayout prepared,
+    RoutineTimelineItem item,
+  ) {
+    final componentId = prepared.componentIdByItemId[item.id];
+    if (componentId == null) return false;
+    final component = prepared.components
+        .where((candidate) => candidate.id == componentId)
+        .firstOrNull;
+    if (component == null) return false;
+    final front = _frontForComponent(prepared, component);
+    if (front.id == item.id) return false;
+    return item.startMinute < front.endMinute &&
+        front.startMinute < item.endMinute;
   }
 
   bool _isFrontItem(
@@ -652,17 +703,18 @@ class RoutineTimelineViewportState
           )
           .toList();
 
+      final front = _frontForComponent(prepared, component);
       final backItems = <RoutineTimelineItem>[];
-      final firstRegionByItemId = <String, RoutineOverlapRegion>{};
+      final exposureRegionByItemId = <String, RoutineOverlapRegion>{};
 
       for (final id in component.itemIds) {
         final item = prepared.itemById[id];
         if (item == null) continue;
         for (final region in componentRegions) {
           if (!region.itemIds.contains(id)) continue;
-          final front = _frontForComponent(prepared, component);
+          if (!region.itemIds.contains(front.id)) continue;
           if (front.id != id) {
-            firstRegionByItemId.putIfAbsent(id, () => region);
+            exposureRegionByItemId.putIfAbsent(id, () => region);
             if (!backItems.contains(item)) {
               backItems.add(item);
             }
@@ -672,8 +724,8 @@ class RoutineTimelineViewportState
       }
 
       backItems.sort((a, b) {
-        final regA = firstRegionByItemId[a.id]!;
-        final regB = firstRegionByItemId[b.id]!;
+        final regA = exposureRegionByItemId[a.id]!;
+        final regB = exposureRegionByItemId[b.id]!;
         final startComp = regA.startMinute.compareTo(regB.startMinute);
         if (startComp != 0) return startComp;
         final itemComp = a.startMinute.compareTo(b.startMinute);
@@ -686,10 +738,10 @@ class RoutineTimelineViewportState
           TimelineBackTabPlacementRequest(
             id: item.id,
             startY: prepared.scale.yForMinute(
-              firstRegionByItemId[item.id]!.startMinute,
+              exposureRegionByItemId[item.id]!.startMinute,
             ),
             tabHeight:
-                prepared.tabHeightByRegionKey[firstRegionByItemId[item.id]!
+                prepared.tabHeightByRegionKey[exposureRegionByItemId[item.id]!
                     .key] ??
                 44.0,
           ),
@@ -697,8 +749,8 @@ class RoutineTimelineViewportState
       final topOffsets = computeBackTabTopOffsets(placementRequests);
 
       for (final item in backItems) {
-        final firstRegion = firstRegionByItemId[item.id]!;
-        final regionKey = firstRegion.key;
+        final exposureRegion = exposureRegionByItemId[item.id]!;
+        final regionKey = exposureRegion.key;
         final tabHeight = prepared.tabHeightByRegionKey[regionKey] ?? 44.0;
         final top = topOffsets[item.id]!;
 

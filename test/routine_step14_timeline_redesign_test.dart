@@ -65,7 +65,7 @@ class _MockRoutineNotifier extends RoutineNotifier {
     if (targetIndex != -1) {
       final item = state.items[targetIndex];
       if (item.blockType == RoutineBlockType.trackerTask) {
-        return await startTrackerTask(item);
+        return await startTrackerTask(item, occurrenceDate: occurrenceDate);
       }
     }
     return RoutineWriteResult.saved(
@@ -87,7 +87,10 @@ class _MockRoutineNotifier extends RoutineNotifier {
   }
 
   @override
-  Future<RoutineWriteResult> startTrackerTask(RoutineItem item) async {
+  Future<RoutineWriteResult> startTrackerTask(
+    RoutineItem item, {
+    DateTime? occurrenceDate,
+  }) async {
     trackerStarts.add(item.id);
     state = state.copyWith(
       items: state.items
@@ -106,8 +109,9 @@ class _MockRoutineNotifier extends RoutineNotifier {
 
   @override
   Future<RoutineWriteResult> completeTrackerSession(
-    String routineTaskId,
-  ) async {
+    String routineTaskId, {
+    DateTime? occurrenceDate,
+  }) async {
     trackerCompletes.add(routineTaskId);
     completedItemIds.add(routineTaskId);
     state = state.copyWith(
@@ -129,6 +133,7 @@ class _MockRoutineNotifier extends RoutineNotifier {
   Future<RoutineWriteResult> alreadySaved(
     String itemId, {
     double? amount,
+    DateTime? occurrenceDate,
   }) async {
     moneySavedIds.add(itemId);
     completedItemIds.add(itemId);
@@ -700,11 +705,11 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Initially one coherent component front is promoted, and every other
-        // member remains exposed as an individually tappable back card.
+        // Initially one coherent component front is promoted, and exact
+        // physical overlaps remain exposed as individually tappable back cards.
         expect(
           find.byKey(const ValueKey('routine-back-label-trans_a')),
-          findsOneWidget,
+          findsNothing,
         );
         expect(
           find.byKey(const ValueKey('routine-back-label-trans_c')),
@@ -712,7 +717,7 @@ void main() {
         );
         expect(
           find.byKey(const ValueKey('routine-back-label-trans_b')),
-          findsOneWidget,
+          findsNothing,
         );
         expect(
           find.byKey(const ValueKey('routine-back-label-trans_d')),
@@ -750,7 +755,8 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // trans_a is now front; every other member of the component is exposed.
+        // trans_a is now front; only cards that physically overlap it are
+        // exposed. trans_d only shares the component transitively through C.
         expect(
           find.byKey(const ValueKey('routine-back-label-trans_a')),
           findsNothing,
@@ -765,7 +771,7 @@ void main() {
         );
         expect(
           find.byKey(const ValueKey('routine-back-label-trans_d')),
-          findsOneWidget,
+          findsNothing,
         );
       },
     );
@@ -1846,7 +1852,7 @@ void main() {
           expect(nutritionBox.borderRadius, BorderRadius.circular(8));
           expect(
             (nutritionBox.border as Border).top.color,
-            OptivusColors.blockSoft.withValues(alpha: 0.35),
+            RoutineCardPresentation.dishBorderColor,
           );
 
           // Find dish chip container

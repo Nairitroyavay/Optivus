@@ -50,6 +50,9 @@ class RoutineCardActions extends ConsumerWidget {
             occurrenceDateKey: routineLocalDateKey(occurrenceDate!),
           )
         : null;
+    final occurrenceDateKey = occurrenceDate == null
+        ? null
+        : routineLocalDateKey(occurrenceDate!);
     final actionState = hasScope
         ? ref.watch(
             routineNotifierProvider.select(
@@ -59,6 +62,8 @@ class RoutineCardActions extends ConsumerWidget {
                     occurrenceTargetId != null &&
                     state.pendingOccurrenceIds.contains(occurrenceTargetId),
                 activeTrackerId: state.activeTrackerLaunchIntent?.routineTaskId,
+                activeTrackerOccurrenceDateKey:
+                    state.activeTrackerLaunchIntent?.occurrenceDateKey,
               ),
             ),
           )
@@ -86,6 +91,9 @@ class RoutineCardActions extends ConsumerWidget {
             item.blockType != RoutineBlockType.moneyTask &&
             item.startedAt != null &&
             item.countdownDurationSeconds != null;
+        final isActiveTrackerOccurrence =
+            actionState?.activeTrackerId == item.id &&
+            actionState?.activeTrackerOccurrenceDateKey == occurrenceDateKey;
         final startAction = _ActionButton(
           key: ValueKey('routine-action-start-${item.id}'),
           label: hasGenericCountdown ? null : 'Start',
@@ -95,7 +103,7 @@ class RoutineCardActions extends ConsumerWidget {
               : null,
           color: OptivusColors.routineAccent,
           icon: Icons.play_arrow_rounded,
-          isDisabled: isPending,
+          isDisabled: isPending || hasGenericCountdown,
           onTap: () {
             if (!hasScope) return;
             if (item.blockType == RoutineBlockType.moneyTask) {
@@ -116,7 +124,7 @@ class RoutineCardActions extends ConsumerWidget {
               _showBadHabitCheckInSheet(context, ref, item);
             } else if (item.blockType == RoutineBlockType.trackerTask &&
                 (item.status == RoutineStatus.inTracker ||
-                    actionState?.activeTrackerId == item.id)) {
+                    isActiveTrackerOccurrence)) {
               ref.read(appNavigationProvider.notifier).goToTracker();
             } else if (item.blockType == RoutineBlockType.trackerTask) {
               ref

@@ -69,6 +69,11 @@ class RoutineOccurrenceFirestoreCodec {
     }
     final hasStartedAt = record.startedAt != null;
     final hasCountdown = record.countdownDurationSeconds != null;
+    if (record.schemaVersion == 1 && (hasStartedAt || hasCountdown)) {
+      throw ArgumentError(
+        'Routine occurrence schema v1 cannot include timer fields.',
+      );
+    }
     if (hasStartedAt != hasCountdown) {
       throw ArgumentError('Routine occurrence timer fields are incomplete.');
     }
@@ -179,7 +184,7 @@ class RoutineOccurrenceFirestoreCodec {
           (throw const FormatException(
             'Routine occurrence updatedAt is required.',
           )),
-      schemaVersion: (data['schemaVersion'] as num?)?.toInt() ?? 0,
+      schemaVersion: (data['schemaVersion'] as num?)?.toInt() ?? 1,
     );
     toFirestore(record);
     return record;

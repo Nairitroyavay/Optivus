@@ -777,6 +777,66 @@ describe("Firestore Rules for Routine durability", () => {
     })));
   });
 
+  it("enforces Routine occurrence timer schema versions", async () => {
+    const db = ownerDb();
+    const history = db.collection("users").doc("user123").collection("routineHistory");
+    const timerOccurrenceData = (id, overrides = {}) => occurrenceData("user123", id, overrides);
+
+    await assertSucceeds(history.doc("timer-v1-none").set(timerOccurrenceData("timer-v1-none")));
+    await assertSucceeds(history.doc("timer-v2-none").set(timerOccurrenceData("timer-v2-none", {
+      schemaVersion: 2,
+    })));
+    await assertSucceeds(history.doc("timer-v2-valid").set(timerOccurrenceData("timer-v2-valid", {
+      schemaVersion: 2,
+      startedAt: createdAt,
+      countdownDurationSeconds: 3600,
+    })));
+
+    await assertFails(history.doc("timer-v1-started").set(timerOccurrenceData("timer-v1-started", {
+      startedAt: createdAt,
+    })));
+    await assertFails(history.doc("timer-v1-countdown").set(timerOccurrenceData("timer-v1-countdown", {
+      countdownDurationSeconds: 3600,
+    })));
+    await assertFails(history.doc("timer-v1-both").set(timerOccurrenceData("timer-v1-both", {
+      startedAt: createdAt,
+      countdownDurationSeconds: 3600,
+    })));
+    await assertFails(history.doc("timer-v2-started-only").set(timerOccurrenceData("timer-v2-started-only", {
+      schemaVersion: 2,
+      startedAt: createdAt,
+    })));
+    await assertFails(history.doc("timer-v2-countdown-only").set(timerOccurrenceData("timer-v2-countdown-only", {
+      schemaVersion: 2,
+      countdownDurationSeconds: 3600,
+    })));
+    await assertFails(history.doc("timer-v2-zero").set(timerOccurrenceData("timer-v2-zero", {
+      schemaVersion: 2,
+      startedAt: createdAt,
+      countdownDurationSeconds: 0,
+    })));
+    await assertFails(history.doc("timer-v2-negative").set(timerOccurrenceData("timer-v2-negative", {
+      schemaVersion: 2,
+      startedAt: createdAt,
+      countdownDurationSeconds: -1,
+    })));
+    await assertFails(history.doc("timer-v2-too-long").set(timerOccurrenceData("timer-v2-too-long", {
+      schemaVersion: 2,
+      startedAt: createdAt,
+      countdownDurationSeconds: 86401,
+    })));
+    await assertFails(history.doc("timer-v2-wrong-started").set(timerOccurrenceData("timer-v2-wrong-started", {
+      schemaVersion: 2,
+      startedAt: "2026-07-24T10:00:00Z",
+      countdownDurationSeconds: 3600,
+    })));
+    await assertFails(history.doc("timer-v2-wrong-countdown").set(timerOccurrenceData("timer-v2-wrong-countdown", {
+      schemaVersion: 2,
+      startedAt: createdAt,
+      countdownDurationSeconds: 3600.5,
+    })));
+  });
+
   it("requires strict append-only Routine events", async () => {
     const db = ownerDb();
     const docRef = db.collection("users").doc("user123").collection("routineEvents").doc("event-1");

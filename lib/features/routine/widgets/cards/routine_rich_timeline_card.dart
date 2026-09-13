@@ -153,14 +153,14 @@ class RoutineRichTimelineCard extends ConsumerWidget {
                   color: Colors.white.withValues(alpha: 0.85),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: accent.withValues(alpha: 0.35),
+                    color: RoutineCardPresentation.dishBorderColor,
                     width: 1,
                   ),
                 ),
                 child: Text(
                   nutrition,
                   style: RoutineCardPresentation.nutritionTextStyle.copyWith(
-                    color: accent,
+                    color: OptivusColors.textPrimary,
                   ),
                 ),
               ),

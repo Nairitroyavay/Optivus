@@ -2,7 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/models/routine_event_record.dart';
 import 'package:optivus/models/routine_occurrence.dart';
 import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/repositories/routine_history_repository.dart';
@@ -126,6 +128,124 @@ void main() {
     expect(state.items.length, 1);
     expect(state.items.first.id, 't1');
   });
+
+  test('generic Start is idempotent after save', () async {
+    final notifier = container.read(routineNotifierProvider.notifier);
+    const uid = 'user_1';
+    await repo.createRoutineItem(uid, createTemplate(uid, 't1'));
+    await notifier.loadForOwner(uid);
+
+    final first = await notifier.startFlexibleTask('t1');
+    await waitForPending();
+    final afterFirst = container.read(routineNotifierProvider);
+    final started = afterFirst.occurrences.single;
+    expect(first.outcome, RoutineWriteOutcome.saved);
+    expect(started.status, RoutineStatus.active);
+    expect(started.startedAt, isNotNull);
+    expect(started.countdownDurationSeconds, 3600);
+
+    final second = await notifier.startFlexibleTask('t1');
+    await waitForPending();
+    final afterSecond = container.read(routineNotifierProvider);
+
+    expect(second.outcome, RoutineWriteOutcome.noOp);
+    expect(afterSecond.occurrences, hasLength(1));
+    expect(afterSecond.occurrences.single.startedAt, started.startedAt);
+    expect(
+      afterSecond.occurrences.single.countdownDurationSeconds,
+      started.countdownDurationSeconds,
+    );
+    expect(
+      afterSecond.events
+          .where((event) => event.eventType == RoutineEventType.started)
+          .length,
+      1,
+    );
+  });
+
+  test(
+    'tracker links target moved-in and native occurrences independently',
+    () async {
+      final notifier = container.read(routineNotifierProvider.notifier);
+      const uid = 'user_1';
+      final template = createTemplate(uid, 'tracker-template').copyWith(
+        blockType: RoutineBlockType.trackerTask,
+        trackerType: TrackerType.focus,
+        repeatDays: const [DateTime.wednesday],
+      );
+      await repo.createRoutineItem(uid, template);
+      await notifier.loadForOwner(uid);
+
+      final movedDate = DateTime(2026, 9, 15);
+      final nativeDate = DateTime(2026, 9, 16);
+
+      await notifier.startTrackerTask(template, occurrenceDate: movedDate);
+      await waitForPending();
+      await notifier.startTrackerTask(template, occurrenceDate: nativeDate);
+      await waitForPending();
+
+      var links = container.read(trackerSessionLinksProvider);
+      expect(links, hasLength(2));
+      expect(links.map((link) => link.occurrenceDateKey).toSet(), {
+        '2026-09-15',
+        '2026-09-16',
+      });
+      expect(
+        container
+            .read(routineNotifierProvider)
+            .activeTrackerLaunchIntent
+            ?.occurrenceDateKey,
+        '2026-09-16',
+      );
+
+      await notifier.completeTrackerSession(
+        template.id,
+        occurrenceDate: movedDate,
+      );
+      await waitForPending();
+
+      links = container.read(trackerSessionLinksProvider);
+      expect(
+        links
+            .singleWhere((link) => link.occurrenceDateKey == '2026-09-15')
+            .status,
+        'completed',
+      );
+      expect(
+        links
+            .singleWhere((link) => link.occurrenceDateKey == '2026-09-16')
+            .status,
+        'active',
+      );
+      expect(
+        container
+            .read(routineNotifierProvider)
+            .activeTrackerLaunchIntent
+            ?.occurrenceDateKey,
+        '2026-09-16',
+      );
+
+      await notifier.completeTrackerSession(
+        template.id,
+        occurrenceDate: nativeDate,
+      );
+      await waitForPending();
+
+      expect(
+        container.read(routineNotifierProvider).activeTrackerLaunchIntent,
+        isNull,
+      );
+      expect(
+        container
+            .read(routineNotifierProvider)
+            .occurrences
+            .where(
+              (occurrence) => occurrence.status == RoutineStatus.completed,
+            ),
+        hasLength(2),
+      );
+    },
+  );
 
   test('Move later (same date)', () async {
     final notifier = container.read(routineNotifierProvider.notifier);
