@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/class_timeline_adapter.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
@@ -38,6 +40,13 @@ class ClassesCurrentSetupView extends StatefulWidget {
 
 class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
   String? _frontBlockId;
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,6 +60,7 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
         .expand((b) => adapter.toEntries(b))
         .toList();
     final blockMap = {for (final b in widget.routineBlocks) b.id: b};
+    final hasClasses = snapshot.isConfigured || widget.routineBlocks.isNotEmpty;
 
     return SafeArea(
       bottom: false,
@@ -87,8 +97,7 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        (snapshot.isConfigured ||
-                                widget.routineBlocks.isNotEmpty)
+                        hasClasses
                             ? 'Your current setup'
                             : 'Set up your timetable',
                         style: const TextStyle(
@@ -99,7 +108,7 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
                     ],
                   ),
                 ),
-                if (snapshot.isConfigured || widget.routineBlocks.isNotEmpty)
+                if (hasClasses)
                   PopupMenuButton<String>(
                     icon: const Icon(
                       Icons.more_vert_rounded,
@@ -145,27 +154,14 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
             ),
           ),
 
-          // Source Photo Preview (Truthful Presigned R2 or saved asset)
-          if (snapshot.sourceR2Key != null || snapshot.sourceAssetId != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: BaseTimelinePhotoPreviewCard(
-                r2Key: snapshot.sourceR2Key,
-                assetId: snapshot.sourceAssetId,
-                title: 'Timetable photo',
-                subtitle: widget.routineBlocks.isNotEmpty
-                    ? '${widget.routineBlocks.length} weekly classes'
-                    : null,
-                height: 110,
-              ),
-            ),
-
           // Timeline View (Hero)
           Expanded(
             child: FullScreenTimelineScaffold(
               entries: entries,
               selectedDay: widget.selectedDay,
               onDayChanged: widget.onDayChanged,
+              scrollController: _scrollController,
+              enableHaptics: true,
               overlapPresentation: TimelineOverlapPresentation.frontAndExposed,
               frontEntryId: _frontBlockId,
               onFrontSelected: (id) => setState(() => _frontBlockId = id),
@@ -179,6 +175,7 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
                   accent: OptivusColors.blueAccent,
                   onTap: () {
                     if (positioned.hasOverlap && !positioned.isFront) {
+                      HapticFeedback.lightImpact();
                       setState(() => _frontBlockId = positioned.entry.id);
                     } else if (block != null) {
                       ClassDetailSheet.show(context, block);
@@ -186,12 +183,7 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
                   },
                 );
               },
-              onEntryTapped: (entry) {
-                final block = blockMap[entry.sourceId];
-                if (block != null) {
-                  ClassDetailSheet.show(context, block);
-                }
-              },
+              onEntryTapped: null,
               accent: OptivusColors.blueAccent,
               mode: TimelineMode.previewReadOnly,
               visibleRangePolicy: TimelineVisibleRangePolicy.contentAdaptive,
@@ -200,15 +192,36 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
             ),
           ),
 
-          // Dominant 52px Bottom CTA
+          // Source Photo Preview below Timeline (Fixed-height compact row)
+          if (snapshot.sourceR2Key != null || snapshot.sourceAssetId != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+              child: BaseTimelinePhotoPreviewCard(
+                r2Key: snapshot.sourceR2Key,
+                assetId: snapshot.sourceAssetId,
+                title: 'Timetable photo',
+                subtitle: widget.routineBlocks.isNotEmpty
+                    ? '${widget.routineBlocks.length} weekly classes'
+                    : null,
+                isCompactRow: true,
+                height: 68,
+              ),
+            ),
+
+          // Dominant 52px Bottom CTA with Floating Tab Bar Clearance
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              10,
+              16,
+              routineBottomCtaReserve(context),
+            ),
             child: SizedBox(
               height: 52,
               child: FilledButton.icon(
                 icon: const Icon(Icons.edit_calendar_rounded, size: 20),
                 label: Text(
-                  snapshot.isConfigured ? 'Change setup' : 'Set up Classes',
+                  hasClasses ? 'Change setup' : 'Set up Classes',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,

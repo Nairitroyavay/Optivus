@@ -727,6 +727,7 @@ class RoutineTimelineViewportState
                   isFront: false,
                   hasOverlap: true,
                   useGroupedBackdrop: true,
+                  showShadow: false,
                   borderRadius: BorderRadius.circular(20),
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Align(

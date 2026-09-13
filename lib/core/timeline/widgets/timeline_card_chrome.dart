@@ -14,6 +14,7 @@ class TimelineCardChrome extends StatelessWidget {
   final BorderRadius? borderRadius;
   final EdgeInsetsGeometry? padding;
   final bool useGroupedBackdrop;
+  final bool? showShadow;
 
   const TimelineCardChrome({
     super.key,
@@ -25,12 +26,15 @@ class TimelineCardChrome extends StatelessWidget {
     this.borderRadius,
     this.padding,
     this.useGroupedBackdrop = false,
+    this.showShadow,
   });
 
   @override
   Widget build(BuildContext context) {
     final effectiveRadius = borderRadius ?? BorderRadius.circular(24);
     final neutralSurface = surfaceMode == TimelineCardSurfaceMode.neutralGlass;
+    final effectiveShowShadow =
+        showShadow ?? (surfaceMode != TimelineCardSurfaceMode.neutralGlass);
 
     return Container(
       decoration: BoxDecoration(
@@ -59,15 +63,17 @@ class TimelineCardChrome extends StatelessWidget {
           color: Colors.white.withValues(alpha: isFront ? 0.96 : 0.82),
           width: isFront ? 1.6 : 1.2,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: neutralSurface
-                ? Colors.black.withValues(alpha: isFront ? 0.10 : 0.06)
-                : baseColor.withValues(alpha: isFront ? 0.18 : 0.09),
-            blurRadius: isFront ? 14 : 10,
-            offset: Offset(0, isFront ? 5 : 3),
-          ),
-        ],
+        boxShadow: effectiveShowShadow
+            ? [
+                BoxShadow(
+                  color: neutralSurface
+                      ? Colors.black.withValues(alpha: isFront ? 0.10 : 0.06)
+                      : baseColor.withValues(alpha: isFront ? 0.18 : 0.09),
+                  blurRadius: isFront ? 14 : 10,
+                  offset: Offset(0, isFront ? 5 : 3),
+                ),
+              ]
+            : null,
       ),
       child: ClipRRect(
         borderRadius: effectiveRadius,

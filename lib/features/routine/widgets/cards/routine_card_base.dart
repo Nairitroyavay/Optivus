@@ -45,6 +45,7 @@ class RoutineCardBase extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         padding: const EdgeInsets.all(12),
         useGroupedBackdrop: true,
+        showShadow: false,
         child: child,
       ),
     );

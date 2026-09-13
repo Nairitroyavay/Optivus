@@ -22,6 +22,7 @@ class BaseTimelinePhotoPreviewCard extends ConsumerStatefulWidget {
   final String title;
   final String? subtitle;
   final double height;
+  final bool isCompactRow;
 
   const BaseTimelinePhotoPreviewCard({
     super.key,
@@ -31,6 +32,7 @@ class BaseTimelinePhotoPreviewCard extends ConsumerStatefulWidget {
     this.title = 'Source Photo',
     this.subtitle,
     this.height = 180,
+    this.isCompactRow = false,
   });
 
   @override
@@ -212,6 +214,10 @@ class _BaseTimelinePhotoPreviewCardState
         (key == null || key.isEmpty) &&
         (assetId == null || assetId.isEmpty)) {
       return const SizedBox.shrink();
+    }
+
+    if (widget.isCompactRow || widget.height <= 80) {
+      return _buildCompactRow(context);
     }
 
     final radius = BorderRadius.circular(18);
@@ -426,6 +432,144 @@ class _BaseTimelinePhotoPreviewCardState
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildCompactRow(BuildContext context) {
+    final hasLocal = _hasValidLocalPreview;
+    final isPhotoSavedUnavailable =
+        widget.assetId != null && (widget.r2Key == null || _failed);
+
+    Widget thumbnailWidget;
+    if (hasLocal) {
+      thumbnailWidget = Image.file(
+        File(widget.localPreviewPath!),
+        fit: BoxFit.cover,
+        cacheWidth: 240,
+        cacheHeight: 240,
+        errorBuilder: (context, error, stackTrace) =>
+            _buildCompactThumbnailFallback(),
+      );
+    } else if (_previewUri != null && !_failed) {
+      thumbnailWidget = Image.network(
+        _previewUri.toString(),
+        fit: BoxFit.cover,
+        cacheWidth: 240,
+        cacheHeight: 240,
+        errorBuilder: (context, error, stackTrace) =>
+            _buildCompactThumbnailFallback(),
+      );
+    } else if (_loading) {
+      thumbnailWidget = const Center(
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation(Colors.white70),
+          ),
+        ),
+      );
+    } else {
+      thumbnailWidget = _buildCompactThumbnailFallback();
+    }
+
+    final subtitleText = isPhotoSavedUnavailable
+        ? (widget.subtitle != null && widget.subtitle!.trim().isNotEmpty
+              ? '${widget.subtitle!.trim()} · Preview unavailable'
+              : 'Timetable photo saved · Preview unavailable')
+        : (widget.subtitle != null && widget.subtitle!.trim().isNotEmpty
+              ? widget.subtitle!.trim()
+              : (_failed ? 'Preview unavailable' : 'Tap to view full photo'));
+
+    final canViewFull = hasLocal || (_previewUri != null && !_failed);
+
+    return Semantics(
+      button: canViewFull,
+      label: 'View timetable photo',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: canViewFull
+              ? () => _showFullImage(
+                  context,
+                  networkUri: _previewUri,
+                  localPath: hasLocal ? widget.localPreviewPath : null,
+                )
+              : null,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            height: widget.height,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              color: Colors.white.withValues(alpha: 0.08),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.15),
+                width: 1.0,
+              ),
+            ),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    width: 46,
+                    height: 46,
+                    color: Colors.black.withValues(alpha: 0.25),
+                    child: thumbnailWidget,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: OptivusColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitleText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: OptivusColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (canViewFull)
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: OptivusColors.textSecondary,
+                    size: 20,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactThumbnailFallback() {
+    return Center(
+      child: Icon(
+        Icons.photo_outlined,
+        color: OptivusColors.textSecondary.withValues(alpha: 0.7),
+        size: 20,
       ),
     );
   }

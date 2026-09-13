@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
@@ -73,7 +74,12 @@ class ClassesSourceSelectionView extends StatelessWidget {
           ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                16,
+                16,
+                routineBottomCtaReserve(context),
+              ),
               children: [
                 if (snapshot.sourceR2Key != null ||
                     snapshot.sourceAssetId != null) ...[
@@ -91,7 +97,8 @@ class ClassesSourceSelectionView extends StatelessWidget {
                     r2Key: snapshot.sourceR2Key,
                     assetId: snapshot.sourceAssetId,
                     title: 'Current Timetable Photo',
-                    height: 120,
+                    isCompactRow: true,
+                    height: 68,
                   ),
                   const SizedBox(height: 16),
                 ],

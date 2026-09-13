@@ -7,6 +7,8 @@ import 'package:optivus/features/routine/models/routine_day_entry.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/services/routine_materializer.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/core/timeline/widgets/timeline_card_chrome.dart';
+import 'package:optivus/features/routine/widgets/cards/routine_card_base.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_rich_timeline_card.dart';
 import 'package:optivus/features/routine/widgets/routine_current_time_line.dart';
@@ -282,6 +284,91 @@ void main() {
         ),
       );
       expect(find.text('Now — 5:00 PM'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'routine timeline blocks and current time indicator have zero shadow',
+    (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: RoutineCardBase(
+              railColor: Colors.blue,
+              child: Text('Routine Card'),
+            ),
+          ),
+        ),
+      );
+
+      final containerFinder = find.descendant(
+        of: find.byType(TimelineCardChrome),
+        matching: find.byType(Container),
+      );
+      expect(containerFinder, findsWidgets);
+      final container = tester.widget<Container>(containerFinder.first);
+      final decoration = container.decoration as BoxDecoration;
+      expect(
+        decoration.boxShadow,
+        isNull,
+        reason: 'Routine timeline cards must not have any boxShadow',
+      );
+
+      // Verify RoutineCurrentTimeLine dot has no shadow
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: RoutineCurrentTimeLine(
+              layout: TimelineLayout(
+                visibleStartMinute: 480,
+                visibleEndMinute: 1080,
+              ),
+              currentMinute: 500,
+            ),
+          ),
+        ),
+      );
+
+      final dotContainerFinder = find.descendant(
+        of: find.byType(RoutineCurrentTimeLine),
+        matching: find.byType(Container),
+      );
+      expect(dotContainerFinder, findsOneWidget);
+      final dotContainer = tester.widget<Container>(dotContainerFinder);
+      final dotDecoration = dotContainer.decoration as BoxDecoration;
+      expect(
+        dotDecoration.boxShadow,
+        isNull,
+        reason: 'Current time dot must not have any boxShadow',
+      );
+
+      // Verify Onboarding accentTinted mode still preserves shadow
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: TimelineCardChrome(
+              baseColor: Colors.blue,
+              surfaceMode: TimelineCardSurfaceMode.accentTinted,
+              child: Text('Onboarding Card'),
+            ),
+          ),
+        ),
+      );
+
+      final onboardingContainerFinder = find.descendant(
+        of: find.byType(TimelineCardChrome),
+        matching: find.byType(Container),
+      );
+      final onboardingContainer = tester.widget<Container>(
+        onboardingContainerFinder.first,
+      );
+      final onboardingDecoration =
+          onboardingContainer.decoration as BoxDecoration;
+      expect(
+        onboardingDecoration.boxShadow,
+        isNotNull,
+        reason: 'Onboarding cards should retain their boxShadow',
+      );
     },
   );
 

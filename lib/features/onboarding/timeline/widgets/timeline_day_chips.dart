@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../../core/theme/optivus_colors.dart';
 
 /// Standard weekday names in canonical 1-indexed order (1 = Monday, 7 = Sunday).
@@ -20,6 +21,7 @@ class TimelineDayChips extends StatelessWidget {
   final ValueChanged<int> onDayChanged;
   final Color accent;
   final EdgeInsetsGeometry padding;
+  final bool enableHaptics;
 
   const TimelineDayChips({
     super.key,
@@ -27,6 +29,7 @@ class TimelineDayChips extends StatelessWidget {
     required this.onDayChanged,
     this.accent = OptivusColors.brandAccent,
     this.padding = const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+    this.enableHaptics = false,
   });
 
   @override
@@ -49,7 +52,12 @@ class TimelineDayChips extends StatelessWidget {
               label: dayName,
               isSelected: isSelected,
               accent: accent,
-              onTap: () => onDayChanged(dayNumber),
+              onTap: () {
+                if (enableHaptics && selectedDay != dayNumber) {
+                  HapticFeedback.selectionClick();
+                }
+                onDayChanged(dayNumber);
+              },
             );
 
             return useExpanded

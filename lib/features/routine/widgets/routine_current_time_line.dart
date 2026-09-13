@@ -59,16 +59,9 @@ class RoutineCurrentTimeLine extends StatelessWidget {
                   left: (kTimelineRailDotColumnWidth - dotSize) / 2,
                   right: kTimelineContentGap,
                 ),
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: OptivusColors.roseAccent,
                   shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: OptivusColors.roseAccent.withValues(alpha: 0.5),
-                      blurRadius: 6,
-                      spreadRadius: 2,
-                    ),
-                  ],
                 ),
               ),
               Padding(

@@ -49,7 +49,12 @@ class ClassDetailSheet extends StatelessWidget {
       child: ConstrainedBox(
         constraints: BoxConstraints(maxHeight: maxHeight),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            16,
+            20,
+            24 + MediaQuery.viewInsetsOf(context).bottom,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -115,9 +120,7 @@ class ClassDetailSheet extends StatelessWidget {
                                 ),
                               if (block.section.isNotEmpty)
                                 _buildBadge(
-                                  block.section.toLowerCase().startsWith('sec')
-                                      ? block.section
-                                      : 'Sec ${block.section}',
+                                  _formatSectionBadge(block.section),
                                   OptivusColors.aquaAccent,
                                 ),
                             ],
@@ -127,6 +130,7 @@ class ClassDetailSheet extends StatelessWidget {
                     ),
                   ),
                   IconButton(
+                    tooltip: 'Close class details',
                     icon: const Icon(
                       Icons.close_rounded,
                       color: OptivusColors.textSecondary,
@@ -237,5 +241,20 @@ class ClassDetailSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  static String _formatSectionBadge(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return '';
+    final lower = trimmed.toLowerCase();
+    if (lower.startsWith('sec') ||
+        lower.startsWith('section') ||
+        lower.startsWith('batch') ||
+        lower.startsWith('group') ||
+        lower.startsWith('div') ||
+        lower.startsWith('division')) {
+      return trimmed;
+    }
+    return 'Sec $trimmed';
   }
 }

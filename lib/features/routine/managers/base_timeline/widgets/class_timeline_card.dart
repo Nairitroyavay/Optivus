@@ -66,14 +66,16 @@ class ClassTimelineCard extends StatelessWidget {
         '$subject, $timeLabel'
         '${room.isNotEmpty ? ", Room $room" : ""}'
         '${professor.isNotEmpty ? ", $professor" : ""}'
-        '${section.isNotEmpty ? ", Section $section" : ""}'
+        '${section.isNotEmpty ? ", $section" : ""}'
         '${notes.isNotEmpty ? ", Notes: $notes" : ""}'
         '${isEditable ? ", tap to edit" : ", tap for details"}';
 
     final card = Semantics(
       button: true,
       label: semanticLabel,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           color: Colors.white.withValues(alpha: 0.88),
@@ -164,6 +166,15 @@ class ClassTimelineCard extends StatelessWidget {
     }
 
     if (isCompact) {
+      final secondary = room.isNotEmpty
+          ? room
+          : (professor.isNotEmpty
+                ? professor
+                : (section.isNotEmpty ? section : notes));
+      final detailText = secondary.isNotEmpty
+          ? '$timeLabel · $secondary'
+          : timeLabel;
+
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
@@ -193,7 +204,7 @@ class ClassTimelineCard extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            room.isNotEmpty ? '$timeLabel · $room' : timeLabel,
+            detailText,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -207,6 +218,9 @@ class ClassTimelineCard extends StatelessWidget {
     }
 
     if (isMedium) {
+      final hasRoomOrProf = room.isNotEmpty || professor.isNotEmpty;
+      final showSectionBadge = section.isNotEmpty && courseCode.isEmpty;
+
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
@@ -234,7 +248,9 @@ class ClassTimelineCard extends StatelessWidget {
                 ),
             ],
           ),
-          if (courseCode.isNotEmpty || classType.isNotEmpty) ...[
+          if (courseCode.isNotEmpty ||
+              classType.isNotEmpty ||
+              showSectionBadge) ...[
             const SizedBox(height: 2),
             Wrap(
               spacing: 4,
@@ -243,6 +259,8 @@ class ClassTimelineCard extends StatelessWidget {
                 if (courseCode.isNotEmpty) _buildBadge(courseCode, accent),
                 if (classType.isNotEmpty)
                   _buildBadge(classType, OptivusColors.routineAccent),
+                if (showSectionBadge)
+                  _buildBadge(section, OptivusColors.aquaAccent),
               ],
             ),
           ],
@@ -257,7 +275,7 @@ class ClassTimelineCard extends StatelessWidget {
               color: accent.withValues(alpha: 0.90),
             ),
           ),
-          if (room.isNotEmpty || professor.isNotEmpty) ...[
+          if (hasRoomOrProf) ...[
             const SizedBox(height: 2),
             Row(
               children: [
@@ -299,6 +317,30 @@ class ClassTimelineCard extends StatelessWidget {
                     ),
                   ),
               ],
+            ),
+          ] else if (section.isNotEmpty && !showSectionBadge) ...[
+            const SizedBox(height: 2),
+            Text(
+              section,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 9.5,
+                color: OptivusColors.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ] else if (notes.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              notes,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 9.5,
+                fontStyle: FontStyle.italic,
+                color: OptivusColors.textSecondary,
+              ),
             ),
           ],
         ],
@@ -355,12 +397,7 @@ class ClassTimelineCard extends StatelessWidget {
               if (classType.isNotEmpty)
                 _buildBadge(classType, OptivusColors.routineAccent),
               if (section.isNotEmpty)
-                _buildBadge(
-                  section.toLowerCase().startsWith('sec')
-                      ? section
-                      : 'Sec $section',
-                  OptivusColors.aquaAccent,
-                ),
+                _buildBadge(section, OptivusColors.aquaAccent),
             ],
           ),
           const SizedBox(height: 3),
@@ -498,7 +535,9 @@ class ClassTimelineCard extends StatelessWidget {
     final card = Semantics(
       button: true,
       label: semanticLabel,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           color: Colors.white.withValues(alpha: 0.88),

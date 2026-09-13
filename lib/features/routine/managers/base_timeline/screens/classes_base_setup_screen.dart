@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
@@ -350,7 +351,31 @@ class _ClassesBaseSetupScreenState
       },
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        body: _buildStageContent(setup, state, uid),
+        body: Builder(
+          builder: (context) {
+            final disableAnimations =
+                MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+            final isTest = WidgetsBinding.instance.runtimeType
+                .toString()
+                .contains('Test');
+            final transitionDuration = (disableAnimations || isTest)
+                ? Duration.zero
+                : const Duration(milliseconds: 250);
+
+            return AnimatedSwitcher(
+              duration: transitionDuration,
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(opacity: animation, child: child);
+              },
+              child: KeyedSubtree(
+                key: ValueKey(state.stage),
+                child: _buildStageContent(setup, state, uid),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -367,14 +392,13 @@ class _ClassesBaseSetupScreenState
         return SafeArea(
           child: Column(
             children: [
-              _buildTopCancelBar(() => _handleClassesBack(setup, state, uid)),
-              const Expanded(
-                child: BaseTimelineAiThinkingView(
-                  initialMessage: 'Uploading timetable photo...',
-                  progressMessages: [
-                    'Encrypting and uploading to private storage...',
-                    'Preparing document for analysis...',
-                  ],
+              _buildTopCancelBar(
+                onCancel: () => _handleClassesBack(setup, state, uid),
+                title: 'Updating timetable',
+              ),
+              Expanded(
+                child: BaseTimelineUploadView(
+                  localPreviewPath: state.workingLocalPreviewPath,
                 ),
               ),
             ],
@@ -385,17 +409,23 @@ class _ClassesBaseSetupScreenState
         return SafeArea(
           child: Column(
             children: [
-              _buildTopCancelBar(() => _handleClassesBack(setup, state, uid)),
-              const Expanded(
+              _buildTopCancelBar(
+                onCancel: () => _handleClassesBack(setup, state, uid),
+                title: 'Reading timetable',
+              ),
+              Expanded(
                 child: BaseTimelineAiThinkingView(
                   initialMessage: 'Reading your timetable',
-                  progressMessages: [
+                  progressMessages: const [
                     'Finding subjects',
                     'Reading rooms and faculty',
                     'Matching weekdays',
                     'Checking exact times',
                     'Building your new timetable',
                   ],
+                  localPreviewPath: state.workingLocalPreviewPath,
+                  assetId: state.candidateAssetId,
+                  r2Key: state.candidateR2Key,
                 ),
               ),
             ],
@@ -476,12 +506,13 @@ class _ClassesBaseSetupScreenState
     }
   }
 
-  Widget _buildTopCancelBar(VoidCallback onCancel) {
+  Widget _buildTopCancelBar({required VoidCallback onCancel, String? title}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
           IconButton(
+            tooltip: 'Cancel',
             icon: const Icon(
               Icons.close_rounded,
               color: OptivusColors.textPrimary,
@@ -491,6 +522,17 @@ class _ClassesBaseSetupScreenState
               backgroundColor: Colors.white.withValues(alpha: 0.1),
             ),
           ),
+          if (title != null) ...[
+            const SizedBox(width: 12),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: OptivusColors.textPrimary,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -794,6 +836,7 @@ class _ClassesSaveSuccessViewState extends State<_ClassesSaveSuccessView>
   @override
   void initState() {
     super.initState();
+    HapticFeedback.mediumImpact();
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 400),

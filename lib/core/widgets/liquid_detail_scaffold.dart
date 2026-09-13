@@ -9,6 +9,22 @@ double liquidTabBarReserve(BuildContext context) {
   return 76.0 + media.padding.bottom + media.viewInsets.bottom + 48.0;
 }
 
+/// Canonical floating Routine tab bar height (72) + bottom float margin (10).
+const double kLiquidTabBarHeightWithGap = 82.0;
+
+/// Default breathing room between the floating tab bar and floating/fixed CTAs.
+const double kRoutineCtaBreathingRoom = 14.0;
+
+/// Computes the exact bottom reserve for fixed/bottom CTAs in Routine screens
+/// to sit cleanly above the floating tab bar and device navigation insets.
+double routineBottomCtaReserve(BuildContext context) {
+  final media = MediaQuery.of(context);
+  final systemBottom = media.viewPadding.bottom > 0
+      ? media.viewPadding.bottom
+      : media.padding.bottom;
+  return kLiquidTabBarHeightWithGap + kRoutineCtaBreathingRoom + systemBottom;
+}
+
 class LiquidDetailScaffold extends StatelessWidget {
   final String eyebrow;
   final String title;
@@ -19,6 +35,7 @@ class LiquidDetailScaffold extends StatelessWidget {
   final Widget? trailing;
   final EdgeInsetsGeometry padding;
   final bool includeBottomReserve;
+  final bool fixedHeader;
 
   const LiquidDetailScaffold({
     super.key,
@@ -31,11 +48,64 @@ class LiquidDetailScaffold extends StatelessWidget {
     this.trailing,
     this.padding = const EdgeInsets.fromLTRB(20, 26, 20, 0),
     this.includeBottomReserve = true,
+    this.fixedHeader = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final bottom = includeBottomReserve ? liquidTabBarReserve(context) : 32.0;
+
+    if (fixedHeader) {
+      final insets = padding.resolve(Directionality.of(context));
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  insets.left,
+                  insets.top,
+                  insets.right,
+                  20,
+                ),
+                child: LiquidDetailHeader(
+                  eyebrow: eyebrow,
+                  title: title,
+                  subtitle: subtitle,
+                  accentColor: accentColor,
+                  onBack: onBack,
+                  trailing: trailing,
+                ),
+              ),
+              Expanded(
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverPadding(
+                      padding: EdgeInsets.fromLTRB(
+                        insets.left,
+                        0,
+                        insets.right,
+                        0,
+                      ),
+                      sliver: SliverList.list(
+                        children: [
+                          ...children,
+                          SizedBox(height: bottom),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: Colors.transparent,

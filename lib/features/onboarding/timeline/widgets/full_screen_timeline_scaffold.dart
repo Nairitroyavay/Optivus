@@ -50,6 +50,7 @@ class FullScreenTimelineScaffold extends StatelessWidget {
   final TimelineOverlapPresentation overlapPresentation;
   final String? frontEntryId;
   final ValueChanged<String>? onFrontSelected;
+  final bool enableHaptics;
 
   const FullScreenTimelineScaffold({
     super.key,
@@ -73,6 +74,7 @@ class FullScreenTimelineScaffold extends StatelessWidget {
     this.overlapPresentation = TimelineOverlapPresentation.sideBySide,
     this.frontEntryId,
     this.onFrontSelected,
+    this.enableHaptics = false,
   });
 
   @override
@@ -137,6 +139,7 @@ class FullScreenTimelineScaffold extends StatelessWidget {
               selectedDay: selectedDay,
               onDayChanged: onDayChanged,
               accent: accent,
+              enableHaptics: enableHaptics,
             ),
 
             const SizedBox(height: 4),
@@ -151,17 +154,21 @@ class FullScreenTimelineScaffold extends StatelessWidget {
                   : TimelineViewport(
                       layoutResult: layoutResult,
                       styleBuilder: styleBuilder,
-                      onEntryTapped: (entry) {
-                        final positioned = layoutResult.entryMap[entry.id];
-                        if (positioned != null &&
-                            positioned.hasOverlap &&
-                            !positioned.isFront &&
-                            onFrontSelected != null) {
-                          onFrontSelected!(entry.id);
-                        } else if (mode == TimelineMode.fullScreenEditable) {
-                          onEntryTapped?.call(entry);
-                        }
-                      },
+                      onEntryTapped: onEntryTapped == null
+                          ? null
+                          : (entry) {
+                              final positioned =
+                                  layoutResult.entryMap[entry.id];
+                              if (positioned != null &&
+                                  positioned.hasOverlap &&
+                                  !positioned.isFront &&
+                                  onFrontSelected != null) {
+                                onFrontSelected!(entry.id);
+                              } else if (mode ==
+                                  TimelineMode.fullScreenEditable) {
+                                onEntryTapped?.call(entry);
+                              }
+                            },
                       accent: accent,
                       scrollController: scrollController,
                       blockBuilder: blockBuilder,

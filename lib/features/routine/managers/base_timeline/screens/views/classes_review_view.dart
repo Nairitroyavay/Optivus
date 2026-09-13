@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/class_timeline_adapter.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
@@ -9,7 +11,7 @@ import 'package:optivus/features/routine/managers/base_timeline/widgets/base_tim
 import 'package:optivus/features/routine/managers/base_timeline/widgets/class_timeline_card.dart';
 
 /// Review and edit stage for Classes Base Timeline setup.
-class ClassesReviewView extends StatelessWidget {
+class ClassesReviewView extends StatefulWidget {
   final List<ClassRoutineBlock> workingBlocks;
   final String? workingAssetId;
   final String? workingR2Key;
@@ -52,20 +54,35 @@ class ClassesReviewView extends StatelessWidget {
   });
 
   @override
+  State<ClassesReviewView> createState() => _ClassesReviewViewState();
+}
+
+class _ClassesReviewViewState extends State<ClassesReviewView> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     const adapter = ClassTimelineAdapter(
       accent: OptivusColors.blueAccent,
       defaultEditable: true,
     );
 
-    final entries = workingBlocks.expand((b) => adapter.toEntries(b)).toList();
-    final blockMap = {for (final b in workingBlocks) b.id: b};
+    final entries = widget.workingBlocks
+        .expand((b) => adapter.toEntries(b))
+        .toList();
+    final blockMap = {for (final b in widget.workingBlocks) b.id: b};
 
     final sanitizedIssues = ClassSetupErrorMapper.sanitizeDroppedExamples(
-      droppedExamples,
+      widget.droppedExamples,
     );
     final droppedSummary = ClassSetupErrorMapper.formatDroppedSummary(
-      droppedCount,
+      widget.droppedCount,
       sanitizedIssues,
     );
 
@@ -84,7 +101,7 @@ class ClassesReviewView extends StatelessWidget {
                     Icons.close_rounded,
                     color: OptivusColors.textPrimary,
                   ),
-                  onPressed: isSaving ? null : onCancel,
+                  onPressed: widget.isSaving ? null : widget.onCancel,
                   style: IconButton.styleFrom(
                     backgroundColor: Colors.white.withValues(alpha: 0.1),
                   ),
@@ -104,9 +121,9 @@ class ClassesReviewView extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        droppedCount > 0
-                            ? '${workingBlocks.length} classes scheduled · $droppedCount ${droppedCount == 1 ? 'entry was skipped' : 'entries were skipped'}'
-                            : '${workingBlocks.length} classes scheduled',
+                        widget.droppedCount > 0
+                            ? '${widget.workingBlocks.length} classes scheduled · ${widget.droppedCount} ${widget.droppedCount == 1 ? 'entry was skipped' : 'entries were skipped'}'
+                            : '${widget.workingBlocks.length} classes scheduled',
                         style: const TextStyle(
                           fontSize: 12,
                           color: OptivusColors.textSecondary,
@@ -119,7 +136,7 @@ class ClassesReviewView extends StatelessWidget {
             ),
           ),
 
-          // Action Buttons
+          // Compact Action Buttons
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
@@ -135,9 +152,24 @@ class ClassesReviewView extends StatelessWidget {
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
-                    icon: const Icon(Icons.camera_alt_outlined, size: 18),
-                    label: const Text('Scan Again'),
-                    onPressed: isSaving ? null : onScanAgain,
+                    icon: const Icon(Icons.photo_library_outlined, size: 18),
+                    label: const Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Text(
+                          'Change photo',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        Text(
+                          'Scan Again',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: Colors.transparent,
+                          ),
+                        ),
+                      ],
+                    ),
+                    onPressed: widget.isSaving ? null : widget.onScanAgain,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -153,29 +185,19 @@ class ClassesReviewView extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                     icon: const Icon(Icons.add_rounded, size: 18),
-                    label: const Text('Add Class'),
-                    onPressed: isSaving ? null : onAddClass,
+                    label: const Text(
+                      'Add Class',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    onPressed: widget.isSaving ? null : widget.onAddClass,
                   ),
                 ),
               ],
             ),
           ),
 
-          // Scanned Photo Preview (Immediate local preview if available)
-          if (workingLocalPreviewPath != null || workingR2Key != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: BaseTimelinePhotoPreviewCard(
-                localPreviewPath: workingLocalPreviewPath,
-                r2Key: workingR2Key,
-                assetId: workingAssetId,
-                title: 'Scanned Timetable Photo',
-                height: 110,
-              ),
-            ),
-
           // Sanitized attention banner for dropped entries
-          if (droppedCount > 0)
+          if (widget.droppedCount > 0)
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               padding: const EdgeInsets.all(10),
@@ -209,7 +231,7 @@ class ClassesReviewView extends StatelessWidget {
             ),
 
           // Inline Error Message Banner
-          if (errorMessage != null)
+          if (widget.errorMessage != null)
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               padding: const EdgeInsets.all(12),
@@ -230,7 +252,7 @@ class ClassesReviewView extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      errorMessage!,
+                      widget.errorMessage!,
                       style: const TextStyle(
                         color: OptivusColors.danger,
                         fontSize: 12,
@@ -243,15 +265,15 @@ class ClassesReviewView extends StatelessWidget {
                       size: 16,
                       color: OptivusColors.danger,
                     ),
-                    onPressed: onClearError,
+                    onPressed: widget.onClearError,
                   ),
                 ],
               ),
             ),
 
-          // Timeline View
+          // Timeline View (Hero)
           Expanded(
-            child: workingBlocks.isEmpty
+            child: widget.workingBlocks.isEmpty
                 ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24.0),
@@ -289,12 +311,14 @@ class ClassesReviewView extends StatelessWidget {
                   )
                 : FullScreenTimelineScaffold(
                     entries: entries,
-                    selectedDay: selectedDay,
-                    onDayChanged: onDayChanged,
+                    selectedDay: widget.selectedDay,
+                    onDayChanged: widget.onDayChanged,
+                    scrollController: _scrollController,
+                    enableHaptics: true,
                     overlapPresentation:
                         TimelineOverlapPresentation.frontAndExposed,
-                    frontEntryId: frontBlockId,
-                    onFrontSelected: onFrontSelected,
+                    frontEntryId: widget.frontBlockId,
+                    onFrontSelected: widget.onFrontSelected,
                     styleBuilder: (entry) => adapter.styleForEntry(entry),
                     blockBuilder: (context, positioned) {
                       final block = blockMap[positioned.entry.sourceId];
@@ -305,19 +329,15 @@ class ClassesReviewView extends StatelessWidget {
                         accent: OptivusColors.blueAccent,
                         onTap: () {
                           if (positioned.hasOverlap && !positioned.isFront) {
-                            onFrontSelected?.call(positioned.entry.id);
+                            HapticFeedback.lightImpact();
+                            widget.onFrontSelected?.call(positioned.entry.id);
                           } else if (block != null) {
-                            onEditBlock(block);
+                            widget.onEditBlock(block);
                           }
                         },
                       );
                     },
-                    onEntryTapped: (entry) {
-                      final block = blockMap[entry.sourceId];
-                      if (block != null) {
-                        onEditBlock(block);
-                      }
-                    },
+                    onEntryTapped: null,
                     accent: OptivusColors.blueAccent,
                     mode: TimelineMode.fullScreenEditable,
                     visibleRangePolicy:
@@ -327,9 +347,32 @@ class ClassesReviewView extends StatelessWidget {
                   ),
           ),
 
-          // Dominant 52px Bottom CTA
+          // Scanned Photo Preview (Fixed-height compact row below Timeline)
+          if (widget.workingLocalPreviewPath != null ||
+              widget.workingR2Key != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+              child: BaseTimelinePhotoPreviewCard(
+                localPreviewPath: widget.workingLocalPreviewPath,
+                r2Key: widget.workingR2Key,
+                assetId: widget.workingAssetId,
+                title: 'Scanned timetable',
+                subtitle: widget.workingBlocks.isNotEmpty
+                    ? '${widget.workingBlocks.length} weekly classes'
+                    : null,
+                isCompactRow: true,
+                height: 68,
+              ),
+            ),
+
+          // Dominant 52px Bottom CTA with Floating Tab Bar Clearance
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              10,
+              16,
+              routineBottomCtaReserve(context),
+            ),
             child: SizedBox(
               height: 52,
               child: FilledButton(
@@ -342,8 +385,10 @@ class ClassesReviewView extends StatelessWidget {
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                onPressed: (isSaving || workingBlocks.isEmpty) ? null : onSave,
-                child: isSaving
+                onPressed: (widget.isSaving || widget.workingBlocks.isEmpty)
+                    ? null
+                    : widget.onSave,
+                child: widget.isSaving
                     ? const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         mainAxisSize: MainAxisSize.min,

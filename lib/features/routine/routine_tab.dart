@@ -335,6 +335,7 @@ class _RoutineSettingsInline extends ConsumerWidget {
     final notifier = ref.read(routineNotifierProvider.notifier);
 
     return LiquidDetailScaffold(
+      fixedHeader: true,
       eyebrow: 'Routine',
       title: 'Routine Settings',
       subtitle:
