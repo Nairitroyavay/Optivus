@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/models/routine_write_result.dart';
@@ -54,11 +55,16 @@ void main() {
   late FakeRoutineRepository repo;
   late FakeRoutineDatabase database;
   late FailingRoutineHistoryRepository historyRepo;
+  late FakeRoutineTransactionRepository transactionRepo;
 
   setUp(() {
     database = FakeRoutineDatabase();
     repo = FakeRoutineRepository(database: database);
     historyRepo = FailingRoutineHistoryRepository(0);
+    transactionRepo = FakeRoutineTransactionRepository(
+      routineRepository: repo,
+      historyRepository: historyRepo,
+    );
 
     container = ProviderContainer(
       overrides: [
@@ -67,12 +73,7 @@ void main() {
         ),
         routineRepositoryProvider.overrideWithValue(repo),
         routineHistoryRepositoryProvider.overrideWithValue(historyRepo),
-        routineTransactionRepositoryProvider.overrideWith(
-          (ref) => FakeRoutineTransactionRepository(
-            routineRepository: ref.read(routineRepositoryProvider),
-            historyRepository: ref.read(routineHistoryRepositoryProvider),
-          ),
-        ),
+        routineTransactionRepositoryProvider.overrideWithValue(transactionRepo),
       ],
     );
     addTearDown(container.dispose);
@@ -86,6 +87,34 @@ void main() {
       startMinute: 600,
       endMinute: 660,
       blockType: RoutineBlockType.flexibleTask,
+    );
+  }
+
+  RoutineOccurrenceRecord onboardingOccurrence({
+    required String uid,
+    required String itemId,
+    required DateTime date,
+  }) {
+    final dateKey = routineLocalDateKey(date);
+    return RoutineOccurrenceRecord(
+      id: stableRoutineOccurrenceId(
+        ownerUid: uid,
+        routineItemId: itemId,
+        occurrenceDateKey: dateKey,
+      ),
+      ownerUid: uid,
+      routineItemId: itemId,
+      occurrenceDateKey: dateKey,
+      status: RoutineStatus.active,
+      source: 'onboarding',
+      action: 'project',
+      operationKey: 'onboarding_project_$itemId',
+      createdAt: DateTime.utc(2026, 9, 1),
+      updatedAt: DateTime.utc(2026, 9, 1),
+      onboardingProjectionId: 'onboarding-initial-v1',
+      onboardingSourceItemId: 'source-$itemId',
+      sourceFingerprint:
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     );
   }
 
@@ -162,6 +191,177 @@ void main() {
       1,
     );
   });
+
+  void expectOnboardingProvenance(
+    RoutineOccurrenceRecord record, {
+    required String itemId,
+  }) {
+    expect(record.source, 'onboarding');
+    expect(record.onboardingProjectionId, 'onboarding-initial-v1');
+    expect(record.onboardingSourceItemId, 'source-$itemId');
+    expect(
+      record.sourceFingerprint,
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    );
+  }
+
+  test(
+    'UI action paths preserve onboarding occurrence provenance and event origin',
+    () async {
+      final notifier = container.read(routineNotifierProvider.notifier);
+      const uid = 'user_1';
+      final date = DateTime(2026, 9, 16);
+      final templates = {
+        't_start': createTemplate(uid, 't_start'),
+        't_done': createTemplate(uid, 't_done'),
+        't_move': createTemplate(uid, 't_move'),
+        't_reschedule': createTemplate(uid, 't_reschedule'),
+        't_tracker': createTemplate(uid, 't_tracker').copyWith(
+          blockType: RoutineBlockType.trackerTask,
+          trackerType: TrackerType.focus,
+        ),
+        't_money': createTemplate(
+          uid,
+          't_money',
+        ).copyWith(blockType: RoutineBlockType.moneyTask),
+        't_checkin': createTemplate(uid, 't_checkin').copyWith(
+          blockType: RoutineBlockType.checkIn,
+          category: RoutineCategory.badHabit,
+        ),
+      };
+      for (final entry in templates.entries) {
+        await repo.createRoutineItem(uid, entry.value);
+        await historyRepo.appendHistory(
+          uid,
+          onboardingOccurrence(uid: uid, itemId: entry.key, date: date),
+        );
+      }
+      await notifier.loadForOwner(uid);
+
+      await notifier.startFlexibleTask('t_start', occurrenceDate: date);
+      await waitForPending();
+      await notifier.markCompleted('t_done', occurrenceDate: date);
+      await waitForPending();
+      await notifier.moveItem(
+        itemId: 't_move',
+        date: date,
+        startMinute: 13 * 60,
+        durationMinutes: 30,
+        occurrenceDate: date,
+      );
+      await waitForPending();
+      await notifier.moveItem(
+        itemId: 't_reschedule',
+        date: date.add(const Duration(days: 1)),
+        startMinute: 14 * 60,
+        durationMinutes: 30,
+        occurrenceDate: date,
+      );
+      await waitForPending();
+      await notifier.startRoutineItem('t_tracker', occurrenceDate: date);
+      await waitForPending();
+      await notifier.completeRoutineItem('t_money', occurrenceDate: date);
+      await waitForPending();
+      await notifier.checkIn('t_checkin', 'Avoided', occurrenceDate: date);
+      await waitForPending();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      final state = container.read(routineNotifierProvider);
+      final recordsByItemId = {
+        for (final occurrence in state.occurrences)
+          occurrence.routineItemId: occurrence,
+      };
+      for (final itemId in templates.keys) {
+        expectOnboardingProvenance(recordsByItemId[itemId]!, itemId: itemId);
+      }
+      expect(recordsByItemId['t_start']!.action, 'start');
+      expect(recordsByItemId['t_done']!.action, 'complete');
+      expect(recordsByItemId['t_move']!.action, 'move');
+      expect(recordsByItemId['t_reschedule']!.action, 'reschedule');
+      expect(recordsByItemId['t_tracker']!.action, 'startTracker');
+      expect(recordsByItemId['t_money']!.action, 'complete');
+      expect(recordsByItemId['t_checkin']!.action, 'checkIn');
+
+      final eventsByItemId = {
+        for (final event in state.events) event.routineItemId: event,
+      };
+      expect(eventsByItemId['t_start']!.source, 'routine');
+      expect(eventsByItemId['t_start']!.eventType, RoutineEventType.started);
+      expect(eventsByItemId['t_done']!.source, 'routine');
+      expect(eventsByItemId['t_done']!.eventType, RoutineEventType.completed);
+      expect(eventsByItemId['t_move']!.source, 'routine');
+      expect(eventsByItemId['t_move']!.eventType, RoutineEventType.moved);
+      expect(eventsByItemId['t_reschedule']!.source, 'routine');
+      expect(
+        eventsByItemId['t_reschedule']!.eventType,
+        RoutineEventType.rescheduled,
+      );
+      expect(eventsByItemId['t_tracker']!.source, 'tracker');
+      expect(eventsByItemId['t_tracker']!.eventType, RoutineEventType.started);
+      expect(eventsByItemId['t_money']!.source, 'money');
+      expect(eventsByItemId['t_money']!.eventType, RoutineEventType.completed);
+      expect(eventsByItemId['t_checkin']!.source, 'checkIn');
+    },
+  );
+
+  test(
+    'new non-onboarding occurrence does not fabricate projection metadata',
+    () async {
+      final notifier = container.read(routineNotifierProvider.notifier);
+      const uid = 'user_1';
+      await repo.createRoutineItem(uid, createTemplate(uid, 't1'));
+      await notifier.loadForOwner(uid);
+
+      await notifier.startRoutineItem('t1');
+      await waitForPending();
+
+      final occurrence = container
+          .read(routineNotifierProvider)
+          .occurrences
+          .single;
+      expect(occurrence.source, 'routine');
+      expect(occurrence.onboardingProjectionId, isNull);
+      expect(occurrence.onboardingSourceItemId, isNull);
+      expect(occurrence.sourceFingerprint, isNull);
+    },
+  );
+
+  test(
+    'transient failure retry preserves onboarding occurrence provenance',
+    () async {
+      final notifier = container.read(routineNotifierProvider.notifier);
+      const uid = 'user_1';
+      final date = DateTime(2026, 9, 16);
+      await repo.createRoutineItem(uid, createTemplate(uid, 't1'));
+      await historyRepo.appendHistory(
+        uid,
+        onboardingOccurrence(uid: uid, itemId: 't1', date: date),
+      );
+      await notifier.loadForOwner(uid);
+      historyRepo.failCount = 1;
+
+      final result = await notifier.markCompleted('t1', occurrenceDate: date);
+      await waitForPending();
+      expect(result.outcome, RoutineWriteOutcome.retryRequired);
+      final failedIntent = container
+          .read(routineNotifierProvider)
+          .failedOccurrenceIntentsById
+          .values
+          .single;
+      expectOnboardingProvenance(failedIntent.attemptedRecord, itemId: 't1');
+
+      final retryResult = await notifier.retryFailedOccurrenceAction(
+        failedIntent.occurrenceId,
+      );
+      await waitForPending();
+
+      expect(retryResult.outcome, RoutineWriteOutcome.saved);
+      final state = container.read(routineNotifierProvider);
+      expect(state.failedOccurrenceIntentsById, isEmpty);
+      expectOnboardingProvenance(state.occurrences.single, itemId: 't1');
+      expect(state.occurrences.single.action, 'complete');
+    },
+  );
 
   test(
     'tracker links target moved-in and native occurrences independently',
@@ -243,6 +443,109 @@ void main() {
               (occurrence) => occurrence.status == RoutineStatus.completed,
             ),
         hasLength(2),
+      );
+    },
+  );
+
+  test('failed tracker Start creates no ghost session state', () async {
+    final notifier = container.read(routineNotifierProvider.notifier);
+    const uid = 'user_1';
+    final template = createTemplate(uid, 'tracker-template').copyWith(
+      blockType: RoutineBlockType.trackerTask,
+      trackerType: TrackerType.focus,
+    );
+    await repo.createRoutineItem(uid, template);
+    await notifier.loadForOwner(uid);
+    historyRepo.failCount = 1;
+
+    final result = await notifier.startRoutineItem(template.id);
+    await waitForPending();
+
+    expect(result.outcome, RoutineWriteOutcome.retryRequired);
+    expect(container.read(trackerSessionLinksProvider), isEmpty);
+    expect(
+      container.read(routineNotifierProvider).activeTrackerLaunchIntent,
+      isNull,
+    );
+    expect(container.read(appNavigationProvider), 0);
+  });
+
+  test(
+    'successful tracker Start creates session state after persistence',
+    () async {
+      final notifier = container.read(routineNotifierProvider.notifier);
+      const uid = 'user_1';
+      final template = createTemplate(uid, 'tracker-template').copyWith(
+        blockType: RoutineBlockType.trackerTask,
+        trackerType: TrackerType.focus,
+      );
+      await repo.createRoutineItem(uid, template);
+      await notifier.loadForOwner(uid);
+
+      final result = await notifier.startRoutineItem(template.id);
+      await waitForPending();
+
+      expect(result.outcome, RoutineWriteOutcome.saved);
+      expect(container.read(trackerSessionLinksProvider), hasLength(1));
+      expect(
+        container.read(routineNotifierProvider).activeTrackerLaunchIntent,
+        isNotNull,
+      );
+      expect(container.read(appNavigationProvider), 2);
+    },
+  );
+
+  test('failed tracker completion leaves active link unchanged', () async {
+    final notifier = container.read(routineNotifierProvider.notifier);
+    const uid = 'user_1';
+    final template = createTemplate(uid, 'tracker-template').copyWith(
+      blockType: RoutineBlockType.trackerTask,
+      trackerType: TrackerType.focus,
+    );
+    await repo.createRoutineItem(uid, template);
+    await notifier.loadForOwner(uid);
+    await notifier.startRoutineItem(template.id);
+    await waitForPending();
+    historyRepo.failCount = 1;
+    historyRepo.failStartAt = historyRepo.appendCallCount;
+
+    final result = await notifier.completeRoutineItem(template.id);
+    await waitForPending();
+
+    expect(result.outcome, RoutineWriteOutcome.retryRequired);
+    final link = container.read(trackerSessionLinksProvider).single;
+    expect(link.status, 'active');
+    expect(link.completedAt, isNull);
+    expect(
+      container.read(routineNotifierProvider).activeTrackerLaunchIntent,
+      isNotNull,
+    );
+  });
+
+  test(
+    'successful tracker completion completes link after persistence',
+    () async {
+      final notifier = container.read(routineNotifierProvider.notifier);
+      const uid = 'user_1';
+      final template = createTemplate(uid, 'tracker-template').copyWith(
+        blockType: RoutineBlockType.trackerTask,
+        trackerType: TrackerType.focus,
+      );
+      await repo.createRoutineItem(uid, template);
+      await notifier.loadForOwner(uid);
+      await notifier.startRoutineItem(template.id);
+      await waitForPending();
+
+      final result = await notifier.completeRoutineItem(template.id);
+      await waitForPending();
+
+      expect(result.outcome, RoutineWriteOutcome.saved);
+      final link = container.read(trackerSessionLinksProvider).single;
+      expect(link.status, 'completed');
+      expect(link.completedAt, isNotNull);
+      expect(
+        container.read(routineNotifierProvider).activeTrackerLaunchIntent,
+        isNull,
       );
     },
   );

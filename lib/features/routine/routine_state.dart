@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
@@ -2199,6 +2200,87 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return true;
   }
 
+  String _routineActionErrorCategory(Object error) {
+    if (error is FirebaseException) return 'firestore_${error.code}';
+    if (error is FormatException || error is ArgumentError) {
+      return 'codec_validation';
+    }
+    if (error is StateError) return 'local_validation';
+    return 'unknown';
+  }
+
+  void _logRoutineActionWrite({
+    required String action,
+    required String occurrenceSource,
+    required String actionSource,
+    required bool existing,
+    required String result,
+    Object? error,
+  }) {
+    if (!kDebugMode) return;
+    final category = error == null ? null : _routineActionErrorCategory(error);
+    debugPrint(
+      '[RoutineActionWrite] '
+      'action=$action '
+      'occurrenceSource=$occurrenceSource '
+      'actionSource=$actionSource '
+      'existing=$existing '
+      'result=$result'
+      '${category == null ? '' : ' category=$category'}',
+    );
+  }
+
+  RoutineOccurrenceWriteIntent _normalizeOccurrenceIntentForRetry(
+    RoutineOccurrenceWriteIntent intent,
+  ) {
+    final previous = intent.previousRecord;
+    if (previous == null) return intent;
+    final attempted = intent.attemptedRecord;
+    final normalized = RoutineOccurrenceRecord(
+      id: attempted.id,
+      ownerUid: attempted.ownerUid,
+      routineItemId: attempted.routineItemId,
+      occurrenceDateKey: attempted.occurrenceDateKey,
+      status: attempted.status,
+      source: previous.source,
+      action: attempted.action,
+      operationKey: attempted.operationKey,
+      createdAt: previous.createdAt,
+      updatedAt: attempted.updatedAt,
+      schemaVersion: attempted.schemaVersion,
+      movedToDateKey: attempted.movedToDateKey,
+      movedStartMinute: attempted.movedStartMinute,
+      movedEndMinute: attempted.movedEndMinute,
+      completedSubtaskIndexes: attempted.completedSubtaskIndexes,
+      note: attempted.note,
+      displayTitleOverride: attempted.displayTitleOverride,
+      undoToPlannedAllowed: attempted.undoToPlannedAllowed,
+      onboardingProjectionId: previous.onboardingProjectionId,
+      onboardingSourceItemId: previous.onboardingSourceItemId,
+      sourceFingerprint: previous.sourceFingerprint,
+      startedAt: attempted.startedAt,
+      countdownDurationSeconds: attempted.countdownDurationSeconds,
+    );
+    if (normalized.source == attempted.source &&
+        normalized.createdAt == attempted.createdAt &&
+        normalized.onboardingProjectionId == attempted.onboardingProjectionId &&
+        normalized.onboardingSourceItemId == attempted.onboardingSourceItemId &&
+        normalized.sourceFingerprint == attempted.sourceFingerprint) {
+      return intent;
+    }
+    return RoutineOccurrenceWriteIntent(
+      action: intent.action,
+      ownerUid: intent.ownerUid,
+      occurrenceId: intent.occurrenceId,
+      operationId: intent.operationId,
+      attemptedRecord: normalized,
+      previousRecord: previous,
+      createdAt: intent.createdAt,
+      event: intent.event,
+      completer: intent.completer,
+    );
+  }
+
   RoutineCountdownAllocation? _allocateCountdownForOccurrence({
     required String itemId,
     required String occurrenceDateKey,
@@ -2224,7 +2306,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   Future<RoutineWriteResult> _writeOccurrence(
     String itemId, {
     required RoutineStatus status,
-    required String source,
+    required String actionSource,
     required String action,
     DateTime? occurrenceDate,
     String? movedToDateKey,
@@ -2248,6 +2330,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
 
     final now = DateTime.now().toUtc();
     final existing = _occurrenceFor(itemId, date);
+    final occurrenceSource = existing?.source ?? actionSource;
     if (action == 'start' &&
         existing?.status == RoutineStatus.active &&
         existing?.startedAt != null &&
@@ -2302,7 +2385,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       routineItemId: itemId,
       occurrenceDateKey: dateKey,
       status: status,
-      source: source,
+      source: occurrenceSource,
       action: action,
       operationKey: operationId,
       createdAt: existing?.createdAt ?? now,
@@ -2318,6 +2401,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       displayTitleOverride:
           displayTitleOverride ?? existing?.displayTitleOverride,
       undoToPlannedAllowed: existing == null,
+      onboardingProjectionId: existing?.onboardingProjectionId,
+      onboardingSourceItemId: existing?.onboardingSourceItemId,
+      sourceFingerprint: existing?.sourceFingerprint,
       startedAt: effectiveStartedAt,
       countdownDurationSeconds: effectiveCountdownDurationSeconds,
     );
@@ -2353,6 +2439,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     // even after the template is edited or deleted.
     final occurrenceSnapshot = _historySnapshotForItemId(itemId, uid);
     if (occurrenceSnapshot == null) {
+      _logRoutineActionWrite(
+        action: action,
+        occurrenceSource: occurrenceSource,
+        actionSource: actionSource,
+        existing: existing != null,
+        result: 'failure',
+        error: StateError('missing_item_snapshot'),
+      );
       return RoutineWriteResult.validationFailed(
         const RoutineValidationResult.invalid(
           errorType: RoutineValidationErrorType.missingData,
@@ -2373,7 +2467,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       occurrenceDateKey: dateKey,
       eventType: eventType,
       operationKey: operationId,
-      source: source,
+      source: actionSource,
       occurredAt: now,
       itemSnapshot: occurrenceSnapshot,
     );
@@ -2427,6 +2521,13 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         setOccurrence: record,
         addEvent: event,
       );
+      _logRoutineActionWrite(
+        action: action,
+        occurrenceSource: occurrenceSource,
+        actionSource: actionSource,
+        existing: existing != null,
+        result: 'success',
+      );
       if (!mounted) return _supersededWriteResult(operationId);
       if (_ownerUid != uid) return _supersededWriteResult(operationId);
 
@@ -2442,6 +2543,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     } catch (error) {
       if (!mounted) return _supersededWriteResult(operationId);
       if (_ownerUid != uid) return _supersededWriteResult(operationId);
+      _logRoutineActionWrite(
+        action: action,
+        occurrenceSource: occurrenceSource,
+        actionSource: actionSource,
+        existing: existing != null,
+        result: 'failure',
+        error: error,
+      );
       state = state.copyWith(
         failedOccurrenceIntentsById: {
           ...state.failedOccurrenceIntentsById,
@@ -2499,6 +2608,13 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         setOccurrence: intent.attemptedRecord,
         addEvent: intent.event,
       );
+      _logRoutineActionWrite(
+        action: intent.attemptedRecord.action,
+        occurrenceSource: intent.attemptedRecord.source,
+        actionSource: intent.event?.source ?? intent.attemptedRecord.source,
+        existing: intent.previousRecord != null,
+        result: 'success',
+      );
       if (!mounted) {
         intent.completer?.complete(_supersededWriteResult(intent.operationId));
         return;
@@ -2525,6 +2641,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         intent.completer?.complete(_supersededWriteResult(intent.operationId));
         return;
       }
+      _logRoutineActionWrite(
+        action: intent.attemptedRecord.action,
+        occurrenceSource: intent.attemptedRecord.source,
+        actionSource: intent.event?.source ?? intent.attemptedRecord.source,
+        existing: intent.previousRecord != null,
+        result: 'failure',
+        error: error,
+      );
       state = state.copyWith(
         failedOccurrenceIntentsById: {
           ...state.failedOccurrenceIntentsById,
@@ -2725,7 +2849,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       }
     }
 
-    final record = intent.attemptedRecord;
+    final retryIntent = _normalizeOccurrenceIntentForRetry(intent);
+    final record = retryIntent.attemptedRecord;
 
     state = state.copyWith(
       pendingOccurrenceIds: {...state.pendingOccurrenceIds, occurrenceId},
@@ -2741,7 +2866,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       await _transactionRepository.commitWrite(
         uid: uid,
         setOccurrence: record,
-        addEvent: intent.event,
+        addEvent: retryIntent.event,
+      );
+      _logRoutineActionWrite(
+        action: record.action,
+        occurrenceSource: record.source,
+        actionSource: retryIntent.event?.source ?? record.source,
+        existing: retryIntent.previousRecord != null,
+        result: 'success',
       );
       if (!mounted) return _supersededWriteResult(intent.operationId);
       if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
@@ -2757,6 +2889,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     } catch (error) {
       if (!mounted) return _supersededWriteResult(intent.operationId);
       if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
+      _logRoutineActionWrite(
+        action: record.action,
+        occurrenceSource: record.source,
+        actionSource: retryIntent.event?.source ?? record.source,
+        existing: retryIntent.previousRecord != null,
+        result: 'failure',
+        error: error,
+      );
       state = state.copyWith(
         pendingOccurrenceIds: state.pendingOccurrenceIds
             .where((e) => e != occurrenceId)
@@ -2768,7 +2908,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
               ),
         failedOccurrenceIntentsById: {
           ...state.failedOccurrenceIntentsById,
-          occurrenceId: intent,
+          occurrenceId: retryIntent,
         },
         error: 'Could not update routine. Please try again.',
       );
@@ -2817,7 +2957,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return await _writeOccurrence(
       itemId,
       status: RoutineStatus.active,
-      source: 'routine',
+      actionSource: 'routine',
       action: 'start',
       occurrenceDate: occurrenceDate,
     );
@@ -2854,7 +2994,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return await _writeOccurrence(
       itemId,
       status: RoutineStatus.active,
-      source: 'routine',
+      actionSource: 'routine',
       action: 'start',
       occurrenceDate: occurrenceDate,
     );
@@ -2892,7 +3032,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return await _writeOccurrence(
       itemId,
       status: _occurrenceFor(itemId, anchor)?.status ?? RoutineStatus.active,
-      source: 'routine',
+      actionSource: 'routine',
       action: 'toggleSubtask',
       completedSubtaskIndexes: completed.toList()..sort(),
       occurrenceDate: occurrenceDate,
@@ -2906,7 +3046,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return await _writeOccurrence(
       itemId,
       status: RoutineStatus.completed,
-      source: 'routine',
+      actionSource: 'routine',
       action: 'complete',
       occurrenceDate: occurrenceDate,
     );
@@ -2930,7 +3070,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return await _writeOccurrence(
       itemId,
       status: RoutineStatus.skipped,
-      source: 'routine',
+      actionSource: 'routine',
       action: 'skip',
       occurrenceDate: occurrenceDate,
     );
@@ -2940,7 +3080,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return await _writeOccurrence(
       itemId,
       status: RoutineStatus.missed,
-      source: 'routine',
+      actionSource: 'routine',
       action: 'miss',
     );
   }
@@ -2968,7 +3108,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return await _writeOccurrence(
       itemId,
       status: status,
-      source: 'checkIn',
+      actionSource: 'checkIn',
       action: 'checkIn',
       note: 'Check-in: $response',
       occurrenceDate: occurrenceDate,
@@ -3007,7 +3147,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return await _writeOccurrence(
       itemId,
       status: RoutineStatus.completed,
-      source: 'money',
+      actionSource: 'money',
       action: 'complete',
       occurrenceDate: occurrenceDate,
     );
@@ -3041,6 +3181,16 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       status: 'active',
     );
 
+    final result = await _writeOccurrence(
+      item.id,
+      status: RoutineStatus.inTracker,
+      actionSource: 'tracker',
+      action: 'startTracker',
+      occurrenceDate: occurrenceDate,
+    );
+    if (!result.closesUserFlow) return result;
+    if (_ownerUid == null) return result;
+
     _ref.read(trackerSessionLinksProvider.notifier).upsert(link);
 
     state = state.copyWith(
@@ -3054,13 +3204,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
 
     _ref.read(appNavigationProvider.notifier).goToTracker();
-    return await _writeOccurrence(
-      item.id,
-      status: RoutineStatus.inTracker,
-      source: 'tracker',
-      action: 'startTracker',
-      occurrenceDate: occurrenceDate,
-    );
+    return result;
   }
 
   Future<RoutineWriteResult> completeTrackerSession(
@@ -3090,6 +3234,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       }
     }
     final now = DateTime.now();
+    final result = await _writeOccurrence(
+      routineTaskId,
+      status: RoutineStatus.completed,
+      actionSource: 'tracker',
+      action: 'complete',
+      occurrenceDate: occurrenceDate,
+    );
+    if (!result.closesUserFlow) return result;
     if (link != null) {
       _ref
           .read(trackerSessionLinksProvider.notifier)
@@ -3103,13 +3255,6 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             ),
           );
     }
-    final result = await _writeOccurrence(
-      routineTaskId,
-      status: RoutineStatus.completed,
-      source: 'tracker',
-      action: 'complete',
-      occurrenceDate: occurrenceDate,
-    );
     if (result.closesUserFlow &&
         state.activeTrackerLaunchIntent?.routineTaskId == routineTaskId &&
         state.activeTrackerLaunchIntent?.occurrenceDateKey ==
@@ -3162,7 +3307,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       return await _writeOccurrence(
         itemId,
         status: RoutineStatus.moved,
-        source: 'routine',
+        actionSource: 'routine',
         action: 'move',
         occurrenceDate: anchor,
         movedToDateKey: routineLocalDateKey(anchor),
@@ -3173,7 +3318,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       return await _writeOccurrence(
         itemId,
         status: RoutineStatus.moved,
-        source: 'routine',
+        actionSource: 'routine',
         action: 'reschedule',
         occurrenceDate: anchor, // source date
         movedToDateKey: routineLocalDateKey(date),
@@ -3204,7 +3349,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return await _writeOccurrence(
       item.id,
       status: RoutineStatus.moved,
-      source: 'routine',
+      actionSource: 'routine',
       action: 'makeTiny',
       occurrenceDate: occurrenceDate,
       movedToDateKey: routineLocalDateKey(occurrenceDate ?? state.selectedDay),

@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_presentation.dart';
 import 'package:optivus/features/routine/sheets/routine_move_sheet.dart';
@@ -30,6 +32,19 @@ class RoutineCardActions extends ConsumerWidget {
     required this.color,
     this.occurrenceDate,
   });
+
+  void _runRoutineAction(Future<RoutineWriteResult> Function() action) {
+    unawaited(
+      action().catchError((Object error, StackTrace stackTrace) {
+        if (kDebugMode) {
+          debugPrint('Routine card action failed unexpectedly.');
+        }
+        return const RoutineWriteResult.retryRequired(
+          message: 'Could not update routine. Please try again.',
+        );
+      }),
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -112,12 +127,14 @@ class RoutineCardActions extends ConsumerWidget {
                 ref,
                 source: MoneyEntrySource.routineTask,
                 routineTaskId: item.id,
-                onSaved: () => ref
-                    .read(routineNotifierProvider.notifier)
-                    .completeRoutineItem(
-                      item.id,
-                      occurrenceDate: occurrenceDate,
-                    ),
+                onSaved: () => _runRoutineAction(
+                  () => ref
+                      .read(routineNotifierProvider.notifier)
+                      .completeRoutineItem(
+                        item.id,
+                        occurrenceDate: occurrenceDate,
+                      ),
+                ),
               );
             } else if (item.blockType == RoutineBlockType.checkIn &&
                 item.category == RoutineCategory.badHabit) {
@@ -127,13 +144,17 @@ class RoutineCardActions extends ConsumerWidget {
                     isActiveTrackerOccurrence)) {
               ref.read(appNavigationProvider.notifier).goToTracker();
             } else if (item.blockType == RoutineBlockType.trackerTask) {
-              ref
-                  .read(routineNotifierProvider.notifier)
-                  .startRoutineItem(item.id, occurrenceDate: occurrenceDate);
+              _runRoutineAction(
+                () => ref
+                    .read(routineNotifierProvider.notifier)
+                    .startRoutineItem(item.id, occurrenceDate: occurrenceDate),
+              );
             } else {
-              ref
-                  .read(routineNotifierProvider.notifier)
-                  .startRoutineItem(item.id, occurrenceDate: occurrenceDate);
+              _runRoutineAction(
+                () => ref
+                    .read(routineNotifierProvider.notifier)
+                    .startRoutineItem(item.id, occurrenceDate: occurrenceDate),
+              );
             }
           },
         );
@@ -148,13 +169,23 @@ class RoutineCardActions extends ConsumerWidget {
           onTap: () {
             if (!hasScope) return;
             if (item.blockType == RoutineBlockType.trackerTask) {
-              ref
-                  .read(routineNotifierProvider.notifier)
-                  .completeRoutineItem(item.id, occurrenceDate: occurrenceDate);
+              _runRoutineAction(
+                () => ref
+                    .read(routineNotifierProvider.notifier)
+                    .completeRoutineItem(
+                      item.id,
+                      occurrenceDate: occurrenceDate,
+                    ),
+              );
             } else {
-              ref
-                  .read(routineNotifierProvider.notifier)
-                  .completeRoutineItem(item.id, occurrenceDate: occurrenceDate);
+              _runRoutineAction(
+                () => ref
+                    .read(routineNotifierProvider.notifier)
+                    .completeRoutineItem(
+                      item.id,
+                      occurrenceDate: occurrenceDate,
+                    ),
+              );
             }
           },
         );
@@ -241,13 +272,15 @@ class RoutineCardActions extends ConsumerWidget {
                     icon: Icons.check_circle_outline_rounded,
                     onTap: () {
                       Navigator.pop(ctx);
-                      ref
-                          .read(routineNotifierProvider.notifier)
-                          .checkIn(
-                            item.id,
-                            'Avoided',
-                            occurrenceDate: occurrenceDate,
-                          );
+                      _runRoutineAction(
+                        () => ref
+                            .read(routineNotifierProvider.notifier)
+                            .checkIn(
+                              item.id,
+                              'Avoided',
+                              occurrenceDate: occurrenceDate,
+                            ),
+                      );
                     },
                   ),
                   _SheetOptionButton(
@@ -256,13 +289,15 @@ class RoutineCardActions extends ConsumerWidget {
                     icon: Icons.warning_amber_rounded,
                     onTap: () {
                       Navigator.pop(ctx);
-                      ref
-                          .read(routineNotifierProvider.notifier)
-                          .checkIn(
-                            item.id,
-                            'Craving',
-                            occurrenceDate: occurrenceDate,
-                          );
+                      _runRoutineAction(
+                        () => ref
+                            .read(routineNotifierProvider.notifier)
+                            .checkIn(
+                              item.id,
+                              'Craving',
+                              occurrenceDate: occurrenceDate,
+                            ),
+                      );
                     },
                   ),
                   _SheetOptionButton(
@@ -271,13 +306,15 @@ class RoutineCardActions extends ConsumerWidget {
                     icon: Icons.close_rounded,
                     onTap: () {
                       Navigator.pop(ctx);
-                      ref
-                          .read(routineNotifierProvider.notifier)
-                          .checkIn(
-                            item.id,
-                            'Relapsed',
-                            occurrenceDate: occurrenceDate,
-                          );
+                      _runRoutineAction(
+                        () => ref
+                            .read(routineNotifierProvider.notifier)
+                            .checkIn(
+                              item.id,
+                              'Relapsed',
+                              occurrenceDate: occurrenceDate,
+                            ),
+                      );
                     },
                   ),
                 ],

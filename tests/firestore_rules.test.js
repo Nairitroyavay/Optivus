@@ -1,6 +1,6 @@
 
 const { assertFails, assertSucceeds, initializeTestEnvironment } = require("@firebase/rules-unit-testing");
-const { serverTimestamp } = require("firebase/firestore");
+const { deleteField, serverTimestamp } = require("firebase/firestore");
 const fs = require("fs");
 
 let testEnv;
@@ -71,6 +71,19 @@ function occurrenceData(uid = "user123", id = "occurrence-1", overrides = {}) {
     schemaVersion: 1,
     ...overrides,
   };
+}
+
+function onboardingOccurrenceData(uid = "user123", id = "onboarding-occurrence-1", overrides = {}) {
+  return occurrenceData(uid, id, {
+    status: "active",
+    source: "onboarding",
+    action: "project",
+    operationKey: "onboarding-project-1",
+    onboardingProjectionId: "onboarding-initial-v1",
+    onboardingSourceItemId: "source-1",
+    sourceFingerprint: fingerprint,
+    ...overrides,
+  });
 }
 
 function eventSnapshot(overrides = {}) {
@@ -775,6 +788,61 @@ describe("Firestore Rules for Routine durability", () => {
     await assertFails(docRef.set(occurrenceData("user123", "occurrence-1", {
       undoToPlannedAllowed: "yes",
     })));
+  });
+
+  it("allows onboarding occurrence actions only when provenance is preserved", async () => {
+    const db = ownerDb();
+    const ref = db.collection("users").doc("user123").collection("routineHistory").doc("onboarding-occurrence-1");
+    const projected = onboardingOccurrenceData();
+    delete projected.movedToDateKey;
+    delete projected.movedStartMinute;
+    delete projected.movedEndMinute;
+
+    await assertSucceeds(ref.set(projected));
+    await assertSucceeds(ref.update({
+      action: "start",
+      operationKey: "routine-start-1",
+      schemaVersion: 2,
+      startedAt: updatedAt,
+      countdownDurationSeconds: 3600,
+      updatedAt,
+    }));
+    await assertSucceeds(ref.update({
+      action: "complete",
+      status: "completed",
+      operationKey: "routine-complete-1",
+      updatedAt: completedAt,
+    }));
+    await assertSucceeds(ref.update({
+      action: "move",
+      status: "moved",
+      operationKey: "routine-move-1",
+      movedToDateKey: "2026-07-24",
+      movedStartMinute: 720,
+      movedEndMinute: 780,
+      updatedAt,
+    }));
+
+    await assertFails(ref.update({
+      source: "routine",
+      operationKey: "bad-source-conversion",
+      updatedAt: completedAt,
+    }));
+    await assertFails(ref.update({
+      onboardingProjectionId: deleteField(),
+      operationKey: "bad-remove-projection",
+      updatedAt: completedAt,
+    }));
+    await assertFails(ref.update({
+      onboardingSourceItemId: deleteField(),
+      operationKey: "bad-remove-source-item",
+      updatedAt: completedAt,
+    }));
+    await assertFails(ref.update({
+      sourceFingerprint: deleteField(),
+      operationKey: "bad-remove-fingerprint",
+      updatedAt: completedAt,
+    }));
   });
 
   it("enforces Routine occurrence timer schema versions", async () => {
