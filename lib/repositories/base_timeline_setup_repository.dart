@@ -267,6 +267,8 @@ class BaseTimelineSetupNotifier
   StreamSubscription<BaseTimelineSetup?>? _watchSubscription;
   int _loadGeneration = 0;
 
+  String get uid => _uid;
+
   BaseTimelineSetupNotifier(this._repository, this._uid)
     : super(const AsyncValue.loading()) {
     load();

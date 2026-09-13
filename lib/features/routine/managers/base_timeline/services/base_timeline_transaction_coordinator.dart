@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
@@ -65,6 +66,8 @@ class BaseTimelineTransactionCoordinator {
   final Ref? _ref;
   final Map<String, int> _latestCommittedRevisionByUid = {};
   final Map<String, BaseTimelineRoutineRefreshStatus> _latestRefreshStatusByUid = {};
+  final Map<String, int> _latestStatusRevisionByUid = {};
+  final Map<String, Future<void>> _reconciliationTailByUid = {};
 
   BaseTimelineTransactionCoordinator({
     required RoutineRepository routineRepo,
@@ -79,6 +82,32 @@ class BaseTimelineTransactionCoordinator {
   BaseTimelineRoutineRefreshStatus latestRefreshStatusFor(String uid) {
     return _latestRefreshStatusByUid[uid] ??
         BaseTimelineRoutineRefreshStatus.notAttempted;
+  }
+
+  /// Canonical active session validation for post-commit coordinator paths.
+  ///
+  /// Authority rules:
+  /// - The active profile UID ([userProfileProvider.uid]) MUST equal [targetUid].
+  /// - If [RoutineNotifier.ownerUid] is non-null and non-empty, it MUST NOT
+  ///   contradict [targetUid].
+  bool _isSessionValidForOwner(String targetUid) {
+    final ref = _ref;
+    if (ref == null) return false;
+
+    final activeProfileUid = ref.read(userProfileProvider).uid.trim();
+    if (activeProfileUid.isEmpty || activeProfileUid != targetUid) {
+      return false;
+    }
+
+    final routineOwner =
+        ref.read(routineNotifierProvider.notifier).ownerUid?.trim();
+    if (routineOwner != null &&
+        routineOwner.isNotEmpty &&
+        routineOwner != targetUid) {
+      return false;
+    }
+
+    return true;
   }
 
   static bool isSectionRoutineItem(
@@ -377,45 +406,156 @@ class BaseTimelineTransactionCoordinator {
     final commitRevision = commitResult.revision;
     _latestCommittedRevisionByUid[uid] = commitRevision;
 
-    // 6. Update in-memory state directly from the committed transaction result
-    // and reconcile Routine frontend.
-    var refreshStatus = BaseTimelineRoutineRefreshStatus.notAttempted;
-    String? refreshMessage;
-
-    if (_ref != null) {
-      _ref
-          .read(baseTimelineSetupNotifierProvider.notifier)
-          .updateInMemory(commitResult.committedSetup);
-
-      try {
-        await _ref.read(routineNotifierProvider.notifier).loadForOwner(uid);
-        if ((_latestCommittedRevisionByUid[uid] ?? 0) <= commitRevision) {
-          _latestRefreshStatusByUid[uid] =
-              BaseTimelineRoutineRefreshStatus.refreshed;
-        }
-        refreshStatus = BaseTimelineRoutineRefreshStatus.refreshed;
-      } catch (_) {
-        if ((_latestCommittedRevisionByUid[uid] ?? 0) <= commitRevision) {
-          _latestRefreshStatusByUid[uid] =
-              BaseTimelineRoutineRefreshStatus.refreshPending;
-        }
-        refreshStatus = BaseTimelineRoutineRefreshStatus.refreshPending;
-        refreshMessage = 'Saved, but Routine needs to refresh.';
-      }
+    // 6. Post-commit frontend reconciliation.
+    //
+    // Once replaceBaseTimelineSection returns successfully, the Base Timeline
+    // transaction is durable. Post-commit local publication and Routine
+    // reconciliation must NEVER convert a durable success into a thrown failure.
+    if (_ref == null) {
+      return BaseTimelineSectionReplaceResult(
+        commit: commitResult,
+        routineRefreshStatus: BaseTimelineRoutineRefreshStatus.notAttempted,
+      );
     }
+
+    // Verify current active account still matches commit UID before local publication
+    if (!_isSessionValidForOwner(uid)) {
+      return BaseTimelineSectionReplaceResult(
+        commit: commitResult,
+        routineRefreshStatus: BaseTimelineRoutineRefreshStatus.notAttempted,
+        routineRefreshMessage:
+            'Saved for the previous account; local refresh was skipped because the active account changed.',
+      );
+    }
+
+    // Safe in-memory publication: ensure target notifier is bound to this UID
+    try {
+      final setupNotifier =
+          _ref.read(baseTimelineSetupNotifierProvider.notifier);
+      if (setupNotifier.uid == uid) {
+        setupNotifier.updateInMemory(commitResult.committedSetup);
+      }
+    } catch (_) {
+      // In-memory update error must not throw as save failure
+    }
+
+    // Fresh Routine reconciliation
+    final refreshResult = await _reconcileCommittedRoutine(
+      uid: uid,
+      committedRevision: commitRevision,
+      accountSwitchedMessage:
+          'Saved for the previous account; local refresh was skipped because the active account changed.',
+    );
 
     return BaseTimelineSectionReplaceResult(
       commit: commitResult,
-      routineRefreshStatus: refreshStatus,
-      routineRefreshMessage: refreshMessage,
+      routineRefreshStatus: refreshResult.status,
+      routineRefreshMessage: refreshResult.message,
     );
+  }
+
+  /// Serializes Routine reconciliation per UID, ensuring that:
+  /// - At least one Routine repository fetch begins after this commit became durable.
+  /// - Any pre-commit load or concurrent older commit reconciliation completes before
+  ///   this revision initiates its fetch.
+  /// - A newer committed revision cannot have its latest status downgraded by an older
+  ///   reconciliation.
+  /// - The durable commit result is never converted into an exception if the active
+  ///   session changes or the reload fails.
+  Future<BaseTimelineRoutineRefreshResult> _reconcileCommittedRoutine({
+    required String uid,
+    required int committedRevision,
+    String? accountSwitchedMessage,
+  }) async {
+    final ref = _ref;
+    if (ref == null) {
+      return const BaseTimelineRoutineRefreshResult(
+        status: BaseTimelineRoutineRefreshStatus.notAttempted,
+      );
+    }
+
+    // 1. Initial active session check before queuing
+    if (!_isSessionValidForOwner(uid)) {
+      return BaseTimelineRoutineRefreshResult(
+        status: BaseTimelineRoutineRefreshStatus.notAttempted,
+        message: accountSwitchedMessage ??
+            'Active session does not match requested owner.',
+      );
+    }
+
+    // 2. Queue behind any active reconciliation for this UID
+    final previousReconciliation = _reconciliationTailByUid[uid];
+    final completer = Completer<void>();
+    _reconciliationTailByUid[uid] = completer.future;
+
+    try {
+      if (previousReconciliation != null) {
+        try {
+          await previousReconciliation;
+        } catch (_) {
+          // Prior reconciliation failure must not prevent this revision's fresh reload
+        }
+      }
+
+      // 3. Re-verify active session after awaiting prior reconciliation
+      if (!_isSessionValidForOwner(uid)) {
+        return BaseTimelineRoutineRefreshResult(
+          status: BaseTimelineRoutineRefreshStatus.notAttempted,
+          message: accountSwitchedMessage ??
+              'Active session does not match requested owner.',
+        );
+      }
+
+      // 4. Perform fresh-after-commit reload using reloadForOwnerAfterCurrentLoad
+      try {
+        await ref
+            .read(routineNotifierProvider.notifier)
+            .reloadForOwnerAfterCurrentLoad(uid);
+
+        // 5. Monotonic revision check: if a newer revision was committed,
+        // do not let this older revision downgrade coordinator's latest status.
+        final latestCommitted = _latestCommittedRevisionByUid[uid] ?? 0;
+        final currentStatusRev = _latestStatusRevisionByUid[uid] ?? 0;
+        if (committedRevision >= latestCommitted ||
+            committedRevision >= currentStatusRev) {
+          _latestRefreshStatusByUid[uid] =
+              BaseTimelineRoutineRefreshStatus.refreshed;
+          _latestStatusRevisionByUid[uid] = committedRevision;
+        }
+
+        return const BaseTimelineRoutineRefreshResult(
+          status: BaseTimelineRoutineRefreshStatus.refreshed,
+        );
+      } catch (_) {
+        final latestCommitted = _latestCommittedRevisionByUid[uid] ?? 0;
+        final currentStatusRev = _latestStatusRevisionByUid[uid] ?? 0;
+        if (committedRevision >= latestCommitted ||
+            committedRevision >= currentStatusRev) {
+          _latestRefreshStatusByUid[uid] =
+              BaseTimelineRoutineRefreshStatus.refreshPending;
+          _latestStatusRevisionByUid[uid] = committedRevision;
+        }
+
+        return const BaseTimelineRoutineRefreshResult(
+          status: BaseTimelineRoutineRefreshStatus.refreshPending,
+          message: 'Saved, but Routine needs to refresh.',
+        );
+      }
+    } finally {
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+      if (identical(_reconciliationTailByUid[uid], completer.future)) {
+        _reconciliationTailByUid.remove(uid);
+      }
+    }
   }
 
   /// Safely retries Routine frontend reconciliation after a commit resulted in
   /// [BaseTimelineRoutineRefreshStatus.refreshPending].
   ///
   /// Invariants:
-  /// - Only calls [RoutineNotifier.loadForOwner].
+  /// - Only calls [RoutineNotifier.reloadForOwnerAfterCurrentLoad].
   /// - NEVER reruns [replaceSection] or [replaceBaseTimelineSection].
   /// - NEVER saves [BaseTimelineSetup] or increments revision.
   /// - NEVER retires photo assets.
@@ -434,9 +574,7 @@ class BaseTimelineTransactionCoordinator {
     }
 
     // Owner isolation guard: ensure active session matches requested UID
-    final activeUid = ref.read(routineNotifierProvider.notifier).ownerUid ??
-        ref.read(userProfileProvider).uid;
-    if (activeUid.trim().isEmpty || activeUid != uid) {
+    if (!_isSessionValidForOwner(uid)) {
       return const BaseTimelineRoutineRefreshResult(
         status: BaseTimelineRoutineRefreshStatus.notAttempted,
         message: 'Active session does not match requested owner.',
@@ -445,7 +583,9 @@ class BaseTimelineTransactionCoordinator {
 
     // Revision monotonic guard: older retries cannot downgrade newer revisions
     final latestRev = _latestCommittedRevisionByUid[uid];
-    if (targetRevision != null && latestRev != null && targetRevision < latestRev) {
+    if (targetRevision != null &&
+        latestRev != null &&
+        targetRevision < latestRev) {
       return BaseTimelineRoutineRefreshResult(
         status: _latestRefreshStatusByUid[uid] ??
             BaseTimelineRoutineRefreshStatus.refreshed,
@@ -453,27 +593,10 @@ class BaseTimelineTransactionCoordinator {
       );
     }
 
-    try {
-      await ref.read(routineNotifierProvider.notifier).loadForOwner(uid);
-      if (targetRevision == null ||
-          targetRevision >= (_latestCommittedRevisionByUid[uid] ?? 0)) {
-        _latestRefreshStatusByUid[uid] =
-            BaseTimelineRoutineRefreshStatus.refreshed;
-      }
-      return const BaseTimelineRoutineRefreshResult(
-        status: BaseTimelineRoutineRefreshStatus.refreshed,
-      );
-    } catch (_) {
-      if (targetRevision == null ||
-          targetRevision >= (_latestCommittedRevisionByUid[uid] ?? 0)) {
-        _latestRefreshStatusByUid[uid] =
-            BaseTimelineRoutineRefreshStatus.refreshPending;
-      }
-      return const BaseTimelineRoutineRefreshResult(
-        status: BaseTimelineRoutineRefreshStatus.refreshPending,
-        message: 'Saved, but Routine needs to refresh.',
-      );
-    }
+    return await _reconcileCommittedRoutine(
+      uid: uid,
+      committedRevision: targetRevision ?? latestRev ?? 1,
+    );
   }
 }
 

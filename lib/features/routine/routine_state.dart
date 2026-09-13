@@ -896,6 +896,39 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   Future<void>? _inFlightLoad;
   String? _inFlightUid;
 
+  /// Post-commit Routine reconciliation reload primitive.
+  ///
+  /// Guarantees that at least one fresh repository fetch begins after this method
+  /// is invoked:
+  /// 1. Validates [uid].
+  /// 2. If a same-owner load is already in progress, waits for it to finish so
+  ///    potentially stale pre-commit data is not joined.
+  /// 3. Verifies owner isolation if the active owner changed while waiting.
+  /// 4. Initiates a fresh [loadForOwner] after the prior load has completed/cleared.
+  /// 5. Propagates any real failure from the new reload.
+  Future<void> reloadForOwnerAfterCurrentLoad(String uid) async {
+    if (uid.trim().isEmpty || uid.contains('/')) {
+      throw ArgumentError('A valid authenticated Routine owner is required.');
+    }
+
+    final priorLoad = (_ownerUid == uid && _inFlightUid == uid)
+        ? _inFlightLoad
+        : null;
+    if (priorLoad != null) {
+      try {
+        await priorLoad;
+      } catch (_) {
+        // Stale pre-commit load failure must not prevent our fresh post-commit reload.
+      }
+    }
+
+    if (_ownerUid != null && _ownerUid != uid) {
+      return;
+    }
+
+    await loadForOwner(uid);
+  }
+
   Future<void> loadForOwner(String uid) async {
     if (uid.trim().isEmpty || uid.contains('/')) {
       throw ArgumentError('A valid authenticated Routine owner is required.');
