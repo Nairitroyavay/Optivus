@@ -228,6 +228,17 @@ class ClassTimelineCard extends StatelessWidget {
         children: [
           Row(
             children: [
+              Container(
+                width: 18,
+                height: 18,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Icon(Icons.school_rounded, size: 11, color: accent),
+              ),
+              const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   subject,

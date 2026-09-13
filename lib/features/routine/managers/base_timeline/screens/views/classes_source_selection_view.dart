@@ -13,6 +13,7 @@ class ClassesSourceSelectionView extends StatelessWidget {
   final void Function(ImageSource source) onPickPhoto;
   final VoidCallback onManualSetup;
   final VoidCallback? onEditCurrent;
+  final VoidCallback? onRemoveSetup;
 
   const ClassesSourceSelectionView({
     super.key,
@@ -21,6 +22,7 @@ class ClassesSourceSelectionView extends StatelessWidget {
     required this.onPickPhoto,
     required this.onManualSetup,
     this.onEditCurrent,
+    this.onRemoveSetup,
   });
 
   @override
@@ -69,6 +71,48 @@ class ClassesSourceSelectionView extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (onRemoveSetup != null && snapshot.isConfigured)
+                  PopupMenuButton<String>(
+                    icon: const Icon(
+                      Icons.more_vert_rounded,
+                      color: OptivusColors.textSecondary,
+                    ),
+                    color: OptivusColors.backgroundBottom,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: const BorderSide(
+                        color: OptivusColors.borderStandard,
+                      ),
+                    ),
+                    onSelected: (val) {
+                      if (val == 'remove') {
+                        onRemoveSetup!();
+                      }
+                    },
+                    itemBuilder: (ctx) => [
+                      const PopupMenuItem(
+                        value: 'remove',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.delete_outline_rounded,
+                              color: OptivusColors.danger,
+                              size: 18,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'Remove setup',
+                              style: TextStyle(
+                                color: OptivusColors.danger,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),
@@ -167,6 +211,28 @@ class ClassesSourceSelectionView extends StatelessWidget {
                     accent: OptivusColors.routineAccent,
                     onTap: onManualSetup,
                   ),
+                ],
+                if (onRemoveSetup != null && snapshot.isConfigured) ...[
+                  const SizedBox(height: 24),
+                  Center(
+                    child: TextButton.icon(
+                      icon: const Icon(
+                        Icons.delete_outline_rounded,
+                        color: OptivusColors.danger,
+                        size: 18,
+                      ),
+                      label: const Text(
+                        'Remove Classes setup',
+                        style: TextStyle(
+                          color: OptivusColors.danger,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      onPressed: onRemoveSetup,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                 ],
               ],
             ),

@@ -443,6 +443,7 @@ class _ClassesBaseSetupScreenState
           ),
           onManualSetup: () => controller.startManualSetup(setup),
           onEditCurrent: () => controller.editCurrentTimetable(setup),
+          onRemoveSetup: () => _handleRemoveSetup(setup, uid),
         );
 
       case ClassesSetupStage.error:
@@ -453,15 +454,6 @@ class _ClassesBaseSetupScreenState
           onComplete: () {
             if (!mounted) return;
             controller.dismissSuccess();
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Classes updated. Your new timetable is now active.',
-                ),
-                duration: Duration(seconds: 3),
-                backgroundColor: OptivusColors.routineAccent,
-              ),
-            );
           },
         );
 
@@ -566,8 +558,8 @@ class _ClassesBaseSetupScreenState
                       Text(
                         'Classes',
                         style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
                           color: OptivusColors.textPrimary,
                         ),
                       ),
@@ -582,6 +574,14 @@ class _ClassesBaseSetupScreenState
                     ],
                   ),
                 ),
+                Container(
+                  width: 120,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: OptivusColors.blueAccent.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
               ],
             ),
           ),
@@ -591,7 +591,7 @@ class _ClassesBaseSetupScreenState
               child: Column(
                 children: [
                   Container(
-                    height: 110,
+                    height: 140,
                     margin: const EdgeInsets.only(bottom: 16),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(18),
@@ -620,16 +620,6 @@ class _ClassesBaseSetupScreenState
                     ),
                   ),
                 ],
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-            child: Container(
-              height: 52,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                color: OptivusColors.blueAccent.withValues(alpha: 0.25),
               ),
             ),
           ),

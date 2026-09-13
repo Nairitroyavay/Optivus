@@ -153,21 +153,9 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
                       padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                     icon: const Icon(Icons.photo_library_outlined, size: 18),
-                    label: const Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Text(
-                          'Change photo',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        Text(
-                          'Scan Again',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: Colors.transparent,
-                          ),
-                        ),
-                      ],
+                    label: const Text(
+                      'Change photo',
+                      style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                     onPressed: widget.isSaving ? null : widget.onScanAgain,
                   ),

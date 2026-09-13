@@ -445,9 +445,9 @@ void main() {
     );
   });
 
-  group('5. Tab Bar Bottom Clearance & Compact Source Row', () {
+  group('5. Visual Family Alignment & Tab Bar Bottom Clearance', () {
     testWidgets(
-      'ClassesCurrentSetupView CTA reserves floating tab bar clearance',
+      'ClassesCurrentSetupView renders top-right Change setup CTA and 140px photo card',
       (tester) async {
         final setup = BaseTimelineSetup(
           uid: 'user-tab-test',
@@ -498,19 +498,19 @@ void main() {
         final ctaFinder = find.text('Change setup');
         expect(ctaFinder, findsOneWidget);
 
-        // Verify compact source preview card exists
+        // Verify 140px large photo preview card directly below header
         final previewFinder = find.byType(BaseTimelinePhotoPreviewCard);
         expect(previewFinder, findsOneWidget);
         final previewCard = tester.widget<BaseTimelinePhotoPreviewCard>(
           previewFinder,
         );
-        expect(previewCard.isCompactRow, isTrue);
-        expect(previewCard.height, 68.0);
+        expect(previewCard.isCompactRow, isFalse);
+        expect(previewCard.height, 140.0);
       },
     );
 
     testWidgets(
-      'ClassesReviewView renders Change photo with Scan Again compatibility and tab bar clearance',
+      'ClassesReviewView renders Change photo and tab bar clearance without hidden Scan Again hack',
       (tester) async {
         final blocks = <ClassRoutineBlock>[
           ClassRoutineBlock(
@@ -522,7 +522,7 @@ void main() {
           ),
         ];
 
-        bool scannedAgain = false;
+        bool changedPhoto = false;
 
         await tester.pumpWidget(
           ProviderScope(
@@ -541,7 +541,7 @@ void main() {
                   onClearError: () {},
                   isSaving: false,
                   onCancel: () {},
-                  onScanAgain: () => scannedAgain = true,
+                  onScanAgain: () => changedPhoto = true,
                   onAddClass: () {},
                   onEditBlock: (_) {},
                   onSave: () {},
@@ -551,13 +551,13 @@ void main() {
           ),
         );
 
-        // Verify both 'Change photo' and 'Scan Again' finders match
+        // Verify 'Change photo' exists and hidden 'Scan Again' hack is removed
         expect(find.text('Change photo'), findsOneWidget);
-        expect(find.text('Scan Again'), findsOneWidget);
+        expect(find.text('Scan Again'), findsNothing);
 
-        // Verify tapping 'Scan Again' invokes onScanAgain
-        await tester.tap(find.text('Scan Again'));
-        expect(scannedAgain, isTrue);
+        // Verify tapping 'Change photo' invokes onScanAgain
+        await tester.tap(find.text('Change photo'));
+        expect(changedPhoto, isTrue);
 
         // Verify bottom CTA has "Use this timetable"
         expect(find.text('Use this timetable'), findsOneWidget);

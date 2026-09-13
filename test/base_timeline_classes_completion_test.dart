@@ -759,15 +759,20 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('Chemistry 101'), findsOneWidget);
 
-        // Open overflow menu
+        // Tap 'Change setup' to navigate to source selection
+        expect(find.text('Change setup'), findsOneWidget);
+        await tester.tap(find.text('Change setup'));
+        await tester.pumpAndSettle();
+
+        // Open overflow menu in source selection
         final moreBtn = find.byIcon(Icons.more_vert_rounded);
         expect(moreBtn, findsOneWidget);
         await tester.tap(moreBtn);
         await tester.pumpAndSettle();
 
         // Tap 'Remove setup'
-        expect(find.text('Remove setup'), findsOneWidget);
-        await tester.tap(find.text('Remove setup'));
+        expect(find.text('Remove setup'), findsWidgets);
+        await tester.tap(find.text('Remove setup').first);
         await tester.pumpAndSettle();
 
         // Confirmation dialog
@@ -1867,8 +1872,8 @@ void main() {
         expect(find.text('Review Timetable'), findsOneWidget);
         expect(find.text('Algorithms 101'), findsOneWidget);
 
-        // Tap Scan Again -> Choose from Gallery
-        await tester.tap(find.text('Scan Again'));
+        // Tap Change photo -> Choose from Gallery
+        await tester.tap(find.text('Change photo'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Choose from Gallery'));
         await tester.pumpAndSettle();
@@ -2175,12 +2180,12 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Transitioned to currentSetup stage and snackbar is displayed
+      // Transitioned to currentSetup stage without duplicate snackbar
       expect(find.text('Classes'), findsOneWidget);
       expect(find.text('Change setup'), findsOneWidget);
       expect(
         find.text('Classes updated. Your new timetable is now active.'),
-        findsOneWidget,
+        findsNothing,
       );
     });
 
@@ -2418,8 +2423,8 @@ void main() {
         expect(find.text('Review Timetable'), findsOneWidget);
         expect(find.text('Draft Physics'), findsOneWidget);
 
-        // In review, tap Scan Again -> Choose from Gallery (triggers photo upload + AI failure)
-        await tester.tap(find.text('Scan Again'));
+        // In review, tap Change photo -> Choose from Gallery (triggers photo upload + AI failure)
+        await tester.tap(find.text('Change photo'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Choose from Gallery'));
         await tester.pumpAndSettle();

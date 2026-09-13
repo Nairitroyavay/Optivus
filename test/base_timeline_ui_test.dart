@@ -114,7 +114,7 @@ void main() {
       expect(find.text('Skin Care'), findsOneWidget);
 
       // 3. Snapshot summaries
-      expect(find.text('Timetable photo · 1 blocks'), findsOneWidget);
+      expect(find.text('Timetable photo · 1 classes'), findsOneWidget);
       expect(find.text('1 weekly blocks'), findsOneWidget);
       expect(find.text('Sleep, Bath'), findsOneWidget);
       expect(find.text('Not set up'), findsWidgets);
@@ -508,7 +508,7 @@ void main() {
       // In review stage
       expect(find.text('Review Timetable'), findsOneWidget);
       expect(find.text('Use this timetable'), findsOneWidget);
-      expect(find.text('Scan Again'), findsOneWidget);
+      expect(find.text('Change photo'), findsOneWidget);
       expect(find.text('Add Class'), findsOneWidget);
 
       // In review mode, editable card shows edit icon
@@ -516,11 +516,16 @@ void main() {
 
       // Tap 'Use this timetable' to save
       await tester.tap(find.text('Use this timetable'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // In-flow success stage is displayed
+      expect(find.textContaining('Classes updated'), findsOneWidget);
+
       await tester.pumpAndSettle();
 
-      // Returns to currentSetup with success snackbar
+      // Returns to currentSetup
       expect(find.text('Classes'), findsOneWidget);
-      expect(find.textContaining('Classes updated'), findsOneWidget);
 
       // Verify committed setup in repository preserved all fields
       final updatedSetup = await fakeSetupRepo.fetchSetup('user-manual-test');

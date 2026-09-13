@@ -245,18 +245,22 @@ class _BaseTimelinePhotoPreviewCardState
                   context,
                   localPath: widget.localPreviewPath!,
                 ),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Image.file(
-                      File(widget.localPreviewPath!),
-                      fit: BoxFit.cover,
-                      cacheWidth: 800,
-                      errorBuilder: (context, error, stackTrace) =>
-                          _buildFallbackContent(),
-                    ),
-                    _buildOverlayBar(),
-                  ],
+                child: Semantics(
+                  label: '${widget.title}. Tap to view.',
+                  button: true,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.file(
+                        File(widget.localPreviewPath!),
+                        fit: BoxFit.cover,
+                        cacheWidth: 800,
+                        errorBuilder: (context, error, stackTrace) =>
+                            _buildFallbackContent(),
+                      ),
+                      _buildOverlayBar(),
+                    ],
+                  ),
                 ),
               )
             else if (_loading)
@@ -287,18 +291,22 @@ class _BaseTimelinePhotoPreviewCardState
             else if (_previewUri != null && !_failed)
               GestureDetector(
                 onTap: () => _showFullImage(context, networkUri: _previewUri!),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Image.network(
-                      _previewUri.toString(),
-                      fit: BoxFit.cover,
-                      cacheWidth: 800,
-                      errorBuilder: (context, error, stackTrace) =>
-                          _buildFallbackContent(),
-                    ),
-                    _buildOverlayBar(),
-                  ],
+                child: Semantics(
+                  label: '${widget.title}. Tap to view.',
+                  button: true,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.network(
+                        _previewUri.toString(),
+                        fit: BoxFit.cover,
+                        cacheWidth: 800,
+                        errorBuilder: (context, error, stackTrace) =>
+                            _buildFallbackContent(),
+                      ),
+                      _buildOverlayBar(),
+                    ],
+                  ),
                 ),
               )
             else
@@ -389,48 +397,51 @@ class _BaseTimelinePhotoPreviewCardState
     final isPhotoSavedUnavailable =
         widget.assetId != null && (widget.r2Key == null || _failed);
 
-    return Center(
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: isCompact ? 6 : 16,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.image_outlined,
-              color: OptivusColors.textSecondary.withValues(alpha: 0.7),
-              size: isCompact ? 24 : 32,
-            ),
-            SizedBox(height: isCompact ? 4 : 8),
-            Text(
-              widget.title,
-              style: const TextStyle(
-                color: OptivusColors.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
+    return Semantics(
+      label: '${widget.title}. Preview unavailable.',
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: isCompact ? 6 : 16,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.image_outlined,
+                color: OptivusColors.textSecondary.withValues(alpha: 0.7),
+                size: isCompact ? 24 : 32,
               ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              isPhotoSavedUnavailable
-                  ? (widget.subtitle != null &&
-                            widget.subtitle!.trim().isNotEmpty
-                        ? 'Preview unavailable · ${widget.subtitle!.trim()}'
-                        : 'Timetable photo saved · Preview unavailable')
-                  : (widget.subtitle != null &&
-                            widget.subtitle!.trim().isNotEmpty
-                        ? widget.subtitle!.trim()
-                        : (_failed
-                              ? 'Preview unavailable'
-                              : 'Secure cloud storage')),
-              style: const TextStyle(
-                color: OptivusColors.textSecondary,
-                fontSize: 11,
+              SizedBox(height: isCompact ? 4 : 8),
+              Text(
+                widget.title,
+                style: const TextStyle(
+                  color: OptivusColors.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 2),
+              Text(
+                isPhotoSavedUnavailable
+                    ? (widget.subtitle != null &&
+                              widget.subtitle!.trim().isNotEmpty
+                          ? 'Preview unavailable · ${widget.subtitle!.trim()}'
+                          : 'Timetable photo saved · Preview unavailable')
+                    : (widget.subtitle != null &&
+                              widget.subtitle!.trim().isNotEmpty
+                          ? widget.subtitle!.trim()
+                          : (_failed
+                                ? 'Preview unavailable'
+                                : 'Secure cloud storage')),
+                style: const TextStyle(
+                  color: OptivusColors.textSecondary,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

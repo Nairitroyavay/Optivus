@@ -197,8 +197,8 @@ class BaseTimelineSetup {
         : (configured ? BaseSetupOrigin.manual : BaseSetupOrigin.notConfigured);
     final summary = configured
         ? (origin == BaseSetupOrigin.photo
-              ? 'Timetable photo · ${classBlocks.length} blocks'
-              : '${classBlocks.length} weekly blocks')
+              ? 'Timetable photo · ${classBlocks.length} classes'
+              : '${classBlocks.length} weekly classes')
         : 'Not set up';
     return BaseTimelineSectionSnapshot(
       section: BaseTimelineSection.classes,
