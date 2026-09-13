@@ -31,6 +31,8 @@ class RoutineOccurrenceFirestoreCodec {
     'onboardingProjectionId',
     'onboardingSourceItemId',
     'sourceFingerprint',
+    'startedAt',
+    'countdownDurationSeconds',
     'createdAt',
     'updatedAt',
     'schemaVersion',
@@ -40,7 +42,8 @@ class RoutineOccurrenceFirestoreCodec {
     validateOwnerUid(record.ownerUid);
     validateDocumentId(record.id);
     validateDocumentId(record.routineItemId);
-    if (record.schemaVersion != RoutineOccurrenceRecord.currentSchemaVersion) {
+    if (record.schemaVersion < 1 ||
+        record.schemaVersion > RoutineOccurrenceRecord.currentSchemaVersion) {
       throw ArgumentError('Unsupported Routine occurrence schema.');
     }
     parseRoutineLocalDateKey(record.occurrenceDateKey);
@@ -63,6 +66,16 @@ class RoutineOccurrenceFirestoreCodec {
     if (record.operationKey.trim().isEmpty ||
         record.operationKey.length > 256) {
       throw ArgumentError('Invalid Routine occurrence operation key.');
+    }
+    final hasStartedAt = record.startedAt != null;
+    final hasCountdown = record.countdownDurationSeconds != null;
+    if (hasStartedAt != hasCountdown) {
+      throw ArgumentError('Routine occurrence timer fields are incomplete.');
+    }
+    if (record.countdownDurationSeconds != null &&
+        (record.countdownDurationSeconds! <= 0 ||
+            record.countdownDurationSeconds! > 24 * 60 * 60)) {
+      throw ArgumentError('Invalid Routine occurrence countdown duration.');
     }
     _validateMove(record);
     final uniqueSubtasks = record.completedSubtaskIndexes.toSet();
@@ -97,6 +110,10 @@ class RoutineOccurrenceFirestoreCodec {
         'onboardingSourceItemId': record.onboardingSourceItemId,
       if (record.sourceFingerprint != null)
         'sourceFingerprint': record.sourceFingerprint,
+      if (record.startedAt != null)
+        'startedAt': Timestamp.fromDate(record.startedAt!.toUtc()),
+      if (record.countdownDurationSeconds != null)
+        'countdownDurationSeconds': record.countdownDurationSeconds,
       'createdAt': Timestamp.fromDate(record.createdAt.toUtc()),
       'updatedAt': Timestamp.fromDate(record.updatedAt.toUtc()),
       'schemaVersion': record.schemaVersion,
@@ -149,6 +166,9 @@ class RoutineOccurrenceFirestoreCodec {
       onboardingProjectionId: data['onboardingProjectionId'] as String?,
       onboardingSourceItemId: data['onboardingSourceItemId'] as String?,
       sourceFingerprint: data['sourceFingerprint'] as String?,
+      startedAt: readRoutineDateTime(data['startedAt']),
+      countdownDurationSeconds: (data['countdownDurationSeconds'] as num?)
+          ?.toInt(),
       createdAt:
           readRoutineDateTime(data['createdAt']) ??
           (throw const FormatException(

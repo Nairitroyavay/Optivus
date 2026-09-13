@@ -39,6 +39,7 @@ class RoutineCardBase extends StatelessWidget {
       duration: const Duration(milliseconds: 200),
       child: TimelineCardChrome(
         baseColor: effectiveColor,
+        surfaceMode: TimelineCardSurfaceMode.neutralGlass,
         isFront: isFront,
         hasOverlap: hasOverlap,
         borderRadius: BorderRadius.circular(24),

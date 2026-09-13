@@ -700,8 +700,8 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Initially, the two non-overlapping short items (trans_b at 10:30 and trans_d at 12:00)
-        // are front cards in their respective non-conflicting time windows, while trans_a and trans_c are in the gutter.
+        // Initially one coherent component front is promoted, and every other
+        // member remains exposed as an individually tappable back card.
         expect(
           find.byKey(const ValueKey('routine-back-label-trans_a')),
           findsOneWidget,
@@ -712,7 +712,7 @@ void main() {
         );
         expect(
           find.byKey(const ValueKey('routine-back-label-trans_b')),
-          findsNothing,
+          findsOneWidget,
         );
         expect(
           find.byKey(const ValueKey('routine-back-label-trans_d')),
@@ -750,7 +750,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // trans_a is now front; trans_b and trans_c are in back; trans_d at 12:00 is also visible in front
+        // trans_a is now front; every other member of the component is exposed.
         expect(
           find.byKey(const ValueKey('routine-back-label-trans_a')),
           findsNothing,
@@ -765,7 +765,7 @@ void main() {
         );
         expect(
           find.byKey(const ValueKey('routine-back-label-trans_d')),
-          findsNothing,
+          findsOneWidget,
         );
       },
     );
@@ -1335,18 +1335,12 @@ void main() {
         final actionsFinder = find.byType(RoutineCardActions);
         expect(actionsFinder, findsOneWidget);
 
-        final expandedFinder = find.descendant(
-          of: actionsFinder,
-          matching: find.byType(Expanded),
-        );
-        expect(expandedFinder, findsNWidgets(3));
+        expect(find.text('Start'), findsOneWidget);
+        expect(find.text('Done'), findsOneWidget);
+        expect(find.text('Move'), findsOneWidget);
 
-        final outerRow = tester.widget<Row>(
-          find.descendant(of: actionsFinder, matching: find.byType(Row)).first,
-        );
-        expect(outerRow.children.whereType<Expanded>().length, 3);
-
-        // Each button container has minHeight of 44.0
+        // Each button container has stable minHeight of 44.0, whether the
+        // countdown-safe solver chooses a row or stacked layout.
         final containers = tester.widgetList<Container>(
           find.descendant(
             of: actionsFinder,

@@ -69,6 +69,16 @@ class RoutineOccurrenceWriteIntent {
   });
 }
 
+class _RoutineCountdownAllocation {
+  final DateTime startedAt;
+  final int durationSeconds;
+
+  const _RoutineCountdownAllocation({
+    required this.startedAt,
+    required this.durationSeconds,
+  });
+}
+
 class RoutineWriteIntent {
   final RoutineWriteAction action;
   final String ownerUid;
@@ -2137,6 +2147,10 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     if (a.movedEndMinute != b.movedEndMinute) return false;
     if (a.note != b.note) return false;
     if (a.displayTitleOverride != b.displayTitleOverride) return false;
+    if (a.startedAt != b.startedAt) return false;
+    if (a.countdownDurationSeconds != b.countdownDurationSeconds) {
+      return false;
+    }
     if (a.completedSubtaskIndexes.length != b.completedSubtaskIndexes.length) {
       return false;
     }
@@ -2146,6 +2160,61 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       }
     }
     return true;
+  }
+
+  _RoutineCountdownAllocation? _allocateCountdownForOccurrence({
+    required String itemId,
+    required String occurrenceDateKey,
+    required DateTime actualStart,
+    RoutineOccurrenceRecord? existing,
+  }) {
+    RoutineItem? template;
+    for (final candidate in state.items) {
+      if (candidate.id == itemId) {
+        template = candidate;
+        break;
+      }
+    }
+    if (template == null) return null;
+
+    DateTime startDate;
+    int startMinute;
+    int endMinute;
+    if (existing?.movedToDateKey != null &&
+        existing?.movedStartMinute != null &&
+        existing?.movedEndMinute != null) {
+      startDate = parseRoutineLocalDateKey(existing!.movedToDateKey!);
+      startMinute = existing.movedStartMinute!;
+      endMinute = existing.movedEndMinute!;
+    } else {
+      startDate = parseRoutineLocalDateKey(occurrenceDateKey);
+      startMinute = template.startMinute;
+      endMinute = template.endMinute;
+    }
+
+    final plannedStart = startDate.add(Duration(minutes: startMinute));
+    var plannedEnd = startDate.add(Duration(minutes: endMinute));
+    if ((template.isOvernight && existing?.movedToDateKey == null) ||
+        endMinute <= startMinute) {
+      plannedEnd = plannedEnd.add(const Duration(days: 1));
+    }
+    final plannedDurationSeconds = plannedEnd
+        .difference(plannedStart)
+        .inSeconds;
+    if (plannedDurationSeconds <= 0 || plannedDurationSeconds > 24 * 60 * 60) {
+      return null;
+    }
+
+    final actual = actualStart.toUtc();
+    final allocatedSeconds = !actual.isAfter(plannedStart.toUtc())
+        ? plannedDurationSeconds
+        : actual.isBefore(plannedEnd.toUtc())
+        ? plannedEnd.toUtc().difference(actual).inSeconds
+        : plannedDurationSeconds;
+    return _RoutineCountdownAllocation(
+      startedAt: actual,
+      durationSeconds: allocatedSeconds.clamp(1, 24 * 60 * 60),
+    );
   }
 
   Future<RoutineWriteResult> _writeOccurrence(
@@ -2160,6 +2229,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     List<int>? completedSubtaskIndexes,
     String? note,
     String? displayTitleOverride,
+    DateTime? startedAt,
+    int? countdownDurationSeconds,
   }) async {
     final uid = _requireOwnerUid();
     final date =
@@ -2173,6 +2244,23 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
 
     final now = DateTime.now().toUtc();
     final existing = _occurrenceFor(itemId, date);
+    final timerAllocation =
+        action == 'start' &&
+            existing?.startedAt == null &&
+            existing?.countdownDurationSeconds == null
+        ? _allocateCountdownForOccurrence(
+            itemId: itemId,
+            occurrenceDateKey: dateKey,
+            actualStart: now,
+            existing: existing,
+          )
+        : null;
+    final effectiveStartedAt =
+        existing?.startedAt ?? startedAt ?? timerAllocation?.startedAt;
+    final effectiveCountdownDurationSeconds =
+        existing?.countdownDurationSeconds ??
+        countdownDurationSeconds ??
+        timerAllocation?.durationSeconds;
 
     final operationId = _stableOperationId('occurrence', [
       uid,
@@ -2186,6 +2274,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       completedSubtaskIndexes?.join(',') ?? '',
       note ?? '',
       displayTitleOverride ?? '',
+      effectiveStartedAt?.toIso8601String() ?? '',
+      effectiveCountdownDurationSeconds ?? '',
       existing?.operationKey ?? '',
     ]);
     final occAction = RoutineOccurrenceAction.values.firstWhere(
@@ -2216,6 +2306,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       displayTitleOverride:
           displayTitleOverride ?? existing?.displayTitleOverride,
       undoToPlannedAllowed: existing == null,
+      startedAt: effectiveStartedAt,
+      countdownDurationSeconds: effectiveCountdownDurationSeconds,
     );
 
     RoutineEventType eventType = RoutineEventType.edited;
@@ -2707,7 +2799,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         return await startFlexibleTask(itemId, occurrenceDate: occurrenceDate);
       }
       if (item.blockType == RoutineBlockType.trackerTask) {
-        return await startTrackerTask(item);
+        return await _startTrackerTask(item, occurrenceDate: occurrenceDate);
       }
     }
     return await _writeOccurrence(
@@ -2727,10 +2819,13 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     if (targetIndex != -1) {
       final item = state.items[targetIndex];
       if (item.blockType == RoutineBlockType.trackerTask) {
-        return await completeTrackerSession(itemId);
+        return await _completeTrackerSession(
+          itemId,
+          occurrenceDate: occurrenceDate,
+        );
       }
       if (item.blockType == RoutineBlockType.moneyTask) {
-        return await alreadySaved(itemId);
+        return await _alreadySaved(itemId, occurrenceDate: occurrenceDate);
       }
       if (item.blockType == RoutineBlockType.checkIn &&
           item.category == RoutineCategory.badHabit) {
@@ -2868,9 +2963,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
   }
 
-  Future<RoutineWriteResult> alreadySaved(
+  Future<RoutineWriteResult> alreadySaved(String itemId, {double? amount}) {
+    return _alreadySaved(itemId, amount: amount);
+  }
+
+  Future<RoutineWriteResult> _alreadySaved(
     String itemId, {
     double? amount,
+    DateTime? occurrenceDate,
   }) async {
     if (_ref.read(fakeDataAllowedProvider)) {
       final moneyGoal = _ref.read(mockTrackerProvider).moneyGoal;
@@ -2889,17 +2989,29 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       status: RoutineStatus.completed,
       source: 'money',
       action: 'complete',
+      occurrenceDate: occurrenceDate,
     );
   }
 
-  Future<RoutineWriteResult> startTrackerTask(RoutineItem item) async {
+  Future<RoutineWriteResult> startTrackerTask(RoutineItem item) {
+    return _startTrackerTask(item);
+  }
+
+  Future<RoutineWriteResult> _startTrackerTask(
+    RoutineItem item, {
+    DateTime? occurrenceDate,
+  }) async {
     final now = DateTime.now();
+    final occurrenceDateKey = occurrenceDate == null
+        ? null
+        : routineLocalDateKey(occurrenceDate);
     final sessionId = 'tracker-${item.id}-${now.millisecondsSinceEpoch}';
     final trackerType = item.trackerType == TrackerType.none
         ? _inferTrackerType(item)
         : item.trackerType;
     final link = TrackerSessionLink(
       routineTaskId: item.id,
+      occurrenceDateKey: occurrenceDateKey,
       trackerType: trackerType.name,
       sessionId: sessionId,
       startedAt: now,
@@ -2923,16 +3035,27 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       status: RoutineStatus.inTracker,
       source: 'tracker',
       action: 'startTracker',
+      occurrenceDate: occurrenceDate,
     );
   }
 
-  Future<RoutineWriteResult> completeTrackerSession(
-    String routineTaskId,
-  ) async {
+  Future<RoutineWriteResult> completeTrackerSession(String routineTaskId) {
+    return _completeTrackerSession(routineTaskId);
+  }
+
+  Future<RoutineWriteResult> _completeTrackerSession(
+    String routineTaskId, {
+    DateTime? occurrenceDate,
+  }) async {
     final links = _ref.read(trackerSessionLinksProvider);
+    final occurrenceDateKey = occurrenceDate == null
+        ? null
+        : routineLocalDateKey(occurrenceDate);
     TrackerSessionLink? link;
     for (final candidate in links) {
-      if (candidate.routineTaskId == routineTaskId) {
+      if (candidate.routineTaskId == routineTaskId &&
+          (occurrenceDateKey == null ||
+              candidate.occurrenceDateKey == occurrenceDateKey)) {
         link = candidate;
         break;
       }
@@ -2956,6 +3079,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       status: RoutineStatus.completed,
       source: 'tracker',
       action: 'complete',
+      occurrenceDate: occurrenceDate,
     );
     if (result.closesUserFlow &&
         state.activeTrackerLaunchIntent?.routineTaskId == routineTaskId) {
@@ -3368,7 +3492,9 @@ class RoutineFilters {
       'classes' => item.category == RoutineCategory.classBlock,
       'job' => item.category == RoutineCategory.job,
       'eating' => item.category == RoutineCategory.eating,
-      'fixed' => item.category == RoutineCategory.fixed,
+      'fixed' =>
+        item.category == RoutineCategory.fixed ||
+            item.category == RoutineCategory.sleep,
       'skin_care' => item.category == RoutineCategory.skinCare,
       'good_habits' =>
         item.category == RoutineCategory.habit ||

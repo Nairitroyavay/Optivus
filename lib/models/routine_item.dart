@@ -163,6 +163,8 @@ class RoutineItem {
   final bool hasConflict;
   final String? conflictMessage;
   final bool undoToPlannedAllowed;
+  final DateTime? startedAt;
+  final int? countdownDurationSeconds;
 
   // Timestamps
   final DateTime createdAt;
@@ -221,6 +223,8 @@ class RoutineItem {
     this.hasConflict = false,
     this.conflictMessage,
     this.undoToPlannedAllowed = false,
+    this.startedAt,
+    this.countdownDurationSeconds,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) : repeatDays = repeatDays ?? const [1, 2, 3, 4, 5, 6, 7],
@@ -365,6 +369,8 @@ class RoutineItem {
     String? conflictMessage,
     bool clearConflict = false,
     bool? undoToPlannedAllowed,
+    DateTime? startedAt,
+    int? countdownDurationSeconds,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -429,6 +435,9 @@ class RoutineItem {
           ? null
           : (conflictMessage ?? this.conflictMessage),
       undoToPlannedAllowed: undoToPlannedAllowed ?? this.undoToPlannedAllowed,
+      startedAt: startedAt ?? this.startedAt,
+      countdownDurationSeconds:
+          countdownDurationSeconds ?? this.countdownDurationSeconds,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );

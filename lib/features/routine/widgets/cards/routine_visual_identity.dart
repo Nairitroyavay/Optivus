@@ -47,7 +47,7 @@ class RoutineVisualIdentityResolver {
 
   static Color _accent(RoutineItem item) {
     final key = item.onboardingVisualStyleKey?.trim();
-    if (item.source == RoutineSource.onboarding && key != null) {
+    if (_canTrustStyleKey(item) && key != null) {
       final parts = key.split(':');
       final ordinal = parts.length == 2 ? int.tryParse(parts[1]) : null;
       if (parts.first == 'class' && ordinal != null) {
@@ -77,6 +77,17 @@ class RoutineVisualIdentityResolver {
       RoutineBlockType.checkIn => OptivusColors.blockCheckIn,
       RoutineBlockType.moneyTask => OptivusColors.blockMoney,
     };
+  }
+
+  static bool _canTrustStyleKey(RoutineItem item) {
+    if (item.source == RoutineSource.onboarding) return true;
+    if (item.source != RoutineSource.baseTimeline) return false;
+    final section = item.baseTimelineSection?.trim();
+    return section == 'classes' ||
+        section == 'work' ||
+        section == 'eating' ||
+        section == 'fixed' ||
+        section == 'skinCare';
   }
 
   static IconData _icon(RoutineItem item) {

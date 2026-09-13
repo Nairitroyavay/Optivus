@@ -193,11 +193,12 @@ class RoutineOccurrenceProjector {
     List<RoutineOccurrenceRecord> occurrences,
     DateTime day,
   ) {
-    return entriesForDay(templates, occurrences, day)
-        .map((e) => e.item)
-        .toList(growable: false);
+    return entriesForDay(
+      templates,
+      occurrences,
+      day,
+    ).map((e) => e.item).toList(growable: false);
   }
-
 
   static RoutineItem _applyOccurrence(
     RoutineItem item,
@@ -239,6 +240,8 @@ class RoutineOccurrenceProjector {
       subtasksCompleted: subtasksCompleted,
       notes: notes,
       undoToPlannedAllowed: occurrence.undoToPlannedAllowed,
+      startedAt: occurrence.startedAt,
+      countdownDurationSeconds: occurrence.countdownDurationSeconds,
     );
   }
 }

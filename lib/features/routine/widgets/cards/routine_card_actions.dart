@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
@@ -79,10 +80,20 @@ class RoutineCardActions extends ConsumerWidget {
               textDirection: textDirection,
             );
 
+        final hasGenericCountdown =
+            item.blockType != RoutineBlockType.trackerTask &&
+            item.blockType != RoutineBlockType.checkIn &&
+            item.blockType != RoutineBlockType.moneyTask &&
+            item.startedAt != null &&
+            item.countdownDurationSeconds != null;
         final startAction = _ActionButton(
           key: ValueKey('routine-action-start-${item.id}'),
-          label: 'Start',
-          color: color,
+          label: hasGenericCountdown ? null : 'Start',
+          countdownStartedAt: hasGenericCountdown ? item.startedAt : null,
+          countdownDurationSeconds: hasGenericCountdown
+              ? item.countdownDurationSeconds
+              : null,
+          color: OptivusColors.routineAccent,
           icon: Icons.play_arrow_rounded,
           isDisabled: isPending,
           onTap: () {
@@ -108,7 +119,9 @@ class RoutineCardActions extends ConsumerWidget {
                     actionState?.activeTrackerId == item.id)) {
               ref.read(appNavigationProvider.notifier).goToTracker();
             } else if (item.blockType == RoutineBlockType.trackerTask) {
-              ref.read(routineNotifierProvider.notifier).startTrackerTask(item);
+              ref
+                  .read(routineNotifierProvider.notifier)
+                  .startRoutineItem(item.id, occurrenceDate: occurrenceDate);
             } else {
               ref
                   .read(routineNotifierProvider.notifier)
@@ -129,7 +142,7 @@ class RoutineCardActions extends ConsumerWidget {
             if (item.blockType == RoutineBlockType.trackerTask) {
               ref
                   .read(routineNotifierProvider.notifier)
-                  .completeTrackerSession(item.id);
+                  .completeRoutineItem(item.id, occurrenceDate: occurrenceDate);
             } else {
               ref
                   .read(routineNotifierProvider.notifier)
@@ -319,7 +332,9 @@ class _SheetOptionButton extends StatelessWidget {
 }
 
 class _ActionButton extends StatelessWidget {
-  final String label;
+  final String? label;
+  final DateTime? countdownStartedAt;
+  final int? countdownDurationSeconds;
   final Color color;
   final IconData icon;
   final VoidCallback? onTap;
@@ -328,7 +343,9 @@ class _ActionButton extends StatelessWidget {
 
   const _ActionButton({
     super.key,
-    required this.label,
+    this.label,
+    this.countdownStartedAt,
+    this.countdownDurationSeconds,
     required this.color,
     required this.icon,
     required this.onTap,
@@ -338,6 +355,7 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveLabel = label ?? '00:00:00';
     final effectiveBgColor = isSelected
         ? color.withValues(alpha: 0.24)
         : color.withValues(alpha: 0.10);
@@ -351,7 +369,7 @@ class _ActionButton extends StatelessWidget {
 
     return Semantics(
       button: true,
-      label: label,
+      label: effectiveLabel,
       enabled: !isDisabled,
       selected: isSelected,
       child: GestureDetector(
@@ -379,7 +397,7 @@ class _ActionButton extends StatelessWidget {
               builder: (context, constraints) {
                 final textPainter = TextPainter(
                   text: TextSpan(
-                    text: label,
+                    text: effectiveLabel,
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: isSelected
@@ -406,18 +424,29 @@ class _ActionButton extends StatelessWidget {
                       const SizedBox(width: 4),
                     ],
                     Flexible(
-                      child: Text(
-                        label,
-                        maxLines: 1,
-                        softWrap: false,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: isSelected
-                              ? FontWeight.w800
-                              : FontWeight.w700,
-                          color: effectiveTextColor,
-                        ),
-                      ),
+                      child:
+                          countdownStartedAt != null &&
+                              countdownDurationSeconds != null
+                          ? _CountdownLabel(
+                              startedAt: countdownStartedAt!,
+                              durationSeconds: countdownDurationSeconds!,
+                              color: effectiveTextColor,
+                            )
+                          : Text(
+                              effectiveLabel,
+                              maxLines: 1,
+                              softWrap: false,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: isSelected
+                                    ? FontWeight.w800
+                                    : FontWeight.w700,
+                                color: effectiveTextColor,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
                     ),
                   ],
                 );
@@ -425,6 +454,64 @@ class _ActionButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _CountdownLabel extends StatefulWidget {
+  final DateTime startedAt;
+  final int durationSeconds;
+  final Color color;
+
+  const _CountdownLabel({
+    required this.startedAt,
+    required this.durationSeconds,
+    required this.color,
+  });
+
+  @override
+  State<_CountdownLabel> createState() => _CountdownLabelState();
+}
+
+class _CountdownLabelState extends State<_CountdownLabel> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final elapsed = DateTime.now()
+        .toUtc()
+        .difference(widget.startedAt.toUtc())
+        .inSeconds;
+    final remaining = (widget.durationSeconds - elapsed).clamp(0, 999 * 3600);
+    final hours = remaining ~/ 3600;
+    final minutes = (remaining % 3600) ~/ 60;
+    final seconds = remaining % 60;
+    return Text(
+      '${hours.toString().padLeft(2, '0')}:'
+      '${minutes.toString().padLeft(2, '0')}:'
+      '${seconds.toString().padLeft(2, '0')}',
+      maxLines: 1,
+      softWrap: false,
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w800,
+        color: widget.color,
+        fontFeatures: const [FontFeature.tabularFigures()],
       ),
     );
   }

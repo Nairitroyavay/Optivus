@@ -130,6 +130,7 @@ class BaseTimelineTransactionCoordinator {
     required TimelineBlockDraft block,
     required int index,
     required DateTime now,
+    BaseTimelineSetup? setup,
   }) {
     final isOvernight =
         block.crossesMidnight ||
@@ -157,6 +158,11 @@ class BaseTimelineTransactionCoordinator {
       category: categoryForSection(section, block),
       source: RoutineSource.baseTimeline,
       baseTimelineSection: section.name,
+      onboardingVisualStyleKey: visualStyleKeyForSectionBlock(
+        section: section,
+        index: index,
+        setup: setup,
+      ),
       priority: priorityForSection(section),
       hardBlock: isHardBlockForSection(section),
       location: block.location,
@@ -181,11 +187,31 @@ class BaseTimelineTransactionCoordinator {
     );
   }
 
+  static String visualStyleKeyForSectionBlock({
+    required BaseTimelineSection section,
+    required int index,
+    BaseTimelineSetup? setup,
+  }) {
+    return switch (section) {
+      BaseTimelineSection.classes => 'class:$index',
+      BaseTimelineSection.work => 'work:$index',
+      BaseTimelineSection.eating => 'eating:default',
+      BaseTimelineSection.fixed => 'fixed:default',
+      BaseTimelineSection.skinCare => switch (setup?.skinCareSetupPath) {
+        'products' => 'skin:has-products',
+        'build_for_me' => 'skin:no-products',
+        'skip' => 'skin:default',
+        _ => 'skin:default',
+      },
+    };
+  }
+
   static List<RoutineItem> routineItemsForSectionBlocks({
     required String uid,
     required BaseTimelineSection section,
     required List<TimelineBlockDraft> blocks,
     required DateTime now,
+    BaseTimelineSetup? setup,
   }) {
     return [
       for (var index = 0; index < blocks.length; index++)
@@ -195,6 +221,7 @@ class BaseTimelineTransactionCoordinator {
           block: blocks[index],
           index: index,
           now: now,
+          setup: setup,
         ),
     ];
   }
@@ -227,6 +254,7 @@ class BaseTimelineTransactionCoordinator {
       section: section,
       blocks: newBlocks,
       now: DateTime.now(),
+      setup: currentSetup,
     );
 
     // 4. Atomic transaction with live revision optimistic concurrency check

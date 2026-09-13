@@ -4,6 +4,7 @@
 /// is created to track the connection between Routine and Tracker tabs.
 class TrackerSessionLink {
   final String routineTaskId;
+  final String? occurrenceDateKey;
   final String
   trackerType; // meditation, workout, focus, money, hydration, smoking
   final String? sessionId;
@@ -15,6 +16,7 @@ class TrackerSessionLink {
 
   const TrackerSessionLink({
     required this.routineTaskId,
+    this.occurrenceDateKey,
     required this.trackerType,
     this.sessionId,
     this.startedAt,
@@ -30,6 +32,7 @@ class TrackerSessionLink {
 
   TrackerSessionLink copyWith({
     String? routineTaskId,
+    String? occurrenceDateKey,
     String? trackerType,
     String? sessionId,
     DateTime? startedAt,
@@ -40,6 +43,7 @@ class TrackerSessionLink {
   }) {
     return TrackerSessionLink(
       routineTaskId: routineTaskId ?? this.routineTaskId,
+      occurrenceDateKey: occurrenceDateKey ?? this.occurrenceDateKey,
       trackerType: trackerType ?? this.trackerType,
       sessionId: sessionId ?? this.sessionId,
       startedAt: startedAt ?? this.startedAt,
@@ -53,6 +57,7 @@ class TrackerSessionLink {
   Map<String, dynamic> toMap() {
     return {
       'routineTaskId': routineTaskId,
+      if (occurrenceDateKey != null) 'occurrenceDateKey': occurrenceDateKey,
       'trackerType': trackerType,
       'sessionId': sessionId,
       'startedAt': startedAt?.toIso8601String(),
@@ -66,6 +71,7 @@ class TrackerSessionLink {
   factory TrackerSessionLink.fromMap(Map<String, dynamic> map) {
     return TrackerSessionLink(
       routineTaskId: map['routineTaskId'] as String? ?? '',
+      occurrenceDateKey: map['occurrenceDateKey'] as String?,
       trackerType: map['trackerType'] as String? ?? 'none',
       sessionId: map['sessionId'] as String?,
       startedAt: map['startedAt'] != null

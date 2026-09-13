@@ -466,7 +466,7 @@ service cloud.firestore {
           || (data.baseTimelineSection is string && data.baseTimelineSection.size() > 0 && data.baseTimelineSection.size() <= 50))
         && data.createdAt is timestamp
         && data.updatedAt is timestamp
-        && data.schemaVersion == 1;
+        && (data.schemaVersion == 1 || data.schemaVersion == 2);
     }
 
     function validRoutineOccurrenceStatus(value) {
@@ -498,6 +498,8 @@ service cloud.firestore {
           "onboardingProjectionId",
           "onboardingSourceItemId",
           "sourceFingerprint",
+          "startedAt",
+          "countdownDurationSeconds",
           "createdAt",
           "updatedAt",
           "schemaVersion"
@@ -544,6 +546,13 @@ service cloud.firestore {
         && data.operationKey is string
         && data.operationKey.size() > 0
         && data.operationKey.size() <= 256
+        && (data.schemaVersion == 1 || data.schemaVersion == 2)
+        && (!data.keys().hasAny(["startedAt", "countdownDurationSeconds"])
+          || (data.keys().hasAll(["startedAt", "countdownDurationSeconds"])
+            && data.startedAt is timestamp
+            && data.countdownDurationSeconds is int
+            && data.countdownDurationSeconds > 0
+            && data.countdownDurationSeconds <= 86400))
         && data.completedSubtaskIndexes is list
         && data.completedSubtaskIndexes.size() <= 100
         && data.completedSubtaskIndexes.size()

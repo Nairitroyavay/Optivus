@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:optivus/models/routine_item.dart';
 
 class RoutineOccurrenceRecord {
-  static const int currentSchemaVersion = 1;
+  static const int currentSchemaVersion = 2;
 
   final String id;
   final String ownerUid;
@@ -25,6 +25,8 @@ class RoutineOccurrenceRecord {
   final String? onboardingProjectionId;
   final String? onboardingSourceItemId;
   final String? sourceFingerprint;
+  final DateTime? startedAt;
+  final int? countdownDurationSeconds;
 
   const RoutineOccurrenceRecord({
     required this.id,
@@ -48,6 +50,8 @@ class RoutineOccurrenceRecord {
     this.onboardingProjectionId,
     this.onboardingSourceItemId,
     this.sourceFingerprint,
+    this.startedAt,
+    this.countdownDurationSeconds,
   });
 
   RoutineOccurrenceRecord copyWith({
@@ -67,6 +71,8 @@ class RoutineOccurrenceRecord {
     String? onboardingProjectionId,
     String? onboardingSourceItemId,
     String? sourceFingerprint,
+    DateTime? startedAt,
+    int? countdownDurationSeconds,
   }) {
     return RoutineOccurrenceRecord(
       id: id,
@@ -93,6 +99,9 @@ class RoutineOccurrenceRecord {
       onboardingSourceItemId:
           onboardingSourceItemId ?? this.onboardingSourceItemId,
       sourceFingerprint: sourceFingerprint ?? this.sourceFingerprint,
+      startedAt: startedAt ?? this.startedAt,
+      countdownDurationSeconds:
+          countdownDurationSeconds ?? this.countdownDurationSeconds,
     );
   }
 
@@ -118,6 +127,9 @@ class RoutineOccurrenceRecord {
     if (onboardingSourceItemId != null)
       'onboardingSourceItemId': onboardingSourceItemId,
     if (sourceFingerprint != null) 'sourceFingerprint': sourceFingerprint,
+    if (startedAt != null) 'startedAt': startedAt!.toUtc().toIso8601String(),
+    if (countdownDurationSeconds != null)
+      'countdownDurationSeconds': countdownDurationSeconds,
     'createdAt': createdAt.toUtc().toIso8601String(),
     'updatedAt': updatedAt.toUtc().toIso8601String(),
     'schemaVersion': schemaVersion,
@@ -127,6 +139,9 @@ class RoutineOccurrenceRecord {
     final map = toMap();
     map['createdAt'] = Timestamp.fromDate(createdAt.toUtc());
     map['updatedAt'] = Timestamp.fromDate(updatedAt.toUtc());
+    if (startedAt != null) {
+      map['startedAt'] = Timestamp.fromDate(startedAt!.toUtc());
+    }
     return map;
   }
 
@@ -173,6 +188,11 @@ class RoutineOccurrenceRecord {
       onboardingProjectionId: map['onboardingProjectionId'] as String?,
       onboardingSourceItemId: map['onboardingSourceItemId'] as String?,
       sourceFingerprint: map['sourceFingerprint'] as String?,
+      startedAt: map.containsKey('startedAt')
+          ? parseDate(map['startedAt'])
+          : null,
+      countdownDurationSeconds: (map['countdownDurationSeconds'] as num?)
+          ?.toInt(),
     );
   }
 

@@ -258,8 +258,15 @@ class TimelineUtils {
         return items
             .where(
               (i) =>
-                  i.blockType == RoutineBlockType.hardBlock ||
-                  i.blockType == RoutineBlockType.softBlock,
+                  i.baseTimelineSection != null ||
+                  i.source == RoutineSource.baseTimeline ||
+                  i.source == RoutineSource.onboarding &&
+                      (i.category == RoutineCategory.classBlock ||
+                          i.category == RoutineCategory.job ||
+                          i.category == RoutineCategory.eating ||
+                          i.category == RoutineCategory.fixed ||
+                          i.category == RoutineCategory.sleep ||
+                          i.category == RoutineCategory.skinCare),
             )
             .toList();
       case 'flexible_tasks':

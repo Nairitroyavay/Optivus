@@ -339,15 +339,8 @@ class RoutineTimelineViewportState
         widget.items.map(
           (entry) => Object.hashAll([
             entry.instanceId,
-            entry.item.title,
-            entry.item.startMinute,
-            entry.item.endMinute,
-            entry.item.location,
-            entry.item.notes,
             entry.item.onboardingVisualStyleKey,
-            Object.hashAll(entry.item.subtasks ?? const <String>[]),
-            Object.hashAll(entry.item.steps ?? const <String>[]),
-            Object.hashAll(entry.item.dishes ?? const <String>[]),
+            RoutineCardFactory.layoutFingerprint(entry.item),
           ]),
         ),
       ),
@@ -603,39 +596,28 @@ class RoutineTimelineViewportState
         ? null
         : _focusedItemIdByComponent[componentId];
 
-    if (focusedId != null) {
-      if (item.id == focusedId) return true;
-      final focusedItem = prepared.itemById[focusedId];
-      if (focusedItem != null &&
-          item.startMinute < focusedItem.endMinute &&
-          item.endMinute > focusedItem.startMinute) {
-        return false;
-      }
+    if (focusedId != null && prepared.itemById.containsKey(focusedId)) {
+      return item.id == focusedId;
     }
 
-    final contestedRegions = prepared.regions
-        .where((r) => r.itemIds.contains(item.id) && r.itemIds.length > 1)
-        .toList();
-    if (contestedRegions.isEmpty) return true;
-
-    return contestedRegions.every(
-      (r) => _frontForRegion(prepared, r).id == item.id,
-    );
+    final component = prepared.components
+        .where((candidate) => candidate.id == componentId)
+        .firstOrNull;
+    if (component == null) return true;
+    return _frontForComponent(prepared, component).id == item.id;
   }
 
-  RoutineTimelineItem _frontForRegion(
+  RoutineTimelineItem _frontForComponent(
     RoutinePreparedTimelineLayout prepared,
-    RoutineOverlapRegion region,
+    RoutineOverlapComponent component,
   ) {
-    final componentId = prepared.componentIdByItemId[region.itemIds.first];
-    final focused = componentId == null
-        ? null
-        : _focusedItemIdByComponent[componentId];
-    if (focused != null && region.itemIds.contains(focused)) {
-      return prepared.itemById[focused]!;
+    final focused = _focusedItemIdByComponent[component.id];
+    if (focused != null && component.itemIds.contains(focused)) {
+      final item = prepared.itemById[focused];
+      if (item != null) return item;
     }
     return _defaultFront(
-      region.itemIds.map((id) => prepared.itemById[id]!).toList(),
+      component.itemIds.map((id) => prepared.itemById[id]!).toList(),
     );
   }
 
@@ -678,7 +660,7 @@ class RoutineTimelineViewportState
         if (item == null) continue;
         for (final region in componentRegions) {
           if (!region.itemIds.contains(id)) continue;
-          final front = _frontForRegion(prepared, region);
+          final front = _frontForComponent(prepared, component);
           if (front.id != id) {
             firstRegionByItemId.putIfAbsent(id, () => region);
             if (!backItems.contains(item)) {
@@ -741,6 +723,7 @@ class RoutineTimelineViewportState
                 },
                 child: TimelineCardChrome(
                   baseColor: RoutineCardFactory.colorForItem(item.item),
+                  surfaceMode: TimelineCardSurfaceMode.neutralGlass,
                   isFront: false,
                   hasOverlap: true,
                   useGroupedBackdrop: true,

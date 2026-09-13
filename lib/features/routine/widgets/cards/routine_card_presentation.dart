@@ -151,7 +151,7 @@ class RoutineCardPresentation {
         (2 * actionButtonBorderWidth);
     if (maxInnerWidth <= 0) return RoutineCardActionLayout.stacked;
 
-    const labels = ['Start', 'Done', 'Move'];
+    const labels = ['00:00:00', 'Done', 'Move'];
     for (final label in labels) {
       final painter = TextPainter(
         text: TextSpan(text: label, style: actionLabelStyle),

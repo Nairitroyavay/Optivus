@@ -106,6 +106,40 @@ class RoutineCardFactory {
 
   static Color colorForItem(RoutineItem item) => visualIdentityFor(item).accent;
 
+  static int layoutFingerprint(RoutineItem item) {
+    return Object.hashAll([
+      item.id,
+      item.title,
+      item.startMinute,
+      item.endMinute,
+      item.location,
+      item.professor,
+      item.courseCode,
+      item.classType,
+      item.sectionLabel,
+      item.status,
+      item.trackerType,
+      item.mealSlot,
+      item.mealCategory,
+      item.caloriesEstimate,
+      item.proteinEstimate,
+      item.skincareSlotLabel,
+      item.notes,
+      item.isContinuation,
+      item.crossesMidnight,
+      item.endsNextDay,
+      item.startedAt,
+      item.countdownDurationSeconds,
+      Object.hashAll(item.subtasks ?? const <String>[]),
+      Object.hashAll(item.subtasksCompleted ?? const <bool>[]),
+      Object.hashAll(item.steps ?? const <String>[]),
+      Object.hashAll(item.displaySteps ?? const <String>[]),
+      Object.hashAll(item.dishes ?? const <String>[]),
+      Object.hashAll(item.skincareProducts ?? const <String>[]),
+      Object.hashAll(item.skincareMissingItems ?? const <String>[]),
+    ]);
+  }
+
   /// Exact formatted time string matching each block's presentation.
   static String formattedTimeString(RoutineItem item) {
     return switch (item.blockType) {
@@ -410,7 +444,7 @@ class RoutineCardFactory {
     final hideActionIcon = scaler.scale(12) > 15;
     final actionTextPainter = TextPainter(
       text: TextSpan(
-        text: 'Start',
+        text: '00:00:00',
         style: defaultStyle.merge(RoutineCardPresentation.actionLabelStyle),
       ),
       textDirection: textDirection,
