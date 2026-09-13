@@ -84,44 +84,70 @@ class BaseTimelineUploadLifecycleHelper {
 
   /// Recovers and retires orphaned temporary uploads older than [graceWindow].
   ///
-  /// Strictly protects [committedAssetId] and [committedR2Key] (and any [activeSessionAssetIds])
-  /// so current setup photos and in-flight session uploads are never deleted.
+  /// Strictly protects [committedAssetIds] / [committedAssetId] and
+  /// [committedR2Keys] / [committedR2Key] (and any [activeSessionAssetIds] /
+  /// [activeSessionR2Keys]) so current setup photos and in-flight session
+  /// uploads are never deleted.
+  ///
+  /// [purposes] explicitly declares the upload purpose(s) being cleaned.
+  /// Each requested purpose is fetched independently to prevent purpose starvation.
   Future<int> cleanupStaleUncommittedAssets({
     required String uid,
-    required String? committedAssetId,
+    required Set<UploadedAssetPurpose> purposes,
+    Set<String> committedAssetIds = const {},
+    Set<String> committedR2Keys = const {},
+    String? committedAssetId,
     String? committedR2Key,
     Set<String> activeSessionAssetIds = const {},
     Set<String> activeSessionR2Keys = const {},
     Duration graceWindow = const Duration(minutes: 15),
   }) async {
     final normalizedUid = uid.trim();
-    if (normalizedUid.isEmpty) return 0;
+    if (normalizedUid.isEmpty || purposes.isEmpty) return 0;
+
+    final protectedAssetIds = {
+      ...committedAssetIds.map((id) => id.trim()).where((id) => id.isNotEmpty),
+      if (committedAssetId != null && committedAssetId.trim().isNotEmpty)
+        committedAssetId.trim(),
+    };
+    final protectedR2Keys = {
+      ...committedR2Keys.map((k) => k.trim()).where((k) => k.isNotEmpty),
+      if (committedR2Key != null && committedR2Key.trim().isNotEmpty)
+        committedR2Key.trim(),
+    };
 
     var cleaned = 0;
     try {
-      final recent = await _assetRepository.fetchRecentAssets(
-        uid: normalizedUid,
-        sourceFeature: UploadSourceFeature.routineBaseTimeline,
-        purpose: UploadedAssetPurpose.classTimetable,
-        limit: 20,
-      );
+      final discoveredAssets = <String, UploadedAsset>{};
+      for (final purpose in purposes) {
+        final recent = await _assetRepository.fetchRecentAssets(
+          uid: normalizedUid,
+          sourceFeature: UploadSourceFeature.routineBaseTimeline,
+          purpose: purpose,
+          limit: 20,
+        );
+        for (final asset in recent) {
+          discoveredAssets[asset.assetId] = asset;
+        }
+      }
 
       final now = DateTime.now();
-      for (final asset in recent) {
+      for (final asset in discoveredAssets.values) {
+        // Only consider assets belonging to requested owner and source feature
+        if (asset.ownerUid != normalizedUid) continue;
+        if (asset.sourceFeature != UploadSourceFeature.routineBaseTimeline) {
+          continue;
+        }
+        if (!purposes.contains(asset.purpose)) continue;
+        if (asset.status == UploadedAssetStatus.deleted) continue;
+
         // Strictly protect current committed source asset identity and R2 key
-        if (committedAssetId != null &&
-            committedAssetId.isNotEmpty &&
-            asset.assetId == committedAssetId) {
-          continue;
-        }
-        if (committedR2Key != null &&
-            committedR2Key.isNotEmpty &&
-            asset.r2Key == committedR2Key) {
-          continue;
-        }
+        if (protectedAssetIds.contains(asset.assetId)) continue;
+        if (protectedR2Keys.contains(asset.r2Key)) continue;
+
+        // Strictly protect active-session uploads
         if (activeSessionAssetIds.contains(asset.assetId)) continue;
         if (activeSessionR2Keys.contains(asset.r2Key)) continue;
-        if (asset.status == UploadedAssetStatus.deleted) continue;
 
         final age = now.difference(asset.updatedAt);
         if (age >= graceWindow) {
@@ -133,12 +159,12 @@ class BaseTimelineUploadLifecycleHelper {
             );
             cleaned++;
           } catch (_) {
-            // Safe fail per asset
+            // Safe fail per asset: failure to retire one does not abort cleanup
           }
         }
       }
     } catch (_) {
-      // Best-effort cleanup
+      // Best-effort cleanup: never throw to caller
     }
     return cleaned;
   }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/class_timeline_adapter.dart';
 import 'package:optivus/features/onboarding/timeline/layout/timeline_overlap_engine.dart';
@@ -38,8 +39,11 @@ import 'package:optivus/state/upload_state.dart';
 
 class _TrackingLifecycleHelper extends BaseTimelineUploadLifecycleHelper {
   int cleanupCalls = 0;
-  String? lastProtectedAssetId;
-  String? lastProtectedR2Key;
+  Set<UploadedAssetPurpose>? lastRequestedPurposes;
+  Set<String>? lastProtectedAssetIds;
+  Set<String>? lastProtectedR2Keys;
+  String? get lastProtectedAssetId => lastProtectedAssetIds?.firstOrNull;
+  String? get lastProtectedR2Key => lastProtectedR2Keys?.firstOrNull;
   int retireCalls = 0;
   String? lastRetiredAssetId;
   String? lastRetiredObjectKey;
@@ -54,15 +58,26 @@ class _TrackingLifecycleHelper extends BaseTimelineUploadLifecycleHelper {
   @override
   Future<int> cleanupStaleUncommittedAssets({
     required String uid,
-    required String? committedAssetId,
+    required Set<UploadedAssetPurpose> purposes,
+    Set<String> committedAssetIds = const {},
+    Set<String> committedR2Keys = const {},
+    String? committedAssetId,
     String? committedR2Key,
     Set<String> activeSessionAssetIds = const {},
     Set<String> activeSessionR2Keys = const {},
     Duration graceWindow = const Duration(minutes: 15),
   }) async {
     cleanupCalls++;
-    lastProtectedAssetId = committedAssetId;
-    lastProtectedR2Key = committedR2Key;
+    lastRequestedPurposes = purposes;
+    lastProtectedAssetIds = {
+      ...committedAssetIds,
+      if (committedAssetId != null && committedAssetId.isNotEmpty)
+        committedAssetId,
+    };
+    lastProtectedR2Keys = {
+      ...committedR2Keys,
+      if (committedR2Key != null && committedR2Key.isNotEmpty) committedR2Key,
+    };
     return 0;
   }
 
@@ -213,6 +228,10 @@ void main() {
         await controller.performStartupCleanup(setup, uid: 'user-123');
 
         expect(lifecycleHelper.cleanupCalls, 1);
+        expect(
+          lifecycleHelper.lastRequestedPurposes,
+          contains(UploadedAssetPurpose.classTimetable),
+        );
         expect(lifecycleHelper.lastProtectedAssetId, 'photo-asset-777');
         expect(
           lifecycleHelper.lastProtectedR2Key,
@@ -298,6 +317,16 @@ void main() {
 
         final container = ProviderContainer(
           overrides: [
+            userProfileProvider.overrideWith(
+              (ref) => UserProfileNotifier()
+                ..loadSeedData(
+                  UserProfile(
+                    uid: 'user-save-inmem',
+                    email: 'test@optivus.app',
+                    displayName: 'Test User',
+                  ),
+                ),
+            ),
             baseTimelineSetupRepositoryProvider.overrideWithValue(
               fakeSetupRepo,
             ),
@@ -921,6 +950,17 @@ void main() {
 
           final container = ProviderContainer(
             overrides: [
+              fakeDataAllowedProvider.overrideWithValue(false),
+              userProfileProvider.overrideWith(
+                (ref) => UserProfileNotifier()
+                  ..loadSeedData(
+                    UserProfile(
+                      uid: 'user-commit-success',
+                      email: 'test@optivus.app',
+                      displayName: 'Test User',
+                    ),
+                  ),
+              ),
               baseTimelineSetupRepositoryProvider.overrideWithValue(
                 fakeSetupRepo,
               ),

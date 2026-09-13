@@ -72,6 +72,104 @@ class FakeBaseTimelineSetupRepository implements BaseTimelineSetupRepository {
   }
 }
 
+/// Pure policy governing whether a Firestore document snapshot represents
+/// canonical durable state for Base Timeline.
+///
+/// Local pending writes (latency-compensated local mutations before server ack)
+/// MUST NOT be published as canonical Base Timeline state.
+/// Normal committed cache snapshots (`isFromCache: true, hasPendingWrites: false`)
+/// represent durable data previously written or synced, so they ARE accepted.
+bool shouldPublishBaseTimelineSnapshot({
+  required bool exists,
+  required bool hasPendingWrites,
+  bool isFromCache = false,
+}) {
+  if (!exists) return false;
+  if (hasPendingWrites) return false;
+  return true;
+}
+
+/// Pure policy governing whether a remote snapshot may update the canonical
+/// state in [BaseTimelineSetupNotifier].
+///
+/// Invariants:
+/// 1. A live stream snapshot must never move canonical frontend state backwards
+///    (`remote.revision < current.revision -> false`).
+/// 2. If `remote.revision == current.revision`:
+///    - If remote has a higher schemaVersion (schema migration), accept it.
+///    - If remote has equivalent content, accept it.
+///    - If remote differs unexpectedly from a known committed in-memory state,
+///      handle conservatively and do not regress in-memory state.
+/// 3. If `remote.revision > current.revision`, accept it.
+bool shouldPublishRemoteSetup({
+  required BaseTimelineSetup? current,
+  required BaseTimelineSetup remote,
+}) {
+  if (current == null) return true;
+  if (remote.revision < current.revision) return false;
+  if (remote.revision == current.revision) {
+    if (remote.schemaVersion > current.schemaVersion) return true;
+    if (current.schemaVersion > remote.schemaVersion) return false;
+    if (_areBaseTimelineSetupsEquivalent(current, remote)) return true;
+    // Differing data with same revision and schemaVersion: do not overwrite in-memory committed setup
+    return false;
+  }
+  return true;
+}
+
+bool _areBaseTimelineSetupsEquivalent(BaseTimelineSetup a, BaseTimelineSetup b) {
+  if (identical(a, b)) return true;
+  if (a.uid != b.uid) return false;
+  if (a.revision != b.revision) return false;
+  if (a.schemaVersion != b.schemaVersion) return false;
+  final mapA = a.toMap()..remove('updatedAt');
+  final mapB = b.toMap()..remove('updatedAt');
+  return _deepEqualsMaps(mapA, mapB);
+}
+
+bool _deepEqualsMaps(Map<String, dynamic> a, Map<String, dynamic> b) {
+  if (a.length != b.length) return false;
+  for (final key in a.keys) {
+    if (!b.containsKey(key)) return false;
+    final valA = a[key];
+    final valB = b[key];
+    if (valA is Map && valB is Map) {
+      if (!_deepEqualsMaps(
+        Map<String, dynamic>.from(valA),
+        Map<String, dynamic>.from(valB),
+      )) {
+        return false;
+      }
+    } else if (valA is List && valB is List) {
+      if (!_deepEqualsLists(valA, valB)) return false;
+    } else if (valA != valB) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _deepEqualsLists(List a, List b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    final elemA = a[i];
+    final elemB = b[i];
+    if (elemA is Map && elemB is Map) {
+      if (!_deepEqualsMaps(
+        Map<String, dynamic>.from(elemA),
+        Map<String, dynamic>.from(elemB),
+      )) {
+        return false;
+      }
+    } else if (elemA is List && elemB is List) {
+      if (!_deepEqualsLists(elemA, elemB)) return false;
+    } else if (elemA != elemB) {
+      return false;
+    }
+  }
+  return true;
+}
+
 class FirestoreBaseTimelineSetupRepository
     implements BaseTimelineSetupRepository {
   final FirebaseFirestore? _injectedFirestore;
@@ -133,7 +231,14 @@ class FirestoreBaseTimelineSetupRepository
   Stream<BaseTimelineSetup?> watchSetup(String uid) {
     return _firestore
         .doc(FirestoreUserPaths.baseTimelineSetup(uid))
-        .snapshots()
+        .snapshots(includeMetadataChanges: true)
+        .where(
+          (snap) => shouldPublishBaseTimelineSnapshot(
+            exists: snap.exists,
+            hasPendingWrites: snap.metadata.hasPendingWrites,
+            isFromCache: snap.metadata.isFromCache,
+          ),
+        )
         .map((snap) {
           if (!snap.exists || snap.data() == null) return null;
           return BaseTimelineSetup.fromMap(snap.data()!, uid: uid);
@@ -170,14 +275,17 @@ class BaseTimelineSetupNotifier
   Future<void> load() async {
     if (_uid.trim().isEmpty) return;
     final generation = ++_loadGeneration;
+    state = const AsyncValue.loading();
     await _watchSubscription?.cancel();
     _watchSubscription = null;
-    state = const AsyncValue.loading();
     try {
       final setup = await _repository.fetchSetup(_uid);
       if (!mounted || generation != _loadGeneration) return;
       setup.validateForOwner(_uid);
-      state = AsyncValue.data(setup);
+      final current = state.valueOrNull;
+      if (shouldPublishRemoteSetup(current: current, remote: setup)) {
+        state = AsyncValue.data(setup);
+      }
       _watchSubscription = _repository
           .watchSetup(_uid)
           .listen(
@@ -187,6 +295,13 @@ class BaseTimelineSetupNotifier
               }
               try {
                 remote.validateForOwner(_uid);
+                final current = state.valueOrNull;
+                if (!shouldPublishRemoteSetup(
+                  current: current,
+                  remote: remote,
+                )) {
+                  return;
+                }
                 state = AsyncValue.data(remote);
               } catch (error, stackTrace) {
                 state = AsyncValue.error(error, stackTrace);

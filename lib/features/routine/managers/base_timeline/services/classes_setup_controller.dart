@@ -196,7 +196,7 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
        );
 
   /// Safe startup cleanup. NEVER runs while BaseTimelineSetup is loading (null).
-  /// Passes both committedAssetId and committedR2Key.
+  /// Passes purposes: {classTimetable} and protected asset ID/key.
   Future<void> performStartupCleanup(
     BaseTimelineSetup? setup, {
     required String uid,
@@ -205,6 +205,17 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
     state = state.copyWith(hasRunStartupCleanup: true);
     await _lifecycleHelper.cleanupStaleUncommittedAssets(
       uid: uid,
+      purposes: const {UploadedAssetPurpose.classTimetable},
+      committedAssetIds: {
+        if (setup.classLogicalAssetId != null &&
+            setup.classLogicalAssetId!.isNotEmpty)
+          setup.classLogicalAssetId!,
+      },
+      committedR2Keys: {
+        if (setup.classLogicalAssetR2Key != null &&
+            setup.classLogicalAssetR2Key!.isNotEmpty)
+          setup.classLogicalAssetR2Key!,
+      },
       committedAssetId: setup.classLogicalAssetId,
       committedR2Key: setup.classLogicalAssetR2Key,
     );

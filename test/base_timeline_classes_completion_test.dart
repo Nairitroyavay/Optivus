@@ -214,6 +214,7 @@ class _CountingCoordinator extends BaseTimelineTransactionCoordinator {
   Future<BaseTimelineSectionCommitResult> replaceSection({
     required String uid,
     required BaseTimelineSection section,
+    int? expectedRevision,
     required List<TimelineBlockDraft> newBlocks,
     required BaseTimelineSetup Function(BaseTimelineSetup current) updateSetup,
   }) async {
@@ -222,6 +223,7 @@ class _CountingCoordinator extends BaseTimelineTransactionCoordinator {
     return super.replaceSection(
       uid: uid,
       section: section,
+      expectedRevision: expectedRevision,
       newBlocks: newBlocks,
       updateSetup: updateSetup,
     );
@@ -569,6 +571,7 @@ void main() {
 
         final cleanedCount = await helper.cleanupStaleUncommittedAssets(
           uid: 'user-clean-test',
+          purposes: const {UploadedAssetPurpose.classTimetable},
           committedAssetId: 'committed-asset-current',
         );
 

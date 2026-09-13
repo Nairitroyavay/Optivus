@@ -303,7 +303,7 @@ void main() {
           newBlocks: eatingBlocks,
           updateSetup: (current) => current.copyWith(
             eatingBlocks: eatingBlocks,
-            eatingSetupPath: 'plan',
+            eatingSetupPath: 'create',
             mealsPerDay: 3,
           ),
         );
