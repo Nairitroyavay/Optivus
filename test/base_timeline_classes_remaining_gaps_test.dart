@@ -13,6 +13,7 @@ import 'package:optivus/features/routine/managers/base_timeline/models/base_time
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/classes_review_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
+import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_upload_lifecycle_helper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/class_setup_error_mapper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/classes_setup_controller.dart';
@@ -104,14 +105,49 @@ class _FakeAuthRepo implements AuthRepository {
 
 class _FailingFollowUpFetchRoutineRepository extends FakeRoutineRepository {
   int fetchCalls = 0;
+  bool failOnFollowUp = true;
 
   @override
   Future<List<RoutineItem>> fetchRoutineItems(String uid) async {
     fetchCalls++;
-    if (fetchCalls > 1) {
+    // fetch #1: coordinator reading existing items
+    // fetch #2: transaction repo reading initial items for rollback snapshot
+    // fetch #3: routineNotifier.loadForOwner after durable transaction commit
+    if (fetchCalls > 2 && failOnFollowUp) {
       throw Exception('Simulated network failure on follow-up routine fetch');
     }
     return super.fetchRoutineItems(uid);
+  }
+}
+
+class _CountingFakeRoutineTransactionRepository
+    extends FakeRoutineTransactionRepository {
+  int replaceBaseTimelineSectionCalls = 0;
+
+  _CountingFakeRoutineTransactionRepository({
+    super.routineRepository,
+    super.setupRepository,
+  });
+
+  @override
+  Future<BaseTimelineSectionCommitResult> replaceBaseTimelineSection({
+    required String uid,
+    required BaseTimelineSection section,
+    required int expectedRevision,
+    required List<RoutineItem> newRoutineItems,
+    List<String> additionalDeleteIds = const [],
+    required BaseTimelineSetup Function(BaseTimelineSetup liveSetup)
+    buildUpdatedSetup,
+  }) {
+    replaceBaseTimelineSectionCalls++;
+    return super.replaceBaseTimelineSection(
+      uid: uid,
+      section: section,
+      expectedRevision: expectedRevision,
+      newRoutineItems: newRoutineItems,
+      additionalDeleteIds: additionalDeleteIds,
+      buildUpdatedSetup: buildUpdatedSetup,
+    );
   }
 }
 
@@ -251,7 +287,7 @@ void main() {
 
   group('Gap 2: Transaction Commit Result & Coordinator In-Memory Update', () {
     test(
-      'replaceSection returns BaseTimelineSectionCommitResult directly with updated setup',
+      'replaceSection returns BaseTimelineSectionReplaceResult containing durable commit and refresh status',
       () async {
         final fakeSetupRepo = FakeBaseTimelineSetupRepository(
           onboardingRepo: FakeOnboardingRepository(),
@@ -287,7 +323,13 @@ void main() {
           updateSetup: (curr) => curr.copyWith(classBlocks: newBlocks),
         );
 
-        expect(result, isA<BaseTimelineSectionCommitResult>());
+        expect(result, isA<BaseTimelineSectionReplaceResult>());
+        expect(result.commit, isA<BaseTimelineSectionCommitResult>());
+        expect(
+          result.routineRefreshStatus,
+          BaseTimelineRoutineRefreshStatus.notAttempted,
+        );
+        expect(result.routineRefreshPending, isFalse);
         expect(result.committedSetup.classBlocks.length, 1);
         expect(
           result.committedSetup.classBlocks.first.title,
@@ -937,14 +979,14 @@ void main() {
     'Gap 11: Commit Success + Follow-up Fetch Failure Resiliency (Req 38)',
     () {
       test(
-        'replaceSection succeeds and updates in-memory provider even when routine fetch throws',
+        'replaceSection succeeds with refreshPending when follow-up routine fetch throws, and retryRoutineRefresh reconciles without rerunning transaction',
         () async {
           final fakeSetupRepo = FakeBaseTimelineSetupRepository(
             onboardingRepo: FakeOnboardingRepository(),
           );
           final failingRoutineRepo = _FailingFollowUpFetchRoutineRepository();
-          final fakeTxRepo = FakeRoutineTransactionRepository(
-            routineRepository: FakeRoutineRepository(),
+          final fakeTxRepo = _CountingFakeRoutineTransactionRepository(
+            routineRepository: failingRoutineRepo,
             setupRepository: fakeSetupRepo,
           );
 
@@ -995,19 +1037,71 @@ void main() {
             updateSetup: (curr) => curr.copyWith(classBlocks: newBlocks),
           );
 
+          // 1. Transaction succeeded
+          expect(result, isA<BaseTimelineSectionReplaceResult>());
+          expect(result.commit, isA<BaseTimelineSectionCommitResult>());
           expect(result.committedSetup.classBlocks.length, 1);
           expect(
             result.committedSetup.classBlocks.first.title,
             'Compiler Design',
           );
+          expect(result.revision, 2);
 
-          // Verify in-memory provider was updated directly and stays updated
+          // 2. Reconciliation failure is observable and truthful
+          expect(
+            result.routineRefreshStatus,
+            BaseTimelineRoutineRefreshStatus.refreshPending,
+          );
+          expect(result.routineRefreshPending, isTrue);
+          expect(
+            result.routineRefreshMessage,
+            'Saved, but Routine needs to refresh.',
+          );
+          expect(
+            coordinator.latestRefreshStatusFor('user-commit-success'),
+            BaseTimelineRoutineRefreshStatus.refreshPending,
+          );
+
+          // 3. Durable setup was NOT rolled back, and in-memory was updated
           final inMemory = container
               .read(baseTimelineSetupNotifierProvider)
               .value;
           expect(inMemory, isNotNull);
           expect(inMemory!.classBlocks.length, 1);
           expect(inMemory.classBlocks.first.title, 'Compiler Design');
+          expect(inMemory.revision, 2);
+
+          // Transaction repo was called exactly once for the durable commit
+          expect(fakeTxRepo.replaceBaseTimelineSectionCalls, 1);
+
+          // 4. Now enable fetch to succeed and test retryRoutineRefresh
+          failingRoutineRepo.failOnFollowUp = false;
+          final retryResult = await coordinator.retryRoutineRefresh(
+            uid: 'user-commit-success',
+          );
+
+          expect(retryResult.isRefreshed, isTrue);
+          expect(retryResult.isPending, isFalse);
+          expect(
+            retryResult.status,
+            BaseTimelineRoutineRefreshStatus.refreshed,
+          );
+          expect(
+            coordinator.latestRefreshStatusFor('user-commit-success'),
+            BaseTimelineRoutineRefreshStatus.refreshed,
+          );
+
+          // 5. CRITICAL: retry must NEVER rerun durable transaction or increment revision
+          expect(fakeTxRepo.replaceBaseTimelineSectionCalls, 1);
+          final finalSetup = await fakeSetupRepo.fetchSetup('user-commit-success');
+          expect(finalSetup.revision, 2);
+
+          // 6. Routine state in notifier is now refreshed with new items
+          final routineItems = container.read(routineNotifierProvider).items;
+          expect(
+            routineItems.any((i) => i.title == 'Compiler Design'),
+            isTrue,
+          );
         },
       );
     },

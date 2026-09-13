@@ -1,7 +1,9 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
+import 'package:optivus/state/app_state.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_domain_engine.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/skin_care_domain_engine.dart';
 import 'package:optivus/models/coach_models.dart';
@@ -623,6 +625,316 @@ void main() {
         expect(allItems.any((i) => i.title == 'Mid-Morning Snack'), isTrue);
       },
     );
+  });
+
+  group('Base Timeline Strict Repeat-Day Invariant & Observable Reconciliation', () {
+    test('validatedRepeatDays enforces 1..7, non-empty, unique, max 7, and deterministically sorts', () {
+      // 1. Valid single day
+      const singleDay = TimelineBlockDraft(
+        id: 'b1',
+        section: 'classes',
+        title: 'Single Day',
+        startMinute: 600,
+        endMinute: 660,
+        repeatDays: [3],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      );
+      expect(BaseTimelineTransactionCoordinator.validatedRepeatDays(singleDay), [3]);
+
+      // 2. Valid multiple days (already sorted)
+      const sortedDays = TimelineBlockDraft(
+        id: 'b2',
+        section: 'classes',
+        title: 'Sorted Days',
+        startMinute: 600,
+        endMinute: 660,
+        repeatDays: [1, 3, 5],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      );
+      expect(BaseTimelineTransactionCoordinator.validatedRepeatDays(sortedDays), [1, 3, 5]);
+
+      // 3. Unsorted days are deterministically sorted ascending
+      const unsortedDays = TimelineBlockDraft(
+        id: 'b3',
+        section: 'classes',
+        title: 'Unsorted Days',
+        startMinute: 600,
+        endMinute: 660,
+        repeatDays: [7, 1, 4, 2],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      );
+      expect(BaseTimelineTransactionCoordinator.validatedRepeatDays(unsortedDays), [1, 2, 4, 7]);
+
+      // 4. Empty repeatDays throws ArgumentError (no silent default to 1..7!)
+      const emptyDays = TimelineBlockDraft(
+        id: 'b4',
+        section: 'classes',
+        title: 'Empty Days',
+        startMinute: 600,
+        endMinute: 660,
+        repeatDays: [],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      );
+      expect(
+        () => BaseTimelineTransactionCoordinator.validatedRepeatDays(emptyDays),
+        throwsA(isA<ArgumentError>().having((e) => e.message, 'message', contains('must specify at least one repeat day'))),
+      );
+
+      // 5. Duplicate days throw ArgumentError
+      const duplicateDays = TimelineBlockDraft(
+        id: 'b5',
+        section: 'classes',
+        title: 'Duplicate Days',
+        startMinute: 600,
+        endMinute: 660,
+        repeatDays: [1, 3, 1],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      );
+      expect(
+        () => BaseTimelineTransactionCoordinator.validatedRepeatDays(duplicateDays),
+        throwsA(isA<ArgumentError>().having((e) => e.message, 'message', contains('contains duplicate repeat days'))),
+      );
+
+      // 6. Day < 1 (0) throws ArgumentError
+      const outOfRangeLow = TimelineBlockDraft(
+        id: 'b6',
+        section: 'classes',
+        title: 'Out of range low',
+        startMinute: 600,
+        endMinute: 660,
+        repeatDays: [0, 2],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      );
+      expect(
+        () => BaseTimelineTransactionCoordinator.validatedRepeatDays(outOfRangeLow),
+        throwsA(isA<ArgumentError>().having((e) => e.message, 'message', contains('is out of range 1..7'))),
+      );
+
+      // 7. Day > 7 (8) throws ArgumentError
+      const outOfRangeHigh = TimelineBlockDraft(
+        id: 'b7',
+        section: 'classes',
+        title: 'Out of range high',
+        startMinute: 600,
+        endMinute: 660,
+        repeatDays: [2, 8],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      );
+      expect(
+        () => BaseTimelineTransactionCoordinator.validatedRepeatDays(outOfRangeHigh),
+        throwsA(isA<ArgumentError>().having((e) => e.message, 'message', contains('is out of range 1..7'))),
+      );
+
+      // 8. More than 7 days throws ArgumentError
+      const moreThanSeven = TimelineBlockDraft(
+        id: 'b8',
+        section: 'classes',
+        title: 'More than seven',
+        startMinute: 600,
+        endMinute: 660,
+        repeatDays: [1, 2, 3, 4, 5, 6, 7, 8],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      );
+      expect(
+        () => BaseTimelineTransactionCoordinator.validatedRepeatDays(moreThanSeven),
+        throwsA(isA<ArgumentError>().having((e) => e.message, 'message', contains('cannot specify more than 7 repeat days'))),
+      );
+    });
+
+    test('replaceSection fails before durable mutation when block repeatDays is invalid', () async {
+      final routineRepo = FakeRoutineRepository();
+      final onboardingRepo = FakeOnboardingRepository();
+      final baseTimelineRepo = FakeBaseTimelineSetupRepository(
+        onboardingRepo: onboardingRepo,
+      );
+      final txRepo = FakeRoutineTransactionRepository(
+        routineRepository: routineRepo,
+        setupRepository: baseTimelineRepo,
+      );
+
+      final coordinator = BaseTimelineTransactionCoordinator(
+        routineRepo: routineRepo,
+        setupRepo: baseTimelineRepo,
+        transactionRepo: txRepo,
+      );
+
+      // Pre-save initial setup at revision 1
+      await baseTimelineRepo.saveSetup(
+        'user-strict',
+        BaseTimelineSetup(
+          uid: 'user-strict',
+          revision: 1,
+          updatedAt: DateTime.now(),
+        ),
+      );
+
+      // Malformed block with empty repeatDays
+      const malformedBlock = TimelineBlockDraft(
+        id: 'bad-cls',
+        section: 'classes',
+        title: 'Invalid Repeat Class',
+        startMinute: 600,
+        endMinute: 660,
+        repeatDays: [],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      );
+
+      expect(
+        () => coordinator.replaceSection(
+          uid: 'user-strict',
+          section: BaseTimelineSection.classes,
+          newBlocks: const [malformedBlock],
+          updateSetup: (s) => s.copyWith(classBlocks: const [malformedBlock]),
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+
+      // Invariant verification: setup was NEVER mutated, revision remains 1, 0 items created
+      final setupAfter = await baseTimelineRepo.fetchSetup('user-strict');
+      expect(setupAfter.revision, 1);
+      expect(setupAfter.classBlocks, isEmpty);
+
+      final routineItemsAfter = await routineRepo.fetchRoutineItems('user-strict');
+      expect(routineItemsAfter, isEmpty);
+    });
+
+    test('RoutineItem converted from Base Timeline block inherits sorted repeatDays and weekly repeatRule', () {
+      final now = DateTime.now();
+      const block = TimelineBlockDraft(
+        id: 'block-1',
+        section: 'classes',
+        title: 'Discrete Math',
+        startMinute: 600,
+        endMinute: 660,
+        repeatDays: [5, 2], // Unsorted
+        blockType: TimelineBlockDraft.hardBlockKey,
+      );
+
+      final item = BaseTimelineTransactionCoordinator.routineItemForSectionBlock(
+        uid: 'user-sort',
+        section: BaseTimelineSection.classes,
+        block: block,
+        index: 0,
+        now: now,
+      );
+
+      expect(item.repeatDays, [2, 5]); // Deterministically sorted
+      expect(item.repeatRule, 'weekly');
+      expect(item.source, RoutineSource.baseTimeline);
+      expect(item.baseTimelineSection, 'classes');
+    });
+
+    test('General one-time routine items with empty repeatDays remain valid and distinct from Base Timeline recurring blocks', () {
+      final now = DateTime.now();
+      // Routine data contract allows one-time items with repeatDays: [] and repeatRule: 'once'
+      final oneTimeItem = RoutineItem(
+        id: 'one-time-task',
+        userId: 'user-1',
+        title: 'Doctor Appointment',
+        category: RoutineCategory.health,
+        blockType: RoutineBlockType.hardBlock,
+        startMinute: 720,
+        endMinute: 780,
+        repeatDays: const [],
+        repeatRule: 'once',
+        createdAt: now,
+        updatedAt: now,
+        source: RoutineSource.manual,
+      );
+
+      expect(oneTimeItem.repeatDays, isEmpty);
+      expect(oneTimeItem.repeatRule, 'once');
+      expect(oneTimeItem.source, RoutineSource.manual);
+    });
+
+    test('routineItemsForSectionBlocks throws ArgumentError if any block has invalid repeatDays', () {
+      const invalidBlock = TimelineBlockDraft(
+        id: 'bad-block',
+        section: 'classes',
+        title: 'Corrupted Class',
+        startMinute: 600,
+        endMinute: 660,
+        repeatDays: [0, 1], // 0 is invalid
+        blockType: TimelineBlockDraft.hardBlockKey,
+      );
+
+      expect(
+        () => BaseTimelineTransactionCoordinator.routineItemsForSectionBlocks(
+          uid: 'user-corrupted',
+          section: BaseTimelineSection.classes,
+          blocks: const [invalidBlock],
+          now: DateTime.now(),
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('retryRoutineRefresh guards owner isolation and monotonic revision', () async {
+      final fakeSetupRepo = FakeBaseTimelineSetupRepository(
+        onboardingRepo: FakeOnboardingRepository(),
+      );
+      final fakeRoutineRepo = FakeRoutineRepository();
+      final fakeTxRepo = FakeRoutineTransactionRepository(
+        routineRepository: fakeRoutineRepo,
+        setupRepository: fakeSetupRepo,
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          userProfileProvider.overrideWith(
+            (ref) => UserProfileNotifier()
+              ..loadSeedData(
+                UserProfile(
+                  uid: 'active-owner-1',
+                  email: 'owner1@optivus.app',
+                  displayName: 'Owner One',
+                ),
+              ),
+          ),
+          baseTimelineSetupRepositoryProvider.overrideWithValue(fakeSetupRepo),
+          routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
+          routineTransactionRepositoryProvider.overrideWithValue(fakeTxRepo),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final coordinator = container.read(
+        baseTimelineTransactionCoordinatorProvider,
+      );
+
+      // 1. Calling retryRoutineRefresh for a DIFFERENT owner must be rejected by owner isolation guard
+      final staleOwnerResult = await coordinator.retryRoutineRefresh(
+        uid: 'stale-owner-999',
+      );
+      expect(staleOwnerResult.status, BaseTimelineRoutineRefreshStatus.notAttempted);
+      expect(staleOwnerResult.message, contains('Active session does not match requested owner'));
+
+      // 2. Monotonic guard: Calling retry with older targetRevision than committed revision returns superseded
+      const validBlock = TimelineBlockDraft(
+        id: 'b-ok',
+        section: 'work',
+        title: 'Deep Work',
+        startMinute: 540,
+        endMinute: 600,
+        repeatDays: [1, 2, 3],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      );
+      // Perform replaceSection for active-owner-1 to establish revision 2
+      final replaceRes = await coordinator.replaceSection(
+        uid: 'active-owner-1',
+        section: BaseTimelineSection.work,
+        newBlocks: const [validBlock],
+        updateSetup: (s) => s.copyWith(workBlocks: const [validBlock]),
+      );
+      expect(replaceRes.revision, 2);
+
+      // Retry targeting revision 1 (older than committed revision 2)
+      final olderRevResult = await coordinator.retryRoutineRefresh(
+        uid: 'active-owner-1',
+        targetRevision: 1,
+      );
+      expect(olderRevResult.message, contains('Superseded by newer revision'));
+    });
   });
 
   group('AuthenticatedR2PreviewResolver Tests', () {

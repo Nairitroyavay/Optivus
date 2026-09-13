@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
@@ -8,12 +9,62 @@ import 'package:optivus/repositories/base_timeline_setup_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/repositories/routine_transaction_repository.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
+import 'package:optivus/state/app_state.dart';
+
+/// Status of post-commit frontend Routine reconciliation.
+enum BaseTimelineRoutineRefreshStatus {
+  notAttempted,
+  refreshed,
+  refreshPending,
+}
+
+/// Typed result of an explicit Routine reconciliation refresh retry.
+@immutable
+class BaseTimelineRoutineRefreshResult {
+  final BaseTimelineRoutineRefreshStatus status;
+  final String? message;
+
+  const BaseTimelineRoutineRefreshResult({
+    required this.status,
+    this.message,
+  });
+
+  bool get isRefreshed =>
+      status == BaseTimelineRoutineRefreshStatus.refreshed;
+  bool get isPending =>
+      status == BaseTimelineRoutineRefreshStatus.refreshPending;
+}
+
+/// Typed result of a committed Base Timeline section replacement at the coordinator level,
+/// pairing durable transaction results with frontend Routine reconciliation status.
+@immutable
+class BaseTimelineSectionReplaceResult {
+  final BaseTimelineSectionCommitResult commit;
+  final BaseTimelineRoutineRefreshStatus routineRefreshStatus;
+  final String? routineRefreshMessage;
+
+  const BaseTimelineSectionReplaceResult({
+    required this.commit,
+    required this.routineRefreshStatus,
+    this.routineRefreshMessage,
+  });
+
+  BaseTimelineSetup get committedSetup => commit.committedSetup;
+  List<String> get routineItemIds => commit.routineItemIds;
+  int get revision => commit.revision;
+
+  bool get routineRefreshPending =>
+      routineRefreshStatus ==
+      BaseTimelineRoutineRefreshStatus.refreshPending;
+}
 
 class BaseTimelineTransactionCoordinator {
   final RoutineRepository _routineRepo;
   final RoutineTransactionRepository _transactionRepo;
   final BaseTimelineSetupRepository _setupRepo;
   final Ref? _ref;
+  final Map<String, int> _latestCommittedRevisionByUid = {};
+  final Map<String, BaseTimelineRoutineRefreshStatus> _latestRefreshStatusByUid = {};
 
   BaseTimelineTransactionCoordinator({
     required RoutineRepository routineRepo,
@@ -24,6 +75,11 @@ class BaseTimelineTransactionCoordinator {
        _transactionRepo = transactionRepo,
        _setupRepo = setupRepo,
        _ref = ref;
+
+  BaseTimelineRoutineRefreshStatus latestRefreshStatusFor(String uid) {
+    return _latestRefreshStatusByUid[uid] ??
+        BaseTimelineRoutineRefreshStatus.notAttempted;
+  }
 
   static bool isSectionRoutineItem(
     RoutineItem item,
@@ -124,6 +180,42 @@ class BaseTimelineTransactionCoordinator {
     );
   }
 
+  /// Enforces the strict Base Timeline repeat-day invariant for [TimelineBlockDraft].
+  ///
+  /// Invariant:
+  /// - repeatDays must be non-empty
+  /// - repeatDays length <= 7
+  /// - days must be unique
+  /// - every value must be 1..7 (Monday=1, Sunday=7)
+  ///
+  /// Returns a deterministically sorted copy. Never invents defaults.
+  static List<int> validatedRepeatDays(TimelineBlockDraft block) {
+    final days = block.repeatDays;
+    if (days.isEmpty) {
+      throw ArgumentError(
+        'Base Timeline block "${block.id}" must specify at least one repeat day.',
+      );
+    }
+    if (days.length > 7) {
+      throw ArgumentError(
+        'Base Timeline block "${block.id}" cannot specify more than 7 repeat days.',
+      );
+    }
+    if (days.toSet().length != days.length) {
+      throw ArgumentError(
+        'Base Timeline block "${block.id}" contains duplicate repeat days.',
+      );
+    }
+    for (final day in days) {
+      if (day < 1 || day > 7) {
+        throw ArgumentError(
+          'Base Timeline block "${block.id}" repeat day $day is out of range 1..7.',
+        );
+      }
+    }
+    return List<int>.from(days)..sort();
+  }
+
   static RoutineItem routineItemForSectionBlock({
     required String uid,
     required BaseTimelineSection section,
@@ -136,9 +228,7 @@ class BaseTimelineTransactionCoordinator {
         block.crossesMidnight ||
         block.endsNextDay ||
         block.endMinute <= block.startMinute;
-    final repeatDays = block.repeatDays.isEmpty
-        ? const [1, 2, 3, 4, 5, 6, 7]
-        : (block.repeatDays.toSet().toList()..sort());
+    final repeatDays = validatedRepeatDays(block);
 
     return RoutineItem(
       id: routineDocumentIdForSectionBlock(
@@ -154,6 +244,7 @@ class BaseTimelineTransactionCoordinator {
       crossesMidnight: isOvernight,
       endsNextDay: isOvernight,
       repeatDays: repeatDays,
+      repeatRule: repeatDays.length == 7 ? 'daily' : 'weekly',
       blockType: blockTypeForSection(section, block),
       category: categoryForSection(section, block),
       source: RoutineSource.baseTimeline,
@@ -226,13 +317,18 @@ class BaseTimelineTransactionCoordinator {
     ];
   }
 
-  Future<BaseTimelineSectionCommitResult> replaceSection({
+  Future<BaseTimelineSectionReplaceResult> replaceSection({
     required String uid,
     required BaseTimelineSection section,
     required List<TimelineBlockDraft> newBlocks,
     int? expectedRevision,
     required BaseTimelineSetup Function(BaseTimelineSetup current) updateSetup,
   }) async {
+    // 0. Strict validation of all incoming blocks before any fetch or durable mutation
+    for (final block in newBlocks) {
+      validatedRepeatDays(block);
+    }
+
     // 1. Fetch current setup and routine items
     final currentSetup = await _setupRepo.fetchSetup(uid);
     final editorRevision = expectedRevision ?? currentSetup.revision;
@@ -277,7 +373,15 @@ class BaseTimelineTransactionCoordinator {
       },
     );
 
-    // 5. Update in-memory state directly from the committed transaction result
+    // 5. Commit succeeded! Record latest revision for monotonicity protection
+    final commitRevision = commitResult.revision;
+    _latestCommittedRevisionByUid[uid] = commitRevision;
+
+    // 6. Update in-memory state directly from the committed transaction result
+    // and reconcile Routine frontend.
+    var refreshStatus = BaseTimelineRoutineRefreshStatus.notAttempted;
+    String? refreshMessage;
+
     if (_ref != null) {
       _ref
           .read(baseTimelineSetupNotifierProvider.notifier)
@@ -285,12 +389,91 @@ class BaseTimelineTransactionCoordinator {
 
       try {
         await _ref.read(routineNotifierProvider.notifier).loadForOwner(uid);
+        if ((_latestCommittedRevisionByUid[uid] ?? 0) <= commitRevision) {
+          _latestRefreshStatusByUid[uid] =
+              BaseTimelineRoutineRefreshStatus.refreshed;
+        }
+        refreshStatus = BaseTimelineRoutineRefreshStatus.refreshed;
       } catch (_) {
-        // Routine refresh failure must NOT invalidate save success.
+        if ((_latestCommittedRevisionByUid[uid] ?? 0) <= commitRevision) {
+          _latestRefreshStatusByUid[uid] =
+              BaseTimelineRoutineRefreshStatus.refreshPending;
+        }
+        refreshStatus = BaseTimelineRoutineRefreshStatus.refreshPending;
+        refreshMessage = 'Saved, but Routine needs to refresh.';
       }
     }
 
-    return commitResult;
+    return BaseTimelineSectionReplaceResult(
+      commit: commitResult,
+      routineRefreshStatus: refreshStatus,
+      routineRefreshMessage: refreshMessage,
+    );
+  }
+
+  /// Safely retries Routine frontend reconciliation after a commit resulted in
+  /// [BaseTimelineRoutineRefreshStatus.refreshPending].
+  ///
+  /// Invariants:
+  /// - Only calls [RoutineNotifier.loadForOwner].
+  /// - NEVER reruns [replaceSection] or [replaceBaseTimelineSection].
+  /// - NEVER saves [BaseTimelineSetup] or increments revision.
+  /// - NEVER retires photo assets.
+  /// - Rejects retries if the active session UID no longer matches [uid].
+  /// - If [targetRevision] is provided and older than the latest committed revision,
+  ///   does not downgrade the latest reconciliation status.
+  Future<BaseTimelineRoutineRefreshResult> retryRoutineRefresh({
+    required String uid,
+    int? targetRevision,
+  }) async {
+    final ref = _ref;
+    if (ref == null) {
+      return const BaseTimelineRoutineRefreshResult(
+        status: BaseTimelineRoutineRefreshStatus.notAttempted,
+      );
+    }
+
+    // Owner isolation guard: ensure active session matches requested UID
+    final activeUid = ref.read(routineNotifierProvider.notifier).ownerUid ??
+        ref.read(userProfileProvider).uid;
+    if (activeUid.trim().isEmpty || activeUid != uid) {
+      return const BaseTimelineRoutineRefreshResult(
+        status: BaseTimelineRoutineRefreshStatus.notAttempted,
+        message: 'Active session does not match requested owner.',
+      );
+    }
+
+    // Revision monotonic guard: older retries cannot downgrade newer revisions
+    final latestRev = _latestCommittedRevisionByUid[uid];
+    if (targetRevision != null && latestRev != null && targetRevision < latestRev) {
+      return BaseTimelineRoutineRefreshResult(
+        status: _latestRefreshStatusByUid[uid] ??
+            BaseTimelineRoutineRefreshStatus.refreshed,
+        message: 'Superseded by newer revision.',
+      );
+    }
+
+    try {
+      await ref.read(routineNotifierProvider.notifier).loadForOwner(uid);
+      if (targetRevision == null ||
+          targetRevision >= (_latestCommittedRevisionByUid[uid] ?? 0)) {
+        _latestRefreshStatusByUid[uid] =
+            BaseTimelineRoutineRefreshStatus.refreshed;
+      }
+      return const BaseTimelineRoutineRefreshResult(
+        status: BaseTimelineRoutineRefreshStatus.refreshed,
+      );
+    } catch (_) {
+      if (targetRevision == null ||
+          targetRevision >= (_latestCommittedRevisionByUid[uid] ?? 0)) {
+        _latestRefreshStatusByUid[uid] =
+            BaseTimelineRoutineRefreshStatus.refreshPending;
+      }
+      return const BaseTimelineRoutineRefreshResult(
+        status: BaseTimelineRoutineRefreshStatus.refreshPending,
+        message: 'Saved, but Routine needs to refresh.',
+      );
+    }
   }
 }
 

@@ -211,7 +211,7 @@ class _CountingCoordinator extends BaseTimelineTransactionCoordinator {
   });
 
   @override
-  Future<BaseTimelineSectionCommitResult> replaceSection({
+  Future<BaseTimelineSectionReplaceResult> replaceSection({
     required String uid,
     required BaseTimelineSection section,
     int? expectedRevision,

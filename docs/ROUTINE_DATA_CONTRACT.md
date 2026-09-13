@@ -107,6 +107,12 @@ Values must be unique and between 1 and 7. A recurring template is
 materialized only when its repeat policy and repeat days include the selected
 local day.
 
+Base Timeline recurring blocks (`TimelineBlockDraft`) require non-empty,
+unique `repeatDays` (values 1–7, at most 7). An empty `repeatDays` list is invalid
+for Base Timeline blocks and is never silently converted into weekdays or every day.
+In contrast, general Routine one-time items legitimately use `repeatRule: "once"`
+with an empty `repeatDays` list.
+
 Completing one occurrence changes only its dated occurrence document. It never
 sets `completed`, `isCompleted`, or another daily status on the repeating
 template, so a later matching weekday remains planned.
