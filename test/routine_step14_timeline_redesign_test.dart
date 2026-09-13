@@ -8,6 +8,7 @@ import 'package:optivus/core/timeline/widgets/timeline_card_chrome.dart';
 import 'package:optivus/features/onboarding/timeline/layout/timeline_overlap_engine.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_entry.dart';
 import 'package:optivus/features/routine/models/routine_write_result.dart';
+import 'package:optivus/features/routine/services/routine_action_executor.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/models/routine_day_entry.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_actions.dart';
@@ -254,6 +255,7 @@ void main() {
 
   Widget buildTestableViewport({
     required List<RoutineItem> items,
+    List<RoutineDayEntry>? entries,
     TimelineLayout? layout,
     Set<String> pendingIds = const {},
     Map<String, RoutineWriteIntent> failedIntents = const {},
@@ -281,14 +283,16 @@ void main() {
             width: testWidth,
             height: testHeight,
             child: RoutineTimelineViewport(
-              items: legacyRoutineDayEntriesForTesting(
-                items,
-                displayDate: DateTime(
-                  2026,
-                  9,
-                  14,
-                ).add(Duration(days: (selectedDay ?? DateTime.monday) - 1)),
-              ),
+              items:
+                  entries ??
+                  legacyRoutineDayEntriesForTesting(
+                    items,
+                    displayDate: DateTime(
+                      2026,
+                      9,
+                      14,
+                    ).add(Duration(days: (selectedDay ?? DateTime.monday) - 1)),
+                  ),
               layout:
                   layout ??
                   const TimelineLayout(
@@ -353,6 +357,7 @@ void main() {
           find.byKey(const ValueKey('routine-back-label-work_1')),
           findsOneWidget,
         );
+        expect(find.byType(RoutineCardActions), findsOneWidget);
 
         // Back tab uses short label, front card displays full title
         expect(find.text('Office'), findsWidgets);
@@ -415,7 +420,81 @@ void main() {
       // Verify no DB mutations occurred during promotion
       expect(capturedNotifier!.completedItemIds, isEmpty);
       expect(capturedNotifier!.startedItemIds, isEmpty);
+      expect(find.byType(RoutineCardActions), findsOneWidget);
     });
+
+    testWidgets(
+      'promoted moved-in card owns the exact action context and is the only actionable card',
+      (tester) async {
+        final native = RoutineItem(
+          id: 'native_template',
+          userId: 'owner-r2',
+          title: 'Native routine',
+          startMinute: 9 * 60,
+          endMinute: 11 * 60,
+          blockType: RoutineBlockType.hardBlock,
+        );
+        final moved = RoutineItem(
+          id: 'moved_template',
+          userId: 'owner-r2',
+          title: 'Moved routine',
+          startMinute: 9 * 60 + 15,
+          endMinute: 10 * 60,
+          blockType: RoutineBlockType.flexibleTask,
+        );
+        final entries = [
+          RoutineDayEntry(
+            item: native,
+            instanceId: 's:native_template:2026-09-14',
+            templateId: native.id,
+            occurrenceDateKey: '2026-09-14',
+            displayDateKey: '2026-09-14',
+            occurrenceId: 'native-occurrence',
+            kind: RoutineDayEntryKind.scheduled,
+          ),
+          RoutineDayEntry(
+            item: moved,
+            instanceId: 'm:moved-occurrence',
+            templateId: moved.id,
+            occurrenceDateKey: '2026-09-12',
+            displayDateKey: '2026-09-14',
+            occurrenceId: 'moved-occurrence',
+            kind: RoutineDayEntryKind.movedIn,
+          ),
+        ];
+        RoutineActionExecutionObservation? observation;
+        RoutineActionExecutor.observer = (value) => observation = value;
+        addTearDown(() => RoutineActionExecutor.observer = null);
+
+        await tester.pumpWidget(
+          buildTestableViewport(items: [native, moved], entries: entries),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(RoutineCardActions), findsOneWidget);
+        await tester.tap(
+          find.byKey(const ValueKey('routine-back-label-native_template')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('routine-back-label-moved_template')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(RoutineCardActions), findsOneWidget);
+        await tester.tap(
+          find.byKey(const ValueKey('routine-action-start-moved_template')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(observation?.routineItemId, 'moved_template');
+        expect(observation?.instanceId, 'm:moved-occurrence');
+        expect(observation?.occurrenceId, 'moved-occurrence');
+        expect(observation?.occurrenceDateKey, '2026-09-12');
+        expect(observation?.displayDateKey, '2026-09-14');
+        expect(observation?.entryKind, RoutineDayEntryKind.movedIn);
+      },
+    );
 
     testWidgets('4 overlapping items are all accessible via back tabs', (
       tester,
@@ -528,6 +607,8 @@ void main() {
 
         await tester.pumpWidget(buildTestableViewport(items: items));
         await tester.pumpAndSettle();
+
+        expect(find.byType(RoutineCardActions), findsOneWidget);
 
         // Ensure zero overflow errors and back tabs are rendered
         expect(tester.takeException(), isNull);

@@ -175,7 +175,10 @@ void main() {
         await setupRepo.saveSetup(uid, initialSetup);
 
         // Verify initial setup contract
-        expect(initialSetup.schemaVersion, 2);
+        expect(
+          initialSetup.schemaVersion,
+          BaseTimelineSetup.currentSchemaVersion,
+        );
         expect(initialSetup.revision, 1);
         expect(
           initialSetup.classRoutineItemIds,
@@ -308,7 +311,10 @@ void main() {
         // Invariant: authoritatively written IDs match updatedSetup.eatingRoutineItemIds
         currentSetup = await setupRepo.fetchSetup(uid);
         expect(currentSetup.revision, 2);
-        expect(currentSetup.schemaVersion, 2);
+        expect(
+          currentSetup.schemaVersion,
+          BaseTimelineSetup.currentSchemaVersion,
+        );
         expect(currentSetup.eatingRoutineItemIds.length, 3);
 
         // Verify Routine items in Routine repository

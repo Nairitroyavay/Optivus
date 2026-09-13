@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
@@ -34,17 +35,17 @@ void main() {
       );
     });
 
-    test('Initial setup has schemaVersion 2 and revision 1', () async {
+    test('Initial setup has current schemaVersion and revision 1', () async {
       final setup = BaseTimelineSetup(
         uid: 'user-rev-1',
         updatedAt: DateTime.now(),
       );
-      expect(setup.schemaVersion, 2);
+      expect(setup.schemaVersion, BaseTimelineSetup.currentSchemaVersion);
       expect(setup.revision, 1);
       await setupRepo.saveSetup('user-rev-1', setup);
 
       final fetched = await setupRepo.fetchSetup('user-rev-1');
-      expect(fetched.schemaVersion, 2);
+      expect(fetched.schemaVersion, BaseTimelineSetup.currentSchemaVersion);
       expect(fetched.revision, 1);
     });
 
@@ -246,5 +247,104 @@ void main() {
       expect(setup.classRoutineItemIds, const ['existing-class-item']);
       expect(setup.revision, 1);
     });
+
+    test('coordinator rejects a stale editor base revision', () async {
+      const uid = 'stale-editor';
+      final initial = BaseTimelineSetup(
+        uid: uid,
+        updatedAt: DateTime.utc(2026, 9, 13),
+      );
+      await setupRepo.saveSetup(uid, initial);
+      await setupRepo.saveSetup(
+        uid,
+        initial.copyWith(revision: 2, mealPlanningGoal: 'remote change'),
+      );
+
+      await expectLater(
+        coordinator.replaceSection(
+          uid: uid,
+          section: BaseTimelineSection.classes,
+          expectedRevision: 1,
+          newBlocks: const [],
+          updateSetup: (current) => current.copyWith(classBlocks: const []),
+        ),
+        throwsA(isA<BaseTimelineConcurrencyException>()),
+      );
+
+      final committed = await coordinator.replaceSection(
+        uid: uid,
+        section: BaseTimelineSection.classes,
+        expectedRevision: 2,
+        newBlocks: const [],
+        updateSetup: (current) => current.copyWith(classBlocks: const []),
+      );
+      expect(committed.revision, 3);
+    });
+
+    test('notifier publishes only after a durable save succeeds', () async {
+      const uid = 'durable-first';
+      final initial = BaseTimelineSetup(
+        uid: uid,
+        updatedAt: DateTime.utc(2026, 9, 13),
+      );
+      final repo = _ControllableSetupRepository(initial);
+      final notifier = BaseTimelineSetupNotifier(repo, uid);
+      addTearDown(notifier.dispose);
+      await notifier.load();
+
+      final updated = initial.copyWith(
+        revision: 2,
+        mealPlanningGoal: 'should not publish',
+      );
+      repo.failSaves = true;
+      await expectLater(notifier.save(updated), throwsStateError);
+      expect(notifier.state.requireValue.revision, 1);
+      expect(notifier.state.requireValue.mealPlanningGoal, isNull);
+
+      repo.failSaves = false;
+      await notifier.save(updated);
+      expect(notifier.state.requireValue.revision, 2);
+    });
+
+    test('live setup streams are isolated by owner', () async {
+      final repo = FakeBaseTimelineSetupRepository();
+      final a = BaseTimelineSetupNotifier(repo, 'owner-a');
+      final b = BaseTimelineSetupNotifier(repo, 'owner-b');
+      addTearDown(a.dispose);
+      addTearDown(b.dispose);
+      await Future.wait([a.load(), b.load()]);
+
+      await repo.saveSetup(
+        'owner-a',
+        a.state.requireValue.copyWith(
+          revision: 2,
+          mealPlanningGoal: 'owner-a-only',
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(a.state.requireValue.mealPlanningGoal, 'owner-a-only');
+      expect(b.state.requireValue.uid, 'owner-b');
+      expect(b.state.requireValue.mealPlanningGoal, isNull);
+    });
   });
+}
+
+class _ControllableSetupRepository implements BaseTimelineSetupRepository {
+  BaseTimelineSetup setup;
+  bool failSaves = false;
+
+  _ControllableSetupRepository(this.setup);
+
+  @override
+  Future<BaseTimelineSetup> fetchSetup(String uid) async => setup;
+
+  @override
+  Future<void> saveSetup(String uid, BaseTimelineSetup updated) async {
+    if (failSaves) throw StateError('simulated durable save failure');
+    setup = updated;
+  }
+
+  @override
+  Stream<BaseTimelineSetup?> watchSetup(String uid) => const Stream.empty();
 }

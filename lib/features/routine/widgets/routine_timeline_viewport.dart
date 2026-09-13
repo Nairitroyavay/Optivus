@@ -390,8 +390,7 @@ class RoutineTimelineViewportState
   ) {
     final overlaps = prepared.overlapItemIds.contains(item.id);
     final isFront = _isFrontItem(prepared, item);
-    final isHiddenBackCard =
-        overlaps && !isFront && _isHiddenByPromotedFront(prepared, item);
+    final isBackCard = overlaps && !isFront;
     final isFrontCard = overlaps && isFront;
     final cardLeft =
         prepared.leftOffset + (isFrontCard ? prepared.gutterWidth : 0);
@@ -407,7 +406,8 @@ class RoutineTimelineViewportState
         widget.isToday &&
         TimelineUtils.isMinuteInsideItem(item.item, currentMinute);
 
-    // Pending / failed state is tracked by template ID, not by instanceId.
+    // Occurrence actions are keyed by the exact durable occurrence identity.
+    // Template state is only a fallback for entries without an owner target.
     final templateId = item.entry.templateId;
     final occurrenceId = item.entry.occurrenceId;
     final ownerUid = item.item.userId?.trim();
@@ -420,11 +420,13 @@ class RoutineTimelineViewportState
                 occurrenceDateKey: item.entry.occurrenceDateKey,
               )
             : null);
-    final isPending =
-        writeState.pendingItemIds.contains(templateId) ||
-        (occurrenceTargetId != null &&
-            writeState.pendingOccurrenceIds.contains(occurrenceTargetId));
-    final failedIntent = writeState.failedIntentsByItemId[templateId];
+    final isPending = occurrenceTargetId != null
+        ? writeState.pendingOccurrenceIds.contains(occurrenceTargetId)
+        : writeState.pendingItemIds.contains(templateId);
+    final failedOccurrenceIntent = occurrenceTargetId == null
+        ? null
+        : writeState.failedOccurrenceIntentsById[occurrenceTargetId];
+    final failedTemplateIntent = writeState.failedIntentsByItemId[templateId];
 
     return Positioned(
       key: ValueKey('routine-timeline-card-${item.id}'),
@@ -436,7 +438,7 @@ class RoutineTimelineViewportState
         key: ValueKey('routine-card-gesture-${item.id}'),
         behavior: HitTestBehavior.opaque,
         onTap: () {
-          if (isHiddenBackCard) {
+          if (isBackCard) {
             final componentId = prepared.componentIdByItemId[item.id];
             if (componentId != null) {
               setState(() {
@@ -445,9 +447,13 @@ class RoutineTimelineViewportState
             }
           }
         },
-        child: ExcludeSemantics(
+        child: Semantics(
           key: ValueKey('routine-timeline-card-semantics-${item.id}'),
-          excluding: isHiddenBackCard,
+          excludeSemantics: isBackCard,
+          button: isBackCard,
+          label: isBackCard
+              ? 'Show ${item.item.title} in front, ${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)}'
+              : null,
           child: Opacity(
             opacity: isPending ? 0.6 : 1.0,
             child: Stack(
@@ -463,20 +469,7 @@ class RoutineTimelineViewportState
                     item.entry.occurrenceDateKey,
                   ),
                   actionContext: RoutineActionContext.fromDayEntry(item.entry),
-                  onTap: isPending
-                      ? null
-                      : () {
-                          if (isHiddenBackCard) {
-                            final componentId =
-                                prepared.componentIdByItemId[item.id];
-                            if (componentId != null) {
-                              setState(() {
-                                _focusedItemIdByComponent[componentId] =
-                                    item.id;
-                              });
-                            }
-                          }
-                        },
+                  onTap: null,
                 ),
 
                 // Pending operation spinner
@@ -492,14 +485,17 @@ class RoutineTimelineViewportState
                   ),
 
                 // Failed operation banner & retry/dismiss
-                if (failedIntent != null && !isPending && isFront)
+                if ((failedOccurrenceIntent != null ||
+                        failedTemplateIntent != null) &&
+                    !isPending &&
+                    isFront)
                   Positioned(
                     top: 8,
                     right: 8,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (failedIntent.action ==
+                        if (failedTemplateIntent?.action ==
                             RoutineWriteAction.create) ...[
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -524,9 +520,19 @@ class RoutineTimelineViewportState
                         ],
                         GestureDetector(
                           behavior: HitTestBehavior.opaque,
-                          onTap: () => ref
-                              .read(routineNotifierProvider.notifier)
-                              .retryFailedOperation(templateId),
+                          onTap: () {
+                            final notifier = ref.read(
+                              routineNotifierProvider.notifier,
+                            );
+                            if (failedOccurrenceIntent != null &&
+                                occurrenceTargetId != null) {
+                              notifier.retryFailedOccurrenceAction(
+                                occurrenceTargetId,
+                              );
+                            } else {
+                              notifier.retryFailedOperation(templateId);
+                            }
+                          },
                           child: Container(
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
@@ -550,7 +556,14 @@ class RoutineTimelineViewportState
                         GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onTap: () {
-                            if (failedIntent.action ==
+                            if (failedOccurrenceIntent != null &&
+                                occurrenceTargetId != null) {
+                              ref
+                                  .read(routineNotifierProvider.notifier)
+                                  .dismissFailedOccurrenceAction(
+                                    occurrenceTargetId,
+                                  );
+                            } else if (failedTemplateIntent?.action ==
                                 RoutineWriteAction.create) {
                               ref
                                   .read(routineNotifierProvider.notifier)

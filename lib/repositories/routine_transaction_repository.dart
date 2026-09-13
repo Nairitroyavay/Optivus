@@ -396,6 +396,7 @@ class FirestoreRoutineTransactionRepository
             section,
             BaseTimelineSectionAuthority.baseTimeline,
           );
+      finalSetup.validateForOwner(uid);
 
       transaction.set(setupRef, finalSetup.toMap());
 
@@ -830,6 +831,7 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
               section,
               BaseTimelineSectionAuthority.baseTimeline,
             );
+        finalSetup.validateForOwner(uid);
 
         if (_setupRepository != null) {
           await _setupRepository.saveSetup(uid, finalSetup);

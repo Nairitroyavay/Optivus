@@ -18,8 +18,7 @@ abstract class BaseTimelineSetupRepository {
 
 class FakeBaseTimelineSetupRepository implements BaseTimelineSetupRepository {
   final Map<String, BaseTimelineSetup> _setups = {};
-  final StreamController<BaseTimelineSetup?> _controller =
-      StreamController<BaseTimelineSetup?>.broadcast();
+  final Map<String, StreamController<BaseTimelineSetup?>> _controllers = {};
   final OnboardingRepository? _onboardingRepo;
 
   FakeBaseTimelineSetupRepository({OnboardingRepository? onboardingRepo})
@@ -36,8 +35,7 @@ class FakeBaseTimelineSetupRepository implements BaseTimelineSetupRepository {
           existing: existing,
           onboardingSource: sourceResult.setup,
         );
-        _setups[uid] = migrated;
-        _controller.add(migrated);
+        await saveSetup(uid, migrated);
         return migrated;
       }
       return existing;
@@ -52,19 +50,25 @@ class FakeBaseTimelineSetupRepository implements BaseTimelineSetupRepository {
     final initial =
         sourceResult.setup ??
         BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
-    _setups[uid] = initial;
+    await saveSetup(uid, initial);
     return initial;
   }
 
   @override
   Future<void> saveSetup(String uid, BaseTimelineSetup setup) async {
+    setup.validateForOwner(uid);
     _setups[uid] = setup;
-    _controller.add(setup);
+    _controllers[uid]?.add(setup);
   }
 
   @override
-  Stream<BaseTimelineSetup?> watchSetup(String uid) {
-    return _controller.stream;
+  Stream<BaseTimelineSetup?> watchSetup(String uid) async* {
+    yield _setups[uid];
+    final controller = _controllers.putIfAbsent(
+      uid,
+      () => StreamController<BaseTimelineSetup?>.broadcast(),
+    );
+    yield* controller.stream;
   }
 }
 
@@ -97,9 +101,7 @@ class FirestoreBaseTimelineSetupRepository
           existing: existing,
           onboardingSource: sourceResult.setup,
         );
-        try {
-          await saveSetup(uid, migrated);
-        } catch (_) {}
+        await saveSetup(uid, migrated);
         return migrated;
       }
       return existing;
@@ -114,18 +116,17 @@ class FirestoreBaseTimelineSetupRepository
     final setup =
         sourceResult.setup ??
         BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
-    // Persist migrated setup so subsequent reads hit Firestore directly
-    try {
-      await saveSetup(uid, setup);
-    } catch (_) {}
+    // A generated setup is canonical only after this durable write succeeds.
+    await saveSetup(uid, setup);
 
     return setup;
   }
 
   @override
   Future<void> saveSetup(String uid, BaseTimelineSetup setup) async {
+    setup.validateForOwner(uid);
     final docRef = _firestore.doc(FirestoreUserPaths.baseTimelineSetup(uid));
-    await docRef.set(setup.toMap(), SetOptions(merge: true));
+    await docRef.set(setup.toMap());
   }
 
   @override
@@ -158,6 +159,8 @@ class BaseTimelineSetupNotifier
     extends StateNotifier<AsyncValue<BaseTimelineSetup>> {
   final BaseTimelineSetupRepository _repository;
   final String _uid;
+  StreamSubscription<BaseTimelineSetup?>? _watchSubscription;
+  int _loadGeneration = 0;
 
   BaseTimelineSetupNotifier(this._repository, this._uid)
     : super(const AsyncValue.loading()) {
@@ -166,21 +169,59 @@ class BaseTimelineSetupNotifier
 
   Future<void> load() async {
     if (_uid.trim().isEmpty) return;
+    final generation = ++_loadGeneration;
+    await _watchSubscription?.cancel();
+    _watchSubscription = null;
+    state = const AsyncValue.loading();
     try {
       final setup = await _repository.fetchSetup(_uid);
+      if (!mounted || generation != _loadGeneration) return;
+      setup.validateForOwner(_uid);
       state = AsyncValue.data(setup);
+      _watchSubscription = _repository
+          .watchSetup(_uid)
+          .listen(
+            (remote) {
+              if (!mounted || generation != _loadGeneration || remote == null) {
+                return;
+              }
+              try {
+                remote.validateForOwner(_uid);
+                state = AsyncValue.data(remote);
+              } catch (error, stackTrace) {
+                state = AsyncValue.error(error, stackTrace);
+              }
+            },
+            onError: (Object error, StackTrace stackTrace) {
+              if (mounted && generation == _loadGeneration) {
+                state = AsyncValue.error(error, stackTrace);
+              }
+            },
+          );
     } catch (e, st) {
+      if (!mounted || generation != _loadGeneration) return;
       state = AsyncValue.error(e, st);
     }
   }
 
   Future<void> save(BaseTimelineSetup updated) async {
-    state = AsyncValue.data(updated);
+    updated.validateForOwner(_uid);
     await _repository.saveSetup(_uid, updated);
+    if (mounted) state = AsyncValue.data(updated);
   }
 
+  /// Publishes state already committed by the atomic Routine + Base Timeline
+  /// transaction. Never use this for an uncommitted editor draft.
   void updateInMemory(BaseTimelineSetup updated) {
+    updated.validateForOwner(_uid);
     state = AsyncValue.data(updated);
+  }
+
+  @override
+  void dispose() {
+    _loadGeneration++;
+    _watchSubscription?.cancel();
+    super.dispose();
   }
 }
 

@@ -478,6 +478,118 @@ service cloud.firestore {
         || value == "moved";
     }
 
+    function validBaseTimelineNullableString(value) {
+      return value == null || (value is string && value.size() <= 2048);
+    }
+
+    function validBaseTimelineNullableMinute(value) {
+      return value == null || (value is int && value >= 0 && value <= 1439);
+    }
+
+    function validBaseTimelineStringList(value, maxSize) {
+      return value is list
+        && value.size() <= maxSize
+        && value.size() == value.toSet().size();
+    }
+
+    function validBaseTimelineAuthority(value) {
+      return value == "onboardingSeed" || value == "baseTimeline";
+    }
+
+    function validBaseTimelineSetup(data, uid) {
+      return data.keys().hasOnly([
+          "uid", "updatedAt", "schemaVersion", "revision",
+          "classRoutineItemIds", "workRoutineItemIds",
+          "eatingRoutineItemIds", "fixedRoutineItemIds",
+          "skinCareRoutineItemIds", "classAuthority", "workAuthority",
+          "eatingAuthority", "fixedAuthority", "skinCareAuthority",
+          "classLogicalAssetId", "classLogicalAssetR2Key", "classBlocks",
+          "workLogicalAssetId", "workLogicalAssetR2Key", "workBlocks",
+          "eatingSetupPath", "eatingBlocks", "mealPlanningGoal",
+          "mealsPerDay", "eatingMode", "foodType", "foodStyleCustomText",
+          "mealBudget", "cookingAbility", "breakfastMinute", "lunchMinute",
+          "dinnerMinute", "snackMinute", "extraSnackMinute",
+          "targetCalories", "targetProtein", "eatingPhotoAssetId",
+          "eatingPhotoR2Key", "fixedBlocks", "skinCareSetupPath",
+          "skinCareSkipped", "skinCareBlocks", "skinCareProductNames",
+          "skinCareProductPhotoAssetId", "skinCareProductPhotoR2Key",
+          "skinCareReviewedProducts", "skinCareFacePhotoAssetId",
+          "skinCareFacePhotoR2Key", "skinCareFacePhotoSkipped",
+          "skinCareSkinType", "skinCareProblems", "skinCareBudget",
+          "skinCarePreference", "skinCareSelectedProductNames",
+          "skinCareProductRecommendations", "skinCareSpecialCareNotes"
+        ])
+        && data.keys().hasAll([
+          "uid", "updatedAt", "schemaVersion", "revision",
+          "classRoutineItemIds", "workRoutineItemIds",
+          "eatingRoutineItemIds", "fixedRoutineItemIds",
+          "skinCareRoutineItemIds", "classAuthority", "workAuthority",
+          "eatingAuthority", "fixedAuthority", "skinCareAuthority",
+          "classBlocks", "workBlocks", "eatingBlocks", "fixedBlocks",
+          "skinCareSkipped", "skinCareBlocks", "skinCareFacePhotoSkipped"
+        ])
+        && data.uid == uid
+        && data.schemaVersion is int
+        && data.schemaVersion == 3
+        && data.revision is int
+        && data.revision >= 1
+        && data.updatedAt is timestamp
+        && validBaseTimelineAuthority(data.classAuthority)
+        && validBaseTimelineAuthority(data.workAuthority)
+        && validBaseTimelineAuthority(data.eatingAuthority)
+        && validBaseTimelineAuthority(data.fixedAuthority)
+        && validBaseTimelineAuthority(data.skinCareAuthority)
+        && validBaseTimelineStringList(data.classRoutineItemIds, 500)
+        && validBaseTimelineStringList(data.workRoutineItemIds, 500)
+        && validBaseTimelineStringList(data.eatingRoutineItemIds, 500)
+        && validBaseTimelineStringList(data.fixedRoutineItemIds, 500)
+        && validBaseTimelineStringList(data.skinCareRoutineItemIds, 500)
+        && data.classBlocks is list && data.classBlocks.size() <= 500
+        && data.workBlocks is list && data.workBlocks.size() <= 500
+        && data.eatingBlocks is list && data.eatingBlocks.size() <= 500
+        && data.fixedBlocks is list && data.fixedBlocks.size() <= 500
+        && data.skinCareBlocks is list && data.skinCareBlocks.size() <= 500
+        && data.skinCareSkipped is bool
+        && data.skinCareFacePhotoSkipped is bool
+        && validBaseTimelineNullableString(data.classLogicalAssetId)
+        && validBaseTimelineNullableString(data.classLogicalAssetR2Key)
+        && validBaseTimelineNullableString(data.workLogicalAssetId)
+        && validBaseTimelineNullableString(data.workLogicalAssetR2Key)
+        && validBaseTimelineNullableString(data.eatingSetupPath)
+        && validBaseTimelineNullableString(data.mealPlanningGoal)
+        && (data.mealsPerDay == null || (data.mealsPerDay is int && data.mealsPerDay >= 1))
+        && validBaseTimelineNullableString(data.eatingMode)
+        && validBaseTimelineNullableString(data.foodType)
+        && validBaseTimelineNullableString(data.foodStyleCustomText)
+        && validBaseTimelineNullableString(data.mealBudget)
+        && validBaseTimelineNullableString(data.cookingAbility)
+        && validBaseTimelineNullableMinute(data.breakfastMinute)
+        && validBaseTimelineNullableMinute(data.lunchMinute)
+        && validBaseTimelineNullableMinute(data.dinnerMinute)
+        && validBaseTimelineNullableMinute(data.snackMinute)
+        && validBaseTimelineNullableMinute(data.extraSnackMinute)
+        && (data.targetCalories == null || (data.targetCalories is int && data.targetCalories >= 1))
+        && (data.targetProtein == null || (data.targetProtein is int && data.targetProtein >= 1))
+        && validBaseTimelineNullableString(data.eatingPhotoAssetId)
+        && validBaseTimelineNullableString(data.eatingPhotoR2Key)
+        && validBaseTimelineNullableString(data.skinCareSetupPath)
+        && validBaseTimelineNullableString(data.skinCareProductNames)
+        && validBaseTimelineNullableString(data.skinCareProductPhotoAssetId)
+        && validBaseTimelineNullableString(data.skinCareProductPhotoR2Key)
+        && data.skinCareReviewedProducts is list
+        && data.skinCareReviewedProducts.size() <= 100
+        && validBaseTimelineNullableString(data.skinCareFacePhotoAssetId)
+        && validBaseTimelineNullableString(data.skinCareFacePhotoR2Key)
+        && validBaseTimelineNullableString(data.skinCareSkinType)
+        && validBaseTimelineStringList(data.skinCareProblems, 100)
+        && validBaseTimelineNullableString(data.skinCareBudget)
+        && validBaseTimelineNullableString(data.skinCarePreference)
+        && validBaseTimelineStringList(data.skinCareSelectedProductNames, 100)
+        && data.skinCareProductRecommendations is list
+        && data.skinCareProductRecommendations.size() <= 100
+        && validBaseTimelineStringList(data.skinCareSpecialCareNotes, 100);
+    }
+
     function validRoutineOccurrence(data, occurrenceId) {
       return data.keys().hasOnly([
           "id",
@@ -604,6 +716,7 @@ service cloud.firestore {
             && data.movedStartMinute >= 0
             && data.movedStartMinute <= 1439
             && data.movedEndMinute is int
+            && data.movedEndMinute >= 1
             && data.movedEndMinute != data.movedStartMinute
             && data.movedEndMinute <= 1440
           : true)
@@ -1177,7 +1290,19 @@ service cloud.firestore {
     }
 
     match /users/{uid}/baseTimelineSetup/{setupId} {
-      allow read, write: if verifiedOwner(uid);
+      allow read: if setupId == "current" && verifiedOwner(uid);
+      allow create: if setupId == "current"
+        && verifiedOwner(uid)
+        && validBaseTimelineSetup(request.resource.data, uid)
+        && request.resource.data.revision == 1;
+      allow update: if setupId == "current"
+        && verifiedOwner(uid)
+        && validBaseTimelineSetup(request.resource.data, uid)
+        && ((resource.data.schemaVersion is int
+              && resource.data.schemaVersion < 3
+              && request.resource.data.revision == resource.data.revision)
+          || request.resource.data.revision == resource.data.revision + 1);
+      allow delete: if false;
     }
 
 

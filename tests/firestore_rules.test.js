@@ -790,8 +790,24 @@ describe("Firestore Rules for Routine durability", () => {
     })));
 
     await assertSucceeds(docRef.set(occurrenceData("user123", "occurrence-1", {
+      movedStartMinute: 600,
+      movedEndMinute: 780,
+    })));
+    await assertSucceeds(docRef.set(occurrenceData("user123", "occurrence-1", {
       movedStartMinute: 1380,
       movedEndMinute: 390,
+    })));
+    await assertFails(docRef.set(occurrenceData("user123", "occurrence-1", {
+      movedStartMinute: 600,
+      movedEndMinute: -1,
+    })));
+    await assertFails(docRef.set(occurrenceData("user123", "occurrence-1", {
+      movedStartMinute: 600,
+      movedEndMinute: 0,
+    })));
+    await assertFails(docRef.set(occurrenceData("user123", "occurrence-1", {
+      movedStartMinute: 600,
+      movedEndMinute: 1441,
     })));
     await assertFails(docRef.set(occurrenceData("user123", "occurrence-1", {
       movedStartMinute: 600,
@@ -3572,14 +3588,42 @@ describe("Firestore Rules for baseTimelineSetup", () => {
     return db.collection("users").doc(uid).collection("baseTimelineSetup").doc(setupId);
   }
 
+  function baseTimelineSetupData(uid = "user123", overrides = {}) {
+    return {
+      uid,
+      updatedAt: new Date(),
+      schemaVersion: 3,
+      revision: 1,
+      classRoutineItemIds: [], workRoutineItemIds: [],
+      eatingRoutineItemIds: [], fixedRoutineItemIds: [],
+      skinCareRoutineItemIds: [],
+      classAuthority: "onboardingSeed", workAuthority: "onboardingSeed",
+      eatingAuthority: "onboardingSeed", fixedAuthority: "onboardingSeed",
+      skinCareAuthority: "onboardingSeed",
+      classLogicalAssetId: null, classLogicalAssetR2Key: null, classBlocks: [],
+      workLogicalAssetId: null, workLogicalAssetR2Key: null, workBlocks: [],
+      eatingSetupPath: null, eatingBlocks: [], mealPlanningGoal: null,
+      mealsPerDay: null, eatingMode: null, foodType: null,
+      foodStyleCustomText: null, mealBudget: null, cookingAbility: null,
+      breakfastMinute: null, lunchMinute: null, dinnerMinute: null,
+      snackMinute: null, extraSnackMinute: null, targetCalories: null,
+      targetProtein: null, eatingPhotoAssetId: null, eatingPhotoR2Key: null,
+      fixedBlocks: [], skinCareSetupPath: null, skinCareSkipped: false,
+      skinCareBlocks: [], skinCareProductNames: null,
+      skinCareProductPhotoAssetId: null, skinCareProductPhotoR2Key: null,
+      skinCareReviewedProducts: [], skinCareFacePhotoAssetId: null,
+      skinCareFacePhotoR2Key: null, skinCareFacePhotoSkipped: false,
+      skinCareSkinType: null, skinCareProblems: [], skinCareBudget: null,
+      skinCarePreference: null, skinCareSelectedProductNames: [],
+      skinCareProductRecommendations: [], skinCareSpecialCareNotes: [],
+      ...overrides,
+    };
+  }
+
   it("owner can create and read baseTimelineSetup document", async () => {
     const db = ownerDb();
     await assertSucceeds(
-      baseTimelineSetupRef(db).set({
-        schemaVersion: 1,
-        updatedAt: new Date().toISOString(),
-        sections: {},
-      })
+      baseTimelineSetupRef(db).set(baseTimelineSetupData())
     );
     const doc = await baseTimelineSetupRef(db).get();
     expect(doc.exists).toBe(true);
@@ -3587,25 +3631,54 @@ describe("Firestore Rules for baseTimelineSetup", () => {
 
   it("owner can update baseTimelineSetup document", async () => {
     const db = ownerDb();
-    await baseTimelineSetupRef(db).set({
-      schemaVersion: 1,
-      updatedAt: new Date().toISOString(),
-      sections: {},
-    });
+    await baseTimelineSetupRef(db).set(baseTimelineSetupData());
     await assertSucceeds(
       baseTimelineSetupRef(db).update({
-        "sections.classes.configured": true,
+        revision: 2,
+        classAuthority: "baseTimeline",
       })
     );
+  });
+
+  it("rejects stale revisions, malformed owners, schema and unknown fields", async () => {
+    const db = ownerDb();
+    const ref = baseTimelineSetupRef(db);
+    await ref.set(baseTimelineSetupData());
+    await assertFails(ref.update({ classAuthority: "baseTimeline" }));
+    await assertFails(ref.set(baseTimelineSetupData("other_user")));
+    await assertFails(ref.set(baseTimelineSetupData("user123", { schemaVersion: 2 })));
+    await assertFails(ref.set(baseTimelineSetupData("user123", { ghostField: true })));
+  });
+
+  it("rejects malformed top-level field types and bounds", async () => {
+    const db = ownerDb();
+    await assertFails(baseTimelineSetupRef(db).set(
+      baseTimelineSetupData("user123", { classBlocks: "not-a-list" })
+    ));
+    await assertFails(baseTimelineSetupRef(db).set(
+      baseTimelineSetupData("user123", { classAuthority: "admin" })
+    ));
+    await assertFails(baseTimelineSetupRef(db).set(
+      baseTimelineSetupData("user123", { breakfastMinute: 1440 })
+    ));
+    await assertFails(baseTimelineSetupRef(db).set(
+      baseTimelineSetupData("user123", { skinCareSkipped: "yes" })
+    ));
+  });
+
+  it("rejects non-current document IDs", async () => {
+    const db = ownerDb();
+    await assertFails(
+      baseTimelineSetupRef(db, "user123", "draft").set(baseTimelineSetupData())
+    );
+    await assertFails(baseTimelineSetupRef(db, "user123", "draft").get());
   });
 
   it("non-owner cannot read or write baseTimelineSetup document", async () => {
     const other = ownerDb("other_user");
     await assertFails(
       baseTimelineSetupRef(other, "user123").set({
-        schemaVersion: 1,
-        updatedAt: new Date().toISOString(),
-        sections: {},
+        ...baseTimelineSetupData(),
       })
     );
     await assertFails(baseTimelineSetupRef(other, "user123").get());
@@ -3615,9 +3688,7 @@ describe("Firestore Rules for baseTimelineSetup", () => {
     const anon = testEnv.unauthenticatedContext().firestore();
     await assertFails(
       baseTimelineSetupRef(anon, "user123").set({
-        schemaVersion: 1,
-        updatedAt: new Date().toISOString(),
-        sections: {},
+        ...baseTimelineSetupData(),
       })
     );
     await assertFails(baseTimelineSetupRef(anon, "user123").get());

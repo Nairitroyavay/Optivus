@@ -843,41 +843,42 @@ void main() {
     });
   });
 
-  group('R: Card Tap Directly Opens Detail Sheet', () {
-    testWidgets(
-      'Tapping overlapping card opens detail sheet directly without resolver',
-      (tester) async {
-        final itemA = RoutineItem(
-          id: 'item_a',
-          title: 'Morning Class',
-          startMinute: 9 * 60,
-          endMinute: 10 * 60,
-          repeatDays: const [1],
-          blockType: RoutineBlockType.hardBlock,
-          hasConflict: true, // legacy value
-        );
+  group('R: Timeline Card Tap Does Not Configure Routine', () {
+    testWidgets('Tapping a front card does not open detail or conflict UI', (
+      tester,
+    ) async {
+      final itemA = RoutineItem(
+        id: 'item_a',
+        title: 'Morning Class',
+        startMinute: 9 * 60,
+        endMinute: 10 * 60,
+        repeatDays: const [1],
+        blockType: RoutineBlockType.hardBlock,
+        hasConflict: true, // legacy value
+      );
 
-        await tester.pumpWidget(
-          ProviderScope(
-            overrides: [
-              routineNotifierProvider.overrideWith(
-                (ref) => _FakeNotifier(ref, initialItems: [itemA]),
-              ),
-            ],
-            child: const MaterialApp(home: Scaffold(body: RoutineTab())),
-          ),
-        );
-        await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            routineNotifierProvider.overrideWith(
+              (ref) => _FakeNotifier(ref, initialItems: [itemA]),
+            ),
+          ],
+          child: const MaterialApp(home: Scaffold(body: RoutineTab())),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-        // Tap card
-        await tester.tap(find.text('Morning Class'));
-        await tester.pumpAndSettle();
+      // Tap card
+      await tester.tap(find.text('Morning Class'));
+      await tester.pumpAndSettle();
 
-        // Routine detail sheet is opened (title 'Morning Class' appears in detail view), NOT conflict resolver
-        expect(find.text('Morning Class'), findsWidgets);
-        expect(find.textContaining('conflict found'), findsNothing);
-      },
-    );
+      // The title remains on the timeline and no configuration UI opens.
+      expect(find.text('Morning Class'), findsWidgets);
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(find.byType(Dialog), findsNothing);
+      expect(find.textContaining('conflict found'), findsNothing);
+    });
   });
 
   group(

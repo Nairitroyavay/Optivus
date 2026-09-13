@@ -230,10 +230,18 @@ class BaseTimelineTransactionCoordinator {
     required String uid,
     required BaseTimelineSection section,
     required List<TimelineBlockDraft> newBlocks,
+    int? expectedRevision,
     required BaseTimelineSetup Function(BaseTimelineSetup current) updateSetup,
   }) async {
     // 1. Fetch current setup and routine items
     final currentSetup = await _setupRepo.fetchSetup(uid);
+    final editorRevision = expectedRevision ?? currentSetup.revision;
+    if (currentSetup.revision != editorRevision) {
+      throw BaseTimelineConcurrencyException(
+        expectedRevision: editorRevision,
+        actualRevision: currentSetup.revision,
+      );
+    }
     final allItems = await _routineRepo.fetchRoutineItems(uid);
 
     // 2. Identify items belonging to this section
@@ -261,7 +269,7 @@ class BaseTimelineTransactionCoordinator {
     final commitResult = await _transactionRepo.replaceBaseTimelineSection(
       uid: uid,
       section: section,
-      expectedRevision: currentSetup.revision,
+      expectedRevision: editorRevision,
       newRoutineItems: newRoutineItems,
       additionalDeleteIds: legacyItemsToDelete,
       buildUpdatedSetup: (liveSetup) {

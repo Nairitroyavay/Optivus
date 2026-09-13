@@ -213,6 +213,76 @@ void main() {
         BaseSetupOrigin.skipped,
       );
     });
+
+    test('wrong embedded owner is rejected during reconstruction', () {
+      final map = BaseTimelineSetup(
+        uid: 'owner-a',
+        updatedAt: DateTime.utc(2026, 9, 13),
+      ).toMap();
+      expect(
+        () => BaseTimelineSetup.fromMap(map, uid: 'owner-b'),
+        throwsFormatException,
+      );
+    });
+
+    test('nullable mode fields clear and remain null after round-trip', () {
+      final setup = BaseTimelineSetup(
+        uid: 'clear-fields',
+        updatedAt: DateTime.utc(2026, 9, 13),
+        eatingSetupPath: 'create',
+        mealPlanningGoal: 'maintain',
+        mealsPerDay: 4,
+        eatingMode: 'home',
+        foodType: 'vegetarian',
+        foodStyleCustomText: 'regional',
+        mealBudget: 'medium',
+        cookingAbility: 'advanced',
+        breakfastMinute: 480,
+        targetCalories: 2200,
+        targetProtein: 130,
+        skinCareSetupPath: 'build_for_me',
+        skinCareSkinType: 'dry',
+        skinCareBudget: 'medium',
+        skinCarePreference: 'simple',
+      );
+
+      final photo = setup.asEatingPhoto(
+        photoAssetId: 'meal-photo',
+        photoR2Key: 'users/clear-fields/meal-photo.jpg',
+      );
+      final products = photo.asSkinCareProducts(productNames: 'Cleanser');
+      final restored = BaseTimelineSetup.fromMap(
+        products.toMap(),
+        uid: 'clear-fields',
+      );
+
+      expect(restored.mealPlanningGoal, isNull);
+      expect(restored.mealsPerDay, isNull);
+      expect(restored.eatingMode, isNull);
+      expect(restored.foodType, isNull);
+      expect(restored.foodStyleCustomText, isNull);
+      expect(restored.mealBudget, isNull);
+      expect(restored.cookingAbility, isNull);
+      expect(restored.breakfastMinute, isNull);
+      expect(restored.targetCalories, isNull);
+      expect(restored.targetProtein, isNull);
+      expect(restored.skinCareSkinType, isNull);
+      expect(restored.skinCareBudget, isNull);
+      expect(restored.skinCarePreference, isNull);
+    });
+
+    test('canonical serialization drops obsolete fields', () {
+      final setup = BaseTimelineSetup(
+        uid: 'canonical-rewrite',
+        updatedAt: DateTime.utc(2026, 9, 13),
+      );
+      final legacyPayload = {...setup.toMap(), 'obsoleteField': 'ghost'};
+      final loaded = BaseTimelineSetup.fromMap(
+        legacyPayload,
+        uid: 'canonical-rewrite',
+      );
+      expect(loaded.toMap(), isNot(contains('obsoleteField')));
+    });
   });
 
   group('Migration from Onboarding Draft & Completion Bundle', () {
@@ -377,6 +447,16 @@ void main() {
           transactionRepo: txRepo,
         );
 
+        // Canonical ownership tracks the existing projected class explicitly.
+        await baseTimelineRepo.saveSetup(
+          'user-a',
+          BaseTimelineSetup(
+            uid: 'user-a',
+            updatedAt: DateTime.now(),
+            classRoutineItemIds: const ['old-class-1'],
+          ),
+        );
+
         // Pre-seed with existing routine items:
         // 1 onboarding class item, 1 manual routine item (must be preserved)
         final oldClassItem = RoutineItem(
@@ -530,7 +610,7 @@ void main() {
           section: BaseTimelineSection.eating,
           newBlocks: eatingBlocks,
           updateSetup: (current) => current.copyWith(
-            eatingSetupPath: 'custom',
+            eatingSetupPath: 'create',
             eatingBlocks: eatingBlocks,
           ),
         );

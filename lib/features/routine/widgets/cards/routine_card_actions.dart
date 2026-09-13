@@ -102,9 +102,9 @@ class RoutineCardActions extends ConsumerWidget {
             ),
           )
         : null;
-    final isPending =
-        (actionState?.templatePending ?? false) ||
-        (actionState?.occurrencePending ?? false);
+    final isPending = occurrenceTargetId != null
+        ? (actionState?.occurrencePending ?? false)
+        : (actionState?.templatePending ?? false);
 
     return LayoutBuilder(
       builder: (context, constraints) {

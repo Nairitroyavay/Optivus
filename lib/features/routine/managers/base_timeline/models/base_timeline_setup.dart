@@ -435,8 +435,13 @@ class BaseTimelineSetup {
       clearSkinCareFacePhotoAssetId: true,
       clearSkinCareFacePhotoR2Key: true,
       skinCareFacePhotoSkipped: false,
+      clearSkinCareSkinType: true,
+      clearSkinCareBudget: true,
+      clearSkinCarePreference: true,
+      skinCareProblems: const [],
       skinCareProductRecommendations: const [],
       skinCareSelectedProductNames: const [],
+      skinCareSpecialCareNotes: const [],
     );
   }
 
@@ -471,7 +476,7 @@ class BaseTimelineSetup {
           productRecommendations ?? skinCareProductRecommendations,
       skinCareSpecialCareNotes: specialCareNotes ?? skinCareSpecialCareNotes,
       skinCareBlocks: blocks ?? skinCareBlocks,
-      skinCareProductNames: null,
+      clearSkinCareProductNames: true,
       clearSkinCareProductPhotoAssetId: true,
       clearSkinCareProductPhotoR2Key: true,
       skinCareReviewedProducts: const [],
@@ -485,17 +490,17 @@ class BaseTimelineSetup {
       skinCareSkipped: true,
       skinCareBlocks: const [],
       skinCareRoutineItemIds: const [],
-      skinCareProductNames: null,
+      clearSkinCareProductNames: true,
       clearSkinCareProductPhotoAssetId: true,
       clearSkinCareProductPhotoR2Key: true,
       skinCareReviewedProducts: const [],
       clearSkinCareFacePhotoAssetId: true,
       clearSkinCareFacePhotoR2Key: true,
       skinCareFacePhotoSkipped: false,
-      skinCareSkinType: null,
+      clearSkinCareSkinType: true,
       skinCareProblems: const [],
-      skinCareBudget: null,
-      skinCarePreference: null,
+      clearSkinCareBudget: true,
+      clearSkinCarePreference: true,
       skinCareSelectedProductNames: const [],
       skinCareProductRecommendations: const [],
       skinCareSpecialCareNotes: const [],
@@ -555,6 +560,20 @@ class BaseTimelineSetup {
       eatingPhotoR2Key: photoR2Key,
       eatingBlocks: blocks ?? eatingBlocks,
       mealsPerDay: meals ?? mealsPerDay,
+      clearMealsPerDay: meals == null,
+      clearMealPlanningGoal: true,
+      clearEatingMode: true,
+      clearFoodType: true,
+      clearFoodStyleCustomText: true,
+      clearMealBudget: true,
+      clearCookingAbility: true,
+      clearBreakfastMinute: true,
+      clearLunchMinute: true,
+      clearDinnerMinute: true,
+      clearSnackMinute: true,
+      clearExtraSnackMinute: true,
+      clearTargetCalories: true,
+      clearTargetProtein: true,
     );
   }
 
@@ -584,30 +603,47 @@ class BaseTimelineSetup {
     bool clearWorkLogicalAssetR2Key = false,
     List<TimelineBlockDraft>? workBlocks,
     String? eatingSetupPath,
+    bool clearEatingSetupPath = false,
     List<TimelineBlockDraft>? eatingBlocks,
     String? mealPlanningGoal,
+    bool clearMealPlanningGoal = false,
     int? mealsPerDay,
+    bool clearMealsPerDay = false,
     String? eatingMode,
+    bool clearEatingMode = false,
     String? foodType,
+    bool clearFoodType = false,
     String? foodStyleCustomText,
+    bool clearFoodStyleCustomText = false,
     String? mealBudget,
+    bool clearMealBudget = false,
     String? cookingAbility,
+    bool clearCookingAbility = false,
     int? breakfastMinute,
+    bool clearBreakfastMinute = false,
     int? lunchMinute,
+    bool clearLunchMinute = false,
     int? dinnerMinute,
+    bool clearDinnerMinute = false,
     int? snackMinute,
+    bool clearSnackMinute = false,
     int? extraSnackMinute,
+    bool clearExtraSnackMinute = false,
     int? targetCalories,
+    bool clearTargetCalories = false,
     int? targetProtein,
+    bool clearTargetProtein = false,
     String? eatingPhotoAssetId,
     bool clearEatingPhotoAssetId = false,
     String? eatingPhotoR2Key,
     bool clearEatingPhotoR2Key = false,
     List<TimelineBlockDraft>? fixedBlocks,
     String? skinCareSetupPath,
+    bool clearSkinCareSetupPath = false,
     bool? skinCareSkipped,
     List<TimelineBlockDraft>? skinCareBlocks,
     String? skinCareProductNames,
+    bool clearSkinCareProductNames = false,
     String? skinCareProductPhotoAssetId,
     bool clearSkinCareProductPhotoAssetId = false,
     String? skinCareProductPhotoR2Key,
@@ -619,9 +655,12 @@ class BaseTimelineSetup {
     bool clearSkinCareFacePhotoR2Key = false,
     bool? skinCareFacePhotoSkipped,
     String? skinCareSkinType,
+    bool clearSkinCareSkinType = false,
     List<String>? skinCareProblems,
     String? skinCareBudget,
+    bool clearSkinCareBudget = false,
     String? skinCarePreference,
+    bool clearSkinCarePreference = false,
     List<String>? skinCareSelectedProductNames,
     List<SkinCareProductRecommendationDraft>? skinCareProductRecommendations,
     List<String>? skinCareSpecialCareNotes,
@@ -656,22 +695,40 @@ class BaseTimelineSetup {
           ? null
           : (workLogicalAssetR2Key ?? this.workLogicalAssetR2Key),
       workBlocks: workBlocks ?? this.workBlocks,
-      eatingSetupPath: eatingSetupPath ?? this.eatingSetupPath,
+      eatingSetupPath: clearEatingSetupPath
+          ? null
+          : (eatingSetupPath ?? this.eatingSetupPath),
       eatingBlocks: eatingBlocks ?? this.eatingBlocks,
-      mealPlanningGoal: mealPlanningGoal ?? this.mealPlanningGoal,
-      mealsPerDay: mealsPerDay ?? this.mealsPerDay,
-      eatingMode: eatingMode ?? this.eatingMode,
-      foodType: foodType ?? this.foodType,
-      foodStyleCustomText: foodStyleCustomText ?? this.foodStyleCustomText,
-      mealBudget: mealBudget ?? this.mealBudget,
-      cookingAbility: cookingAbility ?? this.cookingAbility,
-      breakfastMinute: breakfastMinute ?? this.breakfastMinute,
-      lunchMinute: lunchMinute ?? this.lunchMinute,
-      dinnerMinute: dinnerMinute ?? this.dinnerMinute,
-      snackMinute: snackMinute ?? this.snackMinute,
-      extraSnackMinute: extraSnackMinute ?? this.extraSnackMinute,
-      targetCalories: targetCalories ?? this.targetCalories,
-      targetProtein: targetProtein ?? this.targetProtein,
+      mealPlanningGoal: clearMealPlanningGoal
+          ? null
+          : (mealPlanningGoal ?? this.mealPlanningGoal),
+      mealsPerDay: clearMealsPerDay ? null : (mealsPerDay ?? this.mealsPerDay),
+      eatingMode: clearEatingMode ? null : (eatingMode ?? this.eatingMode),
+      foodType: clearFoodType ? null : (foodType ?? this.foodType),
+      foodStyleCustomText: clearFoodStyleCustomText
+          ? null
+          : (foodStyleCustomText ?? this.foodStyleCustomText),
+      mealBudget: clearMealBudget ? null : (mealBudget ?? this.mealBudget),
+      cookingAbility: clearCookingAbility
+          ? null
+          : (cookingAbility ?? this.cookingAbility),
+      breakfastMinute: clearBreakfastMinute
+          ? null
+          : (breakfastMinute ?? this.breakfastMinute),
+      lunchMinute: clearLunchMinute ? null : (lunchMinute ?? this.lunchMinute),
+      dinnerMinute: clearDinnerMinute
+          ? null
+          : (dinnerMinute ?? this.dinnerMinute),
+      snackMinute: clearSnackMinute ? null : (snackMinute ?? this.snackMinute),
+      extraSnackMinute: clearExtraSnackMinute
+          ? null
+          : (extraSnackMinute ?? this.extraSnackMinute),
+      targetCalories: clearTargetCalories
+          ? null
+          : (targetCalories ?? this.targetCalories),
+      targetProtein: clearTargetProtein
+          ? null
+          : (targetProtein ?? this.targetProtein),
       eatingPhotoAssetId: clearEatingPhotoAssetId
           ? null
           : (eatingPhotoAssetId ?? this.eatingPhotoAssetId),
@@ -679,10 +736,14 @@ class BaseTimelineSetup {
           ? null
           : (eatingPhotoR2Key ?? this.eatingPhotoR2Key),
       fixedBlocks: fixedBlocks ?? this.fixedBlocks,
-      skinCareSetupPath: skinCareSetupPath ?? this.skinCareSetupPath,
+      skinCareSetupPath: clearSkinCareSetupPath
+          ? null
+          : (skinCareSetupPath ?? this.skinCareSetupPath),
       skinCareSkipped: skinCareSkipped ?? this.skinCareSkipped,
       skinCareBlocks: skinCareBlocks ?? this.skinCareBlocks,
-      skinCareProductNames: skinCareProductNames ?? this.skinCareProductNames,
+      skinCareProductNames: clearSkinCareProductNames
+          ? null
+          : (skinCareProductNames ?? this.skinCareProductNames),
       skinCareProductPhotoAssetId: clearSkinCareProductPhotoAssetId
           ? null
           : (skinCareProductPhotoAssetId ?? this.skinCareProductPhotoAssetId),
@@ -699,10 +760,16 @@ class BaseTimelineSetup {
           : (skinCareFacePhotoR2Key ?? this.skinCareFacePhotoR2Key),
       skinCareFacePhotoSkipped:
           skinCareFacePhotoSkipped ?? this.skinCareFacePhotoSkipped,
-      skinCareSkinType: skinCareSkinType ?? this.skinCareSkinType,
+      skinCareSkinType: clearSkinCareSkinType
+          ? null
+          : (skinCareSkinType ?? this.skinCareSkinType),
       skinCareProblems: skinCareProblems ?? this.skinCareProblems,
-      skinCareBudget: skinCareBudget ?? this.skinCareBudget,
-      skinCarePreference: skinCarePreference ?? this.skinCarePreference,
+      skinCareBudget: clearSkinCareBudget
+          ? null
+          : (skinCareBudget ?? this.skinCareBudget),
+      skinCarePreference: clearSkinCarePreference
+          ? null
+          : (skinCarePreference ?? this.skinCarePreference),
       skinCareSelectedProductNames:
           skinCareSelectedProductNames ?? this.skinCareSelectedProductNames,
       skinCareProductRecommendations:
@@ -710,6 +777,136 @@ class BaseTimelineSetup {
       skinCareSpecialCareNotes:
           skinCareSpecialCareNotes ?? this.skinCareSpecialCareNotes,
     );
+  }
+
+  /// Durable schema boundary shared by fake/Firebase repositories and
+  /// transaction commits. This intentionally validates persistence shape,
+  /// not every product form rule.
+  void validateForOwner(String pathUid) {
+    final owner = pathUid.trim();
+    if (owner.isEmpty || owner.contains('/') || uid.trim() != owner) {
+      throw ArgumentError('Base Timeline owner does not match document path.');
+    }
+    if (schemaVersion < 1 || schemaVersion > currentSchemaVersion) {
+      throw ArgumentError('Unsupported Base Timeline schema version.');
+    }
+    if (revision < 1) {
+      throw ArgumentError('Base Timeline revision must be positive.');
+    }
+
+    void validateStrings(List<String> values, String field) {
+      if (values.length > 500 || values.toSet().length != values.length) {
+        throw ArgumentError('Base Timeline $field is malformed.');
+      }
+      for (final value in values) {
+        if (value.trim().isEmpty || value.length > 512) {
+          throw ArgumentError('Base Timeline $field is malformed.');
+        }
+      }
+    }
+
+    for (final entry in <(List<String>, String)>[
+      (classRoutineItemIds, 'classRoutineItemIds'),
+      (workRoutineItemIds, 'workRoutineItemIds'),
+      (eatingRoutineItemIds, 'eatingRoutineItemIds'),
+      (fixedRoutineItemIds, 'fixedRoutineItemIds'),
+      (skinCareRoutineItemIds, 'skinCareRoutineItemIds'),
+      (skinCareProblems, 'skinCareProblems'),
+      (skinCareSelectedProductNames, 'skinCareSelectedProductNames'),
+      (skinCareSpecialCareNotes, 'skinCareSpecialCareNotes'),
+    ]) {
+      validateStrings(entry.$1, entry.$2);
+    }
+
+    bool sectionMatches(BaseTimelineSection section, String raw) {
+      final value = raw.trim().toLowerCase();
+      return switch (section) {
+        BaseTimelineSection.classes => value.contains('class'),
+        BaseTimelineSection.work =>
+          value.contains('work') ||
+              value.contains('job') ||
+              value.contains('business'),
+        BaseTimelineSection.eating =>
+          value.contains('eat') || value.contains('meal'),
+        BaseTimelineSection.fixed =>
+          value.contains('fixed') ||
+              value.contains('sleep') ||
+              value.contains('bath'),
+        BaseTimelineSection.skinCare => value.contains('skin'),
+      };
+    }
+
+    void validateBlocks(
+      BaseTimelineSection section,
+      List<TimelineBlockDraft> blocks,
+    ) {
+      if (blocks.length > 500) {
+        throw ArgumentError('Too many Base Timeline blocks.');
+      }
+      final ids = <String>{};
+      for (final block in blocks) {
+        if (block.id.trim().isEmpty ||
+            block.id.length > 256 ||
+            !ids.add(block.id) ||
+            block.title.trim().isEmpty ||
+            block.title.length > 512 ||
+            !sectionMatches(section, block.section) ||
+            block.startMinute < 0 ||
+            block.startMinute > 1439 ||
+            block.endMinute < 0 ||
+            block.endMinute > 1440 ||
+            block.endMinute == block.startMinute ||
+            block.repeatDays.isEmpty ||
+            block.repeatDays.length > 7 ||
+            block.repeatDays.toSet().length != block.repeatDays.length ||
+            block.repeatDays.any((day) => day < 1 || day > 7)) {
+          throw ArgumentError('Malformed ${section.name} timeline block.');
+        }
+      }
+    }
+
+    validateBlocks(BaseTimelineSection.classes, classBlocks);
+    validateBlocks(BaseTimelineSection.work, workBlocks);
+    validateBlocks(BaseTimelineSection.eating, eatingBlocks);
+    validateBlocks(BaseTimelineSection.fixed, fixedBlocks);
+    validateBlocks(BaseTimelineSection.skinCare, skinCareBlocks);
+
+    for (final minute in <int?>[
+      breakfastMinute,
+      lunchMinute,
+      dinnerMinute,
+      snackMinute,
+      extraSnackMinute,
+    ]) {
+      if (minute != null && (minute < 0 || minute > 1439)) {
+        throw ArgumentError('Base Timeline meal time is out of range.');
+      }
+    }
+    if (mealsPerDay != null && mealsPerDay! < 1) {
+      throw ArgumentError('Base Timeline mealsPerDay must be positive.');
+    }
+    if (targetCalories != null && targetCalories! < 1) {
+      throw ArgumentError('Base Timeline targetCalories must be positive.');
+    }
+    if (targetProtein != null && targetProtein! < 1) {
+      throw ArgumentError('Base Timeline targetProtein must be positive.');
+    }
+    if (eatingSetupPath != null &&
+        eatingSetupPath != 'has_routine' &&
+        eatingSetupPath != 'create') {
+      throw ArgumentError('Base Timeline eating setup path is invalid.');
+    }
+    if (skinCareSetupPath != null &&
+        skinCareSetupPath != 'products' &&
+        skinCareSetupPath != 'build_for_me' &&
+        skinCareSetupPath != 'skip') {
+      throw ArgumentError('Base Timeline skin care setup path is invalid.');
+    }
+    if (skinCareSkipped &&
+        ((skinCareSetupPath != null && skinCareSetupPath != 'skip') ||
+            skinCareBlocks.isNotEmpty)) {
+      throw ArgumentError('Skipped skin care setup is inconsistent.');
+    }
   }
 
   Map<String, dynamic> toMap() {
@@ -781,6 +978,15 @@ class BaseTimelineSetup {
     Map<String, dynamic> map, {
     required String uid,
   }) {
+    final pathUid = uid.trim();
+    final embeddedUid = map['uid'];
+    if (pathUid.isEmpty ||
+        embeddedUid is! String ||
+        embeddedUid.trim() != pathUid) {
+      throw FormatException(
+        'Base Timeline owner does not match document path.',
+      );
+    }
     DateTime updated = DateTime.now();
     final rawUpdated = map['updatedAt'];
     if (rawUpdated is Timestamp) {
@@ -790,11 +996,22 @@ class BaseTimelineSetup {
     }
 
     List<TimelineBlockDraft> parseBlocks(dynamic raw) {
-      if (raw is! List) return const [];
+      if (raw == null) return const [];
+      if (raw is! List || raw.any((value) => value is! Map)) {
+        throw const FormatException('Base Timeline blocks are malformed.');
+      }
       return raw
-          .whereType<Map>()
+          .cast<Map>()
           .map((m) => TimelineBlockDraft.fromMap(Map<String, dynamic>.from(m)))
           .toList();
+    }
+
+    List<String> parseStrings(dynamic raw, String field) {
+      if (raw == null) return const [];
+      if (raw is! List || raw.any((value) => value is! String)) {
+        throw FormatException('Base Timeline $field is malformed.');
+      }
+      return raw.cast<String>().toList();
     }
 
     BaseTimelineSectionAuthority parseAuthority(dynamic raw) {
@@ -803,41 +1020,35 @@ class BaseTimelineSetup {
           if (authority.name == raw) return authority;
         }
       }
-      return BaseTimelineSectionAuthority.onboardingSeed;
+      if (raw == null) return BaseTimelineSectionAuthority.onboardingSeed;
+      throw const FormatException('Base Timeline authority is malformed.');
     }
 
-    return BaseTimelineSetup(
-      uid: (map['uid'] as String?)?.trim().isNotEmpty == true
-          ? map['uid'] as String
-          : uid,
+    final setup = BaseTimelineSetup(
+      uid: pathUid,
       updatedAt: updated,
       schemaVersion: (map['schemaVersion'] as num?)?.toInt() ?? 1,
       revision: (map['revision'] as num?)?.toInt() ?? 1,
-      classRoutineItemIds:
-          (map['classRoutineItemIds'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          const [],
-      workRoutineItemIds:
-          (map['workRoutineItemIds'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          const [],
-      eatingRoutineItemIds:
-          (map['eatingRoutineItemIds'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          const [],
-      fixedRoutineItemIds:
-          (map['fixedRoutineItemIds'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          const [],
-      skinCareRoutineItemIds:
-          (map['skinCareRoutineItemIds'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          const [],
+      classRoutineItemIds: parseStrings(
+        map['classRoutineItemIds'],
+        'classRoutineItemIds',
+      ),
+      workRoutineItemIds: parseStrings(
+        map['workRoutineItemIds'],
+        'workRoutineItemIds',
+      ),
+      eatingRoutineItemIds: parseStrings(
+        map['eatingRoutineItemIds'],
+        'eatingRoutineItemIds',
+      ),
+      fixedRoutineItemIds: parseStrings(
+        map['fixedRoutineItemIds'],
+        'fixedRoutineItemIds',
+      ),
+      skinCareRoutineItemIds: parseStrings(
+        map['skinCareRoutineItemIds'],
+        'skinCareRoutineItemIds',
+      ),
       classAuthority: parseAuthority(map['classAuthority']),
       workAuthority: parseAuthority(map['workAuthority']),
       eatingAuthority: parseAuthority(map['eatingAuthority']),
@@ -890,18 +1101,16 @@ class BaseTimelineSetup {
       skinCareFacePhotoSkipped:
           map['skinCareFacePhotoSkipped'] as bool? ?? false,
       skinCareSkinType: map['skinCareSkinType'] as String?,
-      skinCareProblems:
-          (map['skinCareProblems'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          const [],
+      skinCareProblems: parseStrings(
+        map['skinCareProblems'],
+        'skinCareProblems',
+      ),
       skinCareBudget: map['skinCareBudget'] as String?,
       skinCarePreference: map['skinCarePreference'] as String?,
-      skinCareSelectedProductNames:
-          (map['skinCareSelectedProductNames'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          const [],
+      skinCareSelectedProductNames: parseStrings(
+        map['skinCareSelectedProductNames'],
+        'skinCareSelectedProductNames',
+      ),
       skinCareProductRecommendations:
           (map['skinCareProductRecommendations'] as List?)
               ?.whereType<Map>()
@@ -912,12 +1121,13 @@ class BaseTimelineSetup {
               )
               .toList() ??
           const [],
-      skinCareSpecialCareNotes:
-          (map['skinCareSpecialCareNotes'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          const [],
+      skinCareSpecialCareNotes: parseStrings(
+        map['skinCareSpecialCareNotes'],
+        'skinCareSpecialCareNotes',
+      ),
     );
+    setup.validateForOwner(pathUid);
+    return setup;
   }
 
   factory BaseTimelineSetup.fromOnboardingDraft(

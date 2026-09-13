@@ -298,14 +298,17 @@ class RoutineRichTimelineCard extends ConsumerWidget {
             Text(continuation, style: detailStyle),
           ],
 
-          // Three Primary Actions footer
-          const SizedBox(height: RoutineCardPresentation.actionsFooterGap),
-          RoutineCardActions(
-            item: item,
-            color: accent,
-            occurrenceDate: occurrenceDate,
-            actionContext: actionContext,
-          ),
+          // Only the promoted/front occurrence is executable. Back cards are
+          // presentation layers and must not build action hit targets.
+          if (isFront) ...[
+            const SizedBox(height: RoutineCardPresentation.actionsFooterGap),
+            RoutineCardActions(
+              item: item,
+              color: accent,
+              occurrenceDate: occurrenceDate,
+              actionContext: actionContext,
+            ),
+          ],
         ],
       ),
     );
@@ -332,6 +335,35 @@ class RoutineRichTimelineCard extends ConsumerWidget {
             >() !=
         null;
 
+    final row = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(
+            done ? Icons.check_box : Icons.check_box_outline_blank,
+            size: 15,
+            color: done
+                ? OptivusColors.success
+                : OptivusColors.sub.withValues(alpha: 0.7),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            task,
+            style: style.copyWith(
+              color: done ? OptivusColors.sub : OptivusColors.textPrimary,
+              decoration: done ? TextDecoration.lineThrough : null,
+              decorationColor: OptivusColors.sub,
+            ),
+          ),
+        ),
+      ],
+    );
+
+    if (!isFront) return row;
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {
@@ -345,32 +377,7 @@ class RoutineRichTimelineCard extends ConsumerWidget {
               );
         }
       },
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 1),
-            child: Icon(
-              done ? Icons.check_box : Icons.check_box_outline_blank,
-              size: 15,
-              color: done
-                  ? OptivusColors.success
-                  : OptivusColors.sub.withValues(alpha: 0.7),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              task,
-              style: style.copyWith(
-                color: done ? OptivusColors.sub : OptivusColors.textPrimary,
-                decoration: done ? TextDecoration.lineThrough : null,
-                decorationColor: OptivusColors.sub,
-              ),
-            ),
-          ),
-        ],
-      ),
+      child: row,
     );
   }
 }
