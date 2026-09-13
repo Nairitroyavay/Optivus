@@ -10,6 +10,7 @@ import 'package:optivus/features/routine/managers/base_timeline/models/base_time
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/features/routine/services/routine_failure_classifier.dart';
 import 'package:optivus/models/money_models.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_draft.dart';
@@ -2348,6 +2349,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         return RoutineWriteResult.noOp(
           message: decision.message,
           failureCategory: decision.failureCategory,
+          resultingStatus: existing?.status ?? RoutineStatus.planned,
         );
       }
       return RoutineWriteResult.validationFailed(
@@ -2357,6 +2359,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         ),
         message: decision.message,
         failureCategory: decision.failureCategory,
+        resultingStatus: existing?.status ?? RoutineStatus.planned,
       );
     }
 
@@ -2510,7 +2513,10 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           state.occurrences.where((e) => e.id == id).lastOrNull;
 
       if (lastRecord != null && _isSemanticDuplicate(record, lastRecord)) {
-        return RoutineWriteResult.noOp(operationId: operationId);
+        return RoutineWriteResult.noOp(
+          operationId: operationId,
+          resultingStatus: lastRecord.status,
+        );
       }
 
       state = state.copyWith(
@@ -2554,26 +2560,22 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       );
       await _processNextQueuedOccurrence(uid, id);
       if (!completer.isCompleted) {
-        completer.complete(RoutineWriteResult.saved(operationId: operationId));
+        completer.complete(
+          RoutineWriteResult.saved(
+            operationId: operationId,
+            resultingStatus: record.status,
+          ),
+        );
       }
-      return RoutineWriteResult.saved(operationId: operationId);
+      return RoutineWriteResult.saved(
+        operationId: operationId,
+        resultingStatus: record.status,
+      );
     } catch (error) {
       if (!mounted) return _supersededWriteResult(operationId);
       if (_ownerUid != uid) return _supersededWriteResult(operationId);
 
-      RoutineFailureCategory failureCat = RoutineFailureCategory.unknown;
-      if (error is FirebaseException) {
-        if (error.code == 'unavailable' ||
-            error.code == 'network-request-failed') {
-          failureCat = RoutineFailureCategory.offlineOrUnavailable;
-        } else if (error.code == 'deadline-exceeded') {
-          failureCat = RoutineFailureCategory.deadlineExceeded;
-        } else if (error.code == 'permission-denied') {
-          failureCat = RoutineFailureCategory.permissionDenied;
-        }
-      } else if (error is FormatException || error is ArgumentError) {
-        failureCat = RoutineFailureCategory.validation;
-      }
+      final failureCat = classifyRoutineWriteFailure(error);
 
       _logRoutineActionWrite(
         action: action,
@@ -2604,6 +2606,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             : 'Could not update routine. Please try again.',
         operationId: operationId,
         failureCategory: failureCat,
+        resultingStatus: existing?.status ?? RoutineStatus.planned,
       );
       if (!completer.isCompleted) {
         completer.complete(result);
@@ -2666,7 +2669,10 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           ..remove(id),
       );
       intent.completer?.complete(
-        RoutineWriteResult.saved(operationId: intent.operationId),
+        RoutineWriteResult.saved(
+          operationId: intent.operationId,
+          resultingStatus: intent.attemptedRecord.status,
+        ),
       );
       await _processNextQueuedOccurrence(uid, id);
     } catch (error) {
@@ -2678,19 +2684,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         intent.completer?.complete(_supersededWriteResult(intent.operationId));
         return;
       }
-      RoutineFailureCategory failureCat = RoutineFailureCategory.unknown;
-      if (error is FirebaseException) {
-        if (error.code == 'unavailable' ||
-            error.code == 'network-request-failed') {
-          failureCat = RoutineFailureCategory.offlineOrUnavailable;
-        } else if (error.code == 'deadline-exceeded') {
-          failureCat = RoutineFailureCategory.deadlineExceeded;
-        } else if (error.code == 'permission-denied') {
-          failureCat = RoutineFailureCategory.permissionDenied;
-        }
-      } else if (error is FormatException || error is ArgumentError) {
-        failureCat = RoutineFailureCategory.validation;
-      }
+      final failureCat = classifyRoutineWriteFailure(error);
       _logRoutineActionWrite(
         action: intent.attemptedRecord.action,
         occurrenceSource: intent.attemptedRecord.source,
@@ -2720,6 +2714,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
               : 'Could not update routine. Please try again.',
           operationId: intent.operationId,
           failureCategory: failureCat,
+          resultingStatus:
+              intent.previousRecord?.status ?? RoutineStatus.planned,
         ),
       );
       await _processNextQueuedOccurrence(uid, id);
@@ -2741,26 +2737,35 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
 
     final existing = _occurrenceFor(itemId, date);
-    if (existing == null) {
-      return const RoutineWriteResult.noOp(
-        message: 'No occurrence action to undo.',
+    final decision = RoutineTransitionPolicy.evaluate(
+      existingRecord: existing,
+      requestedAction: RoutineOccurrenceAction.undo,
+    );
+    if (!decision.isAllowed && decision.isNoOp) {
+      return RoutineWriteResult.noOp(
+        message: decision.message,
+        resultingStatus: RoutineStatus.planned,
       );
     }
-    if (!existing.undoToPlannedAllowed) {
+    if (!decision.isAllowed) {
       return RoutineWriteResult.validationFailed(
-        const RoutineValidationResult.invalid(
+        RoutineValidationResult.invalid(
           errorType: RoutineValidationErrorType.missingData,
-          userSafeMessage: 'This action can no longer be undone.',
+          userSafeMessage:
+              decision.message ?? 'This action can no longer be undone.',
         ),
-        failureCategory: RoutineFailureCategory.invalidTransition,
+        message: decision.message,
+        failureCategory: decision.failureCategory,
+        resultingStatus: existing?.status,
       );
     }
+    final undoRecord = existing!;
 
     final operationId = _stableOperationId('occurrence_undo', [
       uid,
       itemId,
       dateKey,
-      existing.operationKey,
+      undoRecord.operationKey,
     ]);
     final snapshot = _historySnapshotForItemId(itemId, uid);
     if (snapshot == null) {
@@ -2793,8 +2798,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       ownerUid: uid,
       occurrenceId: id,
       operationId: operationId,
-      attemptedRecord: existing, // attempted to revert
-      previousRecord: existing,
+      attemptedRecord: undoRecord, // attempted to revert
+      previousRecord: undoRecord,
       createdAt: DateTime.now().toUtc(),
       event: event,
     );
@@ -2821,24 +2826,34 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         failedOccurrenceIntentsById: {...state.failedOccurrenceIntentsById}
           ..remove(id),
       );
-      return RoutineWriteResult.saved(operationId: operationId);
+      return RoutineWriteResult.saved(
+        operationId: operationId,
+        resultingStatus: RoutineStatus.planned,
+      );
     } catch (error) {
       if (!mounted) return _supersededWriteResult(operationId);
       if (_ownerUid != uid) return _supersededWriteResult(operationId);
+      final failureCat = classifyRoutineWriteFailure(error);
       state = state.copyWith(
         pendingOccurrenceIds: state.pendingOccurrenceIds
             .where((e) => e != id)
             .toSet(),
-        occurrences: [...state.occurrences, existing],
+        occurrences: [...state.occurrences, undoRecord],
         failedOccurrenceIntentsById: {
           ...state.failedOccurrenceIntentsById,
           id: intent,
         },
-        error: 'Could not update routine. Please try again.',
+        error: failureCat == RoutineFailureCategory.offlineOrUnavailable
+            ? 'Offline / sync pending.'
+            : 'Could not update routine. Please try again.',
       );
       return RoutineWriteResult.retryRequired(
         operationId: operationId,
-        message: 'Could not update routine. Please try again.',
+        message: failureCat == RoutineFailureCategory.offlineOrUnavailable
+            ? 'Offline / sync pending.'
+            : 'Could not update routine. Please try again.',
+        failureCategory: failureCat,
+        resultingStatus: undoRecord.status,
       );
     }
   }
@@ -2883,10 +2898,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           failedOccurrenceIntentsById: {...state.failedOccurrenceIntentsById}
             ..remove(occurrenceId),
         );
-        return RoutineWriteResult.saved(operationId: intent.operationId);
+        return RoutineWriteResult.saved(
+          operationId: intent.operationId,
+          resultingStatus: RoutineStatus.planned,
+        );
       } catch (error) {
         if (!mounted) return _supersededWriteResult(intent.operationId);
         if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
+        final failureCat = classifyRoutineWriteFailure(error);
         state = state.copyWith(
           pendingOccurrenceIds: state.pendingOccurrenceIds
               .where((e) => e != occurrenceId)
@@ -2896,11 +2915,17 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             ...state.failedOccurrenceIntentsById,
             occurrenceId: intent,
           },
-          error: 'Could not update routine. Please try again.',
+          error: failureCat == RoutineFailureCategory.offlineOrUnavailable
+              ? 'Offline / sync pending.'
+              : 'Could not update routine. Please try again.',
         );
         return RoutineWriteResult.retryRequired(
           operationId: intent.operationId,
-          message: 'Could not update routine. Please try again.',
+          message: failureCat == RoutineFailureCategory.offlineOrUnavailable
+              ? 'Offline / sync pending.'
+              : 'Could not update routine. Please try again.',
+          failureCategory: failureCat,
+          resultingStatus: intent.previousRecord?.status,
         );
       }
     }
@@ -2941,7 +2966,10 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         failedOccurrenceIntentsById: {...state.failedOccurrenceIntentsById}
           ..remove(occurrenceId),
       );
-      return RoutineWriteResult.saved(operationId: intent.operationId);
+      return RoutineWriteResult.saved(
+        operationId: intent.operationId,
+        resultingStatus: record.status,
+      );
     } catch (error) {
       if (!mounted) return _supersededWriteResult(intent.operationId);
       if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
@@ -2953,6 +2981,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         result: 'failure',
         error: error,
       );
+      final failureCat = classifyRoutineWriteFailure(error);
       state = state.copyWith(
         pendingOccurrenceIds: state.pendingOccurrenceIds
             .where((e) => e != occurrenceId)
@@ -2966,11 +2995,18 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           ...state.failedOccurrenceIntentsById,
           occurrenceId: retryIntent,
         },
-        error: 'Could not update routine. Please try again.',
+        error: failureCat == RoutineFailureCategory.offlineOrUnavailable
+            ? 'Offline / sync pending.'
+            : 'Could not update routine. Please try again.',
       );
       return RoutineWriteResult.retryRequired(
         operationId: intent.operationId,
-        message: 'Could not update routine. Please try again.',
+        message: failureCat == RoutineFailureCategory.offlineOrUnavailable
+            ? 'Offline / sync pending.'
+            : 'Could not update routine. Please try again.',
+        failureCategory: failureCat,
+        resultingStatus:
+            retryIntent.previousRecord?.status ?? RoutineStatus.planned,
       );
     }
   }
@@ -3364,10 +3400,28 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     }
     final item = state.items[targetIndex];
 
-    final endMinute = startMinute + durationMinutes;
+    final rawEndMinute = startMinute + durationMinutes;
+    final endMinute = rawEndMinute <= 1440 ? rawEndMinute : rawEndMinute % 1440;
+    if (endMinute == startMinute) {
+      return RoutineWriteResult.validationFailed(
+        const RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.invalidTime,
+          userSafeMessage: 'Move duration must be less than 24 hours.',
+        ),
+        resultingStatus:
+            _occurrenceFor(
+              itemId,
+              occurrenceDate ??
+                  _occurrenceAnchorDate(itemId, state.selectedDay),
+            )?.status ??
+            RoutineStatus.planned,
+      );
+    }
     final dummyItem = item.copyWith(
       startMinute: startMinute,
       endMinute: endMinute,
+      crossesMidnight: endMinute <= startMinute,
+      endsNextDay: endMinute <= startMinute,
       date: TimelineUtils.dateOnly(date),
       repeatDays: const [],
       clearConflict: true,
@@ -3379,7 +3433,16 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       operation: RoutineValidationOperation.move,
     );
     if (!validation.isValid) {
-      return RoutineWriteResult.validationFailed(validation);
+      return RoutineWriteResult.validationFailed(
+        validation,
+        resultingStatus:
+            _occurrenceFor(
+              itemId,
+              occurrenceDate ??
+                  _occurrenceAnchorDate(itemId, state.selectedDay),
+            )?.status ??
+            RoutineStatus.planned,
+      );
     }
 
     final anchor =
@@ -3413,6 +3476,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     RoutineItem item, {
     DateTime? occurrenceDate,
     DateTime? displayDate,
+    int? startMinute,
+    int? durationMinutes,
   }) async {
     final baseDate = displayDate ?? occurrenceDate ?? state.selectedDay;
     final tomorrow = TimelineUtils.dateOnly(
@@ -3421,8 +3486,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return await moveItem(
       itemId: item.id,
       date: tomorrow,
-      startMinute: item.startMinute,
-      durationMinutes: item.durationMinutes,
+      startMinute: startMinute ?? item.startMinute,
+      durationMinutes: durationMinutes ?? item.durationMinutes,
       occurrenceDate: occurrenceDate,
     );
   }

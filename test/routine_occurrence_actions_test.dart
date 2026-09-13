@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +11,8 @@ import 'package:optivus/features/routine/models/routine_day_entry.dart';
 import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/sheets/routine_move_sheet.dart';
+import 'package:optivus/features/routine/services/routine_action_executor.dart';
+import 'package:optivus/features/routine/services/routine_materializer.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_actions.dart';
 import 'package:optivus/models/routine_event_record.dart';
 import 'package:optivus/models/routine_item.dart';
@@ -280,19 +284,18 @@ void main() {
       for (final itemId in templates.keys) {
         expectOnboardingProvenance(recordsByItemId[itemId]!, itemId: itemId);
       }
-      expect(recordsByItemId['t_start']!.action, 'start');
+      expect(recordsByItemId['t_start']!.action, 'project');
       expect(recordsByItemId['t_done']!.action, 'complete');
       expect(recordsByItemId['t_move']!.action, 'move');
       expect(recordsByItemId['t_reschedule']!.action, 'reschedule');
-      expect(recordsByItemId['t_tracker']!.action, 'startTracker');
+      expect(recordsByItemId['t_tracker']!.action, 'project');
       expect(recordsByItemId['t_money']!.action, 'complete');
       expect(recordsByItemId['t_checkin']!.action, 'checkIn');
 
       final eventsByItemId = {
         for (final event in state.events) event.routineItemId: event,
       };
-      expect(eventsByItemId['t_start']!.source, 'routine');
-      expect(eventsByItemId['t_start']!.eventType, RoutineEventType.started);
+      expect(eventsByItemId['t_start'], isNull);
       expect(eventsByItemId['t_done']!.source, 'routine');
       expect(eventsByItemId['t_done']!.eventType, RoutineEventType.completed);
       expect(eventsByItemId['t_move']!.source, 'routine');
@@ -302,8 +305,7 @@ void main() {
         eventsByItemId['t_reschedule']!.eventType,
         RoutineEventType.rescheduled,
       );
-      expect(eventsByItemId['t_tracker']!.source, 'tracker');
-      expect(eventsByItemId['t_tracker']!.eventType, RoutineEventType.started);
+      expect(eventsByItemId['t_tracker'], isNull);
       expect(eventsByItemId['t_money']!.source, 'money');
       expect(eventsByItemId['t_money']!.eventType, RoutineEventType.completed);
       expect(eventsByItemId['t_checkin']!.source, 'checkIn');
@@ -741,18 +743,28 @@ void main() {
   });
 
   test('Account switch during pending', () async {
-    historyRepo.failCount = 999;
+    historyRepo.delayMs = 50;
     final notifier = container.read(routineNotifierProvider.notifier);
-    const uid = 'user_1';
-    await repo.createRoutineItem(uid, createTemplate(uid, 't1'));
-    await notifier.loadForOwner(uid);
+    const ownerA = 'user_1';
+    const ownerB = 'user_2';
+    await repo.createRoutineItem(ownerA, createTemplate(ownerA, 't1'));
+    await notifier.loadForOwner(ownerA);
 
-    notifier.markCompleted('t1');
-    // Don't wait for completion
+    final pending = notifier.markCompleted('t1');
 
     notifier.resetForSignedOut();
+    final result = await pending;
+    await notifier.loadForOwner(ownerB);
+
+    expect(result.outcome, RoutineWriteOutcome.superseded);
+    expect(result.failureCategory, RoutineFailureCategory.ownerSuperseded);
+    expect(result.resultingStatus, isNull);
+    expect(notifier.ownerUid, ownerB);
     expect(
-      container.read(routineNotifierProvider).pendingOccurrenceIds,
+      container
+          .read(routineNotifierProvider)
+          .occurrences
+          .where((entry) => entry.ownerUid == ownerA),
       isEmpty,
     );
   });
@@ -879,7 +891,249 @@ void main() {
     final second = await notifier.startFlexibleTask('t1');
     expect(second.outcome, RoutineWriteOutcome.noOp);
     expect(second.failureCategory, RoutineFailureCategory.alreadyActive);
+    expect(second.resultingStatus, RoutineStatus.active);
   });
+
+  test('Active occurrence without timer metadata cannot Start again', () async {
+    final notifier = container.read(routineNotifierProvider.notifier);
+    const uid = 'user_1';
+    final item = createTemplate(uid, 't_active_legacy');
+    final date = DateTime(2026, 9, 10);
+    await repo.createRoutineItem(uid, item);
+    await historyRepo.appendHistory(
+      uid,
+      RoutineOccurrenceRecord(
+        id: stableRoutineOccurrenceId(
+          ownerUid: uid,
+          routineItemId: item.id,
+          occurrenceDateKey: routineLocalDateKey(date),
+        ),
+        ownerUid: uid,
+        routineItemId: item.id,
+        occurrenceDateKey: routineLocalDateKey(date),
+        status: RoutineStatus.active,
+        source: 'routine',
+        action: 'start',
+        operationKey: 'legacy-active-no-timer',
+        createdAt: DateTime.utc(2026, 9, 10),
+        updatedAt: DateTime.utc(2026, 9, 10),
+      ),
+    );
+    await notifier.loadForOwner(uid);
+    final eventsBefore = container.read(routineNotifierProvider).events.length;
+
+    final result = await notifier.startRoutineItem(
+      item.id,
+      occurrenceDate: date,
+    );
+
+    expect(result.outcome, RoutineWriteOutcome.noOp);
+    expect(result.failureCategory, RoutineFailureCategory.alreadyActive);
+    expect(result.resultingStatus, RoutineStatus.active);
+    expect(container.read(routineNotifierProvider).events.length, eventsBefore);
+    final occurrence = container
+        .read(routineNotifierProvider)
+        .occurrences
+        .single;
+    expect(occurrence.startedAt, isNull);
+    expect(occurrence.countdownDurationSeconds, isNull);
+  });
+
+  testWidgets('Executor observes immutable exact-operation metadata', (
+    tester,
+  ) async {
+    const uid = 'user_a';
+    final item = createTemplate(uid, 't_observed');
+    await repo.createRoutineItem(uid, item);
+    await container.read(routineNotifierProvider.notifier).loadForOwner(uid);
+    RoutineActionExecutionObservation? observation;
+    RoutineActionExecutor.observer = (value) => observation = value;
+    addTearDown(() => RoutineActionExecutor.observer = null);
+    final actionContext = RoutineActionContext(
+      instanceId: 's:t_observed:2026-09-20',
+      templateId: item.id,
+      occurrenceDateKey: '2026-09-20',
+      displayDateKey: '2026-09-20',
+      kind: RoutineDayEntryKind.scheduled,
+      item: item,
+    );
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Consumer(
+              builder: (context, ref, _) => TextButton(
+                onPressed: () {
+                  RoutineActionExecutor.execute(
+                    ref: ref,
+                    actionContext: actionContext,
+                    action: RoutineOccurrenceAction.start,
+                    perform: () => Future.value(
+                      const RoutineWriteResult.saved(
+                        operationId: 'op-observed',
+                        resultingStatus: RoutineStatus.active,
+                      ),
+                    ),
+                    showFeedback: false,
+                  );
+                },
+                child: const Text('Execute'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await container.read(routineNotifierProvider.notifier).loadForOwner(uid);
+    await tester.tap(find.text('Execute'));
+    await tester.pumpAndSettle();
+
+    expect(observation?.ownerUidAtStart, uid);
+    expect(observation?.instanceId, actionContext.instanceId);
+    expect(observation?.occurrenceDateKey, '2026-09-20');
+    expect(observation?.oldStatus, RoutineStatus.planned);
+    expect(observation?.requestedAction, RoutineOccurrenceAction.start);
+    expect(observation?.operationId, isNotEmpty);
+    expect(observation?.writeOutcome, RoutineWriteOutcome.saved);
+    expect(observation?.resultingStatus, RoutineStatus.active);
+  });
+
+  testWidgets('Executor exposes the canonical user-safe outcome messages', (
+    tester,
+  ) async {
+    final messengerKey = GlobalKey<ScaffoldMessengerState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        scaffoldMessengerKey: messengerKey,
+        home: const Scaffold(body: SizedBox.shrink()),
+      ),
+    );
+
+    Future<void> expectMessage(
+      RoutineWriteResult result,
+      String expected,
+    ) async {
+      RoutineActionExecutor.showOutcomeFeedbackWithMessenger(
+        messengerKey.currentState,
+        result,
+      );
+      await tester.pump();
+      expect(find.text(expected), findsOneWidget);
+      messengerKey.currentState!.clearSnackBars();
+      await tester.pumpAndSettle();
+    }
+
+    await expectMessage(const RoutineWriteResult.saved(), 'Saved');
+    await expectMessage(
+      const RoutineWriteResult.noOp(
+        failureCategory: RoutineFailureCategory.alreadyCompleted,
+      ),
+      'Already completed',
+    );
+    await expectMessage(
+      const RoutineWriteResult.noOp(
+        failureCategory: RoutineFailureCategory.alreadyActive,
+      ),
+      'Already active',
+    );
+    await expectMessage(
+      const RoutineWriteResult(
+        outcome: RoutineWriteOutcome.validationFailed,
+        message: 'Safe validation reason',
+      ),
+      'Safe validation reason',
+    );
+    await expectMessage(
+      const RoutineWriteResult.retryRequired(
+        failureCategory: RoutineFailureCategory.offlineOrUnavailable,
+      ),
+      'Offline / sync pending',
+    );
+    await expectMessage(
+      const RoutineWriteResult.retryRequired(),
+      'Retry needed',
+    );
+    await expectMessage(
+      const RoutineWriteResult.superseded(),
+      'Operation superseded',
+    );
+  });
+
+  testWidgets(
+    'Executor keeps starting-owner attribution for a pending superseded result',
+    (tester) async {
+      const ownerA = 'user_a';
+      const ownerB = 'user_b';
+      final item = createTemplate(ownerA, 't_pending_owner');
+      await repo.createRoutineItem(ownerA, item);
+      await container
+          .read(routineNotifierProvider.notifier)
+          .loadForOwner(ownerA);
+      final resultCompleter = Completer<RoutineWriteResult>();
+      final observed = Completer<RoutineActionExecutionObservation>();
+      RoutineActionExecutor.observer = (value) {
+        if (!observed.isCompleted) observed.complete(value);
+      };
+      addTearDown(() => RoutineActionExecutor.observer = null);
+      final context = RoutineActionContext.fallback(
+        item: item,
+        occurrenceDate: DateTime(2026, 9, 20),
+      );
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            home: Scaffold(
+              body: Consumer(
+                builder: (_, ref, child) => TextButton(
+                  onPressed: () => RoutineActionExecutor.execute(
+                    ref: ref,
+                    actionContext: context,
+                    action: RoutineOccurrenceAction.complete,
+                    perform: () => resultCompleter.future,
+                    showFeedback: false,
+                  ),
+                  child: const Text('Pending execute'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await container
+          .read(routineNotifierProvider.notifier)
+          .loadForOwner(ownerA);
+      await tester.tap(find.text('Pending execute'));
+      await tester.pump();
+      container.read(routineNotifierProvider.notifier).resetForSignedOut();
+      await container
+          .read(routineNotifierProvider.notifier)
+          .loadForOwner(ownerB);
+      resultCompleter.complete(
+        const RoutineWriteResult.superseded(operationId: 'op-superseded'),
+      );
+      await tester.pumpAndSettle();
+      final observation = await observed.future;
+
+      expect(observation.ownerUidAtStart, ownerA);
+      expect(observation.writeOutcome, RoutineWriteOutcome.superseded);
+      expect(
+        observation.failureCategory,
+        RoutineFailureCategory.ownerSuperseded,
+      );
+      expect(observation.resultingStatus, isNull);
+      expect(container.read(routineNotifierProvider.notifier).ownerUid, ownerB);
+      expect(
+        container
+            .read(routineNotifierProvider)
+            .occurrences
+            .where((entry) => entry.ownerUid == ownerA),
+        isEmpty,
+      );
+    },
+  );
 
   test(
     'Done twice on completed item returns noOp and creates no duplicate event',
@@ -972,6 +1226,121 @@ void main() {
   );
 
   test(
+    'Overnight move persists minute-of-day range and re-move keeps source identity',
+    () async {
+      final notifier = container.read(routineNotifierProvider.notifier);
+      const uid = 'user_1';
+      final item = createTemplate(uid, 't_overnight').copyWith(
+        startMinute: 23 * 60,
+        endMinute: 6 * 60 + 30,
+        crossesMidnight: true,
+        endsNextDay: true,
+      );
+      final source = DateTime(2026, 9, 15);
+      await repo.createRoutineItem(uid, item);
+      await notifier.loadForOwner(uid);
+
+      final first = await notifier.moveItem(
+        itemId: item.id,
+        date: DateTime(2026, 9, 20),
+        startMinute: 23 * 60,
+        durationMinutes: 450,
+        occurrenceDate: source,
+      );
+      expect(first.outcome, RoutineWriteOutcome.saved);
+      expect(first.resultingStatus, RoutineStatus.moved);
+      var occurrence = container
+          .read(routineNotifierProvider)
+          .occurrences
+          .single;
+      expect(occurrence.occurrenceDateKey, '2026-09-15');
+      expect(occurrence.movedToDateKey, '2026-09-20');
+      expect(occurrence.movedStartMinute, 1380);
+      expect(occurrence.movedEndMinute, 390);
+
+      final second = await notifier.moveItem(
+        itemId: item.id,
+        date: DateTime(2026, 9, 22),
+        startMinute: 23 * 60,
+        durationMinutes: 450,
+        occurrenceDate: source,
+      );
+      expect(second.outcome, RoutineWriteOutcome.saved);
+      occurrence = container.read(routineNotifierProvider).occurrences.single;
+      expect(occurrence.occurrenceDateKey, '2026-09-15');
+      expect(occurrence.movedToDateKey, '2026-09-22');
+    },
+  );
+
+  test(
+    'Native and moved overnight continuation actions target source occurrences',
+    () async {
+      final notifier = container.read(routineNotifierProvider.notifier);
+      const uid = 'user_1';
+      RoutineItem overnight(String id) => createTemplate(uid, id).copyWith(
+        startMinute: 23 * 60,
+        endMinute: 6 * 60 + 30,
+        crossesMidnight: true,
+        endsNextDay: true,
+        repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+      );
+      final native = overnight('native_overnight');
+      final moved = overnight('moved_overnight');
+      await repo.createRoutineItem(uid, native);
+      await repo.createRoutineItem(uid, moved);
+      await notifier.loadForOwner(uid);
+
+      final nativeEntry = RoutineOccurrenceProjector.entriesForDay(
+        [native],
+        const [],
+        DateTime(2026, 9, 16),
+      ).firstWhere((entry) => entry.kind == RoutineDayEntryKind.continuation);
+      final nativeContext = RoutineActionContext.fromDayEntry(nativeEntry);
+      await notifier.startRoutineItem(
+        native.id,
+        occurrenceDate: nativeContext.occurrenceDate,
+      );
+      await notifier.completeRoutineItem(
+        native.id,
+        occurrenceDate: nativeContext.occurrenceDate,
+      );
+
+      await notifier.moveItem(
+        itemId: moved.id,
+        date: DateTime(2026, 9, 20),
+        startMinute: 23 * 60,
+        durationMinutes: 450,
+        occurrenceDate: DateTime(2026, 9, 10),
+      );
+      final movedEntry = RoutineOccurrenceProjector.entriesForDay(
+        [moved],
+        container.read(routineNotifierProvider).occurrences,
+        DateTime(2026, 9, 21),
+      ).firstWhere((entry) => entry.occurrenceId != null);
+      final movedContext = RoutineActionContext.fromDayEntry(movedEntry);
+      await notifier.startRoutineItem(
+        moved.id,
+        occurrenceDate: movedContext.occurrenceDate,
+      );
+      await notifier.completeRoutineItem(
+        moved.id,
+        occurrenceDate: movedContext.occurrenceDate,
+      );
+
+      final records = {
+        for (final occurrence
+            in container.read(routineNotifierProvider).occurrences)
+          occurrence.routineItemId: occurrence,
+      };
+      expect(records[native.id]?.occurrenceDateKey, '2026-09-15');
+      expect(records[native.id]?.status, RoutineStatus.completed);
+      expect(records[moved.id]?.occurrenceDateKey, '2026-09-10');
+      expect(records[moved.id]?.movedToDateKey, '2026-09-20');
+      expect(records[moved.id]?.status, RoutineStatus.completed);
+    },
+  );
+
+  test(
     'Firebase unavailable error produces offlineOrUnavailable failureCategory',
     () async {
       final notifier = container.read(routineNotifierProvider.notifier);
@@ -994,6 +1363,76 @@ void main() {
 
       // Clean up test hook
       transactionRepo.onBeforeMutation = null;
+    },
+  );
+
+  test(
+    'Offline Undo uses the shared failure classification and preserves state',
+    () async {
+      final notifier = container.read(routineNotifierProvider.notifier);
+      const uid = 'user_1';
+      await repo.createRoutineItem(uid, createTemplate(uid, 't_undo_offline'));
+      await notifier.loadForOwner(uid);
+      final started = await notifier.startRoutineItem('t_undo_offline');
+      expect(started.outcome, RoutineWriteOutcome.saved);
+      transactionRepo.onBeforeMutation = () async {
+        throw FirebaseException(plugin: 'cloud_firestore', code: 'unavailable');
+      };
+
+      final result = await notifier.undoOccurrenceAction('t_undo_offline');
+
+      expect(result.outcome, RoutineWriteOutcome.retryRequired);
+      expect(
+        result.failureCategory,
+        RoutineFailureCategory.offlineOrUnavailable,
+      );
+      expect(result.resultingStatus, RoutineStatus.active);
+      expect(
+        container.read(routineNotifierProvider).occurrences.single.status,
+        RoutineStatus.active,
+      );
+      transactionRepo.onBeforeMutation = null;
+    },
+  );
+
+  test(
+    'Past and future explicit actions preserve exact occurrence dates',
+    () async {
+      final notifier = container.read(routineNotifierProvider.notifier);
+      const uid = 'user_1';
+      for (final id in [
+        'past_start',
+        'past_done',
+        'past_move',
+        'future_start',
+      ]) {
+        await repo.createRoutineItem(uid, createTemplate(uid, id));
+      }
+      await notifier.loadForOwner(uid);
+      final past = DateTime(2026, 9, 10);
+      final future = DateTime(2026, 9, 20);
+
+      await notifier.startRoutineItem('past_start', occurrenceDate: past);
+      await notifier.completeRoutineItem('past_done', occurrenceDate: past);
+      await notifier.moveItem(
+        itemId: 'past_move',
+        date: DateTime(2026, 9, 11),
+        startMinute: 700,
+        durationMinutes: 60,
+        occurrenceDate: past,
+      );
+      await notifier.startRoutineItem('future_start', occurrenceDate: future);
+
+      final byItem = {
+        for (final occurrence
+            in container.read(routineNotifierProvider).occurrences)
+          occurrence.routineItemId: occurrence,
+      };
+      expect(byItem['past_start']?.occurrenceDateKey, '2026-09-10');
+      expect(byItem['past_done']?.occurrenceDateKey, '2026-09-10');
+      expect(byItem['past_move']?.occurrenceDateKey, '2026-09-10');
+      expect(byItem['past_move']?.movedToDateKey, '2026-09-11');
+      expect(byItem['future_start']?.occurrenceDateKey, '2026-09-20');
     },
   );
 
@@ -1026,6 +1465,40 @@ void main() {
 
       expect(find.text('Done'), findsOneWidget);
       expect(find.text('Start'), findsOneWidget);
+      final done = find.byKey(
+        const ValueKey('routine-action-done-t_completed'),
+      );
+      final start = find.byKey(
+        const ValueKey('routine-action-start-t_completed'),
+      );
+      expect(
+        tester
+            .widget<GestureDetector>(
+              find.descendant(of: done, matching: find.byType(GestureDetector)),
+            )
+            .onTap,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<GestureDetector>(
+              find.descendant(
+                of: start,
+                matching: find.byType(GestureDetector),
+              ),
+            )
+            .onTap,
+        isNull,
+      );
+      expect(find.textContaining(RegExp(r'^\d{2}:\d{2}:\d{2}$')), findsNothing);
+      expect(
+        tester
+            .widget<Opacity>(
+              find.descendant(of: done, matching: find.byType(Opacity)),
+            )
+            .opacity,
+        0.45,
+      );
     },
   );
 

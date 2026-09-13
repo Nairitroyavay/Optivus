@@ -7,6 +7,7 @@ import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/features/routine/models/routine_action_context.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/services/routine_action_executor.dart';
+import 'package:optivus/features/routine/services/routine_transition_policy.dart';
 import 'package:optivus/features/routine/services/routine_validation_service.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_presentation.dart';
 import 'package:optivus/features/routine/sheets/routine_move_sheet.dart';
@@ -120,6 +121,18 @@ class RoutineCardActions extends ConsumerWidget {
 
         final isCompleted =
             item.isCompleted || item.status == RoutineStatus.completed;
+        final startDecision = RoutineTransitionPolicy.evaluate(
+          existingRecord: null,
+          requestedAction: item.blockType == RoutineBlockType.trackerTask
+              ? RoutineOccurrenceAction.startTracker
+              : RoutineOccurrenceAction.start,
+          projectedStatus: item.status,
+        );
+        final moveDecision = RoutineTransitionPolicy.evaluate(
+          existingRecord: null,
+          requestedAction: RoutineOccurrenceAction.move,
+          projectedStatus: item.status,
+        );
 
         final hasGenericCountdown =
             item.status == RoutineStatus.active &&
@@ -140,7 +153,10 @@ class RoutineCardActions extends ConsumerWidget {
               : null,
           color: OptivusColors.routineAccent,
           icon: Icons.play_arrow_rounded,
-          isDisabled: isPending || isCompleted || hasGenericCountdown,
+          isDisabled:
+              isPending ||
+              (!startDecision.isAllowed &&
+                  item.status != RoutineStatus.inTracker),
           onTap: () {
             if (!hasScope) return;
             if (isCompleted) {
@@ -220,7 +236,7 @@ class RoutineCardActions extends ConsumerWidget {
           color: OptivusColors.success,
           icon: Icons.check_rounded,
           isSelected: isCompleted,
-          isDisabled: isPending || isCompleted,
+          isDisabled: isPending || !moveDecision.isAllowed,
           onTap: () {
             if (!hasScope) return;
             if (isCompleted) {

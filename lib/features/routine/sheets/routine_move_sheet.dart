@@ -7,6 +7,7 @@ import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/features/routine/models/routine_action_context.dart';
 import 'package:optivus/features/routine/services/routine_action_executor.dart';
+import 'package:optivus/features/routine/services/routine_move_seed.dart';
 
 void showRoutineMoveSheet(
   BuildContext context,
@@ -50,24 +51,45 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
   late DateTime _date;
   late int _startMinute;
   late int _duration;
+  late final int _seedStartMinute;
+  late final int _seedDuration;
+  late final RoutineActionContext _canonicalActionContext;
   bool _pending = false;
   String? _error;
 
-  DateTime get _effectiveOccurrenceDate =>
-      widget.actionContext?.occurrenceDate ?? widget.occurrenceDate ?? _date;
+  DateTime get _sourceOccurrenceDate => _canonicalActionContext.occurrenceDate;
+  DateTime get _displayAnchorDate => _canonicalActionContext.displayDate;
 
   @override
   void initState() {
     super.initState();
-    final initialAnchor =
-        widget.actionContext?.displayDate ??
-        widget.displayDate ??
+    final selectedDay = ref.read(routineNotifierProvider).selectedDay;
+    final sourceAnchor =
+        widget.actionContext?.occurrenceDate ??
         widget.occurrenceDate ??
         widget.item.date ??
-        ref.read(routineNotifierProvider).selectedDay;
+        selectedDay;
+    final initialAnchor =
+        widget.actionContext?.displayDate ?? widget.displayDate ?? sourceAnchor;
+    _canonicalActionContext =
+        widget.actionContext ??
+        RoutineActionContext.fallback(
+          item: widget.item,
+          occurrenceDate: sourceAnchor,
+          displayDate: initialAnchor,
+        );
     _date = TimelineUtils.dateOnly(initialAnchor);
-    _startMinute = widget.item.startMinute;
-    _duration = widget.item.durationMinutes.clamp(1, 24 * 60).toInt();
+    final routineState = ref.read(routineNotifierProvider);
+    final seed = RoutineMoveSeedResolver.resolve(
+      actionContext: _canonicalActionContext,
+      visibleItem: widget.item,
+      templates: routineState.items,
+      occurrences: routineState.occurrences,
+    );
+    _startMinute = seed.startMinute;
+    _duration = seed.durationMinutes;
+    _seedStartMinute = seed.startMinute;
+    _seedDuration = seed.durationMinutes;
   }
 
   @override
@@ -204,11 +226,12 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                     onTap: _pending
                         ? null
                         : () => _runWrite(
+                            RoutineOccurrenceAction.makeTiny,
                             () => ref
                                 .read(routineNotifierProvider.notifier)
                                 .makeTinyVersion(
                                   widget.item,
-                                  occurrenceDate: _effectiveOccurrenceDate,
+                                  occurrenceDate: _sourceOccurrenceDate,
                                 ),
                           ),
                   ),
@@ -220,12 +243,15 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                     onTap: _pending
                         ? null
                         : () => _runWrite(
+                            RoutineOccurrenceAction.move,
                             () => ref
                                 .read(routineNotifierProvider.notifier)
                                 .moveToTomorrow(
                                   widget.item,
-                                  occurrenceDate: _effectiveOccurrenceDate,
-                                  displayDate: _date,
+                                  occurrenceDate: _sourceOccurrenceDate,
+                                  displayDate: _displayAnchorDate,
+                                  startMinute: _seedStartMinute,
+                                  durationMinutes: _seedDuration,
                                 ),
                           ),
                   ),
@@ -258,6 +284,7 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                   onPressed: _pending
                       ? null
                       : () => _runWrite(
+                          RoutineOccurrenceAction.move,
                           () => ref
                               .read(routineNotifierProvider.notifier)
                               .moveItem(
@@ -265,7 +292,7 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                                 date: _date,
                                 startMinute: _startMinute,
                                 durationMinutes: _duration,
-                                occurrenceDate: _effectiveOccurrenceDate,
+                                occurrenceDate: _sourceOccurrenceDate,
                               ),
                         ),
                   child: _pending
@@ -333,7 +360,7 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
           item: widget.item,
           date: _date,
           durationMinutes: _duration,
-          occurrenceDate: _effectiveOccurrenceDate,
+          occurrenceDate: _sourceOccurrenceDate,
         );
     if (start != null) {
       setState(() => _startMinute = start);
@@ -345,14 +372,23 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
     }
   }
 
-  Future<void> _runWrite(Future<RoutineWriteResult> Function() write) async {
+  Future<void> _runWrite(
+    RoutineOccurrenceAction action,
+    Future<RoutineWriteResult> Function() write,
+  ) async {
     if (_pending) return;
     setState(() {
       _pending = true;
       _error = null;
     });
     final messenger = ScaffoldMessenger.maybeOf(context);
-    final result = await write();
+    final result = await RoutineActionExecutor.execute(
+      ref: ref,
+      actionContext: _canonicalActionContext,
+      action: action,
+      perform: write,
+      showFeedback: false,
+    );
     if (!mounted) return;
     if (result.outcome == RoutineWriteOutcome.saved ||
         (result.outcome == RoutineWriteOutcome.noOp &&

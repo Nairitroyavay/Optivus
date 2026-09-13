@@ -76,6 +76,33 @@ void main() {
     expect(allocation!.durationSeconds, 30 * 60);
   });
 
+  test('moved overnight occurrence allocates across its target midnight', () {
+    final existing = RoutineOccurrenceRecord(
+      id: 'overnight-occurrence',
+      ownerUid: 'user_1',
+      routineItemId: 'task',
+      occurrenceDateKey: '2026-09-16',
+      status: RoutineStatus.moved,
+      source: 'routine',
+      action: 'reschedule',
+      operationKey: 'move-overnight',
+      movedToDateKey: '2026-09-20',
+      movedStartMinute: 23 * 60,
+      movedEndMinute: 6 * 60 + 30,
+      createdAt: DateTime.utc(2026, 9, 16),
+      updatedAt: DateTime.utc(2026, 9, 16),
+    );
+
+    final allocation = RoutineCountdownAllocator.allocate(
+      template: item(),
+      occurrenceDateKey: '2026-09-16',
+      actualStart: DateTime(2026, 9, 21, 1),
+      existing: existing,
+    );
+
+    expect(allocation!.durationSeconds, 5 * 60 * 60 + 30 * 60);
+  });
+
   test('unversioned legacy occurrence maps to schema v1', () {
     final record = RoutineOccurrenceRecord.fromMap({
       'id': 'occurrence',

@@ -39,8 +39,9 @@ class RoutineTransitionPolicy {
   static RoutineTransitionDecision evaluate({
     required RoutineOccurrenceRecord? existingRecord,
     required RoutineOccurrenceAction requestedAction,
+    RoutineStatus? projectedStatus,
   }) {
-    final status = existingRecord?.status;
+    final status = existingRecord?.status ?? projectedStatus;
 
     switch (requestedAction) {
       case RoutineOccurrenceAction.complete:
@@ -64,8 +65,7 @@ class RoutineTransitionPolicy {
 
       case RoutineOccurrenceAction.start:
       case RoutineOccurrenceAction.startTracker:
-        if ((status == RoutineStatus.active &&
-                existingRecord?.startedAt != null) ||
+        if (status == RoutineStatus.active ||
             status == RoutineStatus.inTracker) {
           return const RoutineTransitionDecision.noOp(
             message: 'Already active.',

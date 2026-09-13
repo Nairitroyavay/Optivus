@@ -206,7 +206,7 @@ class RoutineOccurrenceFirestoreCodec {
         record.movedStartMinute! > 1439 ||
         record.movedEndMinute! < 1 ||
         record.movedEndMinute! > 1440 ||
-        record.movedEndMinute! <= record.movedStartMinute!) {
+        record.movedEndMinute! == record.movedStartMinute!) {
       throw ArgumentError('Invalid Routine occurrence move range.');
     }
   }

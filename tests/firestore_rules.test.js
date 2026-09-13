@@ -788,6 +788,15 @@ describe("Firestore Rules for Routine durability", () => {
     await assertFails(docRef.set(occurrenceData("user123", "occurrence-1", {
       undoToPlannedAllowed: "yes",
     })));
+
+    await assertSucceeds(docRef.set(occurrenceData("user123", "occurrence-1", {
+      movedStartMinute: 1380,
+      movedEndMinute: 390,
+    })));
+    await assertFails(docRef.set(occurrenceData("user123", "occurrence-1", {
+      movedStartMinute: 600,
+      movedEndMinute: 600,
+    })));
   });
 
   it("allows onboarding occurrence actions only when provenance is preserved", async () => {

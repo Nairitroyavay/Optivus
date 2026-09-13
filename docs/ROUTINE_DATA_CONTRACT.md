@@ -146,6 +146,12 @@ A moved occurrence keeps its original `occurrenceDateKey` and stores
 it from the original day and derives it on the target day. Moving one
 occurrence does not edit the repeating template.
 
+Moved times use the same minute-of-day convention as templates. A moved end
+minute less than its start minute means the single durable occurrence crosses
+midnight. The projector derives a target-day start segment and a next-day
+continuation; both retain the original source `occurrenceDateKey` and occurrence
+record identity.
+
 ## 4. Calendar, timestamp, and timezone policy
 
 `dateKey`, `endDateKey`, `occurrenceDateKey`, and `movedToDateKey` use the

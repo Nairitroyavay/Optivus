@@ -173,15 +173,70 @@ class RoutineOccurrenceProjector {
         occurrenceDateKey: occurrence.occurrenceDateKey,
         occurrenceId: occurrence.id,
       );
+      final movedCrossesMidnight =
+          occurrence.movedStartMinute != null &&
+          occurrence.movedEndMinute != null &&
+          occurrence.movedEndMinute! <= occurrence.movedStartMinute!;
+      final projected = _applyOccurrence(template, occurrence, day);
       result.add(
         RoutineDayEntry(
-          item: _applyOccurrence(template, occurrence, day),
+          item: movedCrossesMidnight
+              ? projected.copyWith(
+                  endMinute: 1440,
+                  crossesMidnight: false,
+                  endsNextDay: false,
+                  isContinuation: false,
+                )
+              : projected,
           instanceId: instanceId,
           templateId: template.id,
           occurrenceDateKey: occurrence.occurrenceDateKey,
           displayDateKey: dateKey,
           occurrenceId: occurrence.id,
           kind: RoutineDayEntryKind.movedIn,
+        ),
+      );
+    }
+
+    // A moved overnight occurrence remains one durable occurrence. Its
+    // next-day continuation is derived for presentation and retains the
+    // original source occurrence identity.
+    final previousDateKey = routineLocalDateKey(
+      day.subtract(const Duration(days: 1)),
+    );
+    for (final occurrence in occurrences) {
+      if (occurrence.movedToDateKey != previousDateKey ||
+          occurrence.movedStartMinute == null ||
+          occurrence.movedEndMinute == null ||
+          occurrence.movedEndMinute! > occurrence.movedStartMinute!) {
+        continue;
+      }
+      final template = templates
+          .where((candidate) => candidate.id == occurrence.routineItemId)
+          .firstOrNull;
+      if (template == null) continue;
+      final projected = _applyOccurrence(template, occurrence, day).copyWith(
+        date: TimelineUtils.dateOnly(day),
+        startMinute: 0,
+        endMinute: occurrence.movedEndMinute,
+        crossesMidnight: false,
+        endsNextDay: false,
+        isContinuation: true,
+      );
+      result.add(
+        RoutineDayEntry(
+          item: projected,
+          instanceId: RoutineDayEntry.deriveInstanceId(
+            kind: RoutineDayEntryKind.continuation,
+            templateId: template.id,
+            occurrenceDateKey: occurrence.occurrenceDateKey,
+            occurrenceId: occurrence.id,
+          ),
+          templateId: template.id,
+          occurrenceDateKey: occurrence.occurrenceDateKey,
+          displayDateKey: dateKey,
+          occurrenceId: occurrence.id,
+          kind: RoutineDayEntryKind.continuation,
         ),
       );
     }

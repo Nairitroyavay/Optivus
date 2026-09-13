@@ -604,7 +604,7 @@ service cloud.firestore {
             && data.movedStartMinute >= 0
             && data.movedStartMinute <= 1439
             && data.movedEndMinute is int
-            && data.movedEndMinute > data.movedStartMinute
+            && data.movedEndMinute != data.movedStartMinute
             && data.movedEndMinute <= 1440
           : true)
         && data.createdAt is timestamp

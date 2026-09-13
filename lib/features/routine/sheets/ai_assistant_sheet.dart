@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/models/routine_action_context.dart';
+import 'package:optivus/features/routine/models/routine_day_entry.dart';
 import 'package:optivus/features/routine/sheets/add_routine_sheet.dart';
 import 'package:optivus/features/routine/sheets/routine_move_sheet.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
@@ -146,14 +148,17 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
 
   List<_RoutineSuggestion> _buildSuggestions() {
     final day = ref.watch(routineNotifierProvider).selectedDay;
-    final items = ref.watch(selectedDayRoutineItemsProvider);
+    final entries = ref.watch(selectedDayRoutineEntriesProvider);
+    final items = entries.map((entry) => entry.item).toList(growable: false);
     final controller = ref.read(routineNotifierProvider.notifier);
     final suggestions = <_RoutineSuggestion>[];
 
-    final missed = items.where((item) {
-      return item.status == RoutineStatus.missed || item.isMissed;
+    final missed = entries.where((entry) {
+      return entry.item.status == RoutineStatus.missed || entry.item.isMissed;
     }).toList();
-    for (final item in missed.take(1)) {
+    for (final entry in missed.take(1)) {
+      final item = entry.item;
+      final actionContext = RoutineActionContext.fromDayEntry(entry);
       suggestions.add(
         _RoutineSuggestion(
           id: 'tiny-${item.id}',
@@ -162,8 +167,16 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
           title: 'Create tiny version',
           body:
               '${item.title} was missed. Suggestion: keep a 5-10 min version today instead of dropping the habit.',
-          accept: () => controller.makeTinyVersion(item),
-          edit: () => showRoutineMoveSheet(context, ref, item),
+          accept: () => controller.makeTinyVersion(
+            item,
+            occurrenceDate: actionContext.occurrenceDate,
+          ),
+          edit: () => showRoutineMoveSheet(
+            context,
+            ref,
+            item,
+            actionContext: actionContext,
+          ),
         ),
       );
     }
@@ -201,14 +214,16 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
       );
     }
 
-    final longTask = items
-        .where((item) {
-          return item.blockType == RoutineBlockType.flexibleTask &&
-              item.durationMinutes > 45;
+    final longEntry = entries
+        .where((entry) {
+          return entry.item.blockType == RoutineBlockType.flexibleTask &&
+              entry.item.durationMinutes > 45;
         })
-        .cast<RoutineItem?>()
-        .firstWhere((item) => item != null, orElse: () => null);
-    if (longTask != null) {
+        .cast<RoutineDayEntry?>()
+        .firstWhere((entry) => entry != null, orElse: () => null);
+    if (longEntry != null) {
+      final longTask = longEntry.item;
+      final actionContext = RoutineActionContext.fromDayEntry(longEntry);
       suggestions.add(
         _RoutineSuggestion(
           id: 'order-${longTask.id}',
@@ -217,8 +232,16 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
           title: 'Suggest better task order',
           body:
               '${longTask.title} is long for a crowded day. Suggestion: split it by making a tiny version now and moving the full block later.',
-          accept: () => controller.makeTinyVersion(longTask),
-          edit: () => showRoutineMoveSheet(context, ref, longTask),
+          accept: () => controller.makeTinyVersion(
+            longTask,
+            occurrenceDate: actionContext.occurrenceDate,
+          ),
+          edit: () => showRoutineMoveSheet(
+            context,
+            ref,
+            longTask,
+            actionContext: actionContext,
+          ),
         ),
       );
     }

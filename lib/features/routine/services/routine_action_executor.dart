@@ -3,12 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/models/routine_action_context.dart';
+import 'package:optivus/features/routine/models/routine_day_entry.dart';
 import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/models/routine_item.dart';
 
 /// One shared execution and feedback coordinator for all Routine occurrence actions.
 class RoutineActionExecutor {
   RoutineActionExecutor._();
+
+  @visibleForTesting
+  static ValueChanged<RoutineActionExecutionObservation>? observer;
 
   /// Executes an action with structured observability and user-facing feedback.
   ///
@@ -22,6 +27,7 @@ class RoutineActionExecutor {
     bool showFeedback = true,
   }) async {
     final oldStatus = actionContext.item.status;
+    final ownerUidAtStart = ref.read(routineNotifierProvider.notifier).ownerUid;
     RoutineWriteResult result;
 
     try {
@@ -36,12 +42,27 @@ class RoutineActionExecutor {
       );
     }
 
+    final observation = RoutineActionExecutionObservation(
+      ownerUidAtStart: ownerUidAtStart,
+      routineItemId: actionContext.templateId,
+      instanceId: actionContext.instanceId,
+      occurrenceId: actionContext.occurrenceId,
+      occurrenceDateKey: actionContext.occurrenceDateKey,
+      displayDateKey: actionContext.displayDateKey,
+      entryKind: actionContext.kind,
+      oldStatus: oldStatus,
+      requestedAction: action,
+      operationId: result.operationId,
+      writeOutcome: result.outcome,
+      resultingStatus: result.resultingStatus,
+      failureCategory: result.failureCategory ?? RoutineFailureCategory.none,
+    );
+    observer?.call(observation);
+
     if (kDebugMode) {
-      final notifier = ref.read(routineNotifierProvider.notifier);
-      final ownerUid = notifier.ownerUid ?? 'anonymous';
       debugPrint(
         'RoutineActionExecution: '
-        'uid=$ownerUid '
+        'uid=${ownerUidAtStart ?? "anonymous"} '
         'routineItemId=${actionContext.templateId} '
         'instanceId=${actionContext.instanceId} '
         'occurrenceId=${actionContext.occurrenceId ?? "none"} '
@@ -52,6 +73,7 @@ class RoutineActionExecutor {
         'requestedAction=${action.name} '
         'operationId=${result.operationId ?? "locally_rejected"} '
         'outcome=${result.outcome.name} '
+        'newStatus=${result.resultingStatus?.name ?? "unavailable"} '
         'failureCategory=${result.failureCategory?.name ?? "none"}',
       );
     }
@@ -153,4 +175,37 @@ class RoutineActionExecutor {
       ),
     );
   }
+}
+
+@immutable
+class RoutineActionExecutionObservation {
+  final String? ownerUidAtStart;
+  final String routineItemId;
+  final String instanceId;
+  final String? occurrenceId;
+  final String occurrenceDateKey;
+  final String displayDateKey;
+  final RoutineDayEntryKind entryKind;
+  final RoutineStatus oldStatus;
+  final RoutineOccurrenceAction requestedAction;
+  final String? operationId;
+  final RoutineWriteOutcome writeOutcome;
+  final RoutineStatus? resultingStatus;
+  final RoutineFailureCategory failureCategory;
+
+  const RoutineActionExecutionObservation({
+    required this.ownerUidAtStart,
+    required this.routineItemId,
+    required this.instanceId,
+    required this.occurrenceId,
+    required this.occurrenceDateKey,
+    required this.displayDateKey,
+    required this.entryKind,
+    required this.oldStatus,
+    required this.requestedAction,
+    required this.operationId,
+    required this.writeOutcome,
+    required this.resultingStatus,
+    required this.failureCategory,
+  });
 }
