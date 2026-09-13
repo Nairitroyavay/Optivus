@@ -5,9 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/config/backend_config.dart';
+import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
+import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/money_models.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
+import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_occurrence.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/tracker_session_link.dart';
@@ -16,6 +20,7 @@ import 'package:optivus/repositories/routine_history_repository.dart';
 import 'package:optivus/repositories/routine_transaction_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
+import 'package:optivus/repositories/base_timeline_setup_repository.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
 import 'package:optivus/services/routine_projection_receipt_validator.dart';
 import 'package:optivus/state/app_state.dart';
@@ -336,8 +341,398 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   final Map<String, int> _projectionIntegrityRetryCount = {};
   final Map<String, DateTime> _projectionIntegrityNextRetryAt = {};
   Future<bool>? _inFlightProjectionRepair;
+  Future<bool>? _inFlightBaseTimelineFoundationRepair;
+  String? _inFlightBaseTimelineFoundationRepairSignature;
 
   Future<bool>? get inFlightProjectionRepair => _inFlightProjectionRepair;
+  Future<bool>? get inFlightBaseTimelineFoundationRepair =>
+      _inFlightBaseTimelineFoundationRepair;
+
+  BaseTimelineSection? _foundationSectionForItem(RoutineItem item) {
+    if (item.baseTimelineSection != null) {
+      for (final section in BaseTimelineSection.values) {
+        if (item.baseTimelineSection == section.name) return section;
+      }
+    }
+    return switch (item.category) {
+      RoutineCategory.classBlock => BaseTimelineSection.classes,
+      RoutineCategory.job => BaseTimelineSection.work,
+      RoutineCategory.eating => BaseTimelineSection.eating,
+      RoutineCategory.fixed ||
+      RoutineCategory.sleep => BaseTimelineSection.fixed,
+      RoutineCategory.skinCare => BaseTimelineSection.skinCare,
+      _ => null,
+    };
+  }
+
+  bool _isLiveOnboardingExpectation({
+    required RoutineItem item,
+    required BaseTimelineSetup setup,
+  }) {
+    final section = _foundationSectionForItem(item);
+    if (section == null) return true;
+    return setup.authorityFor(section) ==
+        BaseTimelineSectionAuthority.onboardingSeed;
+  }
+
+  bool _hasGeneratedSourceNote(RoutineItem item) {
+    if (item.source != RoutineSource.onboarding) return false;
+    return switch (item.notes?.trim()) {
+      'identity_system' => item.category == RoutineCategory.identity,
+      'merged_habit_system' ||
+      'good_habit' => item.category == RoutineCategory.habit,
+      'bad_habit_check_in' => item.category == RoutineCategory.badHabit,
+      'money' || 'money_task' => item.category == RoutineCategory.finance,
+      _ => false,
+    };
+  }
+
+  RoutineItem _liveRepairItem(RoutineItem item) {
+    return _hasGeneratedSourceNote(item)
+        ? item.copyWith(clearNotes: true)
+        : item;
+  }
+
+  Future<BaseTimelineSetup?> _fetchBaseTimelineOnboardingSource({
+    required String uid,
+    OnboardingCompletionBundle? bundle,
+    RoutineOnboardingProjectionPlan? plan,
+  }) async {
+    final onboarding = _onboardingRepository;
+    if (onboarding == null) return null;
+    try {
+      final draft = await onboarding.fetchDraft(uid);
+      final effectiveBundle =
+          bundle ?? await onboarding.fetchCompletionBundle(uid);
+      if (draft != null && effectiveBundle != null) {
+        final effectivePlan =
+            plan ?? RoutineOnboardingProjection.build(effectiveBundle);
+        return BaseTimelineSetup.fromOnboardingCompletion(
+          finalDraft: draft,
+          bundle: effectiveBundle,
+          projectedRoutineItems: effectivePlan.items,
+        );
+      }
+      if (effectiveBundle != null) {
+        final effectivePlan =
+            plan ?? RoutineOnboardingProjection.build(effectiveBundle);
+        return BaseTimelineSetup.fromCompletionBundle(
+          uid,
+          effectiveBundle,
+          finalDraft: draft,
+          projectedRoutineItems: effectivePlan.items,
+        );
+      }
+      if (draft != null &&
+          (draft.baseTimeline.blocks.isNotEmpty ||
+              draft.baseTimeline.pendingFutureImports.isNotEmpty ||
+              draft.baseTimeline.skinCareProductPhotoAssetId != null)) {
+        return BaseTimelineSetup.fromOnboardingDraft(uid, draft);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint(
+          'BaseTimelineFoundationRepair: onboarding source unavailable for $uid: $e',
+        );
+      }
+    }
+    return null;
+  }
+
+  bool _sameTimelineBlockList(
+    List<TimelineBlockDraft> a,
+    List<TimelineBlockDraft> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var index = 0; index < a.length; index++) {
+      if (jsonEncode(a[index].toMap()) != jsonEncode(b[index].toMap())) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _sameStringListOrdered(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var index = 0; index < a.length; index++) {
+      if (a[index] != b[index]) return false;
+    }
+    return true;
+  }
+
+  bool _hasDurableBaseTimelineSectionEvidence(
+    BaseTimelineSetup setup,
+    BaseTimelineSection section,
+  ) {
+    if (setup.trackedIdsFor(section).isNotEmpty) return true;
+    return switch (section) {
+      BaseTimelineSection.classes =>
+        setup.classLogicalAssetId != null ||
+            setup.classLogicalAssetR2Key != null,
+      BaseTimelineSection.work =>
+        setup.workLogicalAssetId != null || setup.workLogicalAssetR2Key != null,
+      BaseTimelineSection.eating =>
+        setup.eatingSetupPath != null ||
+            setup.eatingPhotoAssetId != null ||
+            setup.eatingPhotoR2Key != null,
+      BaseTimelineSection.fixed => setup.revision > 1,
+      BaseTimelineSection.skinCare =>
+        setup.skinCareSetupPath != null ||
+            setup.skinCareSkipped ||
+            setup.skinCareProductPhotoAssetId != null ||
+            setup.skinCareProductPhotoR2Key != null ||
+            setup.skinCareFacePhotoAssetId != null ||
+            setup.skinCareFacePhotoR2Key != null,
+    };
+  }
+
+  BaseTimelineSetup _setupWithStrongEvidenceAuthorities({
+    required BaseTimelineSetup setup,
+    required BaseTimelineSetup? onboardingSource,
+    required List<RoutineItem> liveItems,
+    required Set<BaseTimelineSection> ambiguousSections,
+  }) {
+    final liveIds = liveItems.map((item) => item.id).toSet();
+    var migrated = setup;
+
+    for (final section in BaseTimelineSection.values) {
+      if (setup.authorityFor(section) ==
+          BaseTimelineSectionAuthority.baseTimeline) {
+        continue;
+      }
+
+      final hasBaseTimelineTemplates = liveItems.any(
+        (item) =>
+            item.source == RoutineSource.baseTimeline &&
+            item.baseTimelineSection == section.name,
+      );
+      if (hasBaseTimelineTemplates) {
+        migrated = migrated.withSectionAuthority(
+          section,
+          BaseTimelineSectionAuthority.baseTimeline,
+        );
+        continue;
+      }
+
+      final source = onboardingSource;
+      if (source == null) continue;
+
+      final currentBlocks = setup.blocksFor(section);
+      final sourceBlocks = source.blocksFor(section);
+      final matchesOnboardingSeed = _sameTimelineBlockList(
+        currentBlocks,
+        sourceBlocks,
+      );
+      final sourceIds = source.trackedIdsFor(section);
+      final trackedIdsMatchOnboardingSeed = _sameStringListOrdered(
+        setup.trackedIdsFor(section),
+        sourceIds,
+      );
+      final sourceDocsExist =
+          sourceIds.isNotEmpty && sourceIds.every(liveIds.contains);
+
+      if ((matchesOnboardingSeed || trackedIdsMatchOnboardingSeed) &&
+          sourceDocsExist) {
+        continue;
+      }
+
+      if (trackedIdsMatchOnboardingSeed && sourceIds.isNotEmpty) {
+        continue;
+      }
+
+      if (currentBlocks.isEmpty && sourceBlocks.isNotEmpty) {
+        ambiguousSections.add(section);
+        if (kDebugMode) {
+          debugPrint(
+            'BaseTimelineAuthorityMigration: ambiguous_empty_v2 '
+            'uid=${setup.uid} section=${section.name}',
+          );
+        }
+        continue;
+      }
+
+      if (currentBlocks.isNotEmpty &&
+          !matchesOnboardingSeed &&
+          _hasDurableBaseTimelineSectionEvidence(setup, section)) {
+        migrated = migrated.withSectionAuthority(
+          section,
+          BaseTimelineSectionAuthority.baseTimeline,
+        );
+      }
+    }
+
+    return migrated;
+  }
+
+  void _scheduleBaseTimelineFoundationRepair({
+    required String uid,
+    required int generation,
+    required List<RoutineItem> currentRemoteItems,
+    OnboardingCompletionBundle? bundle,
+  }) {
+    if (_ownerUid != uid || generation != _loadGeneration) return;
+    final repairFuture = _runBaseTimelineFoundationRepair(
+      uid: uid,
+      generation: generation,
+      currentRemoteItems: currentRemoteItems,
+      bundle: bundle,
+    );
+    _inFlightBaseTimelineFoundationRepair = repairFuture;
+  }
+
+  Future<bool> _runBaseTimelineFoundationRepair({
+    required String uid,
+    required int generation,
+    required List<RoutineItem> currentRemoteItems,
+    OnboardingCompletionBundle? bundle,
+  }) async {
+    try {
+      final setupRepo = _ref.read(baseTimelineSetupRepositoryProvider);
+      final setup = await setupRepo.fetchSetup(uid);
+      final source = await _fetchBaseTimelineOnboardingSource(
+        uid: uid,
+        bundle: bundle,
+      );
+      if (!mounted || generation != _loadGeneration || _ownerUid != uid) {
+        return false;
+      }
+
+      final ambiguousSections = <BaseTimelineSection>{};
+      var migrated = _setupWithStrongEvidenceAuthorities(
+        setup: setup,
+        onboardingSource: source,
+        liveItems: currentRemoteItems,
+        ambiguousSections: ambiguousSections,
+      );
+
+      final signature = Object.hash(
+        uid,
+        migrated.revision,
+        Object.hashAll(
+          BaseTimelineSection.values.map(
+            (section) => Object.hash(
+              section.name,
+              migrated.authorityFor(section).name,
+              migrated.blocksFor(section).length,
+              Object.hashAll(migrated.trackedIdsFor(section)),
+            ),
+          ),
+        ),
+        Object.hashAll(currentRemoteItems.map((item) => item.id)),
+      ).toString();
+      if (_inFlightBaseTimelineFoundationRepairSignature != null) {
+        return false;
+      }
+      _inFlightBaseTimelineFoundationRepairSignature = signature;
+
+      try {
+        final liveIds = currentRemoteItems.map((item) => item.id).toSet();
+        final itemsToCreate = <RoutineItem>[];
+        var setupToSave = migrated;
+        var needsSetupSave = !identical(migrated, setup);
+        final now = DateTime.now();
+
+        for (final section in BaseTimelineSection.values) {
+          if (ambiguousSections.contains(section)) continue;
+          if (migrated.authorityFor(section) !=
+              BaseTimelineSectionAuthority.baseTimeline) {
+            continue;
+          }
+
+          final expectedItems =
+              BaseTimelineTransactionCoordinator.routineItemsForSectionBlocks(
+                uid: uid,
+                section: section,
+                blocks: migrated.blocksFor(section),
+                now: now,
+              );
+          final expectedIds = expectedItems
+              .map((item) => item.id)
+              .toList(growable: false);
+          final trackedIds = migrated.trackedIdsFor(section).toSet();
+          final actualRoutineIds = currentRemoteItems
+              .where(
+                (item) =>
+                    trackedIds.contains(item.id) ||
+                    (item.source == RoutineSource.baseTimeline &&
+                        item.baseTimelineSection == section.name),
+              )
+              .map((item) => item.id)
+              .toSet();
+          final missingIds = expectedIds
+              .where((id) => !liveIds.contains(id))
+              .toList(growable: false);
+          if (kDebugMode) {
+            debugPrint(
+              '[BaseTimelineIntegrity] section=${section.name} '
+              'authority=${migrated.authorityFor(section).name} '
+              'configuredBlocks=${migrated.blocksFor(section).length} '
+              'trackedIds=${trackedIds.length} '
+              'actualRoutineIds=${actualRoutineIds.length} '
+              'missing=${missingIds.length} '
+              'repairAction=${missingIds.isEmpty ? 'none' : 'createMissing'}',
+            );
+          }
+          if (!_sameStringListOrdered(
+            setupToSave.trackedIdsFor(section),
+            expectedIds,
+          )) {
+            setupToSave = setupToSave.withSectionRoutineIds(
+              section,
+              expectedIds,
+            );
+            needsSetupSave = true;
+          }
+          itemsToCreate.addAll(
+            expectedItems.where((item) => !liveIds.contains(item.id)),
+          );
+        }
+
+        if (itemsToCreate.isEmpty && !needsSetupSave) return false;
+
+        var repaired = false;
+        if (itemsToCreate.isNotEmpty) {
+          final created = await _repository.createRoutineItemsIfMissing(
+            uid,
+            itemsToCreate,
+          );
+          repaired = created.isNotEmpty;
+        }
+        if (needsSetupSave) {
+          await setupRepo.saveSetup(
+            uid,
+            setupToSave.copyWith(
+              revision: setup.revision + 1,
+              updatedAt: DateTime.now(),
+            ),
+          );
+          repaired = true;
+        }
+
+        if (!mounted || generation != _loadGeneration || _ownerUid != uid) {
+          return repaired;
+        }
+        if (repaired) {
+          final refreshedItems = await _repository.fetchRoutineItems(uid);
+          if (mounted && _ownerUid == uid) {
+            _mergeRefreshedItems(refreshedItems);
+          }
+        }
+        return repaired;
+      } finally {
+        if (_inFlightBaseTimelineFoundationRepairSignature == signature) {
+          _inFlightBaseTimelineFoundationRepairSignature = null;
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint(
+          'BaseTimelineFoundationRepair: failed (safe degraded state): $e',
+        );
+      }
+      return false;
+    }
+  }
 
   Map<String, dynamic> _boundedHistorySnapshot(RoutineItem item, String uid) {
     // Only capture the fields required to render history reliably
@@ -588,8 +983,16 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
               },
             );
 
-        final bundle = results[2];
-        if (bundle is OnboardingCompletionBundle) {
+        final bundle = results[2] is OnboardingCompletionBundle
+            ? results[2] as OnboardingCompletionBundle
+            : null;
+        _scheduleBaseTimelineFoundationRepair(
+          uid: uid,
+          generation: generation,
+          currentRemoteItems: remoteItems,
+          bundle: bundle,
+        );
+        if (bundle != null) {
           _scheduleProjectionIntegritySelfHeal(
             uid: uid,
             bundle: bundle,
@@ -681,21 +1084,51 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         uid,
         plan.projectionId,
       );
+      final setup = await _ref
+          .read(baseTimelineSetupRepositoryProvider)
+          .fetchSetup(uid);
+      final source = await _fetchBaseTimelineOnboardingSource(
+        uid: uid,
+        bundle: bundle,
+        plan: plan,
+      );
       if (!mounted || generation != _loadGeneration || _ownerUid != uid) {
         return false;
       }
-
-      final validation = const RoutineProjectionReceiptValidator().validate(
-        receipt: receipt,
-        actualItems: currentRemoteItems,
-        ownerUid: uid,
-        plan: plan,
+      final ambiguousSections = <BaseTimelineSection>{};
+      final liveSetup = _setupWithStrongEvidenceAuthorities(
+        setup: setup,
+        onboardingSource: source,
+        liveItems: currentRemoteItems,
+        ambiguousSections: ambiguousSections,
       );
+
+      final historicalValidation = const RoutineProjectionReceiptValidator()
+          .validate(
+            receipt: receipt,
+            actualItems: currentRemoteItems,
+            ownerUid: uid,
+            plan: plan,
+          );
+      final liveExpectedItems = plan.items
+          .where(
+            (item) =>
+                _isLiveOnboardingExpectation(item: item, setup: liveSetup) &&
+                !ambiguousSections.contains(_foundationSectionForItem(item)),
+          )
+          .toList(growable: false);
 
       final signature = Object.hash(
         uid,
         plan.fingerprint,
         receipt?.sourceBundleFingerprint,
+        Object.hashAll(
+          BaseTimelineSection.values.map(
+            (section) =>
+                Object.hash(section.name, liveSetup.authorityFor(section).name),
+          ),
+        ),
+        Object.hashAll(ambiguousSections.map((section) => section.name)),
         Object.hashAll(
           currentRemoteItems.map(
             (item) =>
@@ -708,23 +1141,33 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         final persistedOnboarding = currentRemoteItems
             .where((item) => item.source == RoutineSource.onboarding)
             .toList();
-        final persistedIds = persistedOnboarding.map((i) => i.id).toSet();
-        final missingIds = plan.items
+        final persistedIds = currentRemoteItems.map((i) => i.id).toSet();
+        final missingIds = liveExpectedItems
             .where((expected) => !persistedIds.contains(expected.id))
             .map((i) => i.id)
             .toList();
         final sampleMissing = missingIds.take(3).join(',');
+        final supersededCount = plan.items.length - liveExpectedItems.length;
         debugPrint(
-          'RoutineProjectionIntegrity: expectedCount=${plan.items.length} '
+          'RoutineProjectionIntegrity: expectedCount=${liveExpectedItems.length} '
+          'supersededFoundationCount=$supersededCount '
           'persistedOnboardingCount=${persistedOnboarding.length} '
-          'missingCount=${missingIds.length} valid=${validation.isValid} '
+          'missingCount=${missingIds.length} historicalValid=${historicalValidation.isValid} '
           'projectionId=${plan.projectionId} '
           'fingerprintPrefix=${plan.fingerprint.substring(0, 8)}'
           '${missingIds.isNotEmpty ? ' sampleMissing=[$sampleMissing]' : ''}',
         );
       }
 
-      if (validation.isValid) {
+      final persistedIds = currentRemoteItems.map((item) => item.id).toSet();
+      final missingLiveItems = liveExpectedItems
+          .where((expected) => !persistedIds.contains(expected.id))
+          .map(_liveRepairItem)
+          .toList(growable: false);
+      final hasSupersededFoundation =
+          liveExpectedItems.length != plan.items.length;
+
+      if (historicalValidation.isValid || missingLiveItems.isEmpty) {
         _lastSuccessfulProjectionIntegritySignature = signature;
         _projectionIntegrityRetryCount.remove(signature);
         _projectionIntegrityNextRetryAt.remove(signature);
@@ -747,10 +1190,12 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       _inFlightProjectionIntegritySignature = signature;
 
       try {
-        final repaired = await _repository.reconcileOnboardingProjection(
-          uid,
-          plan,
-        );
+        final repaired = hasSupersededFoundation
+            ? (await _repository.createRoutineItemsIfMissing(
+                uid,
+                missingLiveItems,
+              )).isNotEmpty
+            : await _repository.reconcileOnboardingProjection(uid, plan);
         if (!mounted || generation != _loadGeneration || _ownerUid != uid) {
           return false;
         }
@@ -773,15 +1218,29 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             uid,
             plan.projectionId,
           );
-          final postValidation = const RoutineProjectionReceiptValidator()
-              .validate(
-                receipt: updatedReceipt,
-                actualItems: normalized,
-                ownerUid: uid,
-                plan: plan,
-              );
+          final validAfterRepair = hasSupersededFoundation
+              ? (() {
+                  final normalizedIds = normalized
+                      .map((item) => item.id)
+                      .toSet();
+                  final liveValid = liveExpectedItems.every(
+                    (expected) => normalizedIds.contains(expected.id),
+                  );
+                  final receiptStillHistorical =
+                      updatedReceipt?.sourceBundleFingerprint ==
+                      receipt?.sourceBundleFingerprint;
+                  return liveValid && receiptStillHistorical;
+                })()
+              : const RoutineProjectionReceiptValidator()
+                    .validate(
+                      receipt: updatedReceipt,
+                      actualItems: normalized,
+                      ownerUid: uid,
+                      plan: plan,
+                    )
+                    .isValid;
 
-          if (postValidation.isValid) {
+          if (validAfterRepair) {
             _lastSuccessfulProjectionIntegritySignature = signature;
             _projectionIntegrityRetryCount.remove(signature);
             _projectionIntegrityNextRetryAt.remove(signature);
@@ -800,7 +1259,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           }
           return true;
         } else {
-          if (validation.isValid) {
+          if (missingLiveItems.isEmpty) {
             _lastSuccessfulProjectionIntegritySignature = signature;
             _projectionIntegrityRetryCount.remove(signature);
             _projectionIntegrityNextRetryAt.remove(signature);
@@ -873,6 +1332,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     _projectionIntegrityRetryCount.clear();
     _projectionIntegrityNextRetryAt.clear();
     _inFlightProjectionRepair = null;
+    _inFlightBaseTimelineFoundationRepair = null;
+    _inFlightBaseTimelineFoundationRepairSignature = null;
     _ref.read(trackerSessionLinksProvider.notifier).reset();
     state = RoutineState(
       items: const [],

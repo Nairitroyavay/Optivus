@@ -336,6 +336,12 @@ class RoutineTemplateFirestoreCodec {
     _validateStringList(item.subtasks, 'subtasks');
     _validateStringList(item.steps, 'steps');
     _validateStringList(item.dishes, 'dishes');
+    _validateStringList(item.skincareMissingItems, 'skincareMissingItems');
+    _validateOptionalLabel(
+      item.skincareSlotLabel,
+      'skincareSlotLabel',
+      maxLength: 50,
+    );
     if (item.createdByOperationId != null) {
       _validateOperationId(item.createdByOperationId!);
     }
@@ -646,6 +652,18 @@ void _validateStringList(List<String>? values, String field) {
   if (values == null) return;
   if (values.length > 100 ||
       values.any((value) => value.trim().isEmpty || value.length > 500)) {
+    throw ArgumentError('Invalid Routine $field.');
+  }
+}
+
+void _validateOptionalLabel(
+  String? value,
+  String field, {
+  required int maxLength,
+}) {
+  if (value == null) return;
+  final normalized = value.trim();
+  if (normalized.isEmpty || normalized.length > maxLength) {
     throw ArgumentError('Invalid Routine $field.');
   }
 }

@@ -48,8 +48,10 @@ class BaseTimelineTransactionCoordinator {
       return true;
     }
 
-    // 3. Migration fallback: onboarding items belonging to this section
+    // 3. Legacy migration fallback only. Schema-v3 steady state relies on
+    // tracked IDs and explicit baseTimeline provenance.
     // STRICT RULE: Never delete RoutineSource.manual or RoutineSource.imported items!
+    if (setup != null && setup.schemaVersion >= 3) return false;
     if (item.source != RoutineSource.onboarding) return false;
 
     return switch (section) {
@@ -108,6 +110,95 @@ class BaseTimelineTransactionCoordinator {
         : RoutinePriority.goodToDo;
   }
 
+  static String routineDocumentIdForSectionBlock({
+    required String uid,
+    required BaseTimelineSection section,
+    required TimelineBlockDraft block,
+    required int index,
+  }) {
+    final sourceKey =
+        'base_${section.name}_${block.id.isNotEmpty ? block.id : index}';
+    return RoutineOnboardingProjection.stableRoutineDocumentId(
+      ownerUid: uid,
+      sourceItemId: sourceKey,
+    );
+  }
+
+  static RoutineItem routineItemForSectionBlock({
+    required String uid,
+    required BaseTimelineSection section,
+    required TimelineBlockDraft block,
+    required int index,
+    required DateTime now,
+  }) {
+    final isOvernight =
+        block.crossesMidnight ||
+        block.endsNextDay ||
+        block.endMinute <= block.startMinute;
+    final repeatDays = block.repeatDays.isEmpty
+        ? const [1, 2, 3, 4, 5, 6, 7]
+        : (block.repeatDays.toSet().toList()..sort());
+
+    return RoutineItem(
+      id: routineDocumentIdForSectionBlock(
+        uid: uid,
+        section: section,
+        block: block,
+        index: index,
+      ),
+      userId: uid,
+      title: block.title,
+      startMinute: block.startMinute,
+      endMinute: block.endMinute,
+      crossesMidnight: isOvernight,
+      endsNextDay: isOvernight,
+      repeatDays: repeatDays,
+      blockType: blockTypeForSection(section, block),
+      category: categoryForSection(section, block),
+      source: RoutineSource.baseTimeline,
+      baseTimelineSection: section.name,
+      priority: priorityForSection(section),
+      hardBlock: isHardBlockForSection(section),
+      location: block.location,
+      notes: block.notes,
+      professor: block.professor,
+      courseCode: block.courseCode,
+      classType: block.classType,
+      sectionLabel: block.sectionLabel,
+      mealCategory: block.mealCategory,
+      mealSlot: block.mealSlot,
+      dishes: block.dishes,
+      caloriesEstimate: block.calories,
+      proteinEstimate: block.protein,
+      steps: block.skincareSteps.isNotEmpty
+          ? block.skincareSteps
+          : block.skincareProducts,
+      skincareProducts: block.skincareProducts,
+      skincareMissingItems: block.skincareMissingItems,
+      skincareSlotLabel: block.skincareSlotLabel,
+      createdAt: now,
+      updatedAt: now,
+    );
+  }
+
+  static List<RoutineItem> routineItemsForSectionBlocks({
+    required String uid,
+    required BaseTimelineSection section,
+    required List<TimelineBlockDraft> blocks,
+    required DateTime now,
+  }) {
+    return [
+      for (var index = 0; index < blocks.length; index++)
+        routineItemForSectionBlock(
+          uid: uid,
+          section: section,
+          block: blocks[index],
+          index: index,
+          now: now,
+        ),
+    ];
+  }
+
   Future<BaseTimelineSectionCommitResult> replaceSection({
     required String uid,
     required BaseTimelineSection section,
@@ -131,59 +222,12 @@ class BaseTimelineTransactionCoordinator {
         .toList(growable: false);
 
     // 3. Convert newBlocks to RoutineItem with baseTimeline provenance
-    final newRoutineItems = <RoutineItem>[];
-    for (var index = 0; index < newBlocks.length; index++) {
-      final b = newBlocks[index];
-      final isOvernight =
-          b.crossesMidnight || b.endsNextDay || b.endMinute <= b.startMinute;
-      final sourceKey =
-          'base_${section.name}_${b.id.isNotEmpty ? b.id : index}';
-      final docId = RoutineOnboardingProjection.stableRoutineDocumentId(
-        ownerUid: uid,
-        sourceItemId: sourceKey,
-      );
-
-      final item = RoutineItem(
-        id: docId,
-        userId: uid,
-        title: b.title,
-        startMinute: b.startMinute,
-        endMinute: b.endMinute,
-        crossesMidnight: isOvernight,
-        endsNextDay: isOvernight,
-        repeatDays:
-            b.repeatDays.isEmpty
-                  ? const [1, 2, 3, 4, 5, 6, 7]
-                  : b.repeatDays.toSet().toList()
-              ..sort(),
-        blockType: blockTypeForSection(section, b),
-        category: categoryForSection(section, b),
-        source: RoutineSource.baseTimeline,
-        baseTimelineSection: section.name,
-        priority: priorityForSection(section),
-        hardBlock: isHardBlockForSection(section),
-        location: b.location,
-        notes: b.notes,
-        professor: b.professor,
-        courseCode: b.courseCode,
-        classType: b.classType,
-        sectionLabel: b.sectionLabel,
-        mealCategory: b.mealCategory,
-        mealSlot: b.mealSlot,
-        dishes: b.dishes,
-        caloriesEstimate: b.calories,
-        proteinEstimate: b.protein,
-        steps: b.skincareSteps.isNotEmpty
-            ? b.skincareSteps
-            : b.skincareProducts,
-        skincareProducts: b.skincareProducts,
-        skincareMissingItems: b.skincareMissingItems,
-        skincareSlotLabel: b.skincareSlotLabel,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-      newRoutineItems.add(item);
-    }
+    final newRoutineItems = routineItemsForSectionBlocks(
+      uid: uid,
+      section: section,
+      blocks: newBlocks,
+      now: DateTime.now(),
+    );
 
     // 4. Atomic transaction with live revision optimistic concurrency check
     final commitResult = await _transactionRepo.replaceBaseTimelineSection(

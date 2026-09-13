@@ -62,6 +62,52 @@ void main() {
       );
     });
 
+    test(
+      'serializes and validates skincare metadata for routine templates',
+      () {
+        final item = _routineItem().copyWith(
+          category: RoutineCategory.skinCare,
+          skincareMissingItems: const ['Cleanser', 'SPF'],
+          skincareSlotLabel: ' Morning ',
+        );
+
+        final map = codec.toFirestore(ownerUid: 'user-a', item: item);
+
+        expect(map['skincareMissingItems'], ['Cleanser', 'SPF']);
+        expect(map['skincareSlotLabel'], 'Morning');
+
+        final decoded = codec.fromFirestore(documentId: 'routine-a', data: map);
+        expect(decoded.skincareMissingItems, ['Cleanser', 'SPF']);
+        expect(decoded.skincareSlotLabel, 'Morning');
+
+        expect(
+          () => codec.toFirestore(
+            ownerUid: 'user-a',
+            item: item.copyWith(
+              skincareMissingItems: List<String>.filled(101, 'SPF'),
+            ),
+          ),
+          throwsArgumentError,
+        );
+        expect(
+          () => codec.toFirestore(
+            ownerUid: 'user-a',
+            item: item.copyWith(skincareSlotLabel: ' '),
+          ),
+          throwsArgumentError,
+        );
+        expect(
+          () => codec.toFirestore(
+            ownerUid: 'user-a',
+            item: item.copyWith(
+              skincareSlotLabel: List<String>.filled(51, 'x').join(),
+            ),
+          ),
+          throwsArgumentError,
+        );
+      },
+    );
+
     test('rejects legacy allowedOverlaps in current Firestore schema', () {
       final map = codec.toFirestore(ownerUid: 'user-a', item: _routineItem());
       map['allowedOverlaps'] = ['routine-b'];

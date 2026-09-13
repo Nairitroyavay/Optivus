@@ -201,6 +201,8 @@ service cloud.firestore {
         "dishes",
         "caloriesEstimate",
         "proteinEstimate",
+        "skincareMissingItems",
+        "skincareSlotLabel",
         "professor",
         "courseCode",
         "classType",
@@ -436,6 +438,14 @@ service cloud.firestore {
           || data.caloriesEstimate is number)
         && (!data.keys().hasAny(["proteinEstimate"])
           || data.proteinEstimate is number)
+        && (!data.keys().hasAny(["skincareMissingItems"])
+          || (data.skincareMissingItems is list
+            && data.skincareMissingItems.size() <= 100))
+        && (!data.keys().hasAny(["skincareSlotLabel"])
+          || (data.skincareSlotLabel is string
+            && data.skincareSlotLabel.size() > 0
+            && data.skincareSlotLabel.matches(".*[^ ].*")
+            && data.skincareSlotLabel.size() <= 50))
         && (!data.keys().hasAny(["professor"])
           || data.professor is string)
         && (!data.keys().hasAny(["courseCode"])

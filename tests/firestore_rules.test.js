@@ -982,6 +982,59 @@ describe("Firestore Rules for Routine durability", () => {
       })));
     });
 
+    it("accepts bounded skincare routine metadata and rejects malformed values", async () => {
+      const owner = ownerDb("user123", true);
+
+      const emptyMissingItemsRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-skin-empty");
+      await assertSucceeds(emptyMissingItemsRef.set(routineItemData("user123", "routine-skin-empty", {
+        category: "skinCare",
+        skincareMissingItems: [],
+      })));
+
+      const severalMissingItemsRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-skin-several");
+      await assertSucceeds(severalMissingItemsRef.set(routineItemData("user123", "routine-skin-several", {
+        category: "skinCare",
+        skincareMissingItems: ["Cleanser", "SPF"],
+      })));
+
+      const slotLabelRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-skin-slot");
+      await assertSucceeds(slotLabelRef.set(routineItemData("user123", "routine-skin-slot", {
+        category: "skinCare",
+        skincareSlotLabel: "Morning",
+      })));
+
+      const combinedRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-skin-combined");
+      await assertSucceeds(combinedRef.set(routineItemData("user123", "routine-skin-combined", {
+        category: "skinCare",
+        skincareMissingItems: ["Moisturizer", "Retinol"],
+        skincareSlotLabel: "Night",
+      })));
+
+      const wrongMissingItemsTypeRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-skin-list-wrong-type");
+      await assertFails(wrongMissingItemsTypeRef.set(routineItemData("user123", "routine-skin-list-wrong-type", {
+        category: "skinCare",
+        skincareMissingItems: "SPF",
+      })));
+
+      const overLimitMissingItemsRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-skin-list-over-limit");
+      await assertFails(overLimitMissingItemsRef.set(routineItemData("user123", "routine-skin-list-over-limit", {
+        category: "skinCare",
+        skincareMissingItems: Array.from({ length: 101 }, (_, index) => `Item ${index}`),
+      })));
+
+      const wrongSlotTypeRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-skin-slot-wrong-type");
+      await assertFails(wrongSlotTypeRef.set(routineItemData("user123", "routine-skin-slot-wrong-type", {
+        category: "skinCare",
+        skincareSlotLabel: 12345,
+      })));
+
+      const oversizedSlotRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-skin-slot-oversized");
+      await assertFails(oversizedSlotRef.set(routineItemData("user123", "routine-skin-slot-oversized", {
+        category: "skinCare",
+        skincareSlotLabel: "x".repeat(51),
+      })));
+    });
+
     it("accepts routine template with source 'baseTimeline' and baseTimelineSection", async () => {
       const owner = ownerDb("user123", true);
       const baseTimelineItemRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-bt-1");

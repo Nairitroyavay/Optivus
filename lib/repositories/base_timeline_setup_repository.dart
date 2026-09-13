@@ -30,10 +30,11 @@ class FakeBaseTimelineSetupRepository implements BaseTimelineSetupRepository {
     final existing = _setups[uid];
     if (existing != null) {
       if (existing.schemaVersion < BaseTimelineSetup.currentSchemaVersion) {
-        final source = await _fetchOnboardingSource(uid, _onboardingRepo);
+        final sourceResult = await _fetchOnboardingSource(uid, _onboardingRepo);
+        if (sourceResult.readFailed) return existing;
         final migrated = migrateBaseTimelineSetupIfNeeded(
           existing: existing,
-          onboardingSource: source,
+          onboardingSource: sourceResult.setup,
         );
         _setups[uid] = migrated;
         _controller.add(migrated);
@@ -42,9 +43,15 @@ class FakeBaseTimelineSetupRepository implements BaseTimelineSetupRepository {
       return existing;
     }
 
-    final source = await _fetchOnboardingSource(uid, _onboardingRepo);
+    final sourceResult = await _fetchOnboardingSource(uid, _onboardingRepo);
+    if (sourceResult.readFailed) {
+      throw StateError(
+        'Base Timeline setup source read failed; retry before creating empty setup.',
+      );
+    }
     final initial =
-        source ?? BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
+        sourceResult.setup ??
+        BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
     _setups[uid] = initial;
     return initial;
   }
@@ -84,10 +91,11 @@ class FirestoreBaseTimelineSetupRepository
     if (doc.exists && data != null) {
       final existing = BaseTimelineSetup.fromMap(data, uid: uid);
       if (existing.schemaVersion < BaseTimelineSetup.currentSchemaVersion) {
-        final source = await _fetchOnboardingSource(uid, _onboardingRepo);
+        final sourceResult = await _fetchOnboardingSource(uid, _onboardingRepo);
+        if (sourceResult.readFailed) return existing;
         final migrated = migrateBaseTimelineSetupIfNeeded(
           existing: existing,
-          onboardingSource: source,
+          onboardingSource: sourceResult.setup,
         );
         try {
           await saveSetup(uid, migrated);
@@ -97,9 +105,15 @@ class FirestoreBaseTimelineSetupRepository
       return existing;
     }
 
-    final source = await _fetchOnboardingSource(uid, _onboardingRepo);
+    final sourceResult = await _fetchOnboardingSource(uid, _onboardingRepo);
+    if (sourceResult.readFailed) {
+      throw StateError(
+        'Base Timeline setup source read failed; retry before creating empty setup.',
+      );
+    }
     final setup =
-        source ?? BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
+        sourceResult.setup ??
+        BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
     // Persist migrated setup so subsequent reads hit Firestore directly
     try {
       await saveSetup(uid, setup);
@@ -180,37 +194,63 @@ final baseTimelineSetupNotifierProvider =
       return BaseTimelineSetupNotifier(repo, uid);
     });
 
-Future<BaseTimelineSetup?> _fetchOnboardingSource(
+class _OnboardingSourceFetchResult {
+  final BaseTimelineSetup? setup;
+  final bool readFailed;
+
+  const _OnboardingSourceFetchResult.sourceFound(this.setup)
+    : readFailed = false;
+
+  const _OnboardingSourceFetchResult.definitivelyNoSource()
+    : setup = null,
+      readFailed = false;
+
+  const _OnboardingSourceFetchResult.readFailed()
+    : setup = null,
+      readFailed = true;
+}
+
+Future<_OnboardingSourceFetchResult> _fetchOnboardingSource(
   String uid,
   OnboardingRepository? onboardingRepo,
 ) async {
-  if (onboardingRepo == null) return null;
+  if (onboardingRepo == null) {
+    return const _OnboardingSourceFetchResult.definitivelyNoSource();
+  }
   try {
     final draft = await onboardingRepo.fetchDraft(uid);
     final bundle = await onboardingRepo.fetchCompletionBundle(uid);
     if (draft != null && bundle != null) {
       final plan = RoutineOnboardingProjection.build(bundle);
-      return BaseTimelineSetup.fromOnboardingCompletion(
-        finalDraft: draft,
-        bundle: bundle,
-        projectedRoutineItems: plan.items,
+      return _OnboardingSourceFetchResult.sourceFound(
+        BaseTimelineSetup.fromOnboardingCompletion(
+          finalDraft: draft,
+          bundle: bundle,
+          projectedRoutineItems: plan.items,
+        ),
       );
     } else if (draft != null &&
         (draft.baseTimeline.blocks.isNotEmpty ||
             draft.baseTimeline.pendingFutureImports.isNotEmpty ||
             draft.baseTimeline.skinCareProductPhotoAssetId != null)) {
-      return BaseTimelineSetup.fromOnboardingDraft(uid, draft);
+      return _OnboardingSourceFetchResult.sourceFound(
+        BaseTimelineSetup.fromOnboardingDraft(uid, draft),
+      );
     } else if (bundle != null) {
       final plan = RoutineOnboardingProjection.build(bundle);
-      return BaseTimelineSetup.fromCompletionBundle(
-        uid,
-        bundle,
-        finalDraft: draft,
-        projectedRoutineItems: plan.items,
+      return _OnboardingSourceFetchResult.sourceFound(
+        BaseTimelineSetup.fromCompletionBundle(
+          uid,
+          bundle,
+          finalDraft: draft,
+          projectedRoutineItems: plan.items,
+        ),
       );
     }
-  } catch (_) {}
-  return null;
+  } catch (_) {
+    return const _OnboardingSourceFetchResult.readFailed();
+  }
+  return const _OnboardingSourceFetchResult.definitivelyNoSource();
 }
 
 BaseTimelineSetup migrateBaseTimelineSetupIfNeeded({
@@ -227,12 +267,16 @@ BaseTimelineSetup migrateBaseTimelineSetupIfNeeded({
   );
 
   if (onboardingSource != null) {
+    final canSafelyBackfillUnconfiguredSections = existing.revision <= 1;
+
     // Classes: preserve existing runtime edits unconditionally
     final classesConfigured =
         existing.snapshotFor(BaseTimelineSection.classes).configured ||
         existing.classBlocks.isNotEmpty ||
         existing.classRoutineItemIds.isNotEmpty;
-    if (!classesConfigured && onboardingSource.classBlocks.isNotEmpty) {
+    if (canSafelyBackfillUnconfiguredSections &&
+        !classesConfigured &&
+        onboardingSource.classBlocks.isNotEmpty) {
       migrated = migrated.copyWith(
         classBlocks: onboardingSource.classBlocks,
         classRoutineItemIds: onboardingSource.classRoutineItemIds,
@@ -246,7 +290,9 @@ BaseTimelineSetup migrateBaseTimelineSetupIfNeeded({
         existing.snapshotFor(BaseTimelineSection.work).configured ||
         existing.workBlocks.isNotEmpty ||
         existing.workRoutineItemIds.isNotEmpty;
-    if (!workConfigured && onboardingSource.workBlocks.isNotEmpty) {
+    if (canSafelyBackfillUnconfiguredSections &&
+        !workConfigured &&
+        onboardingSource.workBlocks.isNotEmpty) {
       migrated = migrated.copyWith(
         workBlocks: onboardingSource.workBlocks,
         workRoutineItemIds: onboardingSource.workRoutineItemIds,
@@ -261,7 +307,8 @@ BaseTimelineSetup migrateBaseTimelineSetupIfNeeded({
         existing.eatingBlocks.isNotEmpty ||
         existing.eatingRoutineItemIds.isNotEmpty ||
         existing.eatingSetupPath != null;
-    if (!eatingConfigured &&
+    if (canSafelyBackfillUnconfiguredSections &&
+        !eatingConfigured &&
         (onboardingSource.eatingBlocks.isNotEmpty ||
             onboardingSource.eatingSetupPath != null)) {
       migrated = migrated.copyWith(
@@ -292,7 +339,9 @@ BaseTimelineSetup migrateBaseTimelineSetupIfNeeded({
         existing.snapshotFor(BaseTimelineSection.fixed).configured ||
         existing.fixedBlocks.isNotEmpty ||
         existing.fixedRoutineItemIds.isNotEmpty;
-    if (!fixedConfigured && onboardingSource.fixedBlocks.isNotEmpty) {
+    if (canSafelyBackfillUnconfiguredSections &&
+        !fixedConfigured &&
+        onboardingSource.fixedBlocks.isNotEmpty) {
       migrated = migrated.copyWith(
         fixedBlocks: onboardingSource.fixedBlocks,
         fixedRoutineItemIds: onboardingSource.fixedRoutineItemIds,
@@ -306,7 +355,8 @@ BaseTimelineSetup migrateBaseTimelineSetupIfNeeded({
         existing.skinCareRoutineItemIds.isNotEmpty ||
         existing.skinCareSetupPath != null ||
         existing.skinCareSkipped;
-    if (!skinCareConfigured &&
+    if (canSafelyBackfillUnconfiguredSections &&
+        !skinCareConfigured &&
         (onboardingSource.skinCareBlocks.isNotEmpty ||
             onboardingSource.skinCareSetupPath != null ||
             onboardingSource.skinCareSkipped)) {

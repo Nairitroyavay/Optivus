@@ -391,7 +391,11 @@ class FirestoreRoutineTransactionRepository
       final newIds = newRoutineItems.map((i) => i.id).toList(growable: false);
       final finalSetup = updatedSetup
           .copyWith(revision: liveSetup.revision + 1, updatedAt: DateTime.now())
-          .withSectionRoutineIds(section, newIds);
+          .withSectionRoutineIds(section, newIds)
+          .withSectionAuthority(
+            section,
+            BaseTimelineSectionAuthority.baseTimeline,
+          );
 
       transaction.set(setupRef, finalSetup.toMap());
 
@@ -821,7 +825,11 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
               revision: initialSetup.revision + 1,
               updatedAt: DateTime.now(),
             )
-            .withSectionRoutineIds(section, newIds);
+            .withSectionRoutineIds(section, newIds)
+            .withSectionAuthority(
+              section,
+              BaseTimelineSectionAuthority.baseTimeline,
+            );
 
         if (_setupRepository != null) {
           await _setupRepository.saveSetup(uid, finalSetup);

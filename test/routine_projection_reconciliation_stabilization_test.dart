@@ -442,6 +442,157 @@ void main() {
     );
 
     test(
+      'does not adopt manual or tampered documents during projection repair',
+      () async {
+        final bundle = _buildRealisticBundle(uid, count: 4);
+        final plan = RoutineOnboardingProjection.build(bundle);
+        final database = FakeRoutineDatabase();
+        final repository = FakeRoutineRepository(database: database);
+
+        final manualCollision = plan.items[0].copyWith(
+          source: RoutineSource.manual,
+          onboardingProjectionId: 'legacy-onboarding-projection-v0',
+          onboardingSourceItemId: plan.items[0].onboardingSourceItemId,
+          title: 'Manual Collision',
+        );
+        final tamperedSource = plan.items[1].copyWith(
+          onboardingProjectionId: 'legacy-onboarding-projection-v0',
+          onboardingSourceItemId: 'different-source-item',
+          title: 'Tampered Source',
+        );
+        final missingSourceIdentity = plan.items[2].copyWith(
+          onboardingProjectionId: 'legacy-onboarding-projection-v0',
+          onboardingSourceItemId: '',
+          title: 'Missing Source Identity',
+        );
+
+        await repository.createRoutineItem(uid, manualCollision);
+        await repository.createRoutineItem(uid, tamperedSource);
+        await repository.createRoutineItem(uid, missingSourceIdentity);
+        await repository.createRoutineItem(uid, plan.items[3]);
+
+        final repaired = await repository.reconcileOnboardingProjection(
+          uid,
+          plan,
+        );
+        expect(repaired, isTrue);
+
+        final stored = await repository.fetchRoutineItems(uid);
+        expect(
+          stored.firstWhere((item) => item.id == manualCollision.id).source,
+          RoutineSource.manual,
+        );
+        expect(
+          stored
+              .firstWhere((item) => item.id == tamperedSource.id)
+              .onboardingSourceItemId,
+          'different-source-item',
+        );
+        expect(
+          stored
+              .firstWhere((item) => item.id == missingSourceIdentity.id)
+              .onboardingSourceItemId,
+          '',
+        );
+
+        final receipt = await repository.fetchProjectionReceipt(
+          uid,
+          plan.projectionId,
+        );
+        expect(
+          receipt!.failedItemIds,
+          containsAll([
+            manualCollision.id,
+            tamperedSource.id,
+            missingSourceIdentity.id,
+          ]),
+        );
+        final validation = const RoutineProjectionReceiptValidator().validate(
+          receipt: receipt,
+          actualItems: stored,
+          ownerUid: uid,
+          plan: plan,
+        );
+        expect(validation.isValid, isFalse);
+      },
+    );
+
+    test(
+      'receipt validator rejects every finalization identity and cursor drift',
+      () async {
+        final bundle = _buildRealisticBundle(uid, count: 5);
+        final plan = RoutineOnboardingProjection.build(bundle);
+        final expectedIds = plan.items.map((item) => item.id).toList()..sort();
+        final receipt = plan.receipt.copyWith(
+          status: 'completed',
+          cursor: plan.items.length,
+          totalCount: plan.items.length,
+          expectedItemIds: expectedIds,
+          projectedItemIds: expectedIds,
+          createdItemIds: expectedIds,
+        );
+
+        for (final entry in <(String, RoutineProjectionReceipt)>[
+          ('wrong projection ID', receipt.copyWith(id: '${receipt.id}-wrong')),
+          ('wrong revision', receipt.copyWith(revision: receipt.revision + 1)),
+          (
+            'wrong source bundle ID',
+            receipt.copyWith(sourceBundleId: 'wrong-bundle'),
+          ),
+          (
+            'wrong fingerprint',
+            receipt.copyWith(sourceBundleFingerprint: 'wrong-fingerprint'),
+          ),
+          (
+            'wrong expected IDs',
+            receipt.copyWith(expectedItemIds: ['wrong-id']),
+          ),
+          (
+            'wrong projected IDs',
+            receipt.copyWith(projectedItemIds: ['wrong-id']),
+          ),
+          (
+            'failedItemIds not empty',
+            receipt.copyWith(failedItemIds: [plan.items.first.id]),
+          ),
+          (
+            'wrong schema',
+            receipt.copyWith(
+              schemaVersion: RoutineProjectionReceipt.currentSchemaVersion + 1,
+            ),
+          ),
+          (
+            'wrong event schema',
+            receipt.copyWith(
+              eventSchemaVersion:
+                  RoutineProjectionReceipt.currentEventSchemaVersion + 1,
+            ),
+          ),
+          (
+            'completed receipt with wrong cursor',
+            receipt.copyWith(cursor: receipt.totalCount - 1),
+          ),
+        ]) {
+          final result = const RoutineProjectionReceiptValidator().validate(
+            receipt: entry.$2,
+            actualItems: plan.items,
+            ownerUid: uid,
+            plan: plan,
+          );
+          expect(result.isValid, isFalse, reason: entry.$1);
+        }
+
+        final valid = const RoutineProjectionReceiptValidator().validate(
+          receipt: receipt,
+          actualItems: plan.items,
+          ownerUid: uid,
+          plan: plan,
+        );
+        expect(valid.isValid, isTrue);
+      },
+    );
+
+    test(
       'rewrites legacy completed receipts whose validator-owned fields are stale',
       () async {
         final bundle = _buildRealisticBundle(uid, count: 6);

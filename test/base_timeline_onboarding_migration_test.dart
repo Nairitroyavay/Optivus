@@ -1,10 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/models/coach_models.dart';
 import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/models/routine_projection_receipt.dart';
 import 'package:optivus/repositories/base_timeline_setup_repository.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
@@ -12,7 +14,7 @@ import 'package:optivus/services/routine_onboarding_projection.dart';
 void main() {
   group('Base Timeline Onboarding Migration and Builder Tests', () {
     test(
-      'fromOnboardingCompletion builds rich setup with schemaVersion 2 and revision 1',
+      'fromOnboardingCompletion builds rich setup with current schema and revision 1',
       () {
         const uid = 'user-onboarding-build';
         final now = DateTime.now();
@@ -151,7 +153,7 @@ void main() {
         );
 
         expect(setup.uid, uid);
-        expect(setup.schemaVersion, 2);
+        expect(setup.schemaVersion, BaseTimelineSetup.currentSchemaVersion);
         expect(setup.revision, 1);
         expect(setup.classLogicalAssetId, 'class-asset-1');
         expect(
@@ -276,7 +278,7 @@ void main() {
     );
 
     test(
-      'migrateBaseTimelineSetupIfNeeded backfills unconfigured sections but protects post-onboarding edits',
+      'migrateBaseTimelineSetupIfNeeded protects post-onboarding edits and leaves high-revision empties for evidence repair',
       () async {
         const uid = 'user-partial-migration';
         final now = DateTime.now();
@@ -380,8 +382,8 @@ void main() {
         // 3. Trigger migration via setup repository
         final migrated = await setupRepo.fetchSetup(uid);
 
-        // MUST be upgraded to schemaVersion 2
-        expect(migrated.schemaVersion, 2);
+        // MUST be upgraded to the current schema.
+        expect(migrated.schemaVersion, BaseTimelineSetup.currentSchemaVersion);
         // Revision must be preserved >= 5
         expect(migrated.revision, 5);
 
@@ -393,19 +395,15 @@ void main() {
           'Custom Post-Onboarding Class',
         );
         expect(migrated.classRoutineItemIds, const ['custom-class-item-id']);
-
-        // UNCONFIGURED SECTION BACKFILLED FROM ONBOARDING
-        expect(migrated.workBlocks.isNotEmpty, isTrue);
-        expect(migrated.workBlocks.first.title, 'Onboarding Job');
         expect(
-          migrated.workRoutineItemIds,
-          contains(
-            RoutineOnboardingProjection.stableRoutineDocumentId(
-              ownerUid: uid,
-              sourceItemId: 'onboarding-work-item',
-            ),
-          ),
+          migrated.authorityFor(BaseTimelineSection.classes),
+          BaseTimelineSectionAuthority.onboardingSeed,
         );
+
+        // High-revision empty sections are ambiguous until the Routine repair
+        // path can inspect live templates and stronger completion evidence.
+        expect(migrated.workBlocks, isEmpty);
+        expect(migrated.workRoutineItemIds, isEmpty);
       },
     );
 
@@ -423,5 +421,104 @@ void main() {
         expect(setup.revision, 1);
       },
     );
+
+    test(
+      'fetchSetup does not persist an empty setup when onboarding source read fails',
+      () async {
+        const uid = 'source-read-fails';
+        final repo = FakeBaseTimelineSetupRepository(
+          onboardingRepo: _ThrowingOnboardingRepository(),
+        );
+
+        await expectLater(repo.fetchSetup(uid), throwsStateError);
+
+        final recoveredSource = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.utc(2026, 9, 13),
+          classBlocks: const [
+            TimelineBlockDraft(
+              id: 'class-recovered',
+              section: 'classes',
+              title: 'Recovered Class',
+              startMinute: 9 * 60,
+              endMinute: 10 * 60,
+              repeatDays: [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+          ],
+        );
+        await repo.saveSetup(uid, recoveredSource);
+
+        final loaded = await repo.fetchSetup(uid);
+        expect(loaded.classBlocks.single.title, 'Recovered Class');
+      },
+    );
+
+    test(
+      'legacy setup migration is retryable when onboarding source read fails',
+      () async {
+        const uid = 'legacy-source-read-fails';
+        final repo = FakeBaseTimelineSetupRepository(
+          onboardingRepo: _ThrowingOnboardingRepository(),
+        );
+        final legacy = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.utc(2026, 9, 13),
+          schemaVersion: 2,
+          revision: 3,
+          classBlocks: const [
+            TimelineBlockDraft(
+              id: 'legacy-class',
+              section: 'classes',
+              title: 'Legacy Class',
+              startMinute: 9 * 60,
+              endMinute: 10 * 60,
+              repeatDays: [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+          ],
+        );
+        await repo.saveSetup(uid, legacy);
+
+        final loaded = await repo.fetchSetup(uid);
+        expect(loaded.schemaVersion, 2);
+        expect(loaded.classBlocks.single.title, 'Legacy Class');
+      },
+    );
   });
+}
+
+class _ThrowingOnboardingRepository implements OnboardingRepository {
+  @override
+  Future<OnboardingDraft?> fetchDraft(String uid) async {
+    throw StateError('simulated onboarding source read failure');
+  }
+
+  @override
+  Future<OnboardingCompletionBundle?> fetchCompletionBundle(String uid) async {
+    throw StateError('simulated onboarding source read failure');
+  }
+
+  @override
+  Future<void> saveDraft(OnboardingDraft draft) async {}
+
+  @override
+  Future<void> saveFinalDraftImmediately(OnboardingDraft draft) async {}
+
+  @override
+  Future<void> flushPendingDraftSave() async {}
+
+  @override
+  void dispose() {}
+
+  @override
+  Future<void> saveCompletionBundle(OnboardingCompletionBundle bundle) async {}
+
+  @override
+  Future<RoutineProjectionResult> completeOnboarding({
+    required OnboardingDraft finalDraft,
+    required OnboardingCompletionBundle bundle,
+  }) {
+    throw UnimplementedError();
+  }
 }

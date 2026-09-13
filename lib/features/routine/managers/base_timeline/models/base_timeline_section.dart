@@ -2,6 +2,8 @@ import 'package:optivus/models/onboarding_draft.dart';
 
 enum BaseTimelineSection { classes, work, eating, fixed, skinCare }
 
+enum BaseTimelineSectionAuthority { onboardingSeed, baseTimeline }
+
 enum BaseSetupOrigin {
   photo,
   generatedFromAnswers,

@@ -8,7 +8,7 @@ import 'package:optivus/models/skin_care_product_draft.dart';
 /// Durable runtime Base Timeline configuration stored at
 /// `users/{uid}/baseTimelineSetup/current`.
 class BaseTimelineSetup {
-  static const int currentSchemaVersion = 2;
+  static const int currentSchemaVersion = 3;
 
   final String uid;
   final DateTime updatedAt;
@@ -21,6 +21,12 @@ class BaseTimelineSetup {
   final List<String> eatingRoutineItemIds;
   final List<String> fixedRoutineItemIds;
   final List<String> skinCareRoutineItemIds;
+
+  final BaseTimelineSectionAuthority classAuthority;
+  final BaseTimelineSectionAuthority workAuthority;
+  final BaseTimelineSectionAuthority eatingAuthority;
+  final BaseTimelineSectionAuthority fixedAuthority;
+  final BaseTimelineSectionAuthority skinCareAuthority;
 
   // ── Classes ──────────────────────────────────────────────────
   final String? classLogicalAssetId;
@@ -84,6 +90,11 @@ class BaseTimelineSetup {
     this.eatingRoutineItemIds = const [],
     this.fixedRoutineItemIds = const [],
     this.skinCareRoutineItemIds = const [],
+    this.classAuthority = BaseTimelineSectionAuthority.onboardingSeed,
+    this.workAuthority = BaseTimelineSectionAuthority.onboardingSeed,
+    this.eatingAuthority = BaseTimelineSectionAuthority.onboardingSeed,
+    this.fixedAuthority = BaseTimelineSectionAuthority.onboardingSeed,
+    this.skinCareAuthority = BaseTimelineSectionAuthority.onboardingSeed,
     this.classLogicalAssetId,
     this.classLogicalAssetR2Key,
     this.classBlocks = const [],
@@ -357,6 +368,26 @@ class BaseTimelineSetup {
     };
   }
 
+  List<TimelineBlockDraft> blocksFor(BaseTimelineSection section) {
+    return switch (section) {
+      BaseTimelineSection.classes => List.unmodifiable(classBlocks),
+      BaseTimelineSection.work => List.unmodifiable(workBlocks),
+      BaseTimelineSection.eating => List.unmodifiable(eatingBlocks),
+      BaseTimelineSection.fixed => List.unmodifiable(fixedBlocks),
+      BaseTimelineSection.skinCare => List.unmodifiable(skinCareBlocks),
+    };
+  }
+
+  BaseTimelineSectionAuthority authorityFor(BaseTimelineSection section) {
+    return switch (section) {
+      BaseTimelineSection.classes => classAuthority,
+      BaseTimelineSection.work => workAuthority,
+      BaseTimelineSection.eating => eatingAuthority,
+      BaseTimelineSection.fixed => fixedAuthority,
+      BaseTimelineSection.skinCare => skinCareAuthority,
+    };
+  }
+
   BaseTimelineSetup withSectionRoutineIds(
     BaseTimelineSection section,
     List<String> newIds,
@@ -367,6 +398,19 @@ class BaseTimelineSetup {
       BaseTimelineSection.eating => copyWith(eatingRoutineItemIds: newIds),
       BaseTimelineSection.fixed => copyWith(fixedRoutineItemIds: newIds),
       BaseTimelineSection.skinCare => copyWith(skinCareRoutineItemIds: newIds),
+    };
+  }
+
+  BaseTimelineSetup withSectionAuthority(
+    BaseTimelineSection section,
+    BaseTimelineSectionAuthority authority,
+  ) {
+    return switch (section) {
+      BaseTimelineSection.classes => copyWith(classAuthority: authority),
+      BaseTimelineSection.work => copyWith(workAuthority: authority),
+      BaseTimelineSection.eating => copyWith(eatingAuthority: authority),
+      BaseTimelineSection.fixed => copyWith(fixedAuthority: authority),
+      BaseTimelineSection.skinCare => copyWith(skinCareAuthority: authority),
     };
   }
 
@@ -524,6 +568,11 @@ class BaseTimelineSetup {
     List<String>? eatingRoutineItemIds,
     List<String>? fixedRoutineItemIds,
     List<String>? skinCareRoutineItemIds,
+    BaseTimelineSectionAuthority? classAuthority,
+    BaseTimelineSectionAuthority? workAuthority,
+    BaseTimelineSectionAuthority? eatingAuthority,
+    BaseTimelineSectionAuthority? fixedAuthority,
+    BaseTimelineSectionAuthority? skinCareAuthority,
     String? classLogicalAssetId,
     bool clearClassLogicalAssetId = false,
     String? classLogicalAssetR2Key,
@@ -588,6 +637,11 @@ class BaseTimelineSetup {
       fixedRoutineItemIds: fixedRoutineItemIds ?? this.fixedRoutineItemIds,
       skinCareRoutineItemIds:
           skinCareRoutineItemIds ?? this.skinCareRoutineItemIds,
+      classAuthority: classAuthority ?? this.classAuthority,
+      workAuthority: workAuthority ?? this.workAuthority,
+      eatingAuthority: eatingAuthority ?? this.eatingAuthority,
+      fixedAuthority: fixedAuthority ?? this.fixedAuthority,
+      skinCareAuthority: skinCareAuthority ?? this.skinCareAuthority,
       classLogicalAssetId: clearClassLogicalAssetId
           ? null
           : (classLogicalAssetId ?? this.classLogicalAssetId),
@@ -669,6 +723,11 @@ class BaseTimelineSetup {
       'eatingRoutineItemIds': eatingRoutineItemIds,
       'fixedRoutineItemIds': fixedRoutineItemIds,
       'skinCareRoutineItemIds': skinCareRoutineItemIds,
+      'classAuthority': classAuthority.name,
+      'workAuthority': workAuthority.name,
+      'eatingAuthority': eatingAuthority.name,
+      'fixedAuthority': fixedAuthority.name,
+      'skinCareAuthority': skinCareAuthority.name,
       'classLogicalAssetId': classLogicalAssetId,
       'classLogicalAssetR2Key': classLogicalAssetR2Key,
       'classBlocks': classBlocks.map((b) => b.toMap()).toList(),
@@ -738,6 +797,15 @@ class BaseTimelineSetup {
           .toList();
     }
 
+    BaseTimelineSectionAuthority parseAuthority(dynamic raw) {
+      if (raw is String) {
+        for (final authority in BaseTimelineSectionAuthority.values) {
+          if (authority.name == raw) return authority;
+        }
+      }
+      return BaseTimelineSectionAuthority.onboardingSeed;
+    }
+
     return BaseTimelineSetup(
       uid: (map['uid'] as String?)?.trim().isNotEmpty == true
           ? map['uid'] as String
@@ -770,6 +838,11 @@ class BaseTimelineSetup {
               ?.map((e) => e.toString())
               .toList() ??
           const [],
+      classAuthority: parseAuthority(map['classAuthority']),
+      workAuthority: parseAuthority(map['workAuthority']),
+      eatingAuthority: parseAuthority(map['eatingAuthority']),
+      fixedAuthority: parseAuthority(map['fixedAuthority']),
+      skinCareAuthority: parseAuthority(map['skinCareAuthority']),
       classLogicalAssetId: map['classLogicalAssetId'] as String?,
       classLogicalAssetR2Key: map['classLogicalAssetR2Key'] as String?,
       classBlocks: parseBlocks(map['classBlocks']),
