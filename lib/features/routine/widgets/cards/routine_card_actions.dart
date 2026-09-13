@@ -1,11 +1,13 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/models/routine_write_result.dart';
+import 'package:optivus/features/routine/models/routine_action_context.dart';
 import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/services/routine_action_executor.dart';
+import 'package:optivus/features/routine/services/routine_validation_service.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_presentation.dart';
 import 'package:optivus/features/routine/sheets/routine_move_sheet.dart';
 import 'package:optivus/features/tracker/money/money_system_mock_flows.dart';
@@ -25,24 +27,34 @@ class RoutineCardActions extends ConsumerWidget {
   /// occurrences write to the correct occurrence record rather than relying
   /// on the ambiguous _occurrenceAnchorDate inference.
   final DateTime? occurrenceDate;
+  final RoutineActionContext? actionContext;
 
   const RoutineCardActions({
     super.key,
     required this.item,
     required this.color,
     this.occurrenceDate,
+    this.actionContext,
   });
 
-  void _runRoutineAction(Future<RoutineWriteResult> Function() action) {
-    unawaited(
-      action().catchError((Object error, StackTrace stackTrace) {
-        if (kDebugMode) {
-          debugPrint('Routine card action failed unexpectedly.');
-        }
-        return const RoutineWriteResult.retryRequired(
-          message: 'Could not update routine. Please try again.',
+  Future<RoutineWriteResult> _executeRoutineAction(
+    BuildContext context,
+    WidgetRef ref, {
+    required RoutineOccurrenceAction action,
+    required Future<RoutineWriteResult> Function() perform,
+  }) {
+    final effectiveContext =
+        actionContext ??
+        RoutineActionContext.fallback(
+          item: item,
+          occurrenceDate: occurrenceDate,
         );
-      }),
+    return RoutineActionExecutor.execute(
+      context: context,
+      ref: ref,
+      actionContext: effectiveContext,
+      action: action,
+      perform: perform,
     );
   }
 
@@ -58,21 +70,27 @@ class RoutineCardActions extends ConsumerWidget {
         ? ref.read(routineNotifierProvider.notifier)
         : null;
     final ownerUid = notifier?.ownerUid;
-    final occurrenceTargetId = ownerUid != null && occurrenceDate != null
-        ? stableRoutineOccurrenceId(
-            ownerUid: ownerUid,
-            routineItemId: item.id,
-            occurrenceDateKey: routineLocalDateKey(occurrenceDate!),
-          )
+    final effectiveOccurrenceDate =
+        actionContext?.occurrenceDate ?? occurrenceDate;
+    final occurrenceDateKey =
+        actionContext?.occurrenceDateKey ??
+        (effectiveOccurrenceDate == null
+            ? null
+            : routineLocalDateKey(effectiveOccurrenceDate));
+    final templateId = actionContext?.templateId ?? item.id;
+    final occurrenceTargetId = ownerUid != null && occurrenceDateKey != null
+        ? (actionContext?.occurrenceId ??
+              stableRoutineOccurrenceId(
+                ownerUid: ownerUid,
+                routineItemId: templateId,
+                occurrenceDateKey: occurrenceDateKey,
+              ))
         : null;
-    final occurrenceDateKey = occurrenceDate == null
-        ? null
-        : routineLocalDateKey(occurrenceDate!);
     final actionState = hasScope
         ? ref.watch(
             routineNotifierProvider.select(
               (state) => (
-                templatePending: state.pendingItemIds.contains(item.id),
+                templatePending: state.pendingItemIds.contains(templateId),
                 occurrencePending:
                     occurrenceTargetId != null &&
                     state.pendingOccurrenceIds.contains(occurrenceTargetId),
@@ -100,7 +118,11 @@ class RoutineCardActions extends ConsumerWidget {
               textDirection: textDirection,
             );
 
+        final isCompleted =
+            item.isCompleted || item.status == RoutineStatus.completed;
+
         final hasGenericCountdown =
+            item.status == RoutineStatus.active &&
             item.blockType != RoutineBlockType.trackerTask &&
             item.blockType != RoutineBlockType.checkIn &&
             item.blockType != RoutineBlockType.moneyTask &&
@@ -118,21 +140,42 @@ class RoutineCardActions extends ConsumerWidget {
               : null,
           color: OptivusColors.routineAccent,
           icon: Icons.play_arrow_rounded,
-          isDisabled: isPending || hasGenericCountdown,
+          isDisabled: isPending || isCompleted || hasGenericCountdown,
           onTap: () {
             if (!hasScope) return;
+            if (isCompleted) {
+              _executeRoutineAction(
+                context,
+                ref,
+                action: RoutineOccurrenceAction.start,
+                perform: () => Future.value(
+                  RoutineWriteResult.validationFailed(
+                    RoutineValidationResult.invalid(
+                      errorType: RoutineValidationErrorType.invalidTime,
+                      userSafeMessage: 'Completed routine cannot be restarted.',
+                    ),
+                    message: 'Completed routine cannot be restarted.',
+                    failureCategory: RoutineFailureCategory.invalidTransition,
+                  ),
+                ),
+              );
+              return;
+            }
             if (item.blockType == RoutineBlockType.moneyTask) {
               showSaveViaUpiFlow(
                 context,
                 ref,
                 source: MoneyEntrySource.routineTask,
                 routineTaskId: item.id,
-                onSaved: () => _runRoutineAction(
-                  () => ref
+                onSaved: () => _executeRoutineAction(
+                  context,
+                  ref,
+                  action: RoutineOccurrenceAction.complete,
+                  perform: () => ref
                       .read(routineNotifierProvider.notifier)
                       .completeRoutineItem(
                         item.id,
-                        occurrenceDate: occurrenceDate,
+                        occurrenceDate: effectiveOccurrenceDate,
                       ),
                 ),
               );
@@ -144,16 +187,28 @@ class RoutineCardActions extends ConsumerWidget {
                     isActiveTrackerOccurrence)) {
               ref.read(appNavigationProvider.notifier).goToTracker();
             } else if (item.blockType == RoutineBlockType.trackerTask) {
-              _runRoutineAction(
-                () => ref
+              _executeRoutineAction(
+                context,
+                ref,
+                action: RoutineOccurrenceAction.startTracker,
+                perform: () => ref
                     .read(routineNotifierProvider.notifier)
-                    .startRoutineItem(item.id, occurrenceDate: occurrenceDate),
+                    .startRoutineItem(
+                      item.id,
+                      occurrenceDate: effectiveOccurrenceDate,
+                    ),
               );
             } else {
-              _runRoutineAction(
-                () => ref
+              _executeRoutineAction(
+                context,
+                ref,
+                action: RoutineOccurrenceAction.start,
+                perform: () => ref
                     .read(routineNotifierProvider.notifier)
-                    .startRoutineItem(item.id, occurrenceDate: occurrenceDate),
+                    .startRoutineItem(
+                      item.id,
+                      occurrenceDate: effectiveOccurrenceDate,
+                    ),
               );
             }
           },
@@ -164,29 +219,35 @@ class RoutineCardActions extends ConsumerWidget {
           label: 'Done',
           color: OptivusColors.success,
           icon: Icons.check_rounded,
-          isSelected: item.isCompleted,
-          isDisabled: isPending,
+          isSelected: isCompleted,
+          isDisabled: isPending || isCompleted,
           onTap: () {
             if (!hasScope) return;
-            if (item.blockType == RoutineBlockType.trackerTask) {
-              _runRoutineAction(
-                () => ref
-                    .read(routineNotifierProvider.notifier)
-                    .completeRoutineItem(
-                      item.id,
-                      occurrenceDate: occurrenceDate,
-                    ),
+            if (isCompleted) {
+              _executeRoutineAction(
+                context,
+                ref,
+                action: RoutineOccurrenceAction.complete,
+                perform: () => Future.value(
+                  const RoutineWriteResult.noOp(
+                    message: 'Already completed.',
+                    failureCategory: RoutineFailureCategory.alreadyCompleted,
+                  ),
+                ),
               );
-            } else {
-              _runRoutineAction(
-                () => ref
-                    .read(routineNotifierProvider.notifier)
-                    .completeRoutineItem(
-                      item.id,
-                      occurrenceDate: occurrenceDate,
-                    ),
-              );
+              return;
             }
+            _executeRoutineAction(
+              context,
+              ref,
+              action: RoutineOccurrenceAction.complete,
+              perform: () => ref
+                  .read(routineNotifierProvider.notifier)
+                  .completeRoutineItem(
+                    item.id,
+                    occurrenceDate: effectiveOccurrenceDate,
+                  ),
+            );
           },
         );
 
@@ -195,14 +256,34 @@ class RoutineCardActions extends ConsumerWidget {
           label: 'Move',
           color: OptivusColors.textSecondary,
           icon: Icons.schedule_rounded,
-          isDisabled: isPending,
+          isDisabled: isPending || isCompleted,
           onTap: () {
             if (!hasScope) return;
+            if (isCompleted) {
+              _executeRoutineAction(
+                context,
+                ref,
+                action: RoutineOccurrenceAction.move,
+                perform: () => Future.value(
+                  RoutineWriteResult.validationFailed(
+                    RoutineValidationResult.invalid(
+                      errorType: RoutineValidationErrorType.invalidTime,
+                      userSafeMessage: 'Completed routine cannot be moved.',
+                    ),
+                    message: 'Completed routine cannot be moved.',
+                    failureCategory: RoutineFailureCategory.invalidTransition,
+                  ),
+                ),
+              );
+              return;
+            }
             showRoutineMoveSheet(
               context,
               ref,
               item,
-              occurrenceDate: occurrenceDate,
+              occurrenceDate: effectiveOccurrenceDate,
+              displayDate: actionContext?.displayDate,
+              actionContext: actionContext,
             );
           },
         );
@@ -239,6 +320,8 @@ class RoutineCardActions extends ConsumerWidget {
     WidgetRef ref,
     RoutineItem item,
   ) {
+    final effectiveOccurrenceDate =
+        actionContext?.occurrenceDate ?? occurrenceDate;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -272,13 +355,16 @@ class RoutineCardActions extends ConsumerWidget {
                     icon: Icons.check_circle_outline_rounded,
                     onTap: () {
                       Navigator.pop(ctx);
-                      _runRoutineAction(
-                        () => ref
+                      _executeRoutineAction(
+                        context,
+                        ref,
+                        action: RoutineOccurrenceAction.checkIn,
+                        perform: () => ref
                             .read(routineNotifierProvider.notifier)
                             .checkIn(
                               item.id,
                               'Avoided',
-                              occurrenceDate: occurrenceDate,
+                              occurrenceDate: effectiveOccurrenceDate,
                             ),
                       );
                     },
@@ -289,13 +375,16 @@ class RoutineCardActions extends ConsumerWidget {
                     icon: Icons.warning_amber_rounded,
                     onTap: () {
                       Navigator.pop(ctx);
-                      _runRoutineAction(
-                        () => ref
+                      _executeRoutineAction(
+                        context,
+                        ref,
+                        action: RoutineOccurrenceAction.checkIn,
+                        perform: () => ref
                             .read(routineNotifierProvider.notifier)
                             .checkIn(
                               item.id,
                               'Craving',
-                              occurrenceDate: occurrenceDate,
+                              occurrenceDate: effectiveOccurrenceDate,
                             ),
                       );
                     },
@@ -306,13 +395,16 @@ class RoutineCardActions extends ConsumerWidget {
                     icon: Icons.close_rounded,
                     onTap: () {
                       Navigator.pop(ctx);
-                      _runRoutineAction(
-                        () => ref
+                      _executeRoutineAction(
+                        context,
+                        ref,
+                        action: RoutineOccurrenceAction.checkIn,
+                        perform: () => ref
                             .read(routineNotifierProvider.notifier)
                             .checkIn(
                               item.id,
                               'Relapsed',
-                              occurrenceDate: occurrenceDate,
+                              occurrenceDate: effectiveOccurrenceDate,
                             ),
                       );
                     },

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/routine/models/routine_action_context.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_actions.dart';
@@ -23,6 +24,7 @@ class RoutineRichTimelineCard extends ConsumerWidget {
   /// When non-null, passed through to [RoutineCardActions] and subtask toggles
   /// for correct occurrence targeting.
   final DateTime? occurrenceDate;
+  final RoutineActionContext? actionContext;
 
   const RoutineRichTimelineCard({
     super.key,
@@ -33,6 +35,7 @@ class RoutineRichTimelineCard extends ConsumerWidget {
     this.hasOverlap = false,
     this.onTap,
     this.occurrenceDate,
+    this.actionContext,
   });
 
   @override
@@ -301,6 +304,7 @@ class RoutineRichTimelineCard extends ConsumerWidget {
             item: item,
             color: accent,
             occurrenceDate: occurrenceDate,
+            actionContext: actionContext,
           ),
         ],
       ),
@@ -314,6 +318,8 @@ class RoutineRichTimelineCard extends ConsumerWidget {
     int index,
     TextStyle style,
   ) {
+    final effectiveOccurrenceDate =
+        actionContext?.occurrenceDate ?? occurrenceDate;
     final task = item.subtasks![index];
     final done =
         item.subtasksCompleted != null &&
@@ -332,7 +338,11 @@ class RoutineRichTimelineCard extends ConsumerWidget {
         if (hasScope) {
           ref
               .read(routineNotifierProvider.notifier)
-              .toggleSubtask(item.id, index, occurrenceDate: occurrenceDate);
+              .toggleSubtask(
+                item.id,
+                index,
+                occurrenceDate: effectiveOccurrenceDate,
+              );
         }
       },
       child: Row(

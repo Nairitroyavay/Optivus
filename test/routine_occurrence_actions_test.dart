@@ -1,14 +1,20 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/config/backend_config.dart';
-import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/models/routine_action_context.dart';
+import 'package:optivus/features/routine/models/routine_day_entry.dart';
 import 'package:optivus/features/routine/models/routine_write_result.dart';
-import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/sheets/routine_move_sheet.dart';
+import 'package:optivus/features/routine/widgets/cards/routine_card_actions.dart';
 import 'package:optivus/models/routine_event_record.dart';
+import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/routine_occurrence.dart';
-import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/repositories/routine_history_repository.dart';
+import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/repositories/routine_transaction_repository.dart';
 
 class FailingRoutineHistoryRepository extends FakeRoutineHistoryRepository {
@@ -858,5 +864,244 @@ void main() {
 
     final occurrences = state.occurrences.where((o) => o.routineItemId == 't1');
     expect(occurrences.last.action, 'start');
+  });
+
+  test('Start on active item returns noOp with alreadyActive', () async {
+    final notifier = container.read(routineNotifierProvider.notifier);
+    const uid = 'user_1';
+    await repo.createRoutineItem(uid, createTemplate(uid, 't1'));
+    await notifier.loadForOwner(uid);
+
+    final first = await notifier.startFlexibleTask('t1');
+    await waitForPending();
+    expect(first.outcome, RoutineWriteOutcome.saved);
+
+    final second = await notifier.startFlexibleTask('t1');
+    expect(second.outcome, RoutineWriteOutcome.noOp);
+    expect(second.failureCategory, RoutineFailureCategory.alreadyActive);
+  });
+
+  test(
+    'Done twice on completed item returns noOp and creates no duplicate event',
+    () async {
+      final notifier = container.read(routineNotifierProvider.notifier);
+      const uid = 'user_1';
+      await repo.createRoutineItem(uid, createTemplate(uid, 't1'));
+      await notifier.loadForOwner(uid);
+
+      final first = await notifier.completeRoutineItem('t1');
+      await waitForPending();
+      expect(first.outcome, RoutineWriteOutcome.saved);
+      final eventsAfterFirst = container
+          .read(routineNotifierProvider)
+          .events
+          .length;
+
+      final second = await notifier.completeRoutineItem('t1');
+      expect(second.outcome, RoutineWriteOutcome.noOp);
+      expect(second.failureCategory, RoutineFailureCategory.alreadyCompleted);
+      final eventsAfterSecond = container
+          .read(routineNotifierProvider)
+          .events
+          .length;
+      expect(eventsAfterSecond, equals(eventsAfterFirst));
+    },
+  );
+
+  test('Start on completed item is rejected with invalidTransition', () async {
+    final notifier = container.read(routineNotifierProvider.notifier);
+    const uid = 'user_1';
+    await repo.createRoutineItem(uid, createTemplate(uid, 't1'));
+    await notifier.loadForOwner(uid);
+
+    final done = await notifier.completeRoutineItem('t1');
+    await waitForPending();
+    expect(done.outcome, RoutineWriteOutcome.saved);
+
+    final restart = await notifier.startRoutineItem('t1');
+    expect(restart.outcome, RoutineWriteOutcome.validationFailed);
+    expect(restart.failureCategory, RoutineFailureCategory.invalidTransition);
+    expect(restart.message, contains('Completed routine cannot be restarted'));
+  });
+
+  test('Move on completed item is rejected with invalidTransition', () async {
+    final notifier = container.read(routineNotifierProvider.notifier);
+    const uid = 'user_1';
+    await repo.createRoutineItem(uid, createTemplate(uid, 't1'));
+    await notifier.loadForOwner(uid);
+
+    final done = await notifier.completeRoutineItem('t1');
+    await waitForPending();
+    expect(done.outcome, RoutineWriteOutcome.saved);
+
+    final move = await notifier.moveItem(
+      itemId: 't1',
+      date: DateTime(2026, 9, 20),
+      startMinute: 700,
+      durationMinutes: 60,
+    );
+    expect(move.outcome, RoutineWriteOutcome.validationFailed);
+    expect(move.failureCategory, RoutineFailureCategory.invalidTransition);
+    expect(move.message, contains('Completed routine cannot be moved'));
+  });
+
+  test(
+    'moveToTomorrow anchors to displayDate + 1 day instead of DateTime.now()',
+    () async {
+      final notifier = container.read(routineNotifierProvider.notifier);
+      const uid = 'user_1';
+      final targetItem = createTemplate(uid, 't_future');
+      await repo.createRoutineItem(uid, targetItem);
+      await notifier.loadForOwner(uid);
+
+      final viewingDate = DateTime(2026, 11, 15);
+      final result = await notifier.moveToTomorrow(
+        targetItem,
+        occurrenceDate: viewingDate,
+        displayDate: viewingDate,
+      );
+      await waitForPending();
+
+      expect(result.outcome, RoutineWriteOutcome.saved);
+      final state = container.read(routineNotifierProvider);
+      final moved = state.occurrences.firstWhere(
+        (o) => o.routineItemId == 't_future',
+      );
+      expect(moved.movedToDateKey, '2026-11-16');
+    },
+  );
+
+  test(
+    'Firebase unavailable error produces offlineOrUnavailable failureCategory',
+    () async {
+      final notifier = container.read(routineNotifierProvider.notifier);
+      const uid = 'user_1';
+      await repo.createRoutineItem(uid, createTemplate(uid, 't1'));
+      await notifier.loadForOwner(uid);
+
+      transactionRepo.onBeforeMutation = () async {
+        throw FirebaseException(
+          plugin: 'cloud_firestore',
+          code: 'unavailable',
+          message: 'The service is currently unavailable.',
+        );
+      };
+
+      final res = await notifier.completeRoutineItem('t1');
+      expect(res.outcome, RoutineWriteOutcome.retryRequired);
+      expect(res.failureCategory, RoutineFailureCategory.offlineOrUnavailable);
+      expect(res.message, 'Offline / sync pending.');
+
+      // Clean up test hook
+      transactionRepo.onBeforeMutation = null;
+    },
+  );
+
+  testWidgets(
+    'Completed card disables Done and does not render active running countdown',
+    (tester) async {
+      final completedItem = createTemplate('user_1', 't_completed').copyWith(
+        status: RoutineStatus.completed,
+        isCompleted: true,
+        startedAt: DateTime.now().subtract(const Duration(minutes: 10)),
+        countdownDurationSeconds: 1800,
+      );
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            home: Scaffold(
+              body: RoutineCardActions(
+                item: completedItem,
+                color: Colors.blue,
+                actionContext: RoutineActionContext.fallback(
+                  item: completedItem,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Done'), findsOneWidget);
+      expect(find.text('Start'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'RoutineMoveSheet initializes date to displayDate when provided',
+    (tester) async {
+      final item = createTemplate('user_1', 't_recurring').copyWith(date: null);
+      final displayDate = DateTime(2026, 10, 20);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            home: Scaffold(
+              body: Consumer(
+                builder: (context, ref, _) => ElevatedButton(
+                  onPressed: () => showRoutineMoveSheet(
+                    context,
+                    ref,
+                    item,
+                    displayDate: displayDate,
+                  ),
+                  child: const Text('Open Move Sheet'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Move Sheet'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('TUE 20/10'), findsOneWidget);
+    },
+  );
+
+  test('Moved-in entry preserves source occurrence date on Done', () async {
+    final notifier = container.read(routineNotifierProvider.notifier);
+    const uid = 'user_1';
+    final sourceDate = DateTime(2026, 9, 10);
+    final targetDate = DateTime(2026, 9, 12);
+    final item = createTemplate(uid, 't_moved');
+    await repo.createRoutineItem(uid, item);
+    await notifier.loadForOwner(uid);
+
+    await notifier.moveItem(
+      itemId: 't_moved',
+      date: targetDate,
+      startMinute: 600,
+      durationMinutes: 60,
+      occurrenceDate: sourceDate,
+    );
+    await waitForPending();
+
+    final context = RoutineActionContext(
+      instanceId: 'm:t_moved:2026-09-12',
+      templateId: 't_moved',
+      occurrenceDateKey: '2026-09-10',
+      displayDateKey: '2026-09-12',
+      kind: RoutineDayEntryKind.movedIn,
+      item: item,
+    );
+
+    await notifier.completeRoutineItem(
+      't_moved',
+      occurrenceDate: context.occurrenceDate,
+    );
+    await waitForPending();
+
+    final state = container.read(routineNotifierProvider);
+    final occ = state.occurrences.firstWhere(
+      (o) => o.routineItemId == 't_moved',
+    );
+    expect(occ.occurrenceDateKey, '2026-09-10');
+    expect(occ.movedToDateKey, '2026-09-12');
+    expect(occ.status, RoutineStatus.completed);
   });
 }

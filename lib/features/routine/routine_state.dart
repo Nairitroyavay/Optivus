@@ -30,6 +30,7 @@ import 'package:optivus/features/routine/services/routine_materializer.dart';
 import 'package:optivus/features/routine/services/routine_countdown_allocator.dart';
 import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/features/routine/models/routine_day_entry.dart';
+import 'package:optivus/features/routine/services/routine_transition_policy.dart';
 
 enum RoutineWriteAction { create, update, delete, moveTemplate, batchCreate }
 
@@ -842,6 +843,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return RoutineWriteResult.superseded(
       operationId: operationId,
       message: 'Routine owner changed before the write completed.',
+      failureCategory: RoutineFailureCategory.ownerSuperseded,
     );
   }
 
@@ -2331,16 +2333,36 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     final now = DateTime.now().toUtc();
     final existing = _occurrenceFor(itemId, date);
     final occurrenceSource = existing?.source ?? actionSource;
-    if (action == 'start' &&
-        existing?.status == RoutineStatus.active &&
-        existing?.startedAt != null &&
-        existing?.countdownDurationSeconds != null) {
-      return const RoutineWriteResult.noOp(
-        message: 'Routine item is already active.',
+    final occAction = RoutineOccurrenceAction.values.firstWhere(
+      (e) => e.name == action,
+      orElse: () =>
+          throw ArgumentError('Unsupported occurrence action: $action'),
+    );
+
+    final decision = RoutineTransitionPolicy.evaluate(
+      existingRecord: existing,
+      requestedAction: occAction,
+    );
+    if (!decision.isAllowed) {
+      if (decision.isNoOp) {
+        return RoutineWriteResult.noOp(
+          message: decision.message,
+          failureCategory: decision.failureCategory,
+        );
+      }
+      return RoutineWriteResult.validationFailed(
+        RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.invalidTime,
+          userSafeMessage: decision.message ?? 'Invalid routine action.',
+        ),
+        message: decision.message,
+        failureCategory: decision.failureCategory,
       );
     }
+
     final timerAllocation =
         action == 'start' &&
+            existing?.status != RoutineStatus.completed &&
             existing?.startedAt == null &&
             existing?.countdownDurationSeconds == null
         ? _allocateCountdownForOccurrence(
@@ -2373,11 +2395,6 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       effectiveCountdownDurationSeconds ?? '',
       existing?.operationKey ?? '',
     ]);
-    final occAction = RoutineOccurrenceAction.values.firstWhere(
-      (e) => e.name == action,
-      orElse: () =>
-          throw ArgumentError('Unsupported occurrence action: $action'),
-    );
 
     final record = RoutineOccurrenceRecord(
       id: id,
@@ -2543,6 +2560,21 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     } catch (error) {
       if (!mounted) return _supersededWriteResult(operationId);
       if (_ownerUid != uid) return _supersededWriteResult(operationId);
+
+      RoutineFailureCategory failureCat = RoutineFailureCategory.unknown;
+      if (error is FirebaseException) {
+        if (error.code == 'unavailable' ||
+            error.code == 'network-request-failed') {
+          failureCat = RoutineFailureCategory.offlineOrUnavailable;
+        } else if (error.code == 'deadline-exceeded') {
+          failureCat = RoutineFailureCategory.deadlineExceeded;
+        } else if (error.code == 'permission-denied') {
+          failureCat = RoutineFailureCategory.permissionDenied;
+        }
+      } else if (error is FormatException || error is ArgumentError) {
+        failureCat = RoutineFailureCategory.validation;
+      }
+
       _logRoutineActionWrite(
         action: action,
         occurrenceSource: occurrenceSource,
@@ -2561,12 +2593,17 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             if (candidate.id != id) candidate,
           if (intent.previousRecord != null) intent.previousRecord!,
         ],
-        error: 'Could not update routine. Please try again.',
+        error: failureCat == RoutineFailureCategory.offlineOrUnavailable
+            ? 'Offline / sync pending.'
+            : 'Could not update routine. Please try again.',
       );
       await _processNextQueuedOccurrence(uid, id);
       final result = RoutineWriteResult.retryRequired(
-        message: 'Could not update routine. Please try again.',
+        message: failureCat == RoutineFailureCategory.offlineOrUnavailable
+            ? 'Offline / sync pending.'
+            : 'Could not update routine. Please try again.',
         operationId: operationId,
+        failureCategory: failureCat,
       );
       if (!completer.isCompleted) {
         completer.complete(result);
@@ -2641,6 +2678,19 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         intent.completer?.complete(_supersededWriteResult(intent.operationId));
         return;
       }
+      RoutineFailureCategory failureCat = RoutineFailureCategory.unknown;
+      if (error is FirebaseException) {
+        if (error.code == 'unavailable' ||
+            error.code == 'network-request-failed') {
+          failureCat = RoutineFailureCategory.offlineOrUnavailable;
+        } else if (error.code == 'deadline-exceeded') {
+          failureCat = RoutineFailureCategory.deadlineExceeded;
+        } else if (error.code == 'permission-denied') {
+          failureCat = RoutineFailureCategory.permissionDenied;
+        }
+      } else if (error is FormatException || error is ArgumentError) {
+        failureCat = RoutineFailureCategory.validation;
+      }
       _logRoutineActionWrite(
         action: intent.attemptedRecord.action,
         occurrenceSource: intent.attemptedRecord.source,
@@ -2659,12 +2709,17 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             if (candidate.id != id) candidate,
           if (intent.previousRecord != null) intent.previousRecord!,
         ],
-        error: 'Could not update routine. Please try again.',
+        error: failureCat == RoutineFailureCategory.offlineOrUnavailable
+            ? 'Offline / sync pending.'
+            : 'Could not update routine. Please try again.',
       );
       intent.completer?.complete(
         RoutineWriteResult.retryRequired(
-          message: 'Could not update routine. Please try again.',
+          message: failureCat == RoutineFailureCategory.offlineOrUnavailable
+              ? 'Offline / sync pending.'
+              : 'Could not update routine. Please try again.',
           operationId: intent.operationId,
+          failureCategory: failureCat,
         ),
       );
       await _processNextQueuedOccurrence(uid, id);
@@ -2697,6 +2752,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           errorType: RoutineValidationErrorType.missingData,
           userSafeMessage: 'This action can no longer be undone.',
         ),
+        failureCategory: RoutineFailureCategory.invalidTransition,
       );
     }
 
@@ -3164,6 +3220,31 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     RoutineItem item, {
     DateTime? occurrenceDate,
   }) async {
+    final anchor =
+        occurrenceDate ?? _occurrenceAnchorDate(item.id, state.selectedDay);
+    final existing = _occurrenceFor(item.id, anchor);
+    final decision = RoutineTransitionPolicy.evaluate(
+      existingRecord: existing,
+      requestedAction: RoutineOccurrenceAction.startTracker,
+    );
+    if (!decision.isAllowed) {
+      if (decision.isNoOp) {
+        _ref.read(appNavigationProvider.notifier).goToTracker();
+        return RoutineWriteResult.noOp(
+          message: decision.message,
+          failureCategory: decision.failureCategory,
+        );
+      }
+      return RoutineWriteResult.validationFailed(
+        RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.invalidTime,
+          userSafeMessage: decision.message ?? 'Cannot start tracker.',
+        ),
+        message: decision.message,
+        failureCategory: decision.failureCategory,
+      );
+    }
+
     final now = DateTime.now();
     final occurrenceDateKey = occurrenceDate == null
         ? null
@@ -3331,10 +3412,15 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   Future<RoutineWriteResult> moveToTomorrow(
     RoutineItem item, {
     DateTime? occurrenceDate,
+    DateTime? displayDate,
   }) async {
+    final baseDate = displayDate ?? occurrenceDate ?? state.selectedDay;
+    final tomorrow = TimelineUtils.dateOnly(
+      baseDate,
+    ).add(const Duration(days: 1));
     return await moveItem(
       itemId: item.id,
-      date: TimelineUtils.dateOnly(DateTime.now()).add(const Duration(days: 1)),
+      date: tomorrow,
       startMinute: item.startMinute,
       durationMinutes: item.durationMinutes,
       occurrenceDate: occurrenceDate,

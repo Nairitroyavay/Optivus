@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/features/routine/models/routine_action_context.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_rich_timeline_card.dart';
 import 'package:optivus/models/routine_item.dart';
 
@@ -12,6 +13,7 @@ class CheckInCard extends ConsumerWidget {
   final bool hasOverlap;
   final VoidCallback? onTap;
   final DateTime? occurrenceDate;
+  final RoutineActionContext? actionContext;
 
   const CheckInCard({
     super.key,
@@ -22,6 +24,7 @@ class CheckInCard extends ConsumerWidget {
     this.hasOverlap = false,
     this.onTap,
     this.occurrenceDate,
+    this.actionContext,
   });
 
   @override
@@ -34,6 +37,7 @@ class CheckInCard extends ConsumerWidget {
       hasOverlap: hasOverlap,
       onTap: onTap,
       occurrenceDate: occurrenceDate,
+      actionContext: actionContext,
     );
   }
 }

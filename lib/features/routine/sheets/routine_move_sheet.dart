@@ -5,27 +5,42 @@ import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/models/routine_write_result.dart';
+import 'package:optivus/features/routine/models/routine_action_context.dart';
+import 'package:optivus/features/routine/services/routine_action_executor.dart';
 
 void showRoutineMoveSheet(
   BuildContext context,
   WidgetRef ref,
   RoutineItem item, {
   DateTime? occurrenceDate,
+  DateTime? displayDate,
+  RoutineActionContext? actionContext,
 }) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (ctx) =>
-        _RoutineMoveSheet(item: item, occurrenceDate: occurrenceDate),
+    builder: (ctx) => _RoutineMoveSheet(
+      item: item,
+      occurrenceDate: occurrenceDate,
+      displayDate: displayDate,
+      actionContext: actionContext,
+    ),
   );
 }
 
 class _RoutineMoveSheet extends ConsumerStatefulWidget {
   final RoutineItem item;
   final DateTime? occurrenceDate;
+  final DateTime? displayDate;
+  final RoutineActionContext? actionContext;
 
-  const _RoutineMoveSheet({required this.item, this.occurrenceDate});
+  const _RoutineMoveSheet({
+    required this.item,
+    this.occurrenceDate,
+    this.displayDate,
+    this.actionContext,
+  });
 
   @override
   ConsumerState<_RoutineMoveSheet> createState() => _RoutineMoveSheetState();
@@ -38,10 +53,19 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
   bool _pending = false;
   String? _error;
 
+  DateTime get _effectiveOccurrenceDate =>
+      widget.actionContext?.occurrenceDate ?? widget.occurrenceDate ?? _date;
+
   @override
   void initState() {
     super.initState();
-    _date = widget.item.date ?? DateTime.now();
+    final initialAnchor =
+        widget.actionContext?.displayDate ??
+        widget.displayDate ??
+        widget.occurrenceDate ??
+        widget.item.date ??
+        ref.read(routineNotifierProvider).selectedDay;
+    _date = TimelineUtils.dateOnly(initialAnchor);
     _startMinute = widget.item.startMinute;
     _duration = widget.item.durationMinutes.clamp(1, 24 * 60).toInt();
   }
@@ -184,7 +208,7 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                                 .read(routineNotifierProvider.notifier)
                                 .makeTinyVersion(
                                   widget.item,
-                                  occurrenceDate: widget.occurrenceDate,
+                                  occurrenceDate: _effectiveOccurrenceDate,
                                 ),
                           ),
                   ),
@@ -200,7 +224,8 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                                 .read(routineNotifierProvider.notifier)
                                 .moveToTomorrow(
                                   widget.item,
-                                  occurrenceDate: widget.occurrenceDate,
+                                  occurrenceDate: _effectiveOccurrenceDate,
+                                  displayDate: _date,
                                 ),
                           ),
                   ),
@@ -240,7 +265,7 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                                 date: _date,
                                 startMinute: _startMinute,
                                 durationMinutes: _duration,
-                                occurrenceDate: widget.occurrenceDate,
+                                occurrenceDate: _effectiveOccurrenceDate,
                               ),
                         ),
                   child: _pending
@@ -269,11 +294,18 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
   }
 
   Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final earliest = _date.isBefore(now)
+        ? _date.subtract(const Duration(days: 365))
+        : now.subtract(const Duration(days: 365));
+    final latest = _date.isAfter(now)
+        ? _date.add(const Duration(days: 365))
+        : now.add(const Duration(days: 365));
     final picked = await showDatePicker(
       context: context,
       initialDate: _date,
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      firstDate: TimelineUtils.dateOnly(earliest),
+      lastDate: TimelineUtils.dateOnly(latest),
     );
     if (picked != null) setState(() => _date = picked);
   }
@@ -301,7 +333,7 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
           item: widget.item,
           date: _date,
           durationMinutes: _duration,
-          occurrenceDate: widget.occurrenceDate,
+          occurrenceDate: _effectiveOccurrenceDate,
         );
     if (start != null) {
       setState(() => _startMinute = start);
@@ -319,12 +351,14 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
       _pending = true;
       _error = null;
     });
+    final messenger = ScaffoldMessenger.maybeOf(context);
     final result = await write();
     if (!mounted) return;
     if (result.outcome == RoutineWriteOutcome.saved ||
         (result.outcome == RoutineWriteOutcome.noOp &&
             result.validation?.isValid != false)) {
       Navigator.of(context).pop();
+      RoutineActionExecutor.showOutcomeFeedbackWithMessenger(messenger, result);
       return;
     }
     setState(() {
@@ -334,6 +368,7 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
           result.message ??
           'Failed to update this item. Please adjust the move and retry.';
     });
+    RoutineActionExecutor.showOutcomeFeedbackWithMessenger(messenger, result);
   }
 
   String _formatDate(DateTime date) {

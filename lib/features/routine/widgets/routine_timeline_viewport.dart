@@ -14,6 +14,7 @@ import 'package:optivus/repositories/routine_history_repository.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/models/routine_day_entry.dart';
+import 'package:optivus/features/routine/models/routine_action_context.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 import 'package:optivus/features/routine/widgets/routine_time_ruler.dart';
 import 'package:optivus/features/routine/widgets/routine_current_time_line.dart';
@@ -461,6 +462,7 @@ class RoutineTimelineViewportState
                   occurrenceDate: parseRoutineLocalDateKey(
                     item.entry.occurrenceDateKey,
                   ),
+                  actionContext: RoutineActionContext.fromDayEntry(item.entry),
                   onTap: isPending
                       ? null
                       : () {
