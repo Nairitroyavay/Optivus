@@ -6,23 +6,17 @@ import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/models/routine_write_result.dart';
 
-void showAddRoutineSheet(
-  BuildContext context,
-  WidgetRef ref, {
-  RoutineItem? editItem,
-}) {
+void showAddRoutineSheet(BuildContext context, WidgetRef ref) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (ctx) => _AddRoutineSheetBody(editItem: editItem),
+    builder: (ctx) => const _AddRoutineSheetBody(),
   );
 }
 
 class _AddRoutineSheetBody extends ConsumerStatefulWidget {
-  final RoutineItem? editItem;
-
-  const _AddRoutineSheetBody({this.editItem});
+  const _AddRoutineSheetBody();
 
   @override
   ConsumerState<_AddRoutineSheetBody> createState() =>
@@ -50,43 +44,24 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
   String? _error;
   bool _saving = false;
 
-  bool get _editing => widget.editItem != null;
-
   @override
   void initState() {
     super.initState();
-    final item = widget.editItem;
-    _mode = item == null ? null : _modeForBlockType(item.blockType);
-    _titleController = TextEditingController(text: item?.title ?? '');
-    _notesController = TextEditingController(text: item?.notes ?? '');
-    _subtasksController = TextEditingController(
-      text: item?.subtasks?.join('\n') ?? '',
-    );
-    _stepsController = TextEditingController(
-      text: item?.displaySteps?.join('\n') ?? '',
-    );
-    _dishesController = TextEditingController(
-      text: item?.dishes?.join('\n') ?? '',
-    );
-    _date = item?.date ?? ref.read(routineNotifierProvider).selectedDay;
-    _startTime = TimeOfDay(
-      hour: (item?.startMinute ?? 8 * 60) ~/ 60,
-      minute: (item?.startMinute ?? 8 * 60) % 60,
-    );
-    _durationMinutes = item?.durationMinutes.clamp(1, 24 * 60).toInt() ?? 30;
-    _priority = item?.priority ?? RoutinePriority.goodToDo;
-    _category = item?.category ?? RoutineCategory.habit;
-    _trackerType = item?.trackerType ?? TrackerType.none;
-    _hard = item?.isHardBlock ?? false;
-
-    _repeatDays = List<int>.from(item?.repeatDays ?? const []);
-    _bestTime = item?.bestTime ?? 'Morning';
-
-    if (item != null &&
-        (item.blockType == RoutineBlockType.hardBlock ||
-            item.blockType == RoutineBlockType.softBlock)) {
-      _fixedKind = _kindForCategory(item.category);
-    }
+    _mode = null;
+    _titleController = TextEditingController();
+    _notesController = TextEditingController();
+    _subtasksController = TextEditingController();
+    _stepsController = TextEditingController();
+    _dishesController = TextEditingController();
+    _date = ref.read(routineNotifierProvider).selectedDay;
+    _startTime = const TimeOfDay(hour: 8, minute: 0);
+    _durationMinutes = 30;
+    _priority = RoutinePriority.goodToDo;
+    _category = RoutineCategory.habit;
+    _trackerType = TrackerType.none;
+    _hard = false;
+    _repeatDays = [];
+    _bestTime = 'Morning';
   }
 
   @override
@@ -136,13 +111,13 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
               Row(
                 children: [
                   Icon(
-                    _editing ? Icons.edit_calendar_rounded : Icons.add_circle,
+                    Icons.add_circle,
                     size: 22,
                     color: OptivusColors.routineAccent,
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    _editing ? 'Edit Routine Item' : 'Add to Routine',
+                    'Add to Routine',
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w900,
@@ -229,29 +204,28 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (!_editing)
-          GestureDetector(
-            onTap: () => setState(() => _mode = null),
-            child: const Row(
-              children: [
-                Icon(
-                  Icons.arrow_back,
-                  size: 18,
+        GestureDetector(
+          onTap: () => setState(() => _mode = null),
+          child: const Row(
+            children: [
+              Icon(
+                Icons.arrow_back,
+                size: 18,
+                color: OptivusColors.textSecondary,
+              ),
+              SizedBox(width: 4),
+              Text(
+                'Back',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
                   color: OptivusColors.textSecondary,
                 ),
-                SizedBox(width: 4),
-                Text(
-                  'Back',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: OptivusColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        if (!_editing) const SizedBox(height: 14),
+        ),
+        const SizedBox(height: 14),
         _textField(
           controller: _titleController,
           label: 'Title',
@@ -368,7 +342,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
                         ),
                       )
                     : Text(
-                        _editing ? 'Save changes' : 'Save at this time',
+                        'Save at this time',
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w900,
@@ -869,10 +843,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     final steps = _lines(_stepsController.text);
     final dishes = _lines(_dishesController.text);
     return RoutineItem(
-      id:
-          widget.editItem?.id ??
-          'routine-${DateTime.now().millisecondsSinceEpoch}',
-      userId: widget.editItem?.userId,
+      id: 'routine-${DateTime.now().millisecondsSinceEpoch}',
       title: _titleController.text.trim(),
       date: _repeatDays.isEmpty ? TimelineUtils.dateOnly(_date) : null,
       endDate: endDate,
@@ -883,8 +854,8 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
       repeatDays: _repeatDays,
       blockType: blockType,
       category: _category,
-      source: widget.editItem?.source ?? RoutineSource.manual,
-      status: widget.editItem?.status ?? RoutineStatus.planned,
+      source: RoutineSource.manual,
+      status: RoutineStatus.planned,
       priority: _priority,
       isTrackerLinked:
           blockType == RoutineBlockType.trackerTask ||
@@ -904,7 +875,6 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
       dishes: dishes.isEmpty ? null : dishes,
       hardBlock: _hard,
       repeatRule: _repeatDays.isEmpty ? 'once' : 'weekly',
-      createdAt: widget.editItem?.createdAt,
     );
   }
 
@@ -943,14 +913,9 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
       _saving = true;
       _error = null;
     });
-    RoutineWriteResult result;
-    if (_editing) {
-      result = await ref
-          .read(routineNotifierProvider.notifier)
-          .updateItem(item);
-    } else {
-      result = await ref.read(routineNotifierProvider.notifier).addItem(item);
-    }
+    final RoutineWriteResult result = await ref
+        .read(routineNotifierProvider.notifier)
+        .addItem(item);
     if (!mounted) return;
     if (result.outcome == RoutineWriteOutcome.saved ||
         result.outcome == RoutineWriteOutcome.noOp) {
@@ -1027,17 +992,6 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     };
   }
 
-  String _modeForBlockType(RoutineBlockType blockType) {
-    return switch (blockType) {
-      RoutineBlockType.hardBlock => 'fixed',
-      RoutineBlockType.softBlock => 'fixed',
-      RoutineBlockType.flexibleTask => 'flexible',
-      RoutineBlockType.trackerTask => 'tracker',
-      RoutineBlockType.checkIn => 'checkin',
-      RoutineBlockType.moneyTask => 'money',
-    };
-  }
-
   RoutineCategory _categoryForFixedKind(String kind) {
     return switch (kind) {
       'Class' || 'Tuition' => RoutineCategory.classBlock,
@@ -1047,18 +1001,6 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
       'Skin Care' => RoutineCategory.skinCare,
       'Bath' || 'Travel' || 'Prayer' => RoutineCategory.fixed,
       _ => RoutineCategory.fixed,
-    };
-  }
-
-  String _kindForCategory(RoutineCategory category) {
-    return switch (category) {
-      RoutineCategory.classBlock => 'Class',
-      RoutineCategory.job => 'Job',
-      RoutineCategory.eating => 'Eating',
-      RoutineCategory.sleep => 'Sleep',
-      RoutineCategory.skinCare => 'Skin Care',
-      RoutineCategory.fixed => 'Bath', // Default for fixed
-      _ => 'Other',
     };
   }
 

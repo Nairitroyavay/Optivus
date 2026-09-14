@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/fixed_timeline_adapter.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
+import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/repositories/base_timeline_setup_repository.dart';
 import 'package:optivus/state/app_state.dart';
@@ -25,10 +28,22 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
   int _selectedDay = 1;
   bool _isSaving = false;
   bool _isDirty = false;
+  int? _editorBaseRevision;
+  int? _refreshPendingRevision;
+  String? _refreshPendingMessage;
+  String? _frontBlockId;
+  String? _editorOwnerUid;
+  String? _errorMessage;
 
   late List<TimelineBlockDraft> _workingBlocks;
 
-  void _initWorkingBlocks(List<TimelineBlockDraft> existing) {
+  void _initWorkingBlocks(
+    List<TimelineBlockDraft> existing,
+    int revision,
+    String ownerUid,
+  ) {
+    _editorBaseRevision = revision;
+    _editorOwnerUid = ownerUid;
     if (existing.isEmpty) {
       _workingBlocks = [
         TimelineBlockDraft(
@@ -134,16 +149,33 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
     );
   }
 
+  bool _isRequiredBlock(TimelineBlockDraft block) =>
+      block.id == BaseTimelineDraft.fixedSleepId ||
+      block.id == BaseTimelineDraft.fixedBathId;
+
+  void _deleteCustomBlock(TimelineBlockDraft block) {
+    if (_isRequiredBlock(block)) return;
+    setState(() {
+      _workingBlocks.removeWhere((candidate) => candidate.id == block.id);
+      if (_frontBlockId == block.id) _frontBlockId = null;
+      _isDirty = true;
+    });
+  }
+
   Future<void> _saveWorkingBlocks() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
     try {
       final uid = ref.read(userProfileProvider).uid;
+      if (uid.trim().isEmpty || uid != _editorOwnerUid) {
+        throw StateError('The active account changed. Reload Fixed setup.');
+      }
       final coordinator = ref.read(baseTimelineTransactionCoordinatorProvider);
-      await coordinator.replaceSection(
+      final result = await coordinator.replaceSection(
         uid: uid,
         section: BaseTimelineSection.fixed,
         newBlocks: _workingBlocks,
+        expectedRevision: _editorBaseRevision,
         updateSetup: (current) => current.copyWith(
           fixedBlocks: _workingBlocks,
           updatedAt: DateTime.now(),
@@ -154,17 +186,33 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
           _isSaving = false;
           _isEditing = false;
           _isDirty = false;
+          _editorBaseRevision = result.revision;
+          _refreshPendingRevision = result.routineRefreshPending
+              ? result.revision
+              : null;
+          _refreshPendingMessage = result.routineRefreshMessage;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Fixed routine blocks updated successfully'),
+          SnackBar(
+            content: Text(
+              result.routineRefreshPending
+                  ? 'Saved. Routine needs to refresh.'
+                  : 'Fixed routine blocks updated successfully',
+            ),
             duration: Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isSaving = false);
+        final isConflict = e.toString().toLowerCase().contains('conflict') ||
+            e.toString().toLowerCase().contains('concurrency');
+        setState(() {
+          _isSaving = false;
+          _errorMessage = isConflict
+              ? 'This setup changed elsewhere. Reload the latest setup before saving again.'
+              : 'Failed to save Fixed setup. Please try again.';
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to update fixed blocks: $e'),
@@ -214,6 +262,9 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
           final entries = _workingBlocks
               .expand((b) => adapter.toEntries(b))
               .toList();
+          final workingMap = {
+            for (final block in _workingBlocks) block.id: block,
+          };
           final sleepBlock = _workingBlocks
               .where((b) => b.id == BaseTimelineDraft.fixedSleepId)
               .firstOrNull;
@@ -306,6 +357,38 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
                     ),
 
                     // Sleep and Bath Quick Editors
+                    if (_errorMessage != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _errorMessage!,
+                                style: const TextStyle(
+                                  color: OptivusColors.danger,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            if (_errorMessage!.contains('changed elsewhere'))
+                              TextButton(
+                                onPressed: () async {
+                                  await ref
+                                      .read(
+                                        baseTimelineSetupNotifierProvider
+                                            .notifier,
+                                      )
+                                      .load();
+                                  if (mounted) {
+                                    setState(() => _isEditing = false);
+                                  }
+                                },
+                                child: const Text('Reload latest'),
+                              ),
+                          ],
+                        ),
+                      ),
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
@@ -443,15 +526,41 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
                         onDayChanged: (day) =>
                             setState(() => _selectedDay = day),
                         styleBuilder: (entry) => adapter.styleForEntry(entry),
-                        accent: OptivusColors.purpleAccent,
-                        onEntryTapped: (entry) {
-                          final block = _workingBlocks
-                              .where((b) => b.id == entry.sourceId)
-                              .firstOrNull;
-                          if (block != null) {
-                            _editBlock(block);
-                          }
+                        overlapPresentation:
+                            TimelineOverlapPresentation.frontAndExposed,
+                        frontEntryId: _frontBlockId,
+                        onFrontSelected: (id) =>
+                            setState(() => _frontBlockId = id),
+                        blockBuilder: (context, positioned) {
+                          final block = workingMap[positioned.entry.sourceId];
+                          if (block == null) return const SizedBox.shrink();
+                          return BaseTimelineDomainCard(
+                            positioned: positioned,
+                            block: block,
+                            domain: BaseTimelineCardDomain.fixed,
+                            accent: OptivusColors.purpleAccent,
+                            isEditable: true,
+                            onTap: () {
+                              if (positioned.hasOverlap &&
+                                  !positioned.isFront) {
+                                HapticFeedback.lightImpact();
+                                setState(
+                                  () => _frontBlockId = positioned.entry.id,
+                                );
+                              } else {
+                                _editBlock(block);
+                              }
+                            },
+                            onDelete: _isRequiredBlock(block)
+                                ? null
+                                : () => _deleteCustomBlock(block),
+                          );
                         },
+                        accent: OptivusColors.purpleAccent,
+                        onEntryTapped: null,
+                        visibleRangePolicy:
+                            TimelineVisibleRangePolicy.contentAdaptive,
+                        stretchPolicy: TimelineStretchPolicy.constraintBased,
                         emptyDayMessage: 'No fixed blocks on this day.',
                       ),
                     ),
@@ -466,6 +575,9 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
         final entries = setup.fixedBlocks
             .expand((b) => adapter.toEntries(b))
             .toList();
+        final blockMap = {
+          for (final block in setup.fixedBlocks) block.id: block,
+        };
 
         return Scaffold(
           backgroundColor: Colors.transparent,
@@ -533,7 +645,11 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
                           ),
                         ),
                         onPressed: () {
-                          _initWorkingBlocks(setup.fixedBlocks);
+                          _initWorkingBlocks(
+                            setup.fixedBlocks,
+                            setup.revision,
+                            setup.uid,
+                          );
                           setState(() {
                             _isEditing = true;
                             _isDirty = false;
@@ -545,14 +661,58 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
                 ),
 
                 // Timeline View
+                if (_refreshPendingRevision != null)
+                  BaseTimelineRefreshPendingBanner(
+                    message: _refreshPendingMessage,
+                    onRetry: () async {
+                      final result = await ref
+                          .read(baseTimelineTransactionCoordinatorProvider)
+                          .retryRoutineRefresh(
+                            uid: ref.read(userProfileProvider).uid,
+                            targetRevision: _refreshPendingRevision,
+                          );
+                      if (mounted && result.isRefreshed) {
+                        setState(() {
+                          _refreshPendingRevision = null;
+                          _refreshPendingMessage = null;
+                        });
+                      }
+                    },
+                  ),
                 Expanded(
                   child: FullScreenTimelineScaffold(
                     entries: entries,
                     selectedDay: _selectedDay,
                     onDayChanged: (day) => setState(() => _selectedDay = day),
                     styleBuilder: (entry) => adapter.styleForEntry(entry),
+                    overlapPresentation:
+                        TimelineOverlapPresentation.frontAndExposed,
+                    frontEntryId: _frontBlockId,
+                    onFrontSelected: (id) => setState(() => _frontBlockId = id),
+                    blockBuilder: (context, positioned) {
+                      final block = blockMap[positioned.entry.sourceId];
+                      if (block == null) return const SizedBox.shrink();
+                      return BaseTimelineDomainCard(
+                        positioned: positioned,
+                        block: block,
+                        domain: BaseTimelineCardDomain.fixed,
+                        accent: OptivusColors.purpleAccent,
+                        isEditable: false,
+                        onTap: positioned.hasOverlap && !positioned.isFront
+                            ? () {
+                                HapticFeedback.lightImpact();
+                                setState(
+                                  () => _frontBlockId = positioned.entry.id,
+                                );
+                              }
+                            : null,
+                      );
+                    },
                     accent: OptivusColors.purpleAccent,
                     mode: TimelineMode.previewReadOnly,
+                    visibleRangePolicy:
+                        TimelineVisibleRangePolicy.contentAdaptive,
+                    stretchPolicy: TimelineStretchPolicy.constraintBased,
                     emptyDayMessage: 'No fixed blocks configured.',
                   ),
                 ),

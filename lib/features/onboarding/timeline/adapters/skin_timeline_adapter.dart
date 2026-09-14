@@ -34,11 +34,11 @@ class SkinTimelineAdapter
         isEditable: true,
         adapterKey: 'skin_care',
         minHeight:
-            72.0 +
+            110.0 +
             (block.skincareProducts.length +
                     block.skincareSteps.length +
                     block.skincareMissingItems.length) *
-                22.0,
+                20.0,
       ),
     ];
   }
@@ -157,9 +157,6 @@ class _SkinCareBlockEditSheetState extends State<_SkinCareBlockEditSheet> {
     _selectedDays = {
       ...widget.block.repeatDays.where((day) => day >= 1 && day <= 7),
     };
-    if (_selectedDays.isEmpty) {
-      _selectedDays.addAll(const [1, 2, 3, 4, 5, 6, 7]);
-    }
   }
 
   @override

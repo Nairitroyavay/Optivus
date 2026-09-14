@@ -33,15 +33,17 @@ class FixedTimelineAdapter
           category: TimelineCategory.fixed,
           isEditable: true,
           adapterKey: 'fixed',
+          minHeight:
+              88 +
+              (block.location?.trim().isNotEmpty == true ? 18 : 0) +
+              (block.notes?.trim().isNotEmpty == true ? 34 : 0),
         ),
       ];
     }
 
     // Cross-midnight block (e.g. 23:00 to 07:00 / 1380 to 420)
     final entries = <TimelineEntry>[];
-    final days = block.repeatDays.isEmpty
-        ? const [1, 2, 3, 4, 5, 6, 7]
-        : block.repeatDays;
+    final days = block.repeatDays;
 
     for (final day in days) {
       // Night segment: startMinute -> 24:00 (1440) on Day `day`
@@ -59,6 +61,10 @@ class FixedTimelineAdapter
             category: TimelineCategory.fixed,
             isEditable: true,
             adapterKey: 'fixed',
+            minHeight:
+                106 +
+                (block.location?.trim().isNotEmpty == true ? 18 : 0) +
+                (block.notes?.trim().isNotEmpty == true ? 34 : 0),
           ),
         );
       }
@@ -79,6 +85,10 @@ class FixedTimelineAdapter
             category: TimelineCategory.fixed,
             isEditable: true,
             adapterKey: 'fixed',
+            minHeight:
+                106 +
+                (block.location?.trim().isNotEmpty == true ? 18 : 0) +
+                (block.notes?.trim().isNotEmpty == true ? 34 : 0),
           ),
         );
       }
@@ -119,11 +129,13 @@ class FixedTimelineAdapter
     Color accent = OptivusColors.purpleAccent,
   }) {
     final titleCtrl = TextEditingController(text: block.title);
+    final locationCtrl = TextEditingController(text: block.location ?? '');
+    final notesCtrl = TextEditingController(text: block.notes ?? '');
     var startMinute = block.startMinute;
     var endMinute = block.endMinute;
     var crossesMidnight = block.crossesMidnight || startMinute > endMinute;
     final selectedDays = Set<int>.from(
-      block.repeatDays.isEmpty ? const [1, 2, 3, 4, 5, 6, 7] : block.repeatDays,
+      block.repeatDays.where((day) => day >= 1 && day <= 7),
     );
     final formKey = GlobalKey<FormState>();
 
@@ -147,6 +159,8 @@ class FixedTimelineAdapter
 
         final updated = block.copyWith(
           title: title,
+          location: locationCtrl.text.trim(),
+          notes: notesCtrl.text.trim(),
           startMinute: startMinute,
           endMinute: endMinute,
           repeatDays: selectedDays.toList()..sort(),
@@ -187,6 +201,26 @@ class FixedTimelineAdapter
                           color: accent.withValues(alpha: 0.5),
                         ),
                       ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  TextFormField(
+                    key: const Key('timeline-edit-fixed-location-field'),
+                    controller: locationCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Location (optional)',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    key: const Key('timeline-edit-fixed-notes-field'),
+                    controller: notesCtrl,
+                    minLines: 2,
+                    maxLines: 5,
+                    decoration: const InputDecoration(
+                      labelText: 'Notes / details (optional)',
                     ),
                   ),
 

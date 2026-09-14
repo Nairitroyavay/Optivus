@@ -38,7 +38,6 @@ class RoutineTimelineViewport extends ConsumerStatefulWidget {
   final bool isToday;
   final bool showCurrentTimeLine;
   final int? currentMinute;
-  final ValueChanged<RoutineItem>? onCardTap;
   final int? selectedDay;
 
   const RoutineTimelineViewport({
@@ -48,7 +47,6 @@ class RoutineTimelineViewport extends ConsumerStatefulWidget {
     required this.isToday,
     this.showCurrentTimeLine = true,
     this.currentMinute,
-    this.onCardTap,
     this.selectedDay,
   });
 
@@ -245,7 +243,8 @@ class RoutineTimelineViewportState
             item.id: _isFrontItem(prepared, item),
         };
 
-        final effectiveCurrentMinute = widget.currentMinute ??
+        final effectiveCurrentMinute =
+            widget.currentMinute ??
             () {
               final now = DateTime.now();
               return now.hour * 60 + now.minute;
@@ -298,8 +297,8 @@ class RoutineTimelineViewportState
                         visualScale: prepared.scale,
                         currentMinute:
                             widget.isToday && widget.showCurrentTimeLine
-                                ? effectiveCurrentMinute
-                                : null,
+                            ? effectiveCurrentMinute
+                            : null,
                       ),
                     ),
                   ),

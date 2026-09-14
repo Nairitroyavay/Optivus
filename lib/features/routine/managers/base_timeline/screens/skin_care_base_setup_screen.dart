@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/skin_timeline_adapter.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
+import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
@@ -11,6 +13,7 @@ import 'package:optivus/features/routine/managers/base_timeline/services/base_ti
 import 'package:optivus/features/routine/managers/base_timeline/services/skin_care_domain_engine.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_ai_thinking_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/repositories/base_timeline_setup_repository.dart';
@@ -54,6 +57,12 @@ class _SkinCareBaseSetupScreenState
   String? _workingR2Key;
   String? _initialAssetId;
   String? _initialR2Key;
+  int? _editorBaseRevision;
+  int? _refreshPendingRevision;
+  String? _refreshPendingMessage;
+  String? _frontBlockId;
+  int _requestGeneration = 0;
+  String? _editorOwnerUid;
 
   final TextEditingController _productsController = TextEditingController();
 
@@ -70,12 +79,15 @@ class _SkinCareBaseSetupScreenState
         setup.skinCareProductPhotoR2Key ?? setup.skinCareFacePhotoR2Key;
     _initialAssetId = _workingAssetId;
     _initialR2Key = _workingR2Key;
+    _editorBaseRevision = setup.revision;
+    _editorOwnerUid = setup.uid;
     _productsController.text = setup.skinCareProductNames ?? '';
     _isDirty = false;
   }
 
   @override
   void dispose() {
+    _requestGeneration++;
     _productsController.dispose();
     super.dispose();
   }
@@ -286,6 +298,7 @@ class _SkinCareBaseSetupScreenState
 
     final uid = ref.read(userProfileProvider).uid;
     if (uid.trim().isEmpty) return;
+    final generation = ++_requestGeneration;
 
     final idToken =
         await ref.read(authRepositoryProvider).currentIdToken() ?? '';
@@ -330,6 +343,12 @@ class _SkinCareBaseSetupScreenState
         baseTimeline: currentSetup.toBaseTimelineDraft(),
       );
 
+      if (!mounted ||
+          generation != _requestGeneration ||
+          ref.read(userProfileProvider).uid != uid) {
+        return;
+      }
+
       if (mounted) {
         if (_workingAssetId != null && _workingAssetId != _initialAssetId) {
           try {
@@ -368,6 +387,7 @@ class _SkinCareBaseSetupScreenState
   Future<void> _generateBuildForMe() async {
     final uid = ref.read(userProfileProvider).uid;
     if (uid.trim().isEmpty) return;
+    final generation = ++_requestGeneration;
 
     final idToken =
         await ref.read(authRepositoryProvider).currentIdToken() ?? '';
@@ -397,6 +417,12 @@ class _SkinCareBaseSetupScreenState
         desiredApplicationsPerDay: 2,
         baseTimeline: currentSetup.toBaseTimelineDraft(),
       );
+
+      if (!mounted ||
+          generation != _requestGeneration ||
+          ref.read(userProfileProvider).uid != uid) {
+        return;
+      }
 
       if (mounted) {
         if (_workingAssetId != null && _workingAssetId != _initialAssetId) {
@@ -459,6 +485,8 @@ class _SkinCareBaseSetupScreenState
   Future<void> _pickPhoto(ImageSource source) async {
     final uid = ref.read(userProfileProvider).uid;
     if (uid.trim().isEmpty) return;
+    final generation = ++_requestGeneration;
+    final lifecycleHelper = ref.read(baseTimelineUploadLifecycleHelperProvider);
 
     // Retire any previously uncommitted upload before starting new one
     if (_workingAssetId != null && _workingAssetId != _initialAssetId) {
@@ -507,6 +535,16 @@ class _SkinCareBaseSetupScreenState
         idToken: idToken,
         productPhotos: [asset.r2Key],
       );
+      if (!mounted ||
+          generation != _requestGeneration ||
+          ref.read(userProfileProvider).uid != uid) {
+        await lifecycleHelper.retireUncommittedUpload(
+          uid: uid,
+          assetId: asset.assetId,
+          objectKey: asset.r2Key,
+        );
+        return;
+      }
 
       final detected = analysis.detectedProducts;
       final setupAsync = ref.read(baseTimelineSetupNotifierProvider);
@@ -524,6 +562,17 @@ class _SkinCareBaseSetupScreenState
           desiredApplicationsPerDay: 2,
           baseTimeline: currentSetup.toBaseTimelineDraft(),
         );
+
+        if (!mounted ||
+            generation != _requestGeneration ||
+            ref.read(userProfileProvider).uid != uid) {
+          await lifecycleHelper.retireUncommittedUpload(
+            uid: uid,
+            assetId: asset.assetId,
+            objectKey: asset.r2Key,
+          );
+          return;
+        }
 
         if (mounted) {
           final names = detected.map((p) => p.displayName).join(', ');
@@ -571,11 +620,15 @@ class _SkinCareBaseSetupScreenState
     setState(() => _isSaving = true);
     try {
       final uid = ref.read(userProfileProvider).uid;
+      if (uid.trim().isEmpty || uid != _editorOwnerUid) {
+        throw StateError('The active account changed. Reload Skin Care setup.');
+      }
       final coordinator = ref.read(baseTimelineTransactionCoordinatorProvider);
-      await coordinator.replaceSection(
+      final result = await coordinator.replaceSection(
         uid: uid,
         section: BaseTimelineSection.skinCare,
         newBlocks: _workingBlocks,
+        expectedRevision: _editorBaseRevision,
         updateSetup: (current) => current.copyWith(
           skinCareBlocks: _workingBlocks,
           skinCareSetupPath: _workingPath,
@@ -616,17 +669,33 @@ class _SkinCareBaseSetupScreenState
           _isSaving = false;
           _isEditing = false;
           _isDirty = false;
+          _editorBaseRevision = result.revision;
+          _refreshPendingRevision = result.routineRefreshPending
+              ? result.revision
+              : null;
+          _refreshPendingMessage = result.routineRefreshMessage;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Skin care routine updated successfully'),
+          SnackBar(
+            content: Text(
+              result.routineRefreshPending
+                  ? 'Saved. Routine needs to refresh.'
+                  : 'Skin care routine updated successfully',
+            ),
             duration: Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isSaving = false);
+        final isConflict = e.toString().toLowerCase().contains('conflict') ||
+            e.toString().toLowerCase().contains('concurrency');
+        setState(() {
+          _isSaving = false;
+          _errorMessage = isConflict
+              ? 'This setup changed elsewhere. Reload the latest setup before saving again.'
+              : 'Failed to save Skin Care setup. Please try again.';
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to update skin care: $e'),
@@ -635,6 +704,57 @@ class _SkinCareBaseSetupScreenState
         );
       }
     }
+  }
+
+  void _addSkinBlock() {
+    final block = TimelineBlockDraft(
+      id: 'skin_${DateTime.now().millisecondsSinceEpoch}',
+      section: 'skin_care',
+      title: 'Skin Care Routine',
+      startMinute: 20 * 60,
+      endMinute: 20 * 60 + 15,
+      repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+      blockType: TimelineBlockDraft.softBlockKey,
+      skincareSlotLabel: 'Night routine',
+      skincareSteps: const ['Cleanse', 'Moisturize'],
+    );
+    SkinTimelineAdapter.showSkinEditSheet(
+      context: context,
+      block: block,
+      onSave: (updated) async {
+        setState(() {
+          _workingBlocks.add(updated);
+          _workingSkipped = false;
+          _isDirty = true;
+        });
+        return true;
+      },
+    );
+  }
+
+  void _editSkinBlock(TimelineBlockDraft block) {
+    SkinTimelineAdapter.showSkinEditSheet(
+      context: context,
+      block: block,
+      onSave: (updated) async {
+        setState(() {
+          final index = _workingBlocks.indexWhere(
+            (item) => item.id == block.id,
+          );
+          if (index >= 0) _workingBlocks[index] = updated;
+          _isDirty = true;
+        });
+        return true;
+      },
+    );
+  }
+
+  void _deleteSkinBlock(String id) {
+    setState(() {
+      _workingBlocks.removeWhere((block) => block.id == id);
+      if (_frontBlockId == id) _frontBlockId = null;
+      _isDirty = true;
+    });
   }
 
   @override
@@ -674,6 +794,9 @@ class _SkinCareBaseSetupScreenState
           final entries = _workingBlocks
               .expand((b) => adapter.toEntries(b))
               .toList();
+          final workingMap = {
+            for (final block in _workingBlocks) block.id: block,
+          };
 
           return PopScope(
             canPop: !_isDirty && !_isSaving && !_isExtracting,
@@ -847,23 +970,30 @@ class _SkinCareBaseSetupScreenState
                     // Skip Option
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton.icon(
-                          icon: const Icon(
-                            Icons.clear_rounded,
-                            size: 14,
-                            color: OptivusColors.textSecondary,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton.icon(
+                            icon: const Icon(Icons.add_rounded, size: 14),
+                            label: const Text('Add block'),
+                            onPressed: _isExtracting ? null : _addSkinBlock,
                           ),
-                          label: const Text(
-                            'Clear / Skip Skin Care',
-                            style: TextStyle(
+                          TextButton.icon(
+                            icon: const Icon(
+                              Icons.clear_rounded,
+                              size: 14,
                               color: OptivusColors.textSecondary,
-                              fontSize: 12,
                             ),
+                            label: const Text(
+                              'Clear / Skip Skin Care',
+                              style: TextStyle(
+                                color: OptivusColors.textSecondary,
+                                fontSize: 12,
+                              ),
+                            ),
+                            onPressed: _skipSkinCare,
                           ),
-                          onPressed: _skipSkinCare,
-                        ),
+                        ],
                       ),
                     ),
 
@@ -891,7 +1021,44 @@ class _SkinCareBaseSetupScreenState
                                   setState(() => _selectedDay = day),
                               styleBuilder: (entry) =>
                                   adapter.styleForEntry(entry),
+                              overlapPresentation:
+                                  TimelineOverlapPresentation.frontAndExposed,
+                              frontEntryId: _frontBlockId,
+                              onFrontSelected: (id) =>
+                                  setState(() => _frontBlockId = id),
+                              blockBuilder: (context, positioned) {
+                                final block =
+                                    workingMap[positioned.entry.sourceId];
+                                if (block == null) {
+                                  return const SizedBox.shrink();
+                                }
+                                return BaseTimelineDomainCard(
+                                  positioned: positioned,
+                                  block: block,
+                                  domain: BaseTimelineCardDomain.skinCare,
+                                  accent: OptivusColors.mintAccent,
+                                  isEditable: true,
+                                  onTap: () {
+                                    if (positioned.hasOverlap &&
+                                        !positioned.isFront) {
+                                      HapticFeedback.lightImpact();
+                                      setState(
+                                        () =>
+                                            _frontBlockId = positioned.entry.id,
+                                      );
+                                    } else {
+                                      _editSkinBlock(block);
+                                    }
+                                  },
+                                  onDelete: () => _deleteSkinBlock(block.id),
+                                );
+                              },
                               accent: OptivusColors.mintAccent,
+                              onEntryTapped: null,
+                              visibleRangePolicy:
+                                  TimelineVisibleRangePolicy.contentAdaptive,
+                              stretchPolicy:
+                                  TimelineStretchPolicy.constraintBased,
                               emptyDayMessage:
                                   'No skin care routine on this day.',
                             ),
@@ -907,6 +1074,9 @@ class _SkinCareBaseSetupScreenState
         final entries = setup.skinCareBlocks
             .expand((b) => adapter.toEntries(b))
             .toList();
+        final blockMap = {
+          for (final block in setup.skinCareBlocks) block.id: block,
+        };
 
         return Scaffold(
           backgroundColor: Colors.transparent,
@@ -998,6 +1168,24 @@ class _SkinCareBaseSetupScreenState
                   ),
 
                 // Timeline View
+                if (_refreshPendingRevision != null)
+                  BaseTimelineRefreshPendingBanner(
+                    message: _refreshPendingMessage,
+                    onRetry: () async {
+                      final result = await ref
+                          .read(baseTimelineTransactionCoordinatorProvider)
+                          .retryRoutineRefresh(
+                            uid: ref.read(userProfileProvider).uid,
+                            targetRevision: _refreshPendingRevision,
+                          );
+                      if (mounted && result.isRefreshed) {
+                        setState(() {
+                          _refreshPendingRevision = null;
+                          _refreshPendingMessage = null;
+                        });
+                      }
+                    },
+                  ),
                 Expanded(
                   child:
                       snapshot.origin == BaseSetupOrigin.skipped ||
@@ -1048,8 +1236,37 @@ class _SkinCareBaseSetupScreenState
                           onDayChanged: (day) =>
                               setState(() => _selectedDay = day),
                           styleBuilder: (entry) => adapter.styleForEntry(entry),
+                          overlapPresentation:
+                              TimelineOverlapPresentation.frontAndExposed,
+                          frontEntryId: _frontBlockId,
+                          onFrontSelected: (id) =>
+                              setState(() => _frontBlockId = id),
+                          blockBuilder: (context, positioned) {
+                            final block = blockMap[positioned.entry.sourceId];
+                            if (block == null) return const SizedBox.shrink();
+                            return BaseTimelineDomainCard(
+                              positioned: positioned,
+                              block: block,
+                              domain: BaseTimelineCardDomain.skinCare,
+                              accent: OptivusColors.mintAccent,
+                              isEditable: false,
+                              onTap:
+                                  positioned.hasOverlap && !positioned.isFront
+                                  ? () {
+                                      HapticFeedback.lightImpact();
+                                      setState(
+                                        () =>
+                                            _frontBlockId = positioned.entry.id,
+                                      );
+                                    }
+                                  : null,
+                            );
+                          },
                           accent: OptivusColors.mintAccent,
                           mode: TimelineMode.previewReadOnly,
+                          visibleRangePolicy:
+                              TimelineVisibleRangePolicy.contentAdaptive,
+                          stretchPolicy: TimelineStretchPolicy.constraintBased,
                           emptyDayMessage: 'No skin care routine on this day.',
                         ),
                 ),

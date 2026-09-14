@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
-import 'package:optivus/features/onboarding/timeline/adapters/work_timeline_adapter.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
+import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/schedule_setup_flow.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/work_timeline_adapter.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
 import 'package:optivus/repositories/base_timeline_setup_repository.dart';
 import 'package:optivus/state/app_state.dart';
 
@@ -24,6 +27,11 @@ class WorkBaseSetupScreen extends ConsumerStatefulWidget {
 class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
   bool _isEditing = false;
   int _selectedDay = 1;
+  String? _frontBlockId;
+  int? _refreshPendingRevision;
+  String? _refreshPendingMessage;
+  int? _editorBaseRevision;
+  String? _editorOwnerUid;
 
   @override
   Widget build(BuildContext context) {
@@ -63,18 +71,30 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
             initialBlocks: setup.workBlocks,
             initialAssetId: setup.workLogicalAssetId,
             initialR2Key: setup.workLogicalAssetR2Key,
-            onCancel: () => setState(() => _isEditing = false),
+            onCancel: () => setState(() {
+              _isEditing = false;
+              _editorBaseRevision = null;
+              _editorOwnerUid = null;
+            }),
             onSave: (newBlocks, assetId, r2Key) async {
               final messenger = ScaffoldMessenger.of(context);
               try {
-                final uid = ref.read(userProfileProvider).uid;
+                final uid =
+                    _editorOwnerUid ?? ref.read(userProfileProvider).uid;
+                if (uid.trim().isEmpty ||
+                    ref.read(userProfileProvider).uid != uid) {
+                  throw StateError(
+                    'The active account changed. Reload Work setup.',
+                  );
+                }
                 final coordinator = ref.read(
                   baseTimelineTransactionCoordinatorProvider,
                 );
-                await coordinator.replaceSection(
+                final result = await coordinator.replaceSection(
                   uid: uid,
                   section: BaseTimelineSection.work,
                   newBlocks: newBlocks,
+                  expectedRevision: _editorBaseRevision,
                   updateSetup: (current) => current.copyWith(
                     workBlocks: newBlocks,
                     workLogicalAssetId: assetId,
@@ -87,10 +107,19 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
                 if (mounted) {
                   setState(() {
                     _isEditing = false;
+                    _editorBaseRevision = result.revision;
+                    _refreshPendingRevision = result.routineRefreshPending
+                        ? result.revision
+                        : null;
+                    _refreshPendingMessage = result.routineRefreshMessage;
                   });
                   messenger.showSnackBar(
-                    const SnackBar(
-                      content: Text('Work schedule updated successfully'),
+                    SnackBar(
+                      content: Text(
+                        result.routineRefreshPending
+                            ? 'Saved. Routine needs to refresh.'
+                            : 'Work schedule updated successfully',
+                      ),
                       duration: Duration(seconds: 2),
                     ),
                   );
@@ -104,30 +133,20 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
                     ),
                   );
                 }
+                rethrow;
               }
             },
           );
         }
 
         // Current Setup View
-        const adapter = WorkTimelineAdapter(accent: OptivusColors.warning);
-        final routineBlocks = setup.workBlocks.map((b) {
-          return ClassRoutineBlock(
-            id: b.id,
-            subject: b.title,
-            room: b.location ?? '',
-            professor: '',
-            startMinute: b.startMinute,
-            endMinute: b.endMinute,
-            repeatDays: b.repeatDays.isEmpty
-                ? const [1, 2, 3, 4, 5]
-                : b.repeatDays,
-          );
-        }).toList();
-
-        final entries = routineBlocks
+        const adapter = BaseTimelineWorkAdapter(accent: OptivusColors.warning);
+        final entries = setup.workBlocks
             .expand((b) => adapter.toEntries(b))
             .toList();
+        final draftMap = {
+          for (final block in setup.workBlocks) block.id: block,
+        };
 
         return Scaffold(
           backgroundColor: Colors.transparent,
@@ -194,7 +213,11 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        onPressed: () => setState(() => _isEditing = true),
+                        onPressed: () => setState(() {
+                          _editorBaseRevision = setup.revision;
+                          _editorOwnerUid = setup.uid;
+                          _isEditing = true;
+                        }),
                       ),
                     ],
                   ),
@@ -212,6 +235,59 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
                     ),
                   ),
 
+                if (_refreshPendingRevision != null)
+                  Container(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 6,
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: OptivusColors.warning.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.sync_problem_rounded,
+                          color: OptivusColors.warning,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _refreshPendingMessage ??
+                                'Saved, but Routine needs to refresh.',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                            final uid = ref.read(userProfileProvider).uid;
+                            final result = await ref
+                                .read(
+                                  baseTimelineTransactionCoordinatorProvider,
+                                )
+                                .retryRoutineRefresh(
+                                  uid: uid,
+                                  targetRevision: _refreshPendingRevision,
+                                );
+                            if (mounted && result.isRefreshed) {
+                              setState(() {
+                                _refreshPendingRevision = null;
+                                _refreshPendingMessage = null;
+                              });
+                            }
+                          },
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 // Timeline View
                 Expanded(
                   child: FullScreenTimelineScaffold(
@@ -219,8 +295,34 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
                     selectedDay: _selectedDay,
                     onDayChanged: (day) => setState(() => _selectedDay = day),
                     styleBuilder: (entry) => adapter.styleForEntry(entry),
+                    overlapPresentation:
+                        TimelineOverlapPresentation.frontAndExposed,
+                    frontEntryId: _frontBlockId,
+                    onFrontSelected: (id) => setState(() => _frontBlockId = id),
+                    blockBuilder: (context, positioned) {
+                      final block = draftMap[positioned.entry.sourceId];
+                      if (block == null) return const SizedBox.shrink();
+                      return BaseTimelineDomainCard(
+                        positioned: positioned,
+                        block: block,
+                        domain: BaseTimelineCardDomain.work,
+                        accent: OptivusColors.warning,
+                        isEditable: false,
+                        onTap: positioned.hasOverlap && !positioned.isFront
+                            ? () {
+                                HapticFeedback.lightImpact();
+                                setState(
+                                  () => _frontBlockId = positioned.entry.id,
+                                );
+                              }
+                            : null,
+                      );
+                    },
                     accent: OptivusColors.warning,
                     mode: TimelineMode.previewReadOnly,
+                    visibleRangePolicy:
+                        TimelineVisibleRangePolicy.contentAdaptive,
+                    stretchPolicy: TimelineStretchPolicy.constraintBased,
                     emptyDayMessage: 'No work blocks on this day.',
                   ),
                 ),

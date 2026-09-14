@@ -86,6 +86,9 @@ class MealTimelineAdapter
     );
     var startMinute = block.startMinute;
     var endMinute = block.endMinute;
+    final selectedDays = Set<int>.from(
+      block.repeatDays.where((day) => day >= 1 && day <= 7),
+    );
 
     return TimelineEditSheetShell.show<bool>(
       context: context,
@@ -104,12 +107,16 @@ class MealTimelineAdapter
         if (endMinute <= startMinute) {
           throw Exception('End time must be after start time.');
         }
+        if (selectedDays.isEmpty) {
+          throw Exception('Select at least one repeat day.');
+        }
         return onSave(
           block.copyWith(
             title: title,
             dishes: dishes,
             startMinute: startMinute,
             endMinute: endMinute,
+            repeatDays: selectedDays.toList()..sort(),
           ),
         );
       },
@@ -180,105 +187,51 @@ class MealTimelineAdapter
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            const Text(
+              'REPEAT DAYS',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textSecondary,
+                letterSpacing: .8,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: List.generate(7, (index) {
+                final day = index + 1;
+                final selected = selectedDays.contains(day);
+                return FilterChip(
+                  label: Text(
+                    const [
+                      'Mon',
+                      'Tue',
+                      'Wed',
+                      'Thu',
+                      'Fri',
+                      'Sat',
+                      'Sun',
+                    ][index],
+                  ),
+                  selected: selected,
+                  selectedColor: accent.withValues(alpha: .25),
+                  onSelected: (value) => setSheetState(() {
+                    if (value) {
+                      selectedDays.add(day);
+                    } else {
+                      selectedDays.remove(day);
+                    }
+                  }),
+                );
+              }),
+            ),
           ],
         ),
       ),
     );
   }
 
-  /// Opens the details sheet for a meal timeline item.
-  static Future<void> showMealDetailsSheet({
-    required BuildContext context,
-    required TimelineBlockDraft block,
-    Color accent = OptivusColors.roseAccent,
-  }) {
-    return showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(_iconForTitle(_displayTitle(block)), color: accent),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _displayTitle(block),
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                          color: OptivusColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  TimelineUtils.formatTimeRange(
-                    block.startMinute,
-                    block.endMinute,
-                  ),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: OptivusColors.textSecondary,
-                  ),
-                ),
-                if (block.dishes.isNotEmpty) ...[
-                  const SizedBox(height: 20),
-                  Text(
-                    'MENU / DISHES',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
-                      color: accent,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final dish in block.dishes)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: accent.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            dish,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: OptivusColors.textPrimary,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 16),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }

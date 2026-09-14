@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step4_candidate_mapping.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
-import 'package:optivus/features/onboarding/timeline/adapters/class_timeline_adapter.dart';
-import 'package:optivus/features/onboarding/timeline/adapters/work_timeline_adapter.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
+import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_upload_lifecycle_helper.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/work_timeline_adapter.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -43,7 +45,7 @@ class ScheduleSetupFlow extends ConsumerStatefulWidget {
 }
 
 class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
-  late List<ClassRoutineBlock> _blocks;
+  late List<TimelineBlockDraft> _blocks;
   String? _assetId;
   String? _r2Key;
   int _selectedDay = 1;
@@ -51,25 +53,13 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
   bool _isSaving = false;
   bool _isDirty = false;
   String? _errorMessage;
+  String? _frontBlockId;
+  int _operationGeneration = 0;
 
   @override
   void initState() {
     super.initState();
-    _blocks = widget.initialBlocks.map((b) {
-      return ClassRoutineBlock(
-        id: b.id,
-        subject: b.title,
-        room: b.location ?? '',
-        professor: b.professor ?? '',
-        courseCode: b.courseCode ?? '',
-        classType: b.classType ?? '',
-        section: b.sectionLabel ?? '',
-        notes: b.notes ?? '',
-        startMinute: b.startMinute,
-        endMinute: b.endMinute,
-        repeatDays: b.repeatDays.isEmpty ? const [1, 2, 3, 4, 5] : b.repeatDays,
-      );
-    }).toList();
+    _blocks = List<TimelineBlockDraft>.from(widget.initialBlocks);
     _assetId = widget.initialAssetId;
     _r2Key = widget.initialR2Key;
   }
@@ -131,6 +121,8 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
   Future<void> _pickAndUploadPhoto(ImageSource source) async {
     final uid = ref.read(userProfileProvider).uid;
     if (uid.trim().isEmpty) return;
+    final generation = ++_operationGeneration;
+    final lifecycleHelper = ref.read(baseTimelineUploadLifecycleHelperProvider);
 
     // Retire any previously uncommitted upload before starting new one
     if (_assetId != null && _assetId != widget.initialAssetId) {
@@ -190,6 +182,16 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
 
       final aiController = ref.read(routineImportAiControllerProvider.notifier);
       final result = await aiController.runExtraction(reviewDraft);
+      if (!mounted ||
+          generation != _operationGeneration ||
+          ref.read(userProfileProvider).uid != uid) {
+        await lifecycleHelper.retireUncommittedUpload(
+          uid: uid,
+          assetId: asset.assetId,
+          objectKey: asset.r2Key,
+        );
+        return;
+      }
 
       if (result != null && result.candidates.isNotEmpty) {
         final mappingResult = mapOnboarding4Candidates(
@@ -199,8 +201,29 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
 
         if (mappingResult.blocks.isNotEmpty) {
           if (mounted) {
+            final candidatesById = {
+              for (final candidate in result.candidates)
+                candidate.id: candidate,
+            };
+            final mappedBlocks = mappingResult.blocks.map((block) {
+              final candidate = candidatesById[block.id];
+              return TimelineBlockDraft(
+                id: block.id,
+                section: widget.config.timelineSection,
+                title: block.subject,
+                startMinute: block.startMinute,
+                endMinute: block.endMinute,
+                repeatDays: block.repeatDays,
+                location: block.room,
+                blockType: TimelineBlockDraft.hardBlockKey,
+                source: candidate?.extractionEngine ?? 'ai_import',
+                notes: block.notes,
+                sectionLabel: block.section,
+                provenanceSourceIds: [asset.assetId],
+              );
+            }).toList();
             setState(() {
-              _blocks = mappingResult.blocks;
+              _blocks = mappedBlocks;
               _isDirty = true;
               _isExtracting = false;
             });
@@ -233,6 +256,12 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
         });
       }
     }
+  }
+
+  @override
+  void dispose() {
+    _operationGeneration++;
+    super.dispose();
   }
 
   void _showImageSourceSheet() {
@@ -293,17 +322,17 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
   }
 
   void _addNewBlock() {
-    final defaultBlock = ClassRoutineBlock(
+    final defaultBlock = TimelineBlockDraft(
       id: 'blk_${DateTime.now().millisecondsSinceEpoch}',
-      subject: '',
-      room: '',
-      professor: '',
+      section: widget.config.timelineSection,
+      title: '',
       startMinute: 9 * 60,
       endMinute: 10 * 60,
       repeatDays: [_selectedDay],
+      blockType: TimelineBlockDraft.hardBlockKey,
     );
 
-    ClassTimelineAdapter.showClassEditSheet(
+    BaseTimelineWorkAdapter.showEditSheet(
       context: context,
       block: defaultBlock,
       accent: widget.config.accent,
@@ -317,8 +346,8 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
     );
   }
 
-  void _editBlock(ClassRoutineBlock block) {
-    ClassTimelineAdapter.showClassEditSheet(
+  void _editBlock(TimelineBlockDraft block) {
+    BaseTimelineWorkAdapter.showEditSheet(
       context: context,
       block: block,
       accent: widget.config.accent,
@@ -332,6 +361,14 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
     );
   }
 
+  void _deleteBlock(String id) {
+    setState(() {
+      _blocks = _blocks.where((block) => block.id != id).toList();
+      if (_frontBlockId == id) _frontBlockId = null;
+      _isDirty = true;
+    });
+  }
+
   Future<void> _handleSave() async {
     if (_isSaving || _isExtracting) return;
     setState(() {
@@ -339,26 +376,8 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
       _errorMessage = null;
     });
 
-    final drafts = _blocks.map((b) {
-      return TimelineBlockDraft(
-        id: b.id,
-        title: b.subject,
-        location: b.room,
-        startMinute: b.startMinute,
-        endMinute: b.endMinute,
-        repeatDays: b.repeatDays,
-        section: widget.config.timelineSection,
-        blockType: TimelineBlockDraft.hardBlockKey,
-        professor: b.professor,
-        courseCode: b.courseCode,
-        classType: b.classType,
-        sectionLabel: b.section,
-        notes: b.notes,
-      );
-    }).toList();
-
     try {
-      await widget.onSave(drafts, _assetId, _r2Key);
+      await widget.onSave(_blocks, _assetId, _r2Key);
       if (widget.initialAssetId != null && _assetId != widget.initialAssetId) {
         try {
           final uid = ref.read(userProfileProvider).uid;
@@ -374,22 +393,32 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
       if (mounted) {
         setState(() {
           _isSaving = false;
-          _errorMessage = 'Failed to save schedule. Please try again.';
+          _errorMessage = _isConcurrencyError(e)
+              ? 'This setup changed elsewhere. Reload the latest setup before saving again.'
+              : 'Failed to save schedule. Please try again.';
         });
       }
     }
   }
 
+  bool _isConcurrencyError(Object error) {
+    final message = error.toString().toLowerCase();
+    return message.contains('concurrency') || message.contains('conflict');
+  }
+
+  Future<void> _reloadLatestSetup() async {
+    await ref.read(baseTimelineSetupNotifierProvider.notifier).load();
+    if (mounted) widget.onCancel();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isClasses = widget.config.source == RoutineImportReviewSource.classes;
-    final adapter = isClasses
-        ? ClassTimelineAdapter(accent: widget.config.accent)
-        : WorkTimelineAdapter(accent: widget.config.accent);
+    final adapter = BaseTimelineWorkAdapter(accent: widget.config.accent);
 
     final entries = _blocks.expand((b) {
       return adapter.toEntries(b);
     }).toList();
+    final blockMap = {for (final block in _blocks) block.id: block};
 
     return PopScope(
       canPop: !_isDirty && !_isSaving && !_isExtracting,
@@ -539,12 +568,23 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
                     horizontal: 16,
                     vertical: 4,
                   ),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(
-                      color: OptivusColors.danger,
-                      fontSize: 12,
-                    ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _errorMessage!,
+                          style: const TextStyle(
+                            color: OptivusColors.danger,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      if (_errorMessage!.contains('changed elsewhere'))
+                        TextButton(
+                          onPressed: _reloadLatestSetup,
+                          child: const Text('Reload latest'),
+                        ),
+                    ],
                   ),
                 ),
 
@@ -575,15 +615,40 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
                         onDayChanged: (day) =>
                             setState(() => _selectedDay = day),
                         styleBuilder: (entry) => adapter.styleForEntry(entry),
-                        onEntryTapped: (entry) {
-                          final block = _blocks
-                              .where((b) => b.id == entry.sourceId)
-                              .firstOrNull;
-                          if (block != null) {
-                            _editBlock(block);
+                        overlapPresentation:
+                            TimelineOverlapPresentation.frontAndExposed,
+                        frontEntryId: _frontBlockId,
+                        onFrontSelected: (id) =>
+                            setState(() => _frontBlockId = id),
+                        blockBuilder: (context, positioned) {
+                          final block = blockMap[positioned.entry.sourceId];
+                          if (block == null) return const SizedBox.shrink();
+                          void tap() {
+                            if (positioned.hasOverlap && !positioned.isFront) {
+                              HapticFeedback.lightImpact();
+                              setState(
+                                () => _frontBlockId = positioned.entry.id,
+                              );
+                            } else {
+                              _editBlock(block);
+                            }
                           }
+
+                          return BaseTimelineDomainCard(
+                            positioned: positioned,
+                            block: block,
+                            domain: BaseTimelineCardDomain.work,
+                            accent: widget.config.accent,
+                            isEditable: true,
+                            onTap: tap,
+                            onDelete: () => _deleteBlock(block.id),
+                          );
                         },
+                        onEntryTapped: null,
                         accent: widget.config.accent,
+                        visibleRangePolicy:
+                            TimelineVisibleRangePolicy.contentAdaptive,
+                        stretchPolicy: TimelineStretchPolicy.constraintBased,
                         emptyDayMessage:
                             'No ${widget.config.sectionLabel.toLowerCase()} on this day.',
                       ),

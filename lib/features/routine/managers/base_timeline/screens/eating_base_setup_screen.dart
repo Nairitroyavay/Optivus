@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/meal_timeline_adapter.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
+import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
@@ -11,6 +13,7 @@ import 'package:optivus/features/routine/managers/base_timeline/services/base_ti
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_domain_engine.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_ai_thinking_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -19,6 +22,28 @@ import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
+
+List<String> _importedMealDishes(RoutineImportCandidateBlock candidate) {
+  final dishes = <String>{};
+  void add(String value) {
+    final clean = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (clean.length >= 2 &&
+        clean.toLowerCase() != candidate.title.trim().toLowerCase()) {
+      dishes.add(clean);
+    }
+  }
+
+  for (final step in candidate.steps) {
+    add(step);
+  }
+  final sourceText = candidate.sourceTextSnippet;
+  if (dishes.isEmpty && sourceText != null) {
+    for (final value in sourceText.split(RegExp(r'[,;\n|•·]+'))) {
+      add(value);
+    }
+  }
+  return dishes.toList(growable: false);
+}
 
 class EatingBaseSetupScreen extends ConsumerStatefulWidget {
   final VoidCallback onBack;
@@ -56,6 +81,12 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
   String? _workingSetupPath;
   String? _initialAssetId;
   String? _initialR2Key;
+  int? _editorBaseRevision;
+  int? _refreshPendingRevision;
+  String? _refreshPendingMessage;
+  String? _frontBlockId;
+  int _requestGeneration = 0;
+  String? _editorOwnerUid;
 
   void _initWorkingState(dynamic setup) {
     _workingBlocks = List.from(setup.eatingBlocks);
@@ -69,6 +100,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     _initialAssetId = setup.eatingPhotoAssetId;
     _initialR2Key = setup.eatingPhotoR2Key;
     _workingSetupPath = setup.eatingSetupPath ?? 'create';
+    _editorBaseRevision = setup.revision;
+    _editorOwnerUid = setup.uid;
     _isDirty = false;
   }
 
@@ -173,6 +206,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
   Future<void> _pickAndUploadPhoto(ImageSource source) async {
     final uid = ref.read(userProfileProvider).uid;
     if (uid.trim().isEmpty) return;
+    final generation = ++_requestGeneration;
+    final lifecycleHelper = ref.read(baseTimelineUploadLifecycleHelperProvider);
 
     // Retire any previously uncommitted upload before starting new one
     if (_workingAssetId != null && _workingAssetId != _initialAssetId) {
@@ -231,21 +266,46 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
 
       final aiController = ref.read(routineImportAiControllerProvider.notifier);
       final result = await aiController.runExtraction(reviewDraft);
+      if (!mounted ||
+          generation != _requestGeneration ||
+          ref.read(userProfileProvider).uid != uid) {
+        await lifecycleHelper.retireUncommittedUpload(
+          uid: uid,
+          assetId: asset.assetId,
+          objectKey: asset.r2Key,
+        );
+        return;
+      }
 
       if (result != null && result.candidates.isNotEmpty) {
-        final extracted = result.candidates.map((c) {
+        final validCandidates = result.candidates.where(
+          (candidate) =>
+              candidate.repeatDays.isNotEmpty &&
+              candidate.repeatDays.toSet().length ==
+                  candidate.repeatDays.length &&
+              candidate.repeatDays.every((day) => day >= 1 && day <= 7) &&
+              _importedMealDishes(candidate).isNotEmpty,
+        );
+        final extracted = validCandidates.map((c) {
           return TimelineBlockDraft(
             id: c.id,
             title: c.title,
             startMinute: c.startMinute,
             endMinute: c.endMinute,
-            repeatDays: c.repeatDays.isEmpty
-                ? const [1, 2, 3, 4, 5, 6, 7]
-                : c.repeatDays,
+            repeatDays: c.repeatDays,
             section: 'eating',
             blockType: TimelineBlockDraft.softBlockKey,
-            mealCategory: c.title,
-            dishes: [c.title],
+            mealCategory: c.mealCategory,
+            mealSlot: c.mealSlot,
+            dishes: _importedMealDishes(c),
+            calories: c.caloriesEstimate,
+            protein: c.proteinEstimate,
+            location: c.location,
+            notes: c.notes,
+            source: c.extractionEngine,
+            provenanceSourceIds: [
+              if (c.sourceAssetId?.trim().isNotEmpty == true) c.sourceAssetId!,
+            ],
           );
         }).toList();
 
@@ -254,6 +314,10 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
             _workingBlocks = extracted;
             _isDirty = true;
             _isExtracting = false;
+            if (extracted.length != result.candidates.length) {
+              _errorMessage =
+                  'Some imported meals need repeat-day review and were not added.';
+            }
           });
         }
       } else {
@@ -279,6 +343,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
   Future<void> _generateBalancedPlan() async {
     final uid = ref.read(userProfileProvider).uid;
     if (uid.trim().isEmpty) return;
+    final generation = ++_requestGeneration;
 
     final idToken =
         await ref.read(authRepositoryProvider).currentIdToken() ?? '';
@@ -326,6 +391,12 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         targets: targets,
         baseTimeline: workingSetup.toBaseTimelineDraft(),
       );
+
+      if (!mounted ||
+          generation != _requestGeneration ||
+          ref.read(userProfileProvider).uid != uid) {
+        return;
+      }
 
       if (mounted) {
         if (_workingAssetId != null && _workingAssetId != _initialAssetId) {
@@ -406,16 +477,28 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     );
   }
 
+  void _deleteMealBlock(String id) {
+    setState(() {
+      _workingBlocks.removeWhere((block) => block.id == id);
+      if (_frontBlockId == id) _frontBlockId = null;
+      _isDirty = true;
+    });
+  }
+
   Future<void> _saveWorkingSetup() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
     try {
       final uid = ref.read(userProfileProvider).uid;
+      if (uid.trim().isEmpty || uid != _editorOwnerUid) {
+        throw StateError('The active account changed. Reload Eating setup.');
+      }
       final coordinator = ref.read(baseTimelineTransactionCoordinatorProvider);
-      await coordinator.replaceSection(
+      final result = await coordinator.replaceSection(
         uid: uid,
         section: BaseTimelineSection.eating,
         newBlocks: _workingBlocks,
+        expectedRevision: _editorBaseRevision,
         updateSetup: (current) => current.copyWith(
           eatingBlocks: _workingBlocks,
           eatingSetupPath: _workingSetupPath,
@@ -451,17 +534,33 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
           _isSaving = false;
           _isEditing = false;
           _isDirty = false;
+          _editorBaseRevision = result.revision;
+          _refreshPendingRevision = result.routineRefreshPending
+              ? result.revision
+              : null;
+          _refreshPendingMessage = result.routineRefreshMessage;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Eating schedule updated successfully'),
+          SnackBar(
+            content: Text(
+              result.routineRefreshPending
+                  ? 'Saved. Routine needs to refresh.'
+                  : 'Eating schedule updated successfully',
+            ),
             duration: Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isSaving = false);
+        final isConflict = e.toString().toLowerCase().contains('conflict') ||
+            e.toString().toLowerCase().contains('concurrency');
+        setState(() {
+          _isSaving = false;
+          _errorMessage = isConflict
+              ? 'This setup changed elsewhere. Reload the latest setup before saving again.'
+              : 'Failed to save Eating setup. Please try again.';
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to update eating schedule: $e'),
@@ -470,6 +569,12 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         );
       }
     }
+  }
+
+  @override
+  void dispose() {
+    _requestGeneration++;
+    super.dispose();
   }
 
   @override
@@ -509,6 +614,9 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
           final entries = _workingBlocks
               .expand((b) => adapter.toEntries(b))
               .toList();
+          final workingMap = {
+            for (final block in _workingBlocks) block.id: block,
+          };
 
           return PopScope(
             canPop: !_isDirty && !_isSaving && !_isExtracting,
@@ -671,12 +779,33 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                           horizontal: 16,
                           vertical: 4,
                         ),
-                        child: Text(
-                          _errorMessage!,
-                          style: const TextStyle(
-                            color: OptivusColors.danger,
-                            fontSize: 12,
-                          ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _errorMessage!,
+                                style: const TextStyle(
+                                  color: OptivusColors.danger,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            if (_errorMessage!.contains('changed elsewhere'))
+                              TextButton(
+                                onPressed: () async {
+                                  await ref
+                                      .read(
+                                        baseTimelineSetupNotifierProvider
+                                            .notifier,
+                                      )
+                                      .load();
+                                  if (mounted) {
+                                    setState(() => _isEditing = false);
+                                  }
+                                },
+                                child: const Text('Reload latest'),
+                              ),
+                          ],
                         ),
                       ),
 
@@ -694,15 +823,44 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                                   setState(() => _selectedDay = day),
                               styleBuilder: (entry) =>
                                   adapter.styleForEntry(entry),
-                              accent: OptivusColors.roseAccent,
-                              onEntryTapped: (entry) {
-                                final block = _workingBlocks
-                                    .where((b) => b.id == entry.sourceId)
-                                    .firstOrNull;
-                                if (block != null) {
-                                  _editMealBlock(block);
+                              overlapPresentation:
+                                  TimelineOverlapPresentation.frontAndExposed,
+                              frontEntryId: _frontBlockId,
+                              onFrontSelected: (id) =>
+                                  setState(() => _frontBlockId = id),
+                              blockBuilder: (context, positioned) {
+                                final block =
+                                    workingMap[positioned.entry.sourceId];
+                                if (block == null) {
+                                  return const SizedBox.shrink();
                                 }
+                                return BaseTimelineDomainCard(
+                                  positioned: positioned,
+                                  block: block,
+                                  domain: BaseTimelineCardDomain.eating,
+                                  accent: OptivusColors.roseAccent,
+                                  isEditable: true,
+                                  onTap: () {
+                                    if (positioned.hasOverlap &&
+                                        !positioned.isFront) {
+                                      HapticFeedback.lightImpact();
+                                      setState(
+                                        () =>
+                                            _frontBlockId = positioned.entry.id,
+                                      );
+                                    } else {
+                                      _editMealBlock(block);
+                                    }
+                                  },
+                                  onDelete: () => _deleteMealBlock(block.id),
+                                );
                               },
+                              accent: OptivusColors.roseAccent,
+                              onEntryTapped: null,
+                              visibleRangePolicy:
+                                  TimelineVisibleRangePolicy.contentAdaptive,
+                              stretchPolicy:
+                                  TimelineStretchPolicy.constraintBased,
                               emptyDayMessage: 'No meals on this day.',
                             ),
                     ),
@@ -717,6 +875,9 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         final entries = setup.eatingBlocks
             .expand((b) => adapter.toEntries(b))
             .toList();
+        final blockMap = {
+          for (final block in setup.eatingBlocks) block.id: block,
+        };
 
         return Scaffold(
           backgroundColor: Colors.transparent,
@@ -898,14 +1059,58 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                   ),
 
                 // Timeline View
+                if (_refreshPendingRevision != null)
+                  BaseTimelineRefreshPendingBanner(
+                    message: _refreshPendingMessage,
+                    onRetry: () async {
+                      final result = await ref
+                          .read(baseTimelineTransactionCoordinatorProvider)
+                          .retryRoutineRefresh(
+                            uid: ref.read(userProfileProvider).uid,
+                            targetRevision: _refreshPendingRevision,
+                          );
+                      if (mounted && result.isRefreshed) {
+                        setState(() {
+                          _refreshPendingRevision = null;
+                          _refreshPendingMessage = null;
+                        });
+                      }
+                    },
+                  ),
                 Expanded(
                   child: FullScreenTimelineScaffold(
                     entries: entries,
                     selectedDay: _selectedDay,
                     onDayChanged: (day) => setState(() => _selectedDay = day),
                     styleBuilder: (entry) => adapter.styleForEntry(entry),
+                    overlapPresentation:
+                        TimelineOverlapPresentation.frontAndExposed,
+                    frontEntryId: _frontBlockId,
+                    onFrontSelected: (id) => setState(() => _frontBlockId = id),
+                    blockBuilder: (context, positioned) {
+                      final block = blockMap[positioned.entry.sourceId];
+                      if (block == null) return const SizedBox.shrink();
+                      return BaseTimelineDomainCard(
+                        positioned: positioned,
+                        block: block,
+                        domain: BaseTimelineCardDomain.eating,
+                        accent: OptivusColors.roseAccent,
+                        isEditable: false,
+                        onTap: positioned.hasOverlap && !positioned.isFront
+                            ? () {
+                                HapticFeedback.lightImpact();
+                                setState(
+                                  () => _frontBlockId = positioned.entry.id,
+                                );
+                              }
+                            : null,
+                      );
+                    },
                     accent: OptivusColors.roseAccent,
                     mode: TimelineMode.previewReadOnly,
+                    visibleRangePolicy:
+                        TimelineVisibleRangePolicy.contentAdaptive,
+                    stretchPolicy: TimelineStretchPolicy.constraintBased,
                     emptyDayMessage: 'No eating schedule configured.',
                   ),
                 ),
