@@ -30,6 +30,8 @@ class ClassesReviewView extends StatefulWidget {
   final VoidCallback onSave;
   final String? frontBlockId;
   final ValueChanged<String>? onFrontSelected;
+  final bool isConcurrencyConflict;
+  final VoidCallback? onReloadLatestSetup;
 
   const ClassesReviewView({
     super.key,
@@ -51,6 +53,8 @@ class ClassesReviewView extends StatefulWidget {
     required this.onSave,
     this.frontBlockId,
     this.onFrontSelected,
+    this.isConcurrencyConflict = false,
+    this.onReloadLatestSetup,
   });
 
   @override
@@ -230,31 +234,53 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
                   color: OptivusColors.danger.withValues(alpha: 0.3),
                 ),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
-                    Icons.error_outline_rounded,
-                    color: OptivusColors.danger,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      widget.errorMessage!,
-                      style: const TextStyle(
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.error_outline_rounded,
                         color: OptivusColors.danger,
-                        fontSize: 12,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          widget.errorMessage!,
+                          style: const TextStyle(
+                            color: OptivusColors.danger,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          size: 16,
+                          color: OptivusColors.danger,
+                        ),
+                        onPressed: widget.onClearError,
+                      ),
+                    ],
+                  ),
+                  if (widget.isConcurrencyConflict &&
+                      widget.onReloadLatestSetup != null) ...[
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.refresh_rounded, size: 14),
+                        label: const Text('Reload latest setup'),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          foregroundColor: OptivusColors.danger,
+                        ),
+                        onPressed: widget.onReloadLatestSetup,
                       ),
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.close_rounded,
-                      size: 16,
-                      color: OptivusColors.danger,
-                    ),
-                    onPressed: widget.onClearError,
-                  ),
+                  ],
                 ],
               ),
             ),

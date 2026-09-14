@@ -96,13 +96,47 @@ class ClassScheduleDraftMapper {
     );
   }
 
+  /// Validates a single [ClassRoutineBlock] against the strict Base Timeline repeat-day
+  /// and schedule contracts.
+  ///
+  /// Invariants:
+  /// - subject must not be empty
+  /// - startMinute must be strictly less than endMinute
+  /// - repeatDays must not be empty
+  /// - repeatDays cannot contain duplicates
+  /// - every repeat day must be in 1..7 (Monday=1, Sunday=7)
+  ///
+  /// Returns null if valid; returns a user-facing explanation string if invalid.
+  static String? validateWorkingBlock(ClassRoutineBlock block) {
+    final title = block.subject.trim();
+    if (title.isEmpty) {
+      return 'Please enter a subject name for all classes.';
+    }
+    if (block.startMinute >= block.endMinute) {
+      return 'Class "$title" has an invalid time range (start time must be earlier than end time).';
+    }
+    if (block.repeatDays.isEmpty) {
+      return 'Class "$title" must have at least one scheduled day.';
+    }
+    final daySet = block.repeatDays.toSet();
+    if (daySet.length != block.repeatDays.length) {
+      return 'Class "$title" contains duplicate scheduled days.';
+    }
+    for (final day in block.repeatDays) {
+      if (day < 1 || day > 7) {
+        return 'Class "$title" has an invalid scheduled day ($day). Days must be Monday through Sunday.';
+      }
+    }
+    return null;
+  }
+
   /// Converts a collection of [ClassRoutineBlock]s into durable [TimelineBlockDraft]s.
   static List<TimelineBlockDraft> toTimelineDrafts(
     List<ClassRoutineBlock> blocks, {
     required String section,
     String? provenanceAssetId,
     String? provenanceR2Key,
-    String source = 'ai_import',
+    String? source,
   }) {
     final provenance = <String>[
       if (provenanceAssetId != null && provenanceAssetId.trim().isNotEmpty)
@@ -110,13 +144,18 @@ class ClassScheduleDraftMapper {
       if (provenanceR2Key != null && provenanceR2Key.trim().isNotEmpty)
         provenanceR2Key.trim(),
     ];
+    final resolvedSource = source ??
+        ((provenanceAssetId != null && provenanceAssetId.trim().isNotEmpty) ||
+                (provenanceR2Key != null && provenanceR2Key.trim().isNotEmpty)
+            ? 'ai_import'
+            : 'manual');
     return blocks
         .map(
           (b) => toTimelineDraft(
             b,
             section: section,
             provenanceSourceIds: provenance,
-            source: source,
+            source: resolvedSource,
           ),
         )
         .whereType<TimelineBlockDraft>()

@@ -14,6 +14,7 @@ import 'package:optivus/features/routine/managers/base_timeline/services/class_s
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/repositories/base_timeline_setup_repository.dart';
+import 'package:optivus/repositories/routine_transaction_repository.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_generation.dart';
 import 'package:optivus/core/ai/ai_generation_lifecycle.dart';
@@ -95,6 +96,14 @@ class ClassesSetupState {
   final String? frontBlockId;
   final int sessionGeneration;
   final bool hasRunStartupCleanup;
+  final String ownerUid;
+  final int? editorBaseRevision;
+  final String? baseCommittedAssetId;
+  final String? baseCommittedR2Key;
+  final bool routineRefreshPending;
+  final int? committedRevision;
+  final String? routineRefreshMessage;
+  final bool isConcurrencyConflict;
 
   const ClassesSetupState({
     this.stage = ClassesSetupStage.currentSetup,
@@ -113,6 +122,14 @@ class ClassesSetupState {
     this.frontBlockId,
     this.sessionGeneration = 0,
     this.hasRunStartupCleanup = false,
+    this.ownerUid = '',
+    this.editorBaseRevision,
+    this.baseCommittedAssetId,
+    this.baseCommittedR2Key,
+    this.routineRefreshPending = false,
+    this.committedRevision,
+    this.routineRefreshMessage,
+    this.isConcurrencyConflict = false,
   });
 
   ClassesSetupState copyWith({
@@ -139,6 +156,19 @@ class ClassesSetupState {
     bool clearFrontBlockId = false,
     int? sessionGeneration,
     bool? hasRunStartupCleanup,
+    String? ownerUid,
+    int? editorBaseRevision,
+    bool clearEditorBaseRevision = false,
+    String? baseCommittedAssetId,
+    bool clearBaseCommittedAssetId = false,
+    String? baseCommittedR2Key,
+    bool clearBaseCommittedR2Key = false,
+    bool? routineRefreshPending,
+    int? committedRevision,
+    bool clearCommittedRevision = false,
+    String? routineRefreshMessage,
+    bool clearRoutineRefreshMessage = false,
+    bool? isConcurrencyConflict,
   }) {
     return ClassesSetupState(
       stage: stage ?? this.stage,
@@ -171,54 +201,121 @@ class ClassesSetupState {
           : (frontBlockId ?? this.frontBlockId),
       sessionGeneration: sessionGeneration ?? this.sessionGeneration,
       hasRunStartupCleanup: hasRunStartupCleanup ?? this.hasRunStartupCleanup,
+      ownerUid: ownerUid ?? this.ownerUid,
+      editorBaseRevision: clearEditorBaseRevision
+          ? null
+          : (editorBaseRevision ?? this.editorBaseRevision),
+      baseCommittedAssetId: clearBaseCommittedAssetId
+          ? null
+          : (baseCommittedAssetId ?? this.baseCommittedAssetId),
+      baseCommittedR2Key: clearBaseCommittedR2Key
+          ? null
+          : (baseCommittedR2Key ?? this.baseCommittedR2Key),
+      routineRefreshPending: routineRefreshPending ?? this.routineRefreshPending,
+      committedRevision: clearCommittedRevision
+          ? null
+          : (committedRevision ?? this.committedRevision),
+      routineRefreshMessage: clearRoutineRefreshMessage
+          ? null
+          : (routineRefreshMessage ?? this.routineRefreshMessage),
+      isConcurrencyConflict: isConcurrencyConflict ?? this.isConcurrencyConflict,
     );
   }
 }
 
 class ClassesSetupController extends StateNotifier<ClassesSetupState> {
   final Ref _ref;
+  final String _ownerUid;
   final BaseTimelineTransactionCoordinator _coordinator;
   final BaseTimelineUploadLifecycleHelper _lifecycleHelper;
 
+  String get ownerUid => _ownerUid;
+
   ClassesSetupController({
     required Ref ref,
+    String? ownerUid,
     required BaseTimelineTransactionCoordinator coordinator,
     required BaseTimelineUploadLifecycleHelper lifecycleHelper,
     int? initialSelectedDay,
   }) : _ref = ref,
+       _ownerUid = (ownerUid != null && ownerUid.isNotEmpty)
+           ? ownerUid
+           : ref.read(userProfileProvider).uid,
        _coordinator = coordinator,
        _lifecycleHelper = lifecycleHelper,
        super(
          ClassesSetupState(
+           ownerUid: (ownerUid != null && ownerUid.isNotEmpty)
+               ? ownerUid
+               : ref.read(userProfileProvider).uid,
            selectedDay:
                initialSelectedDay ?? DateTime.now().weekday.clamp(1, 7),
          ),
        );
 
+  /// Safe best-effort uncommitted asset retirement helper with safe error absorption.
+  void _retireUncommittedBestEffort({
+    required String uid,
+    String? assetId,
+    String? objectKey,
+  }) {
+    final trimmedUid = uid.trim();
+    if (trimmedUid.isEmpty) return;
+    final trimmedId = assetId?.trim();
+    final trimmedKey = objectKey?.trim();
+    if ((trimmedId == null || trimmedId.isEmpty) &&
+        (trimmedKey == null || trimmedKey.isEmpty)) {
+      return;
+    }
+    unawaited(
+      _lifecycleHelper
+          .retireUncommittedUpload(
+            uid: trimmedUid,
+            assetId: trimmedId,
+            objectKey: trimmedKey,
+          )
+          .catchError((error, stackTrace) {
+            debugPrint(
+              'Best-effort upload retirement completed safely: $error',
+            );
+          }),
+    );
+  }
+
   /// Safe startup cleanup. NEVER runs while BaseTimelineSetup is loading (null).
-  /// Passes purposes: {classTimetable} and protected asset ID/key.
+  /// Strictly owner-scoped; passes purposes: {classTimetable} and protected asset ID/key.
   Future<void> performStartupCleanup(
     BaseTimelineSetup? setup, {
     required String uid,
   }) async {
     if (setup == null || state.hasRunStartupCleanup) return;
+    final activeUid = _ref.read(userProfileProvider).uid.trim();
+    if (_ownerUid.isNotEmpty &&
+        (activeUid != _ownerUid || activeUid != uid.trim())) {
+      return;
+    }
+    if (uid.trim().isEmpty) return;
     state = state.copyWith(hasRunStartupCleanup: true);
-    await _lifecycleHelper.cleanupStaleUncommittedAssets(
-      uid: uid,
-      purposes: const {UploadedAssetPurpose.classTimetable},
-      committedAssetIds: {
-        if (setup.classLogicalAssetId != null &&
-            setup.classLogicalAssetId!.isNotEmpty)
-          setup.classLogicalAssetId!,
-      },
-      committedR2Keys: {
-        if (setup.classLogicalAssetR2Key != null &&
-            setup.classLogicalAssetR2Key!.isNotEmpty)
-          setup.classLogicalAssetR2Key!,
-      },
-      committedAssetId: setup.classLogicalAssetId,
-      committedR2Key: setup.classLogicalAssetR2Key,
-    );
+    try {
+      await _lifecycleHelper.cleanupStaleUncommittedAssets(
+        uid: uid,
+        purposes: const {UploadedAssetPurpose.classTimetable},
+        committedAssetIds: {
+          if (setup.classLogicalAssetId != null &&
+              setup.classLogicalAssetId!.isNotEmpty)
+            setup.classLogicalAssetId!,
+        },
+        committedR2Keys: {
+          if (setup.classLogicalAssetR2Key != null &&
+              setup.classLogicalAssetR2Key!.isNotEmpty)
+            setup.classLogicalAssetR2Key!,
+        },
+        committedAssetId: setup.classLogicalAssetId,
+        committedR2Key: setup.classLogicalAssetR2Key,
+      );
+    } catch (err) {
+      debugPrint('Classes startup cleanup failed safely: $err');
+    }
   }
 
   /// Initializes the selected weekday tab if not yet calibrated.
@@ -254,18 +351,20 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
     final candidateKey = state.candidateR2Key;
     state = state.copyWith(
       stage: ClassesSetupStage.chooseSource,
+      editorBaseRevision: setup.revision,
+      baseCommittedAssetId: setup.classLogicalAssetId,
+      baseCommittedR2Key: setup.classLogicalAssetR2Key,
       clearCandidateAssetId: true,
       clearCandidateR2Key: true,
       clearErrorMessage: true,
+      isConcurrencyConflict: false,
     );
     if (candidateId != null && candidateId != setup.classLogicalAssetId) {
-      try {
-        _lifecycleHelper.retireUncommittedUpload(
-          uid: uid,
-          assetId: candidateId,
-          objectKey: candidateKey,
-        );
-      } catch (_) {}
+      _retireUncommittedBestEffort(
+        uid: uid,
+        assetId: candidateId,
+        objectKey: candidateKey,
+      );
     }
   }
 
@@ -288,13 +387,11 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
       clearErrorMessage: true,
     );
     if (candidateId != null && candidateId != setup.classLogicalAssetId) {
-      try {
-        _lifecycleHelper.retireUncommittedUpload(
-          uid: uid,
-          assetId: candidateId,
-          objectKey: candidateKey,
-        );
-      } catch (_) {}
+      _retireUncommittedBestEffort(
+        uid: uid,
+        assetId: candidateId,
+        objectKey: candidateKey,
+      );
     }
   }
 
@@ -321,6 +418,9 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
     state = state.copyWith(
       stage: ClassesSetupStage.review,
       workingBlocks: existingBlocks,
+      editorBaseRevision: setup.revision,
+      baseCommittedAssetId: setup.classLogicalAssetId,
+      baseCommittedR2Key: setup.classLogicalAssetR2Key,
       clearWorkingAssetId: true,
       clearWorkingR2Key: true,
       clearWorkingLocalPreviewPath: true,
@@ -332,6 +432,7 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
       isDirty: false,
       clearErrorMessage: true,
       clearFrontBlockId: true,
+      isConcurrencyConflict: false,
     );
   }
 
@@ -348,6 +449,9 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
     state = state.copyWith(
       stage: ClassesSetupStage.review,
       workingBlocks: existingBlocks,
+      editorBaseRevision: setup.revision,
+      baseCommittedAssetId: setup.classLogicalAssetId,
+      baseCommittedR2Key: setup.classLogicalAssetR2Key,
       workingAssetId: setup.classLogicalAssetId,
       clearWorkingAssetId: setup.classLogicalAssetId == null,
       workingR2Key: setup.classLogicalAssetR2Key,
@@ -361,6 +465,7 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
       isDirty: false,
       clearErrorMessage: true,
       clearFrontBlockId: true,
+      isConcurrencyConflict: false,
     );
   }
 
@@ -376,7 +481,11 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
     state = state.copyWith(
       stage: ClassesSetupStage.uploading,
       sessionGeneration: sessionGen,
+      editorBaseRevision: setup.revision,
+      baseCommittedAssetId: setup.classLogicalAssetId,
+      baseCommittedR2Key: setup.classLogicalAssetR2Key,
       clearErrorMessage: true,
+      isConcurrencyConflict: false,
     );
 
     UploadedAsset? asset;
@@ -401,7 +510,7 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
         _ref.read(authGenerationProvider) != currentAuthGen ||
         _ref.read(userProfileProvider).uid != uid) {
       if (asset != null) {
-        _lifecycleHelper.retireUncommittedUpload(
+        _retireUncommittedBestEffort(
           uid: uid,
           assetId: asset.assetId,
           objectKey: asset.r2Key,
@@ -477,7 +586,7 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
           _ref.read(authGenerationProvider) != currentAuthGen ||
           _ref.read(userProfileProvider).uid != uid ||
           state.candidateAssetId != assetId) {
-        _lifecycleHelper.retireUncommittedUpload(
+        _retireUncommittedBestEffort(
           uid: uid,
           assetId: assetId,
           objectKey: r2Key,
@@ -514,7 +623,7 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
           if (state.workingAssetId != null &&
               state.workingAssetId != setup.classLogicalAssetId &&
               state.workingAssetId != assetId) {
-            _lifecycleHelper.retireUncommittedUpload(
+            _retireUncommittedBestEffort(
               uid: uid,
               assetId: state.workingAssetId,
               objectKey: state.workingR2Key,
@@ -596,13 +705,11 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
 
     if (candidateAssetId != null &&
         candidateAssetId != setup.classLogicalAssetId) {
-      try {
-        await _lifecycleHelper.retireUncommittedUpload(
-          uid: uid,
-          assetId: candidateAssetId,
-          objectKey: candidateR2Key,
-        );
-      } catch (_) {}
+      _retireUncommittedBestEffort(
+        uid: uid,
+        assetId: candidateAssetId,
+        objectKey: candidateR2Key,
+      );
     }
   }
 
@@ -680,11 +787,32 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
 
   Future<void> save({
     required String uid,
-    required BaseTimelineSetup setup,
+    BaseTimelineSetup? setup,
   }) async {
     if (state.isSaving) return;
+    final activeUid = _ref.read(userProfileProvider).uid.trim();
+    if (_ownerUid.isNotEmpty &&
+        (activeUid != _ownerUid || activeUid != uid.trim())) {
+      return;
+    }
+    if (uid.trim().isEmpty) return;
 
-    state = state.copyWith(isSaving: true, clearErrorMessage: true);
+    // Strict validation of each block before any persistence
+    for (final block in state.workingBlocks) {
+      final validationError = ClassScheduleDraftMapper.validateWorkingBlock(block);
+      if (validationError != null) {
+        state = state.copyWith(
+          errorMessage: validationError,
+        );
+        return;
+      }
+    }
+
+    state = state.copyWith(
+      isSaving: true,
+      clearErrorMessage: true,
+      isConcurrencyConflict: false,
+    );
 
     try {
       final drafts = ClassScheduleDraftMapper.toTimelineDrafts(
@@ -694,10 +822,14 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
         provenanceR2Key: state.workingR2Key,
       );
 
+      final expectedRevision =
+          state.editorBaseRevision ?? setup?.revision ?? 1;
+
       final commitResult = await _coordinator.replaceSection(
         uid: uid,
         section: BaseTimelineSection.classes,
         newBlocks: drafts,
+        expectedRevision: expectedRevision,
         updateSetup: (current) => current.copyWith(
           classBlocks: drafts,
           classLogicalAssetId: state.workingAssetId,
@@ -708,20 +840,31 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
         ),
       );
 
-      _ref
-          .read(baseTimelineSetupNotifierProvider.notifier)
-          .updateInMemory(commitResult.committedSetup);
+      try {
+        final setupNotifier =
+            _ref.read(baseTimelineSetupNotifierProvider.notifier);
+        if (setupNotifier.uid == uid) {
+          setupNotifier.updateInMemory(commitResult.committedSetup);
+        }
+      } catch (_) {}
 
       // Clean up previous committed asset if replaced
-      if (setup.classLogicalAssetId != null &&
-          setup.classLogicalAssetId != state.workingAssetId) {
-        try {
-          await _lifecycleHelper.retireReplacedAsset(
-            uid: uid,
-            oldAssetId: setup.classLogicalAssetId!,
-            oldObjectKey: setup.classLogicalAssetR2Key,
-          );
-        } catch (_) {}
+      final oldAssetId =
+          state.baseCommittedAssetId ?? setup?.classLogicalAssetId;
+      final oldObjectKey =
+          state.baseCommittedR2Key ?? setup?.classLogicalAssetR2Key;
+      if (oldAssetId != null && oldAssetId != state.workingAssetId) {
+        unawaited(
+          _lifecycleHelper
+              .retireReplacedAsset(
+                uid: uid,
+                oldAssetId: oldAssetId,
+                oldObjectKey: oldObjectKey,
+              )
+              .catchError((err, st) {
+                debugPrint('Failed retiring old asset: $err');
+              }),
+        );
       }
 
       final savedBlocks = ClassScheduleDraftMapper.toClassRoutineBlocks(drafts);
@@ -745,12 +888,24 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
         droppedExamples: const [],
         clearErrorMessage: true,
         clearFrontBlockId: true,
+        routineRefreshPending: commitResult.routineRefreshPending,
+        committedRevision: commitResult.revision,
+        routineRefreshMessage: commitResult.routineRefreshMessage,
+        clearEditorBaseRevision: true,
+        clearBaseCommittedAssetId: true,
+        clearBaseCommittedR2Key: true,
+        isConcurrencyConflict: false,
       );
     } catch (e) {
+      final isConflict = e is BaseTimelineConcurrencyException ||
+          e.toString().toLowerCase().contains('concurrency') ||
+          e.toString().toLowerCase().contains('conflict');
+
       state = state.copyWith(
         stage: ClassesSetupStage.review,
         isSaving: false,
         errorMessage: ClassSetupErrorMapper.mapSaveError(e),
+        isConcurrencyConflict: isConflict,
       );
     }
   }
@@ -759,12 +914,27 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
     required String uid,
     required BaseTimelineSetup setup,
   }) async {
-    state = state.copyWith(isSaving: true, clearErrorMessage: true);
+    if (state.isSaving) return;
+    final activeUid = _ref.read(userProfileProvider).uid.trim();
+    if (_ownerUid.isNotEmpty &&
+        (activeUid != _ownerUid || activeUid != uid.trim())) {
+      return;
+    }
+    if (uid.trim().isEmpty) return;
+
+    state = state.copyWith(
+      isSaving: true,
+      clearErrorMessage: true,
+      isConcurrencyConflict: false,
+    );
     try {
+      final expectedRevision = state.editorBaseRevision ?? setup.revision;
+
       final commitResult = await _coordinator.replaceSection(
         uid: uid,
         section: BaseTimelineSection.classes,
         newBlocks: const [],
+        expectedRevision: expectedRevision,
         updateSetup: (current) => current.copyWith(
           classBlocks: const [],
           clearClassLogicalAssetId: true,
@@ -773,18 +943,26 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
         ),
       );
 
-      _ref
-          .read(baseTimelineSetupNotifierProvider.notifier)
-          .updateInMemory(commitResult.committedSetup);
+      try {
+        final setupNotifier =
+            _ref.read(baseTimelineSetupNotifierProvider.notifier);
+        if (setupNotifier.uid == uid) {
+          setupNotifier.updateInMemory(commitResult.committedSetup);
+        }
+      } catch (_) {}
 
       if (setup.classLogicalAssetId != null) {
-        try {
-          await _lifecycleHelper.retireReplacedAsset(
-            uid: uid,
-            oldAssetId: setup.classLogicalAssetId!,
-            oldObjectKey: setup.classLogicalAssetR2Key,
-          );
-        } catch (_) {}
+        unawaited(
+          _lifecycleHelper
+              .retireReplacedAsset(
+                uid: uid,
+                oldAssetId: setup.classLogicalAssetId!,
+                oldObjectKey: setup.classLogicalAssetR2Key,
+              )
+              .catchError((err, st) {
+                debugPrint('Failed retiring old asset on remove: $err');
+              }),
+        );
       }
 
       state = state.copyWith(
@@ -801,17 +979,96 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
         droppedExamples: const [],
         clearErrorMessage: true,
         clearFrontBlockId: true,
+        routineRefreshPending: commitResult.routineRefreshPending,
+        committedRevision: commitResult.revision,
+        routineRefreshMessage: commitResult.routineRefreshMessage,
+        clearEditorBaseRevision: true,
+        clearBaseCommittedAssetId: true,
+        clearBaseCommittedR2Key: true,
+        isConcurrencyConflict: false,
       );
     } catch (e) {
+      final isConflict = e is BaseTimelineConcurrencyException ||
+          e.toString().toLowerCase().contains('concurrency') ||
+          e.toString().toLowerCase().contains('conflict');
       state = state.copyWith(
         isSaving: false,
         errorMessage: ClassSetupErrorMapper.mapSaveError(e),
+        isConcurrencyConflict: isConflict,
       );
     }
   }
 
+  /// Retries routine projection / reconciliation without modifying base timeline setup.
+  Future<void> retryRoutineRefresh({required String uid}) async {
+    final activeUid = _ref.read(userProfileProvider).uid.trim();
+    if (_ownerUid.isNotEmpty &&
+        (activeUid != _ownerUid || activeUid != uid.trim())) {
+      return;
+    }
+    if (uid.trim().isEmpty) return;
+    try {
+      final refreshOutcome = await _coordinator.retryRoutineRefresh(
+        uid: uid,
+      );
+      if (refreshOutcome.isRefreshed) {
+        state = state.copyWith(
+          routineRefreshPending: false,
+          clearRoutineRefreshMessage: true,
+        );
+      } else {
+        state = state.copyWith(
+          routineRefreshPending: true,
+          routineRefreshMessage: refreshOutcome.message,
+        );
+      }
+    } catch (e) {
+      state = state.copyWith(
+        routineRefreshPending: true,
+        routineRefreshMessage: 'Reconciliation retry failed: $e',
+      );
+    }
+  }
+
+  /// Discards local conflict working blocks and reloads latest canonical setup.
+  void reloadFromCanonical(BaseTimelineSetup setup) {
+    _retireCandidate();
+    final blocks = ClassScheduleDraftMapper.toClassRoutineBlocks(
+      setup.classBlocks,
+    );
+    final normalizedDay = normalizeSelectedDay(
+      currentDay: state.selectedDay,
+      blocks: blocks,
+    );
+    state = state.copyWith(
+      stage: blocks.isNotEmpty
+          ? ClassesSetupStage.review
+          : ClassesSetupStage.currentSetup,
+      workingBlocks: blocks,
+      editorBaseRevision: setup.revision,
+      baseCommittedAssetId: setup.classLogicalAssetId,
+      baseCommittedR2Key: setup.classLogicalAssetR2Key,
+      workingAssetId: setup.classLogicalAssetId,
+      clearWorkingAssetId: setup.classLogicalAssetId == null,
+      workingR2Key: setup.classLogicalAssetR2Key,
+      clearWorkingR2Key: setup.classLogicalAssetR2Key == null,
+      clearCandidateAssetId: true,
+      clearCandidateR2Key: true,
+      selectedDay: normalizedDay,
+      isDirty: false,
+      droppedCount: 0,
+      droppedExamples: const [],
+      clearErrorMessage: true,
+      clearFrontBlockId: true,
+      isConcurrencyConflict: false,
+    );
+  }
+
   void clearError() {
-    state = state.copyWith(clearErrorMessage: true);
+    state = state.copyWith(
+      clearErrorMessage: true,
+      isConcurrencyConflict: false,
+    );
   }
 
   void dismissSuccess() {
@@ -840,27 +1097,27 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
       droppedExamples: const [],
       clearErrorMessage: true,
       clearFrontBlockId: true,
+      clearEditorBaseRevision: true,
+      clearBaseCommittedAssetId: true,
+      clearBaseCommittedR2Key: true,
+      isConcurrencyConflict: false,
     );
 
     if (candidateAssetId != null &&
         candidateAssetId != setup.classLogicalAssetId) {
-      try {
-        await _lifecycleHelper.retireUncommittedUpload(
-          uid: uid,
-          assetId: candidateAssetId,
-          objectKey: candidateR2Key,
-        );
-      } catch (_) {}
+      _retireUncommittedBestEffort(
+        uid: uid,
+        assetId: candidateAssetId,
+        objectKey: candidateR2Key,
+      );
     }
 
     if (workingAssetId != null && workingAssetId != setup.classLogicalAssetId) {
-      try {
-        await _lifecycleHelper.retireUncommittedUpload(
-          uid: uid,
-          assetId: workingAssetId,
-          objectKey: workingR2Key,
-        );
-      } catch (_) {}
+      _retireUncommittedBestEffort(
+        uid: uid,
+        assetId: workingAssetId,
+        objectKey: workingR2Key,
+      );
     }
   }
 
@@ -868,9 +1125,8 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
     final candidateId = state.candidateAssetId;
     final candidateKey = state.candidateR2Key;
     if (candidateId != null) {
-      final uid = _ref.read(userProfileProvider).uid;
-      _lifecycleHelper.retireUncommittedUpload(
-        uid: uid,
+      _retireUncommittedBestEffort(
+        uid: _ownerUid,
         assetId: candidateId,
         objectKey: candidateKey,
       );
@@ -883,12 +1139,14 @@ final classesSetupControllerProvider =
       ClassesSetupController,
       ClassesSetupState
     >((ref) {
+      final uid = ref.watch(userProfileProvider.select((p) => p.uid));
       final coordinator = ref.watch(baseTimelineTransactionCoordinatorProvider);
       final lifecycleHelper = ref.watch(
         baseTimelineUploadLifecycleHelperProvider,
       );
       return ClassesSetupController(
         ref: ref,
+        ownerUid: uid,
         coordinator: coordinator,
         lifecycleHelper: lifecycleHelper,
       );

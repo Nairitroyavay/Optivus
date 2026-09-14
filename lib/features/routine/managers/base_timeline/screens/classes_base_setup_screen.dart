@@ -323,20 +323,34 @@ class _ClassesBaseSetupScreenState
       },
     );
 
-    if (state.stage == ClassesSetupStage.currentSetup &&
-        setupAsync.isLoading &&
-        !setupAsync.hasValue) {
-      return PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, result) {
-          if (didPop) return;
-          widget.onBack();
-        },
-        child: Scaffold(
-          backgroundColor: Colors.transparent,
-          body: _buildCurrentSetupSkeletonView(),
-        ),
-      );
+    if (state.stage == ClassesSetupStage.currentSetup) {
+      if (setupAsync.isLoading && !setupAsync.hasValue) {
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            widget.onBack();
+          },
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            body: _buildCurrentSetupSkeletonView(),
+          ),
+        );
+      }
+
+      if (setupAsync.hasError && !setupAsync.hasValue) {
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            widget.onBack();
+          },
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            body: _buildCurrentSetupLoadErrorView(setupAsync.error),
+          ),
+        );
+      }
     }
 
     final setup =
@@ -479,6 +493,8 @@ class _ClassesBaseSetupScreenState
           onSave: () => controller.save(uid: uid, setup: setup),
           frontBlockId: state.frontBlockId,
           onFrontSelected: (id) => controller.selectFrontBlock(id),
+          isConcurrencyConflict: state.isConcurrencyConflict,
+          onReloadLatestSetup: () => controller.reloadFromCanonical(setup),
         );
 
       case ClassesSetupStage.currentSetup:
@@ -494,6 +510,9 @@ class _ClassesBaseSetupScreenState
           onBack: () => _handleClassesBack(setup, state, uid),
           onChangeSetup: () => controller.chooseSource(setup, uid: uid),
           onRemoveSetup: () => _handleRemoveSetup(setup, uid),
+          routineRefreshPending: state.routineRefreshPending,
+          routineRefreshMessage: state.routineRefreshMessage,
+          onRetryRefresh: () => controller.retryRoutineRefresh(uid: uid),
         );
     }
   }
@@ -624,6 +643,97 @@ class _ClassesBaseSetupScreenState
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCurrentSetupLoadErrorView(Object? error) {
+    return SafeArea(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: OptivusColors.danger.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.cloud_off_rounded,
+                    color: OptivusColors.danger,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Failed to load Classes timetable',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: OptivusColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  error?.toString() ??
+                      'Unable to load your timetable from the server.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: OptivusColors.textSecondary,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onPressed: widget.onBack,
+                        child: const Text('Back'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: OptivusColors.blueAccent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onPressed: () {
+                          ref
+                              .read(baseTimelineSetupNotifierProvider.notifier)
+                              .load();
+                        },
+                        child: const Text('Retry'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

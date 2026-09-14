@@ -20,6 +20,9 @@ class ClassesCurrentSetupView extends StatefulWidget {
   final VoidCallback onBack;
   final VoidCallback onChangeSetup;
   final VoidCallback? onRemoveSetup;
+  final bool routineRefreshPending;
+  final String? routineRefreshMessage;
+  final VoidCallback? onRetryRefresh;
 
   const ClassesCurrentSetupView({
     super.key,
@@ -30,6 +33,9 @@ class ClassesCurrentSetupView extends StatefulWidget {
     required this.onBack,
     required this.onChangeSetup,
     this.onRemoveSetup,
+    this.routineRefreshPending = false,
+    this.routineRefreshMessage,
+    this.onRetryRefresh,
   });
 
   @override
@@ -169,6 +175,55 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
     );
   }
 
+  Widget _buildRefreshPendingBanner(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: OptivusColors.warning.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: OptivusColors.warning.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.sync_problem_rounded,
+            size: 18,
+            color: OptivusColors.warning,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              widget.routineRefreshMessage ??
+                  'Setup saved. Updating your daily Routine projection is pending.',
+              style: const TextStyle(
+                fontSize: 12,
+                color: OptivusColors.textPrimary,
+              ),
+            ),
+          ),
+          if (widget.onRetryRefresh != null) ...[
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: widget.onRetryRefresh,
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                foregroundColor: OptivusColors.warning,
+              ),
+              child: const Text(
+                'Retry',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final snapshot = widget.setup.snapshotFor(BaseTimelineSection.classes);
@@ -191,6 +246,10 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
         children: [
           // 1. Top Nav Header matching Work/Eating/Skin Care/Fixed
           _buildHeader(context, snapshot),
+
+          // Routine Refresh Pending Banner
+          if (widget.routineRefreshPending)
+            _buildRefreshPendingBanner(context),
 
           // 2. Large Timetable Photo Preview directly below header
           if (hasSourcePhoto)
