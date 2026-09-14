@@ -13,7 +13,6 @@ import 'package:optivus/features/routine/managers/base_timeline/services/class_s
 import 'package:optivus/features/routine/managers/base_timeline/services/class_setup_error_mapper.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
-import 'package:optivus/repositories/base_timeline_setup_repository.dart';
 import 'package:optivus/repositories/routine_transaction_repository.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_generation.dart';
@@ -211,14 +210,16 @@ class ClassesSetupState {
       baseCommittedR2Key: clearBaseCommittedR2Key
           ? null
           : (baseCommittedR2Key ?? this.baseCommittedR2Key),
-      routineRefreshPending: routineRefreshPending ?? this.routineRefreshPending,
+      routineRefreshPending:
+          routineRefreshPending ?? this.routineRefreshPending,
       committedRevision: clearCommittedRevision
           ? null
           : (committedRevision ?? this.committedRevision),
       routineRefreshMessage: clearRoutineRefreshMessage
           ? null
           : (routineRefreshMessage ?? this.routineRefreshMessage),
-      isConcurrencyConflict: isConcurrencyConflict ?? this.isConcurrencyConflict,
+      isConcurrencyConflict:
+          isConcurrencyConflict ?? this.isConcurrencyConflict,
     );
   }
 }
@@ -252,6 +253,17 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
                initialSelectedDay ?? DateTime.now().weekday.clamp(1, 7),
          ),
        );
+
+  bool _isActiveOwner(String uid) {
+    if (!mounted || uid.trim().isEmpty || _ownerUid != uid.trim()) {
+      return false;
+    }
+    try {
+      return _ref.read(userProfileProvider).uid.trim() == uid.trim();
+    } catch (_) {
+      return false;
+    }
+  }
 
   /// Safe best-effort uncommitted asset retirement helper with safe error absorption.
   void _retireUncommittedBestEffort({
@@ -288,13 +300,9 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
     BaseTimelineSetup? setup, {
     required String uid,
   }) async {
-    if (setup == null || state.hasRunStartupCleanup) return;
-    final activeUid = _ref.read(userProfileProvider).uid.trim();
-    if (_ownerUid.isNotEmpty &&
-        (activeUid != _ownerUid || activeUid != uid.trim())) {
+    if (!_isActiveOwner(uid) || setup == null || state.hasRunStartupCleanup) {
       return;
     }
-    if (uid.trim().isEmpty) return;
     state = state.copyWith(hasRunStartupCleanup: true);
     try {
       await _lifecycleHelper.cleanupStaleUncommittedAssets(
@@ -346,20 +354,21 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
     );
   }
 
-  void chooseSource(BaseTimelineSetup setup, {required String uid}) {
+  void chooseSource(BaseTimelineSetup? setup, {required String uid}) {
+    if (!_isActiveOwner(uid)) return;
     final candidateId = state.candidateAssetId;
     final candidateKey = state.candidateR2Key;
     state = state.copyWith(
       stage: ClassesSetupStage.chooseSource,
-      editorBaseRevision: setup.revision,
-      baseCommittedAssetId: setup.classLogicalAssetId,
-      baseCommittedR2Key: setup.classLogicalAssetR2Key,
+      editorBaseRevision: setup?.revision,
+      baseCommittedAssetId: setup?.classLogicalAssetId,
+      baseCommittedR2Key: setup?.classLogicalAssetR2Key,
       clearCandidateAssetId: true,
       clearCandidateR2Key: true,
       clearErrorMessage: true,
       isConcurrencyConflict: false,
     );
-    if (candidateId != null && candidateId != setup.classLogicalAssetId) {
+    if (candidateId != null && candidateId != state.baseCommittedAssetId) {
       _retireUncommittedBestEffort(
         uid: uid,
         assetId: candidateId,
@@ -377,7 +386,8 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
     );
   }
 
-  void keepPreviousDraft(BaseTimelineSetup setup, {required String uid}) {
+  void keepPreviousDraft(BaseTimelineSetup? setup, {required String uid}) {
+    if (!_isActiveOwner(uid)) return;
     final candidateId = state.candidateAssetId;
     final candidateKey = state.candidateR2Key;
     state = state.copyWith(
@@ -386,7 +396,7 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
       clearCandidateR2Key: true,
       clearErrorMessage: true,
     );
-    if (candidateId != null && candidateId != setup.classLogicalAssetId) {
+    if (candidateId != null && candidateId != state.baseCommittedAssetId) {
       _retireUncommittedBestEffort(
         uid: uid,
         assetId: candidateId,
@@ -472,18 +482,18 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
   Future<void> pickAndUploadPhoto({
     required String uid,
     required ImageSource source,
-    required BaseTimelineSetup setup,
+    BaseTimelineSetup? setup,
   }) async {
-    if (uid.trim().isEmpty) return;
+    if (!_isActiveOwner(uid)) return;
     final currentAuthGen = _ref.read(authGenerationProvider);
     final sessionGen = state.sessionGeneration + 1;
 
     state = state.copyWith(
       stage: ClassesSetupStage.uploading,
       sessionGeneration: sessionGen,
-      editorBaseRevision: setup.revision,
-      baseCommittedAssetId: setup.classLogicalAssetId,
-      baseCommittedR2Key: setup.classLogicalAssetR2Key,
+      editorBaseRevision: setup?.revision,
+      baseCommittedAssetId: setup?.classLogicalAssetId,
+      baseCommittedR2Key: setup?.classLogicalAssetR2Key,
       clearErrorMessage: true,
       isConcurrencyConflict: false,
     );
@@ -498,6 +508,7 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
         source: source,
       );
     } catch (uploadError) {
+      if (!_isActiveOwner(uid)) return;
       if (state.sessionGeneration != sessionGen) return;
       state = state.copyWith(
         stage: ClassesSetupStage.error,
@@ -506,9 +517,10 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
       return;
     }
 
-    if (state.sessionGeneration != sessionGen ||
+    if (!_isActiveOwner(uid) ||
+        state.sessionGeneration != sessionGen ||
         _ref.read(authGenerationProvider) != currentAuthGen ||
-        _ref.read(userProfileProvider).uid != uid) {
+        _ownerUid != uid) {
       if (asset != null) {
         _retireUncommittedBestEffort(
           uid: uid,
@@ -542,7 +554,6 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
       localPreviewPath: asset.localPreviewPath,
       sessionGen: sessionGen,
       currentAuthGen: currentAuthGen,
-      setup: setup,
     );
   }
 
@@ -553,7 +564,6 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
     String? localPreviewPath,
     required int sessionGen,
     required int currentAuthGen,
-    required BaseTimelineSetup setup,
   }) async {
     final reviewDraft = RoutineImportReviewDraft(
       id: 'rev_$assetId',
@@ -577,14 +587,26 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
           .timeout(
             const Duration(seconds: 45),
             onTimeout: () {
-              aiController.cancelCurrentExtraction();
+              if (_isActiveOwner(uid) &&
+                  _ref.read(authGenerationProvider) == currentAuthGen) {
+                aiController.cancelCurrentExtraction();
+              }
               throw TimeoutException('AI timetable extraction timed out.');
             },
           );
 
+      if (!_isActiveOwner(uid)) {
+        _retireUncommittedBestEffort(
+          uid: uid,
+          assetId: assetId,
+          objectKey: r2Key,
+        );
+        return;
+      }
+
       if (state.sessionGeneration != sessionGen ||
           _ref.read(authGenerationProvider) != currentAuthGen ||
-          _ref.read(userProfileProvider).uid != uid ||
+          _ownerUid != uid ||
           state.candidateAssetId != assetId) {
         _retireUncommittedBestEffort(
           uid: uid,
@@ -621,7 +643,7 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
         if (mappingResult.blocks.isNotEmpty) {
           // Retire previous working asset if it was uncommitted
           if (state.workingAssetId != null &&
-              state.workingAssetId != setup.classLogicalAssetId &&
+              state.workingAssetId != state.baseCommittedAssetId &&
               state.workingAssetId != assetId) {
             _retireUncommittedBestEffort(
               uid: uid,
@@ -662,7 +684,16 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
         ),
       );
     } catch (e) {
-      if (e is TimeoutException) {
+      if (!_isActiveOwner(uid)) {
+        _retireUncommittedBestEffort(
+          uid: uid,
+          assetId: assetId,
+          objectKey: r2Key,
+        );
+        return;
+      }
+      if (e is TimeoutException &&
+          _ref.read(authGenerationProvider) == currentAuthGen) {
         try {
           _ref
               .read(routineImportAiControllerProvider.notifier)
@@ -682,9 +713,10 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
 
   /// Cancels in-flight extraction or upload immediately and resets state.
   Future<void> cancelCurrentExtraction(
-    BaseTimelineSetup setup, {
+    BaseTimelineSetup? setup, {
     required String uid,
   }) async {
+    if (!_isActiveOwner(uid)) return;
     final newSessionGen = state.sessionGeneration + 1;
     _ref
         .read(routineImportAiControllerProvider.notifier)
@@ -704,7 +736,7 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
     );
 
     if (candidateAssetId != null &&
-        candidateAssetId != setup.classLogicalAssetId) {
+        candidateAssetId != state.baseCommittedAssetId) {
       _retireUncommittedBestEffort(
         uid: uid,
         assetId: candidateAssetId,
@@ -715,8 +747,9 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
 
   Future<void> retryCandidateExtraction({
     required String uid,
-    required BaseTimelineSetup setup,
+    BaseTimelineSetup? setup,
   }) async {
+    if (!_isActiveOwner(uid)) return;
     final assetId = state.candidateAssetId;
     final r2Key = state.candidateR2Key;
     if (assetId == null || r2Key == null) {
@@ -726,6 +759,7 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
 
     final currentAuthGen = _ref.read(authGenerationProvider);
     final sessionGen = state.sessionGeneration + 1;
+    final localPreviewPath = state.workingLocalPreviewPath;
 
     state = state.copyWith(
       stage: ClassesSetupStage.extracting,
@@ -737,10 +771,9 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
       uid: uid,
       assetId: assetId,
       r2Key: r2Key,
-      localPreviewPath: state.workingLocalPreviewPath,
+      localPreviewPath: localPreviewPath,
       sessionGen: sessionGen,
       currentAuthGen: currentAuthGen,
-      setup: setup,
     );
   }
 
@@ -785,27 +818,36 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
     );
   }
 
-  Future<void> save({
-    required String uid,
-    BaseTimelineSetup? setup,
-  }) async {
+  Future<void> save({required String uid, BaseTimelineSetup? setup}) async {
     if (state.isSaving) return;
-    final activeUid = _ref.read(userProfileProvider).uid.trim();
-    if (_ownerUid.isNotEmpty &&
-        (activeUid != _ownerUid || activeUid != uid.trim())) {
-      return;
-    }
-    if (uid.trim().isEmpty) return;
+    if (!_isActiveOwner(uid)) return;
 
     // Strict validation of each block before any persistence
     for (final block in state.workingBlocks) {
-      final validationError = ClassScheduleDraftMapper.validateWorkingBlock(block);
+      final validationError = ClassScheduleDraftMapper.validateWorkingBlock(
+        block,
+      );
       if (validationError != null) {
-        state = state.copyWith(
-          errorMessage: validationError,
-        );
+        state = state.copyWith(errorMessage: validationError);
         return;
       }
+    }
+
+    final workingBlocks = List<ClassRoutineBlock>.unmodifiable(
+      state.workingBlocks,
+    );
+    final workingAssetId = state.workingAssetId;
+    final workingR2Key = state.workingR2Key;
+    final baseCommittedAssetId = state.baseCommittedAssetId;
+    final baseCommittedR2Key = state.baseCommittedR2Key;
+    final expectedRevision = state.editorBaseRevision ?? setup?.revision;
+    final selectedDay = state.selectedDay;
+    if (expectedRevision == null) {
+      state = state.copyWith(
+        errorMessage:
+            "We couldn't verify the latest Classes setup. Try reloading it.",
+      );
+      return;
     }
 
     state = state.copyWith(
@@ -816,14 +858,11 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
 
     try {
       final drafts = ClassScheduleDraftMapper.toTimelineDrafts(
-        state.workingBlocks,
+        workingBlocks,
         section: BaseTimelineSection.classes.name,
-        provenanceAssetId: state.workingAssetId,
-        provenanceR2Key: state.workingR2Key,
+        provenanceAssetId: workingAssetId,
+        provenanceR2Key: workingR2Key,
       );
-
-      final expectedRevision =
-          state.editorBaseRevision ?? setup?.revision ?? 1;
 
       final commitResult = await _coordinator.replaceSection(
         uid: uid,
@@ -832,28 +871,18 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
         expectedRevision: expectedRevision,
         updateSetup: (current) => current.copyWith(
           classBlocks: drafts,
-          classLogicalAssetId: state.workingAssetId,
-          clearClassLogicalAssetId: state.workingAssetId == null,
-          classLogicalAssetR2Key: state.workingR2Key,
-          clearClassLogicalAssetR2Key: state.workingR2Key == null,
+          classLogicalAssetId: workingAssetId,
+          clearClassLogicalAssetId: workingAssetId == null,
+          classLogicalAssetR2Key: workingR2Key,
+          clearClassLogicalAssetR2Key: workingR2Key == null,
           updatedAt: DateTime.now(),
         ),
       );
 
-      try {
-        final setupNotifier =
-            _ref.read(baseTimelineSetupNotifierProvider.notifier);
-        if (setupNotifier.uid == uid) {
-          setupNotifier.updateInMemory(commitResult.committedSetup);
-        }
-      } catch (_) {}
-
       // Clean up previous committed asset if replaced
-      final oldAssetId =
-          state.baseCommittedAssetId ?? setup?.classLogicalAssetId;
-      final oldObjectKey =
-          state.baseCommittedR2Key ?? setup?.classLogicalAssetR2Key;
-      if (oldAssetId != null && oldAssetId != state.workingAssetId) {
+      final oldAssetId = baseCommittedAssetId ?? setup?.classLogicalAssetId;
+      final oldObjectKey = baseCommittedR2Key ?? setup?.classLogicalAssetR2Key;
+      if (oldAssetId != null && oldAssetId != workingAssetId) {
         unawaited(
           _lifecycleHelper
               .retireReplacedAsset(
@@ -867,9 +896,11 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
         );
       }
 
+      if (!_isActiveOwner(uid)) return;
+
       final savedBlocks = ClassScheduleDraftMapper.toClassRoutineBlocks(drafts);
       final normalizedDay = normalizeSelectedDay(
-        currentDay: state.selectedDay,
+        currentDay: selectedDay,
         blocks: savedBlocks,
       );
 
@@ -890,14 +921,21 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
         clearFrontBlockId: true,
         routineRefreshPending: commitResult.routineRefreshPending,
         committedRevision: commitResult.revision,
-        routineRefreshMessage: commitResult.routineRefreshMessage,
+        routineRefreshMessage: commitResult.routineRefreshPending
+            ? ClassSetupErrorMapper.mapRefreshError(
+                commitResult.routineRefreshMessage,
+              )
+            : null,
+        clearRoutineRefreshMessage: !commitResult.routineRefreshPending,
         clearEditorBaseRevision: true,
         clearBaseCommittedAssetId: true,
         clearBaseCommittedR2Key: true,
         isConcurrencyConflict: false,
       );
     } catch (e) {
-      final isConflict = e is BaseTimelineConcurrencyException ||
+      if (!_isActiveOwner(uid)) return;
+      final isConflict =
+          e is BaseTimelineConcurrencyException ||
           e.toString().toLowerCase().contains('concurrency') ||
           e.toString().toLowerCase().contains('conflict');
 
@@ -915,12 +953,11 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
     required BaseTimelineSetup setup,
   }) async {
     if (state.isSaving) return;
-    final activeUid = _ref.read(userProfileProvider).uid.trim();
-    if (_ownerUid.isNotEmpty &&
-        (activeUid != _ownerUid || activeUid != uid.trim())) {
-      return;
-    }
-    if (uid.trim().isEmpty) return;
+    if (!_isActiveOwner(uid)) return;
+
+    final expectedRevision = state.editorBaseRevision ?? setup.revision;
+    final oldAssetId = setup.classLogicalAssetId;
+    final oldObjectKey = setup.classLogicalAssetR2Key;
 
     state = state.copyWith(
       isSaving: true,
@@ -928,8 +965,6 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
       isConcurrencyConflict: false,
     );
     try {
-      final expectedRevision = state.editorBaseRevision ?? setup.revision;
-
       final commitResult = await _coordinator.replaceSection(
         uid: uid,
         section: BaseTimelineSection.classes,
@@ -943,27 +978,21 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
         ),
       );
 
-      try {
-        final setupNotifier =
-            _ref.read(baseTimelineSetupNotifierProvider.notifier);
-        if (setupNotifier.uid == uid) {
-          setupNotifier.updateInMemory(commitResult.committedSetup);
-        }
-      } catch (_) {}
-
-      if (setup.classLogicalAssetId != null) {
+      if (oldAssetId != null) {
         unawaited(
           _lifecycleHelper
               .retireReplacedAsset(
                 uid: uid,
-                oldAssetId: setup.classLogicalAssetId!,
-                oldObjectKey: setup.classLogicalAssetR2Key,
+                oldAssetId: oldAssetId,
+                oldObjectKey: oldObjectKey,
               )
               .catchError((err, st) {
                 debugPrint('Failed retiring old asset on remove: $err');
               }),
         );
       }
+
+      if (!_isActiveOwner(uid)) return;
 
       state = state.copyWith(
         stage: ClassesSetupStage.currentSetup,
@@ -981,14 +1010,21 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
         clearFrontBlockId: true,
         routineRefreshPending: commitResult.routineRefreshPending,
         committedRevision: commitResult.revision,
-        routineRefreshMessage: commitResult.routineRefreshMessage,
+        routineRefreshMessage: commitResult.routineRefreshPending
+            ? ClassSetupErrorMapper.mapRefreshError(
+                commitResult.routineRefreshMessage,
+              )
+            : null,
+        clearRoutineRefreshMessage: !commitResult.routineRefreshPending,
         clearEditorBaseRevision: true,
         clearBaseCommittedAssetId: true,
         clearBaseCommittedR2Key: true,
         isConcurrencyConflict: false,
       );
     } catch (e) {
-      final isConflict = e is BaseTimelineConcurrencyException ||
+      if (!_isActiveOwner(uid)) return;
+      final isConflict =
+          e is BaseTimelineConcurrencyException ||
           e.toString().toLowerCase().contains('concurrency') ||
           e.toString().toLowerCase().contains('conflict');
       state = state.copyWith(
@@ -1001,16 +1037,10 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
 
   /// Retries routine projection / reconciliation without modifying base timeline setup.
   Future<void> retryRoutineRefresh({required String uid}) async {
-    final activeUid = _ref.read(userProfileProvider).uid.trim();
-    if (_ownerUid.isNotEmpty &&
-        (activeUid != _ownerUid || activeUid != uid.trim())) {
-      return;
-    }
-    if (uid.trim().isEmpty) return;
+    if (!_isActiveOwner(uid)) return;
     try {
-      final refreshOutcome = await _coordinator.retryRoutineRefresh(
-        uid: uid,
-      );
+      final refreshOutcome = await _coordinator.retryRoutineRefresh(uid: uid);
+      if (!_isActiveOwner(uid)) return;
       if (refreshOutcome.isRefreshed) {
         state = state.copyWith(
           routineRefreshPending: false,
@@ -1019,13 +1049,16 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
       } else {
         state = state.copyWith(
           routineRefreshPending: true,
-          routineRefreshMessage: refreshOutcome.message,
+          routineRefreshMessage: ClassSetupErrorMapper.mapRefreshError(
+            refreshOutcome.message,
+          ),
         );
       }
     } catch (e) {
+      if (!_isActiveOwner(uid)) return;
       state = state.copyWith(
         routineRefreshPending: true,
-        routineRefreshMessage: 'Reconciliation retry failed: $e',
+        routineRefreshMessage: ClassSetupErrorMapper.mapRefreshError(e),
       );
     }
   }
@@ -1076,13 +1109,15 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
   }
 
   Future<void> resetWorkingDraft(
-    BaseTimelineSetup setup, {
+    BaseTimelineSetup? setup, {
     required String uid,
   }) async {
+    if (!_isActiveOwner(uid)) return;
     final candidateAssetId = state.candidateAssetId;
     final candidateR2Key = state.candidateR2Key;
     final workingAssetId = state.workingAssetId;
     final workingR2Key = state.workingR2Key;
+    final baseCommittedAssetId = state.baseCommittedAssetId;
 
     state = state.copyWith(
       stage: ClassesSetupStage.currentSetup,
@@ -1103,8 +1138,7 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
       isConcurrencyConflict: false,
     );
 
-    if (candidateAssetId != null &&
-        candidateAssetId != setup.classLogicalAssetId) {
+    if (candidateAssetId != null && candidateAssetId != baseCommittedAssetId) {
       _retireUncommittedBestEffort(
         uid: uid,
         assetId: candidateAssetId,
@@ -1112,7 +1146,7 @@ class ClassesSetupController extends StateNotifier<ClassesSetupState> {
       );
     }
 
-    if (workingAssetId != null && workingAssetId != setup.classLogicalAssetId) {
+    if (workingAssetId != null && workingAssetId != baseCommittedAssetId) {
       _retireUncommittedBestEffort(
         uid: uid,
         assetId: workingAssetId,

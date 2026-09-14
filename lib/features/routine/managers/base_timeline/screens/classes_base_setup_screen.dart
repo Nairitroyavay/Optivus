@@ -12,6 +12,7 @@ import 'package:optivus/features/routine/managers/base_timeline/screens/views/cl
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/classes_review_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/classes_source_selection_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/class_schedule_draft_mapper.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/class_setup_error_mapper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/classes_setup_controller.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_ai_thinking_view.dart';
 import 'package:optivus/repositories/base_timeline_setup_repository.dart';
@@ -35,7 +36,7 @@ class _ClassesBaseSetupScreenState
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final setup = ref.read(baseTimelineSetupNotifierProvider).value;
+      final setup = ref.read(baseTimelineSetupNotifierProvider).valueOrNull;
       if (setup != null) {
         final uid = ref.read(userProfileProvider).uid;
         ref
@@ -48,15 +49,12 @@ class _ClassesBaseSetupScreenState
     });
   }
 
-  Future<bool> _confirmDiscard(
-    BaseTimelineSetup setup,
-    ClassesSetupState state,
-  ) async {
+  Future<bool> _confirmDiscard(ClassesSetupState state) async {
     final hasUnsavedPhoto =
         (state.workingAssetId != null &&
-            state.workingAssetId != setup.classLogicalAssetId) ||
+            state.workingAssetId != state.baseCommittedAssetId) ||
         (state.candidateAssetId != null &&
-            state.candidateAssetId != setup.classLogicalAssetId);
+            state.candidateAssetId != state.baseCommittedAssetId);
     if (!state.isDirty && !hasUnsavedPhoto) {
       return true;
     }
@@ -95,7 +93,7 @@ class _ClassesBaseSetupScreenState
   }
 
   Future<void> _handleClassesBack(
-    BaseTimelineSetup setup,
+    BaseTimelineSetup? setup,
     ClassesSetupState state,
     String uid,
   ) async {
@@ -128,7 +126,7 @@ class _ClassesBaseSetupScreenState
 
     if (state.stage == ClassesSetupStage.review ||
         state.stage == ClassesSetupStage.editingBlock) {
-      final canDiscard = await _confirmDiscard(setup, state);
+      final canDiscard = await _confirmDiscard(state);
       if (!canDiscard || !mounted) return;
       await controller.resetWorkingDraft(setup, uid: uid);
       return;
@@ -191,7 +189,7 @@ class _ClassesBaseSetupScreenState
     }
   }
 
-  void _showScanAgainSheet(BaseTimelineSetup setup, String uid) {
+  void _showScanAgainSheet(String uid) {
     final controller = ref.read(classesSetupControllerProvider.notifier);
     showModalBottomSheet(
       context: context,
@@ -228,7 +226,6 @@ class _ClassesBaseSetupScreenState
                   controller.pickAndUploadPhoto(
                     uid: uid,
                     source: ImageSource.gallery,
-                    setup: setup,
                   );
                 },
               ),
@@ -246,7 +243,6 @@ class _ClassesBaseSetupScreenState
                   controller.pickAndUploadPhoto(
                     uid: uid,
                     source: ImageSource.camera,
-                    setup: setup,
                   );
                 },
               ),
@@ -315,7 +311,7 @@ class _ClassesBaseSetupScreenState
     ref.listen<AsyncValue<BaseTimelineSetup>>(
       baseTimelineSetupNotifierProvider,
       (prev, next) {
-        final setup = next.value;
+        final setup = next.valueOrNull;
         if (setup != null) {
           controller.performStartupCleanup(setup, uid: uid);
           controller.initDayIfNeeded(setup);
@@ -353,9 +349,7 @@ class _ClassesBaseSetupScreenState
       }
     }
 
-    final setup =
-        setupAsync.value ??
-        BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
+    final setup = setupAsync.valueOrNull;
 
     return PopScope(
       canPop: false,
@@ -395,7 +389,7 @@ class _ClassesBaseSetupScreenState
   }
 
   Widget _buildStageContent(
-    BaseTimelineSetup setup,
+    BaseTimelineSetup? setup,
     ClassesSetupState state,
     String uid,
   ) {
@@ -447,6 +441,11 @@ class _ClassesBaseSetupScreenState
         );
 
       case ClassesSetupStage.chooseSource:
+        if (setup == null) {
+          return _buildCanonicalUnavailableView(
+            onBack: controller.cancelChooseSource,
+          );
+        }
         return ClassesSourceSelectionView(
           setup: setup,
           onCancel: () => _handleClassesBack(setup, state, uid),
@@ -487,17 +486,22 @@ class _ClassesBaseSetupScreenState
           onClearError: () => controller.clearError(),
           isSaving: state.isSaving,
           onCancel: () => _handleClassesBack(setup, state, uid),
-          onScanAgain: () => _showScanAgainSheet(setup, uid),
+          onScanAgain: () => _showScanAgainSheet(uid),
           onAddClass: () => _addNewBlock(state.selectedDay),
           onEditBlock: _editBlock,
-          onSave: () => controller.save(uid: uid, setup: setup),
+          onSave: () => controller.save(uid: uid),
           frontBlockId: state.frontBlockId,
           onFrontSelected: (id) => controller.selectFrontBlock(id),
           isConcurrencyConflict: state.isConcurrencyConflict,
-          onReloadLatestSetup: () => controller.reloadFromCanonical(setup),
+          onReloadLatestSetup: setup == null
+              ? null
+              : () => controller.reloadFromCanonical(setup),
         );
 
       case ClassesSetupStage.currentSetup:
+        if (setup == null) {
+          return _buildCanonicalUnavailableView(onBack: widget.onBack);
+        }
         final routineBlocks = ClassScheduleDraftMapper.toClassRoutineBlocks(
           setup.classBlocks,
         );
@@ -686,8 +690,7 @@ class _ClassesBaseSetupScreenState
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  error?.toString() ??
-                      'Unable to load your timetable from the server.',
+                  ClassSetupErrorMapper.mapLoadError(error),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 13,
@@ -738,8 +741,50 @@ class _ClassesBaseSetupScreenState
     );
   }
 
+  Widget _buildCanonicalUnavailableView({required VoidCallback onBack}) {
+    return SafeArea(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.cloud_off_rounded,
+                color: OptivusColors.warning,
+                size: 40,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Classes setup temporarily unavailable',
+                style: TextStyle(
+                  color: OptivusColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Reload your setup to continue. Your local changes have been kept.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: OptivusColors.textSecondary),
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: () =>
+                    ref.read(baseTimelineSetupNotifierProvider.notifier).load(),
+                child: const Text('Reload setup'),
+              ),
+              TextButton(onPressed: onBack, child: const Text('Back')),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildErrorView(
-    BaseTimelineSetup setup,
+    BaseTimelineSetup? setup,
     ClassesSetupState state,
     String uid,
   ) {
@@ -813,10 +858,8 @@ class _ClassesBaseSetupScreenState
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
-                          onPressed: () => controller.retryCandidateExtraction(
-                            uid: uid,
-                            setup: setup,
-                          ),
+                          onPressed: () =>
+                              controller.retryCandidateExtraction(uid: uid),
                           child: const Text('Retry AI'),
                         ),
                       ),
@@ -846,7 +889,9 @@ class _ClassesBaseSetupScreenState
                         ),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
-                      onPressed: () => controller.startManualSetup(setup),
+                      onPressed: setup == null
+                          ? null
+                          : () => controller.startManualSetup(setup),
                       child: const Text('Add Manually'),
                     ),
                   ),
@@ -876,7 +921,9 @@ class _ClassesBaseSetupScreenState
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
-                          onPressed: () => controller.startManualSetup(setup),
+                          onPressed: setup == null
+                              ? null
+                              : () => controller.startManualSetup(setup),
                           child: const Text('Add Manually'),
                         ),
                       ),

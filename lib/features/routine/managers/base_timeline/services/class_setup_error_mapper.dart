@@ -8,6 +8,17 @@ import 'package:optivus/repositories/routine_transaction_repository.dart';
 class ClassSetupErrorMapper {
   const ClassSetupErrorMapper._();
 
+  /// Product-safe copy for canonical Classes setup load failures.
+  static String mapLoadError(Object? error) {
+    return "We couldn't load your Classes setup.\n"
+        'Check your connection and try again.';
+  }
+
+  /// Product-safe copy for post-commit Routine reconciliation failures.
+  static String mapRefreshError(Object? error) {
+    return "Routine couldn't refresh yet. Please try again.";
+  }
+
   /// Maps save and transaction errors to actionable user-facing messages.
   static String mapSaveError(Object error) {
     if (error is BaseTimelineConcurrencyException) {

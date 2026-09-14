@@ -218,6 +218,16 @@ void main() {
             baseTimelineUploadLifecycleHelperProvider.overrideWithValue(
               lifecycleHelper,
             ),
+            userProfileProvider.overrideWith(
+              (ref) => UserProfileNotifier()
+                ..loadSeedData(
+                  UserProfile(
+                    uid: 'user-123',
+                    email: 'user-123@test.dev',
+                    displayName: 'Cleanup User',
+                  ),
+                ),
+            ),
           ],
         );
         addTearDown(container.dispose);
@@ -245,6 +255,16 @@ void main() {
           overrides: [
             baseTimelineUploadLifecycleHelperProvider.overrideWithValue(
               lifecycleHelper,
+            ),
+            userProfileProvider.overrideWith(
+              (ref) => UserProfileNotifier()
+                ..loadSeedData(
+                  UserProfile(
+                    uid: 'user-123',
+                    email: 'user-123@test.dev',
+                    displayName: 'Cleanup User',
+                  ),
+                ),
             ),
           ],
         );
@@ -340,7 +360,7 @@ void main() {
     );
 
     test(
-      'ClassesSetupController save updates in-memory baseTimelineSetupNotifierProvider directly',
+      'Classes save consumes coordinator result and coordinator publishes canonical provider state',
       () async {
         final fakeSetupRepo = FakeBaseTimelineSetupRepository(
           onboardingRepo: FakeOnboardingRepository(),
@@ -349,12 +369,6 @@ void main() {
         final fakeTxRepo = FakeRoutineTransactionRepository(
           routineRepository: fakeRoutineRepo,
           setupRepository: fakeSetupRepo,
-        );
-
-        final coordinator = BaseTimelineTransactionCoordinator(
-          routineRepo: fakeRoutineRepo,
-          setupRepo: fakeSetupRepo,
-          transactionRepo: fakeTxRepo,
         );
 
         final container = ProviderContainer(
@@ -374,8 +388,13 @@ void main() {
             ),
             routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
             routineTransactionRepositoryProvider.overrideWithValue(fakeTxRepo),
-            baseTimelineTransactionCoordinatorProvider.overrideWithValue(
-              coordinator,
+            baseTimelineTransactionCoordinatorProvider.overrideWith(
+              (ref) => BaseTimelineTransactionCoordinator(
+                routineRepo: fakeRoutineRepo,
+                setupRepo: fakeSetupRepo,
+                transactionRepo: fakeTxRepo,
+                ref: ref,
+              ),
             ),
           ],
         );
@@ -404,7 +423,7 @@ void main() {
         // Save
         await controller.save(uid: 'user-save-inmem', setup: initialSetup);
 
-        // Check in-memory provider was updated directly!
+        // The coordinator owns safe canonical post-commit publication.
         final inMemory = container
             .read(baseTimelineSetupNotifierProvider)
             .value;
@@ -488,6 +507,16 @@ void main() {
           overrides: [
             baseTimelineUploadLifecycleHelperProvider.overrideWithValue(
               lifecycleHelper,
+            ),
+            userProfileProvider.overrideWith(
+              (ref) => UserProfileNotifier()
+                ..loadSeedData(
+                  UserProfile(
+                    uid: 'user-cancel-test',
+                    email: 'user-cancel-test@test.dev',
+                    displayName: 'Cancel User',
+                  ),
+                ),
             ),
           ],
         );
