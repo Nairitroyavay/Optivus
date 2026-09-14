@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/theme/optivus_radii.dart';
+import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/class_timeline_adapter.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
@@ -534,7 +536,13 @@ class _ClassesBaseSetupScreenState
             ),
             onPressed: onCancel,
             style: IconButton.styleFrom(
-              backgroundColor: Colors.white.withValues(alpha: 0.1),
+              backgroundColor: Colors.white.withValues(alpha: 0.12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(OptivusRadii.md),
+                side: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.2),
+                ),
+              ),
             ),
           ),
           if (title != null) ...[
@@ -542,8 +550,8 @@ class _ClassesBaseSetupScreenState
             Text(
               title,
               style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
                 color: OptivusColors.textPrimary,
               ),
             ),
@@ -744,39 +752,90 @@ class _ClassesBaseSetupScreenState
   Widget _buildCanonicalUnavailableView({required VoidCallback onBack}) {
     return SafeArea(
       child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.cloud_off_rounded,
-                color: OptivusColors.warning,
-                size: 40,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: OnboardingGlassCard(
+              radius: OptivusRadii.surfaceLarge,
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: OptivusColors.warning.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(
+                        OptivusRadii.controlCompact,
+                      ),
+                      border: Border.all(
+                        color: OptivusColors.warning.withValues(alpha: 0.35),
+                        width: 1,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.cloud_off_rounded,
+                      color: OptivusColors.warning,
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Classes setup temporarily unavailable',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: OptivusColors.textPrimary,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Reload your setup to continue. Your local changes have been kept.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: OptivusColors.textSecondary,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: OptivusColors.blueAccent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(
+                            OptivusRadii.controlCompact,
+                          ),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: () =>
+                          ref.read(baseTimelineSetupNotifierProvider.notifier).load(),
+                      child: const Text(
+                        'Reload setup',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: onBack,
+                    child: const Text(
+                      'Back',
+                      style: TextStyle(
+                        color: OptivusColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              const Text(
-                'Classes setup temporarily unavailable',
-                style: TextStyle(
-                  color: OptivusColors.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Reload your setup to continue. Your local changes have been kept.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: OptivusColors.textSecondary),
-              ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: () =>
-                    ref.read(baseTimelineSetupNotifierProvider.notifier).load(),
-                child: const Text('Reload setup'),
-              ),
-              TextButton(onPressed: onBack, child: const Text('Back')),
-            ],
+            ),
           ),
         ),
       ),
@@ -791,171 +850,237 @@ class _ClassesBaseSetupScreenState
     final controller = ref.read(classesSetupControllerProvider.notifier);
 
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Center(
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: OptivusColors.danger.withValues(alpha: 0.12),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.warning_amber_rounded,
-                    color: OptivusColors.danger,
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Timetable Processing Issue',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: OptivusColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  state.errorMessage ??
-                      'An error occurred while processing the photo.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: OptivusColors.textSecondary,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                if (state.candidateAssetId != null &&
-                    state.candidateR2Key != null) ...[
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: OptivusColors.blueAccent,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          onPressed: () =>
-                              controller.retryCandidateExtraction(uid: uid),
-                          child: const Text('Retry AI'),
-                        ),
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: OnboardingGlassCard(
+              radius: OptivusRadii.surfaceLarge,
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: OptivusColors.danger.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(
+                        OptivusRadii.controlCompact,
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          onPressed: () =>
-                              controller.chooseSource(setup, uid: uid),
-                          child: const Text('Choose another photo'),
-                        ),
+                      border: Border.all(
+                        color: OptivusColors.danger.withValues(alpha: 0.35),
+                        width: 1,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      onPressed: setup == null
-                          ? null
-                          : () => controller.startManualSetup(setup),
-                      child: const Text('Add Manually'),
+                    ),
+                    child: const Icon(
+                      Icons.warning_amber_rounded,
+                      color: OptivusColors.danger,
+                      size: 28,
                     ),
                   ),
-                ] else ...[
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          onPressed: () =>
-                              controller.chooseSource(setup, uid: uid),
-                          child: const Text('Try Again'),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: OptivusColors.blueAccent,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          onPressed: setup == null
-                              ? null
-                              : () => controller.startManualSetup(setup),
-                          child: const Text('Add Manually'),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Timetable Processing Issue',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: OptivusColors.textPrimary,
+                      letterSpacing: -0.2,
+                    ),
                   ),
-                ],
-                if (state.workingBlocks.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                  Text(
+                    state.errorMessage ??
+                        'An error occurred while processing the photo.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: OptivusColors.textSecondary,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  if (state.candidateAssetId != null &&
+                      state.candidateR2Key != null) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: OptivusColors.blueAccent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                  OptivusRadii.controlCompact,
+                                ),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            onPressed: () =>
+                                controller.retryCandidateExtraction(uid: uid),
+                            child: const Text(
+                              'Retry AI',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
                         ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              backgroundColor:
+                                  Colors.white.withValues(alpha: 0.08),
+                              side: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.25),
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                  OptivusRadii.controlCompact,
+                                ),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            onPressed: () =>
+                                controller.chooseSource(setup, uid: uid),
+                            child: const Text(
+                              'Choose another photo',
+                              style: TextStyle(
+                                color: OptivusColors.textPrimary,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor:
+                              Colors.white.withValues(alpha: 0.08),
+                          side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.25),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              OptivusRadii.controlCompact,
+                            ),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onPressed: setup == null
+                            ? null
+                            : () => controller.startManualSetup(setup),
+                        child: const Text(
+                          'Add Manually',
+                          style: TextStyle(
+                            color: OptivusColors.textPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
-                      onPressed: () =>
-                          controller.keepPreviousDraft(setup, uid: uid),
-                      child: const Text('Keep previous draft'),
+                    ),
+                  ] else ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              backgroundColor:
+                                  Colors.white.withValues(alpha: 0.08),
+                              side: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.25),
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                  OptivusRadii.controlCompact,
+                                ),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            onPressed: () =>
+                                controller.chooseSource(setup, uid: uid),
+                            child: const Text(
+                              'Try Again',
+                              style: TextStyle(
+                                color: OptivusColors.textPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: OptivusColors.blueAccent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                  OptivusRadii.controlCompact,
+                                ),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            onPressed: setup == null
+                                ? null
+                                : () => controller.startManualSetup(setup),
+                            child: const Text(
+                              'Add Manually',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (state.workingBlocks.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor:
+                              Colors.white.withValues(alpha: 0.08),
+                          side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.25),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              OptivusRadii.controlCompact,
+                            ),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onPressed: () =>
+                            controller.keepPreviousDraft(setup, uid: uid),
+                        child: const Text(
+                          'Keep previous draft',
+                          style: TextStyle(
+                            color: OptivusColors.textPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => _handleClassesBack(setup, state, uid),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: OptivusColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () => _handleClassesBack(setup, state, uid),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(color: OptivusColors.textSecondary),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),

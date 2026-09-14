@@ -119,6 +119,7 @@ class _TimelineViewportState extends State<TimelineViewport> {
     final result = widget.layoutResult;
 
     return Container(
+      clipBehavior: Clip.hardEdge,
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.30),
         border: Border(
@@ -150,7 +151,7 @@ class _TimelineViewportState extends State<TimelineViewport> {
               container: true,
               label: 'Timeline schedule, ${result.entries.length} items',
               child: Stack(
-                clipBehavior: Clip.none,
+                clipBehavior: Clip.hardEdge,
                 children: [
                   // Vertical Time Rail Background
                   TimelineTimeRailBackground(

@@ -298,7 +298,8 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
               geometryConfig: const TimelineGeometryConfig(
                 bottomPadding: 100.0,
               ),
-              visibleRangePolicy: TimelineVisibleRangePolicy.contentAdaptive,
+              visibleRangePolicy: TimelineVisibleRangePolicy.legacy,
+              autoScrollToFirstEntry: false,
               stretchPolicy: TimelineStretchPolicy.constraintBased,
               emptyDayMessage: 'No classes on this day.',
             ),

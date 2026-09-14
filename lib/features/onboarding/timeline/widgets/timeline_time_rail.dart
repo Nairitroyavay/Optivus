@@ -131,16 +131,18 @@ class TimelineTimeRailBackground extends StatelessWidget {
           ),
 
         // ── Hour Marks & Labels ──
-        for (var i = 0; i <= hourCount; i++) ...[
-          _HourMarkLabel(
-            keyPrefix: keyPrefix,
-            minute: (startHour + i) * 60,
-            top: scale.yForMinute((startHour + i) * 60),
-            accent: accent,
-            labelWidth: labelWidth,
-            labelHeight: labelHeight,
-          ),
-        ],
+        for (var i = 0; i <= hourCount; i++)
+          if ((startHour + i) * 60 >= scale.startMinute &&
+              (startHour + i) * 60 <= scale.endMinute) ...[
+            _HourMarkLabel(
+              keyPrefix: keyPrefix,
+              minute: (startHour + i) * 60,
+              top: scale.yForMinute((startHour + i) * 60),
+              accent: accent,
+              labelWidth: labelWidth,
+              labelHeight: labelHeight,
+            ),
+          ],
       ],
     );
   }

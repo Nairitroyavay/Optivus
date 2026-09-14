@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/optivus_colors.dart';
+import '../../../../core/theme/optivus_spacing.dart';
 import '../../widgets/onboarding_glass_widgets.dart';
 import '../layout/timeline_overlap_engine.dart';
 import '../models/timeline_entry.dart';
@@ -52,6 +53,13 @@ class FullScreenTimelineScaffold extends StatelessWidget {
   final ValueChanged<String>? onFrontSelected;
   final bool enableHaptics;
 
+  /// Intentional vertical gap between the weekday selector and the timeline viewport origin.
+  final double timelineTopGap;
+
+  /// Whether to auto-scroll the viewport to the earliest entry on day change.
+  /// Defaults to false so the waking-hour baseline remains stable across all weekdays.
+  final bool autoScrollToFirstEntry;
+
   const FullScreenTimelineScaffold({
     super.key,
     required this.entries,
@@ -75,6 +83,8 @@ class FullScreenTimelineScaffold extends StatelessWidget {
     this.frontEntryId,
     this.onFrontSelected,
     this.enableHaptics = false,
+    this.timelineTopGap = OptivusSpacing.sm,
+    this.autoScrollToFirstEntry = true,
   });
 
   @override
@@ -142,38 +152,42 @@ class FullScreenTimelineScaffold extends StatelessWidget {
               enableHaptics: enableHaptics,
             ),
 
-            const SizedBox(height: 4),
+            // ── Intentional Gap (Weekday Selector Bottom -> Viewport Origin) ──
+            SizedBox(height: timelineTopGap),
 
             // ── Timeline Viewport / Empty State ──
             Expanded(
-              child: dayEntries.isEmpty
-                  ? _EmptyDayPlaceholder(
-                      message: emptyDayMessage,
-                      accent: accent,
-                    )
-                  : TimelineViewport(
-                      layoutResult: layoutResult,
-                      styleBuilder: styleBuilder,
-                      onEntryTapped: onEntryTapped == null
-                          ? null
-                          : (entry) {
-                              final positioned =
-                                  layoutResult.entryMap[entry.id];
-                              if (positioned != null &&
-                                  positioned.hasOverlap &&
-                                  !positioned.isFront &&
-                                  onFrontSelected != null) {
-                                onFrontSelected!(entry.id);
-                              } else if (mode ==
-                                  TimelineMode.fullScreenEditable) {
-                                onEntryTapped?.call(entry);
-                              }
-                            },
-                      accent: accent,
-                      scrollController: scrollController,
-                      blockBuilder: blockBuilder,
-                      autoScrollIdentity: selectedDay,
-                    ),
+              child: ClipRect(
+                child: dayEntries.isEmpty
+                    ? _EmptyDayPlaceholder(
+                        message: emptyDayMessage,
+                        accent: accent,
+                      )
+                    : TimelineViewport(
+                        layoutResult: layoutResult,
+                        styleBuilder: styleBuilder,
+                        onEntryTapped: onEntryTapped == null
+                            ? null
+                            : (entry) {
+                                final positioned =
+                                    layoutResult.entryMap[entry.id];
+                                if (positioned != null &&
+                                    positioned.hasOverlap &&
+                                    !positioned.isFront &&
+                                    onFrontSelected != null) {
+                                  onFrontSelected!(entry.id);
+                                } else if (mode ==
+                                    TimelineMode.fullScreenEditable) {
+                                  onEntryTapped?.call(entry);
+                                }
+                              },
+                        accent: accent,
+                        scrollController: scrollController,
+                        blockBuilder: blockBuilder,
+                        autoScrollIdentity: selectedDay,
+                        autoScrollToFirstEntry: autoScrollToFirstEntry,
+                      ),
+              ),
             ),
 
             // ── Optional Bottom Action ──

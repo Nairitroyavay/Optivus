@@ -423,8 +423,11 @@ void main() {
         await tester.pumpAndSettle();
         expect(removeInvoked, isTrue);
 
-        // 2. Bottom subtle button also exists
-        expect(find.text('Remove Classes setup'), findsOneWidget);
+        // 2. Bottom redundant button is removed in favor of the overflow menu
+        expect(find.text('Remove Classes setup'), findsNothing);
+
+        // 3. View is non-scrolling and does not render a ListView
+        expect(find.byType(ListView), findsNothing);
       },
     );
 

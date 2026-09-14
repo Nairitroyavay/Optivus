@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/theme/optivus_radii.dart';
 import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/class_timeline_adapter.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
+import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/class_setup_error_mapper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/class_timeline_card.dart';
@@ -107,7 +109,13 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
                   ),
                   onPressed: widget.isSaving ? null : widget.onCancel,
                   style: IconButton.styleFrom(
-                    backgroundColor: Colors.white.withValues(alpha: 0.1),
+                    backgroundColor: Colors.white.withValues(alpha: 0.12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(OptivusRadii.md),
+                      side: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.2),
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -148,18 +156,30 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
                 Expanded(
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
+                      backgroundColor:
+                          OptivusColors.blueAccent.withValues(alpha: 0.12),
                       side: BorderSide(
                         color: OptivusColors.blueAccent.withValues(alpha: 0.5),
+                        width: 1.5,
                       ),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(
+                          OptivusRadii.controlCompact,
+                        ),
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
-                    icon: const Icon(Icons.photo_library_outlined, size: 18),
+                    icon: const Icon(
+                      Icons.photo_library_outlined,
+                      size: 18,
+                      color: OptivusColors.blueAccent,
+                    ),
                     label: const Text(
                       'Change photo',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: OptivusColors.blueAccent,
+                      ),
                     ),
                     onPressed: widget.isSaving ? null : widget.onScanAgain,
                   ),
@@ -168,18 +188,29 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
                 Expanded(
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
+                      backgroundColor: Colors.white.withValues(alpha: 0.12),
                       side: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.25),
+                        color: Colors.white.withValues(alpha: 0.45),
+                        width: 1.5,
                       ),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(
+                          OptivusRadii.controlCompact,
+                        ),
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
-                    icon: const Icon(Icons.add_rounded, size: 18),
+                    icon: const Icon(
+                      Icons.add_rounded,
+                      size: 18,
+                      color: OptivusColors.textPrimary,
+                    ),
                     label: const Text(
                       'Add Class',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: OptivusColors.textPrimary,
+                      ),
                     ),
                     onPressed: widget.isSaving ? null : widget.onAddClass,
                   ),
@@ -190,98 +221,93 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
 
           // Sanitized attention banner for dropped entries
           if (widget.droppedCount > 0)
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: OptivusColors.warning.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: OptivusColors.warning.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.info_outline_rounded,
-                    color: OptivusColors.warning,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      droppedSummary,
-                      style: const TextStyle(
-                        color: OptivusColors.textPrimary,
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: OnboardingGlassCard(
+                radius: OptivusRadii.lg,
+                tint: OptivusColors.warning.withValues(alpha: 0.14),
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.info_outline_rounded,
+                      color: OptivusColors.warning,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        droppedSummary,
+                        style: const TextStyle(
+                          color: OptivusColors.textPrimary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
 
           // Inline Error Message Banner
           if (widget.errorMessage != null)
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: OptivusColors.danger.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: OptivusColors.danger.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.error_outline_rounded,
-                        color: OptivusColors.danger,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          widget.errorMessage!,
-                          style: const TextStyle(
-                            color: OptivusColors.danger,
-                            fontSize: 12,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: OnboardingGlassCard(
+                radius: OptivusRadii.lg,
+                tint: OptivusColors.danger.withValues(alpha: 0.12),
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.error_outline_rounded,
+                          color: OptivusColors.danger,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            widget.errorMessage!,
+                            style: const TextStyle(
+                              color: OptivusColors.danger,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.close_rounded,
-                          size: 16,
-                          color: OptivusColors.danger,
+                        IconButton(
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            size: 16,
+                            color: OptivusColors.danger,
+                          ),
+                          onPressed: widget.onClearError,
                         ),
-                        onPressed: widget.onClearError,
+                      ],
+                    ),
+                    if (widget.isConcurrencyConflict &&
+                        widget.onReloadLatestSetup != null) ...[
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          icon: const Icon(Icons.refresh_rounded, size: 14),
+                          label: const Text('Reload latest setup'),
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            foregroundColor: OptivusColors.danger,
+                          ),
+                          onPressed: widget.onReloadLatestSetup,
+                        ),
                       ),
                     ],
-                  ),
-                  if (widget.isConcurrencyConflict &&
-                      widget.onReloadLatestSetup != null) ...[
-                    const SizedBox(height: 6),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        icon: const Icon(Icons.refresh_rounded, size: 14),
-                        label: const Text('Reload latest setup'),
-                        style: TextButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          foregroundColor: OptivusColors.danger,
-                        ),
-                        onPressed: widget.onReloadLatestSetup,
-                      ),
-                    ),
                   ],
-                ],
+                ),
               ),
             ),
 
@@ -396,8 +422,9 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
                     alpha: 0.35,
                   ),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(OptivusRadii.lg),
                   ),
+                  elevation: 0,
                 ),
                 onPressed: (widget.isSaving || widget.workingBlocks.isEmpty)
                     ? null

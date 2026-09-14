@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/theme/optivus_radii.dart';
+import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 
 /// Calm, domain-specific AI processing view used during Base Timeline photo
 /// analysis and plan generation.
@@ -69,66 +71,62 @@ class _BaseTimelineAiThinkingViewState
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 36.0),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 28.0),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.15),
-              width: 1.2,
+        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: OnboardingGlassCard(
+            radius: OptivusRadii.surfaceLarge,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 28.0,
+              vertical: 32.0,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 24,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (hasLocalThumb) ...[
-                Container(
-                  margin: const EdgeInsets.only(bottom: 20),
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: OptivusColors.blueAccent.withValues(alpha: 0.35),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (hasLocalThumb) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 20),
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(
+                        OptivusRadii.controlCompact,
+                      ),
+                      border: Border.all(
+                        color: OptivusColors.blueAccent.withValues(alpha: 0.4),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(OptivusRadii.sm),
+                      child: Image.file(
+                        File(widget.localPreviewPath!),
+                        width: 52,
+                        height: 52,
+                        fit: BoxFit.cover,
+                        cacheWidth: 156,
+                      ),
                     ),
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(7),
-                    child: Image.file(
-                      File(widget.localPreviewPath!),
-                      width: 44,
-                      height: 44,
-                      fit: BoxFit.cover,
-                      cacheWidth: 132,
+                ],
+                const _OrbWidget(),
+                const SizedBox(height: 20),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  child: Text(
+                    _currentMessage,
+                    key: ValueKey<String>(_currentMessage),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: OptivusColors.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                      height: 1.4,
                     ),
                   ),
                 ),
               ],
-              const _OrbWidget(),
-              const SizedBox(height: 20),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
-                child: Text(
-                  _currentMessage,
-                  key: ValueKey<String>(_currentMessage),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: OptivusColors.textPrimary,
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w600,
-                    height: 1.4,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -156,95 +154,97 @@ class BaseTimelineUploadView extends StatelessWidget {
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 36.0),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 28.0),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.15),
-              width: 1.2,
+        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: OnboardingGlassCard(
+            radius: OptivusRadii.surfaceLarge,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 28.0,
+              vertical: 32.0,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 24,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (hasLocalThumb) ...[
-                Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: OptivusColors.blueAccent.withValues(alpha: 0.35),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (hasLocalThumb) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 20),
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(
+                        OptivusRadii.controlCompact,
+                      ),
+                      border: Border.all(
+                        color: OptivusColors.blueAccent.withValues(alpha: 0.4),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(OptivusRadii.sm),
+                      child: Image.file(
+                        File(localPreviewPath!),
+                        width: 56,
+                        height: 56,
+                        fit: BoxFit.cover,
+                        cacheWidth: 168,
+                      ),
                     ),
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(7),
-                    child: Image.file(
-                      File(localPreviewPath!),
-                      width: 48,
-                      height: 48,
-                      fit: BoxFit.cover,
-                      cacheWidth: 144,
+                ] else ...[
+                  Container(
+                    width: 56,
+                    height: 56,
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                      color: OptivusColors.blueAccent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(
+                        OptivusRadii.controlCompact,
+                      ),
+                      border: Border.all(
+                        color: OptivusColors.blueAccent.withValues(alpha: 0.35),
+                        width: 1.5,
+                      ),
                     ),
+                    child: const Icon(
+                      Icons.cloud_upload_rounded,
+                      color: OptivusColors.blueAccent,
+                      size: 28,
+                    ),
+                  ),
+                ],
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: OptivusColors.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.2,
                   ),
                 ),
-              ] else ...[
-                Container(
-                  width: 48,
-                  height: 48,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: OptivusColors.blueAccent.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: 6),
+                Text(
+                  subtitle,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: OptivusColors.textSecondary,
+                    fontSize: 13,
+                    height: 1.4,
                   ),
-                  child: const Icon(
-                    Icons.cloud_upload_rounded,
-                    color: OptivusColors.blueAccent,
-                    size: 24,
+                ),
+                const SizedBox(height: 24),
+                const SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      OptivusColors.blueAccent,
+                    ),
                   ),
                 ),
               ],
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: OptivusColors.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: OptivusColors.textSecondary,
-                  fontSize: 12.5,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 20),
-              const SizedBox(
-                width: 32,
-                height: 32,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    OptivusColors.blueAccent,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),

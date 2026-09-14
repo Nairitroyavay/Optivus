@@ -10,6 +10,7 @@ import 'package:optivus/services/routine_import_ai_client.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
+import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/class_timeline_adapter.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/classes_base_setup_screen.dart';
@@ -1883,6 +1884,7 @@ void main() {
 
         // Now in error state
         expect(find.text('Timetable Processing Issue'), findsOneWidget);
+        expect(find.byType(OnboardingGlassCard), findsOneWidget);
         expect(find.text('Retry AI'), findsOneWidget);
         expect(find.text('Choose another photo'), findsOneWidget);
         expect(find.text('Keep previous draft'), findsOneWidget);
