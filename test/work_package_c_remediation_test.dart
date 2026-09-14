@@ -385,7 +385,8 @@ void main() {
         expect(
           failingRepo.fetchCount,
           1,
-          reason: 'Duplicate concurrent loads must be deduplicated into one fetch',
+          reason:
+              'Duplicate concurrent loads must be deduplicated into one fetch',
         );
         expect(container.read(routineNotifierProvider).loading, isFalse);
         expect(container.read(routineNotifierProvider).error, isNotNull);

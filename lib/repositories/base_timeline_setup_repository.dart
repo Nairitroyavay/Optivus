@@ -127,7 +127,10 @@ bool shouldPublishRemoteSetup({
   return true;
 }
 
-bool _areBaseTimelineSetupsEquivalent(BaseTimelineSetup a, BaseTimelineSetup b) {
+bool _areBaseTimelineSetupsEquivalent(
+  BaseTimelineSetup a,
+  BaseTimelineSetup b,
+) {
   if (identical(a, b)) return true;
   if (a.uid != b.uid) return false;
   if (a.revision != b.revision) return false;
@@ -432,7 +435,8 @@ BaseTimelineSetup migrateBaseTimelineSetupIfNeeded({
   bool hasLegacySkinCarePath = false,
 }) {
   final normalizedExisting = existing.normalizeSkinCareMode();
-  final needsSkinCareRewrite = hasLegacySkinCarePath ||
+  final needsSkinCareRewrite =
+      hasLegacySkinCarePath ||
       existing.skinCareSetupPath != normalizedExisting.skinCareSetupPath;
 
   if (existing.schemaVersion >= BaseTimelineSetup.currentSchemaVersion &&

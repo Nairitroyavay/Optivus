@@ -95,51 +95,49 @@ void main() {
   });
 
   group('2. Viewport Clipping & Structural Containment', () {
-    testWidgets(
-      'TimelineViewport has Clip.hardEdge on Container and Stack',
-      (tester) async {
-        const scale = TimelineScale(
-          startMinute: 420,
-          endMinute: 1380,
-          pixelsPerMinute: 1.1,
-          topPadding: 18.0,
-        );
-        const result = TimelineLayoutResult(
-          scale: scale,
-          entries: [],
-          totalHeight: 1200,
-          boundaryMinutes: [],
-          visibleStartMinute: 420,
-          visibleEndMinute: 1380,
-        );
+    testWidgets('TimelineViewport has Clip.hardEdge on Container and Stack', (
+      tester,
+    ) async {
+      const scale = TimelineScale(
+        startMinute: 420,
+        endMinute: 1380,
+        pixelsPerMinute: 1.1,
+        topPadding: 18.0,
+      );
+      const result = TimelineLayoutResult(
+        scale: scale,
+        entries: [],
+        totalHeight: 1200,
+        boundaryMinutes: [],
+        visibleStartMinute: 420,
+        visibleEndMinute: 1380,
+      );
 
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: TimelineViewport(
-                layoutResult: result,
-                styleBuilder: (_) => const TimelineEntryStyle(
-                  accentColor: Colors.blue,
-                ),
-              ),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TimelineViewport(
+              layoutResult: result,
+              styleBuilder: (_) =>
+                  const TimelineEntryStyle(accentColor: Colors.blue),
             ),
           ),
-        );
+        ),
+      );
 
-        final containerFinder = find.byType(Container);
-        expect(containerFinder, findsWidgets);
-        final viewportContainer = tester.widget<Container>(containerFinder.first);
-        expect(viewportContainer.clipBehavior, equals(Clip.hardEdge));
+      final containerFinder = find.byType(Container);
+      expect(containerFinder, findsWidgets);
+      final viewportContainer = tester.widget<Container>(containerFinder.first);
+      expect(viewportContainer.clipBehavior, equals(Clip.hardEdge));
 
-        final stackFinder = find.descendant(
-          of: find.byType(SingleChildScrollView),
-          matching: find.byType(Stack),
-        );
-        expect(stackFinder, findsWidgets);
-        final innerStack = tester.widget<Stack>(stackFinder.first);
-        expect(innerStack.clipBehavior, equals(Clip.hardEdge));
-      },
-    );
+      final stackFinder = find.descendant(
+        of: find.byType(SingleChildScrollView),
+        matching: find.byType(Stack),
+      );
+      expect(stackFinder, findsWidgets);
+      final innerStack = tester.widget<Stack>(stackFinder.first);
+      expect(innerStack.clipBehavior, equals(Clip.hardEdge));
+    });
   });
 
   group('3. Explicit Vertical Regions in ClassesCurrentSetupView', () {

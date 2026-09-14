@@ -7,6 +7,7 @@ import 'package:optivus/features/routine/models/routine_day_entry.dart';
 import 'package:optivus/features/routine/sheets/add_routine_sheet.dart';
 import 'package:optivus/features/routine/sheets/routine_move_sheet.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/features/routine/services/routine_day_availability.dart';
 import 'package:optivus/models/routine_item.dart';
 
 void showAIAssistantSheet(BuildContext context, WidgetRef ref) {
@@ -262,24 +263,12 @@ class FreeGap {
 
 @visibleForTesting
 FreeGap calculateLargestFreeGap(List<RoutineItem> items) {
-  final sorted = items.where((item) => item.durationMinutes > 0).toList()
-    ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
-  var cursor = 6 * 60;
-  var best = const FreeGap(18 * 60, 18 * 60);
-  for (final item in sorted) {
-    if (item.startMinute > cursor &&
-        item.startMinute - cursor > best.duration) {
-      best = FreeGap(cursor, item.startMinute);
-    }
-    final end = TimelineUtils.normalizedEndMinute(
-      item,
-    ).clamp(0, 24 * 60).toInt();
-    if (end > cursor) cursor = end;
+  final availability = RoutineDayAvailability.computeFromItems(items);
+  final largest = availability.largestFreeInterval;
+  if (largest == null || largest.durationMinutes <= 0) {
+    return const FreeGap(18 * 60, 18 * 60);
   }
-  if (23 * 60 - cursor > best.duration) {
-    best = FreeGap(cursor, 23 * 60);
-  }
-  return best;
+  return FreeGap(largest.startMinute, largest.endMinute);
 }
 
 class _RoutineSuggestion {

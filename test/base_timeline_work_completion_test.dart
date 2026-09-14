@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
-import 'package:optivus/features/routine/managers/base_timeline/screens/schedule_setup_flow.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/views/work_current_setup_view.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/views/work_review_view.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/views/work_source_selection_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/work_base_setup_screen.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_upload_lifecycle_helper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/work_detail_sheet.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -332,128 +334,153 @@ void main() {
       },
     );
 
-    testWidgets('ScheduleSetupFlow retires candidate upload if user cancels', (
-      tester,
-    ) async {
-      final trackingAssetRepo = _TrackingAssetRepo();
-      final trackingR2 = _TrackingR2Client();
-      final stubAuth = _StubAuthRepo();
-      final lifecycleHelper = BaseTimelineUploadLifecycleHelper(
-        assetRepository: trackingAssetRepo,
-        r2UploadClient: trackingR2,
-        authRepository: stubAuth,
-      );
+    testWidgets(
+      'WorkBaseSetupScreen source selection and photo scan workflow retires candidate upload if user cancels',
+      (tester) async {
+        final trackingAssetRepo = _TrackingAssetRepo();
+        final trackingR2 = _TrackingR2Client();
+        final stubAuth = _StubAuthRepo();
+        final lifecycleHelper = BaseTimelineUploadLifecycleHelper(
+          assetRepository: trackingAssetRepo,
+          r2UploadClient: trackingR2,
+          authRepository: stubAuth,
+        );
 
-      final candidateAsset = UploadedAsset(
-        assetId: 'cand-work-upload-1',
-        ownerUid: uid,
-        sourceFeature: 'routine_base_timeline',
-        purpose: UploadedAssetPurpose.workSchedule,
-        status: UploadedAssetStatus.uploaded,
-        fileName: 'schedule.jpg',
-        contentType: 'image/jpeg',
-        sizeBytes: 1024,
-        r2Key: 'users/$uid/work/schedule.jpg',
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
+        final candidateAsset = UploadedAsset(
+          assetId: 'cand-work-upload-1',
+          ownerUid: uid,
+          sourceFeature: 'routine_base_timeline',
+          purpose: UploadedAssetPurpose.workSchedule,
+          status: UploadedAssetStatus.uploaded,
+          fileName: 'schedule.jpg',
+          contentType: 'image/jpeg',
+          sizeBytes: 1024,
+          r2Key: 'users/$uid/work/schedule.jpg',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
 
-      var didCancel = false;
+        final setup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          workBlocks: const [],
+        );
 
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            userProfileProvider.overrideWith(
-              (ref) => UserProfileNotifier()
-                ..loadSeedData(
-                  UserProfile(
+        final fakeOnboardingRepo = FakeOnboardingRepository();
+        final fakeSetupRepo = FakeBaseTimelineSetupRepository(
+          onboardingRepo: fakeOnboardingRepo,
+        );
+        await fakeSetupRepo.saveSetup(uid, setup);
+        final fakeRoutineRepo = FakeRoutineRepository();
+        final fakeTxRepo = FakeRoutineTransactionRepository(
+          routineRepository: fakeRoutineRepo,
+          setupRepository: fakeSetupRepo,
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              userProfileProvider.overrideWith(
+                (ref) => UserProfileNotifier()
+                  ..loadSeedData(
+                    UserProfile(
+                      uid: uid,
+                      email: 'work@optivus.local',
+                      displayName: 'Work Test User',
+                    ),
+                  ),
+              ),
+              baseTimelineSetupRepositoryProvider.overrideWithValue(
+                fakeSetupRepo,
+              ),
+              routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
+              routineTransactionRepositoryProvider.overrideWithValue(
+                fakeTxRepo,
+              ),
+              baseTimelineUploadLifecycleHelperProvider.overrideWithValue(
+                lifecycleHelper,
+              ),
+              uploadedAssetRepositoryProvider.overrideWithValue(
+                trackingAssetRepo,
+              ),
+              uploadControllerProvider.overrideWith(
+                (ref) => _DirectUploadController(
+                  assetRepository: trackingAssetRepo,
+                  assetToReturn: candidateAsset,
+                ),
+              ),
+              routineImportAiControllerProvider.overrideWith(
+                (ref) => _CustomResultAiController(
+                  ref,
+                  resultToReturn: RoutineImportExtractionResult(
+                    id: 'ext-work-1',
                     uid: uid,
-                    email: 'work@optivus.local',
-                    displayName: 'Work Test User',
+                    source: RoutineImportReviewSource.work,
+                    createdAt: DateTime.now(),
+                    candidates: [
+                      RoutineImportCandidateBlock(
+                        id: 'extracted-item-1',
+                        title: 'Store Shift',
+                        startMinute: 10 * 60,
+                        endMinute: 18 * 60,
+                        repeatDays: const [1, 2, 3, 4, 5],
+                        blockType: 'hard',
+                        category: 'work',
+                        hardBlock: true,
+                      ),
+                    ],
                   ),
                 ),
-            ),
-            baseTimelineUploadLifecycleHelperProvider.overrideWithValue(
-              lifecycleHelper,
-            ),
-            uploadedAssetRepositoryProvider.overrideWithValue(
-              trackingAssetRepo,
-            ),
-            uploadControllerProvider.overrideWith(
-              (ref) => _DirectUploadController(
-                assetRepository: trackingAssetRepo,
-                assetToReturn: candidateAsset,
               ),
-            ),
-            routineImportAiControllerProvider.overrideWith(
-              (ref) => _CustomResultAiController(
-                ref,
-                resultToReturn: RoutineImportExtractionResult(
-                  id: 'ext-work-1',
-                  uid: uid,
-                  source: RoutineImportReviewSource.work,
-                  createdAt: DateTime.now(),
-                  candidates: [
-                    RoutineImportCandidateBlock(
-                      id: 'extracted-item-1',
-                      title: 'Store Shift',
-                      startMinute: 10 * 60,
-                      endMinute: 18 * 60,
-                      repeatDays: const [1, 2, 3, 4, 5],
-                      blockType: 'hard',
-                      category: 'work',
-                      hardBlock: true,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-          child: MaterialApp(
-            theme: ThemeData.dark(),
-            home: Scaffold(
-              body: ScheduleSetupFlow(
-                config: ScheduleSetupConfig.workSetup,
-                initialBlocks: const [],
-                initialAssetId: null,
-                initialR2Key: null,
-                onSave: (blocks, assetId, r2Key) async {},
-                onCancel: () {
-                  didCancel = true;
-                },
-              ),
+            ],
+            child: MaterialApp(
+              theme: ThemeData.dark(),
+              home: WorkBaseSetupScreen(onBack: () {}),
             ),
           ),
-        ),
-      );
+        );
 
-      await tester.pumpAndSettle();
+        await tester.pumpAndSettle();
 
-      // Tap Scan Photo -> Gallery
-      await tester.tap(find.text('Scan Photo'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Choose from Gallery'));
-      await tester.pumpAndSettle();
+        // 1. Initial screen: Tap "Set up Work" to enter Source Selection
+        expect(find.text('Set up Work'), findsWidgets);
+        await tester.tap(find.text('Set up Work').first);
+        await tester.pumpAndSettle();
 
-      // Extraction succeeded and shows 1 block scheduled
-      expect(find.text('1 blocks scheduled'), findsOneWidget);
+        expect(find.byType(WorkSourceSelectionView), findsOneWidget);
+        expect(find.text('Update Work Schedule'), findsOneWidget);
 
-      // Now cancel via close icon
-      await tester.tap(find.byIcon(Icons.close_rounded));
-      await tester.pumpAndSettle();
+        // 2. Choose from Gallery
+        await tester.tap(find.text('Choose from Gallery'));
+        await tester.pumpAndSettle();
 
-      // Discard dialog is shown because edits are dirty
-      expect(find.text('Discard changes?'), findsOneWidget);
-      await tester.tap(find.text('Discard'));
-      await tester.pumpAndSettle();
+        // 3. Reaches WorkReviewView with 1 block scheduled
+        expect(find.byType(WorkReviewView), findsOneWidget);
+        expect(find.text('1 blocks scheduled'), findsOneWidget);
+        expect(find.text('Store Shift'), findsOneWidget);
 
-      expect(didCancel, isTrue);
-      // Candidate upload was retired!
-      expect(trackingAssetRepo.deletedAssetIds, contains('cand-work-upload-1'));
-    });
+        // 4. Cancel via close icon
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        // Discard dialog is shown because edits are dirty
+        expect(find.text('Discard this setup?'), findsOneWidget);
+        await tester.tap(find.text('Discard'));
+        await tester.pumpAndSettle();
+
+        // Returns to WorkCurrentSetupView
+        expect(find.byType(WorkCurrentSetupView), findsOneWidget);
+
+        // Candidate upload was retired!
+        expect(
+          trackingAssetRepo.deletedAssetIds,
+          contains('cand-work-upload-1'),
+        );
+      },
+    );
 
     testWidgets(
-      'ScheduleSetupFlow extraction failure preserves working state and retires candidate asset',
+      'WorkBaseSetupScreen AI extraction failure preserves working state and retires candidate asset',
       (tester) async {
         final trackingAssetRepo = _TrackingAssetRepo();
         final trackingR2 = _TrackingR2Client();
@@ -478,7 +505,7 @@ void main() {
           updatedAt: DateTime.now(),
         );
 
-        final existingBlock = const TimelineBlockDraft(
+        const existingBlock = TimelineBlockDraft(
           id: 'existing-work-shift',
           section: 'work',
           title: 'Morning Shift',
@@ -486,6 +513,25 @@ void main() {
           endMinute: 12 * 60,
           repeatDays: [1, 2, 3, 4, 5],
           blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        final setup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          workBlocks: const [existingBlock],
+          workLogicalAssetId: 'initial-work-asset-id',
+          workLogicalAssetR2Key: 'users/$uid/work/initial.jpg',
+        );
+
+        final fakeOnboardingRepo = FakeOnboardingRepository();
+        final fakeSetupRepo = FakeBaseTimelineSetupRepository(
+          onboardingRepo: fakeOnboardingRepo,
+        );
+        await fakeSetupRepo.saveSetup(uid, setup);
+        final fakeRoutineRepo = FakeRoutineRepository();
+        final fakeTxRepo = FakeRoutineTransactionRepository(
+          routineRepository: fakeRoutineRepo,
+          setupRepository: fakeSetupRepo,
         );
 
         await tester.pumpWidget(
@@ -501,6 +547,13 @@ void main() {
                     ),
                   ),
               ),
+              baseTimelineSetupRepositoryProvider.overrideWithValue(
+                fakeSetupRepo,
+              ),
+              routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
+              routineTransactionRepositoryProvider.overrideWithValue(
+                fakeTxRepo,
+              ),
               baseTimelineUploadLifecycleHelperProvider.overrideWithValue(
                 lifecycleHelper,
               ),
@@ -513,7 +566,6 @@ void main() {
                   assetToReturn: candidateAsset,
                 ),
               ),
-              // Returns 0 candidates
               routineImportAiControllerProvider.overrideWith(
                 (ref) => _CustomResultAiController(
                   ref,
@@ -532,16 +584,7 @@ void main() {
             ],
             child: MaterialApp(
               theme: ThemeData.dark(),
-              home: Scaffold(
-                body: ScheduleSetupFlow(
-                  config: ScheduleSetupConfig.workSetup,
-                  initialBlocks: [existingBlock],
-                  initialAssetId: 'initial-work-asset-id',
-                  initialR2Key: 'users/$uid/work/initial.jpg',
-                  onSave: (blocks, assetId, r2Key) async {},
-                  onCancel: () {},
-                ),
-              ),
+              home: WorkBaseSetupScreen(onBack: () {}),
             ),
           ),
         );
@@ -549,28 +592,396 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('Morning Shift'), findsOneWidget);
-        expect(find.text('1 blocks scheduled'), findsOneWidget);
 
-        // Tap Scan Photo -> Gallery
-        await tester.tap(find.text('Scan Photo'));
+        // Tap Change setup -> Source Selection
+        await tester.tap(find.text('Change setup'));
         await tester.pumpAndSettle();
+
+        // Tap Choose from Gallery
         await tester.tap(find.text('Choose from Gallery'));
         await tester.pumpAndSettle();
 
-        // Error message is displayed
+        // Error message is displayed in error stage
+        expect(find.text('Work Schedule Processing Issue'), findsOneWidget);
         expect(
           find.text('Image was too blurry to read work shifts.'),
           findsOneWidget,
         );
-
-        // Existing block is preserved!
-        expect(find.text('Morning Shift'), findsOneWidget);
 
         // Candidate asset was retired!
         expect(
           trackingAssetRepo.deletedAssetIds,
           contains('cand-failed-work-upload'),
         );
+
+        // Tap "Keep previous draft" to recover working blocks
+        expect(find.text('Keep previous draft'), findsOneWidget);
+        await tester.tap(find.text('Keep previous draft'));
+        await tester.pumpAndSettle();
+
+        // Reaches review view with existing block intact!
+        expect(find.byType(WorkReviewView), findsOneWidget);
+        expect(find.text('Morning Shift'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'WorkDetailSheet opens when tapping a work card in current setup',
+      (tester) async {
+        const block = TimelineBlockDraft(
+          id: 'work-detail-1',
+          section: 'work',
+          title: 'Project Deep Work',
+          startMinute: 13 * 60,
+          endMinute: 17 * 60,
+          repeatDays: [1, 2, 3],
+          location: 'HQ Floor 4',
+          sectionLabel: 'Sprint 88',
+          notes: 'Bring sprint checklist',
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        final setup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          workBlocks: const [block],
+        );
+
+        final fakeOnboardingRepo = FakeOnboardingRepository();
+        final fakeSetupRepo = FakeBaseTimelineSetupRepository(
+          onboardingRepo: fakeOnboardingRepo,
+        );
+        await fakeSetupRepo.saveSetup(uid, setup);
+        final fakeRoutineRepo = FakeRoutineRepository();
+        final fakeTxRepo = FakeRoutineTransactionRepository(
+          routineRepository: fakeRoutineRepo,
+          setupRepository: fakeSetupRepo,
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              userProfileProvider.overrideWith(
+                (ref) => UserProfileNotifier()
+                  ..loadSeedData(
+                    UserProfile(
+                      uid: uid,
+                      email: 'work@optivus.local',
+                      displayName: 'Work Test User',
+                    ),
+                  ),
+              ),
+              baseTimelineSetupRepositoryProvider.overrideWithValue(
+                fakeSetupRepo,
+              ),
+              routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
+              routineTransactionRepositoryProvider.overrideWithValue(
+                fakeTxRepo,
+              ),
+            ],
+            child: MaterialApp(
+              theme: ThemeData.dark(),
+              home: WorkBaseSetupScreen(onBack: () {}),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        // Find the card and tap it
+        expect(find.text('Project Deep Work'), findsOneWidget);
+        await tester.tap(find.text('Project Deep Work'));
+        await tester.pumpAndSettle();
+
+        // WorkDetailSheet is displayed
+        expect(find.byType(WorkDetailSheet), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(WorkDetailSheet),
+            matching: find.text('HQ Floor 4'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byType(WorkDetailSheet),
+            matching: find.text('Sprint 88'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byType(WorkDetailSheet),
+            matching: find.text('Bring sprint checklist'),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('WorkReviewView disables save when working blocks are empty', (
+      tester,
+    ) async {
+      final setup = BaseTimelineSetup(
+        uid: uid,
+        updatedAt: DateTime.now(),
+        workBlocks: const [],
+      );
+
+      final fakeOnboardingRepo = FakeOnboardingRepository();
+      final fakeSetupRepo = FakeBaseTimelineSetupRepository(
+        onboardingRepo: fakeOnboardingRepo,
+      );
+      await fakeSetupRepo.saveSetup(uid, setup);
+      final fakeRoutineRepo = FakeRoutineRepository();
+      final fakeTxRepo = FakeRoutineTransactionRepository(
+        routineRepository: fakeRoutineRepo,
+        setupRepository: fakeSetupRepo,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            userProfileProvider.overrideWith(
+              (ref) => UserProfileNotifier()
+                ..loadSeedData(
+                  UserProfile(
+                    uid: uid,
+                    email: 'work@optivus.local',
+                    displayName: 'Work Test User',
+                  ),
+                ),
+            ),
+            baseTimelineSetupRepositoryProvider.overrideWithValue(
+              fakeSetupRepo,
+            ),
+            routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
+            routineTransactionRepositoryProvider.overrideWithValue(fakeTxRepo),
+          ],
+          child: MaterialApp(
+            theme: ThemeData.dark(),
+            home: WorkBaseSetupScreen(onBack: () {}),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Enter manual setup
+      await tester.tap(find.text('Set up Work').first);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Set up manually'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(WorkReviewView), findsOneWidget);
+      expect(find.text('No work blocks scheduled'), findsOneWidget);
+
+      // Verify "Use this work schedule" button is disabled
+      final saveButton = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Use this work schedule'),
+      );
+      expect(saveButton.onPressed, isNull);
+    });
+
+    testWidgets(
+      'Manual block addition via edit sheet enables save and updates setup',
+      (tester) async {
+        final setup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          workBlocks: const [],
+        );
+
+        final fakeOnboardingRepo = FakeOnboardingRepository();
+        final fakeSetupRepo = FakeBaseTimelineSetupRepository(
+          onboardingRepo: fakeOnboardingRepo,
+        );
+        await fakeSetupRepo.saveSetup(uid, setup);
+        final fakeRoutineRepo = FakeRoutineRepository();
+        final fakeTxRepo = FakeRoutineTransactionRepository(
+          routineRepository: fakeRoutineRepo,
+          setupRepository: fakeSetupRepo,
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              userProfileProvider.overrideWith(
+                (ref) => UserProfileNotifier()
+                  ..loadSeedData(
+                    UserProfile(
+                      uid: uid,
+                      email: 'work@optivus.local',
+                      displayName: 'Work Test User',
+                    ),
+                  ),
+              ),
+              baseTimelineSetupRepositoryProvider.overrideWithValue(
+                fakeSetupRepo,
+              ),
+              routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
+              routineTransactionRepositoryProvider.overrideWithValue(
+                fakeTxRepo,
+              ),
+            ],
+            child: MaterialApp(
+              theme: ThemeData.dark(),
+              home: WorkBaseSetupScreen(onBack: () {}),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        // 1. Enter manual setup
+        await tester.tap(find.text('Set up Work').first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Set up manually'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(WorkReviewView), findsOneWidget);
+
+        // 2. Tap Add Work
+        await tester.tap(find.text('Add Work'));
+        await tester.pumpAndSettle();
+
+        // Edit sheet is shown
+        expect(find.text('Add Work Block'), findsOneWidget);
+
+        // Enter title
+        final titleField = find.byKey(const ValueKey('base-work-title-field'));
+        await tester.enterText(titleField, 'Focus Time');
+        await tester.pumpAndSettle();
+
+        // Tap Save in edit sheet
+        await tester.tap(find.text('Save'));
+        await tester.pumpAndSettle();
+
+        // 3. Back in ReviewView with 1 block scheduled
+        expect(find.byType(WorkReviewView), findsOneWidget);
+        expect(find.text('Focus Time'), findsOneWidget);
+        expect(find.text('1 blocks scheduled'), findsOneWidget);
+
+        // Save button is now enabled
+        final saveButton = find.widgetWithText(
+          FilledButton,
+          'Use this work schedule',
+        );
+        expect(tester.widget<FilledButton>(saveButton).onPressed, isNotNull);
+
+        // 4. Tap Use this work schedule to save
+        await tester.tap(saveButton);
+        await tester.pumpAndSettle();
+
+        // Save success view completes and navigates to currentSetup
+        expect(find.byType(WorkCurrentSetupView), findsOneWidget);
+        expect(find.text('Focus Time'), findsOneWidget);
+
+        // Verify persisted in repo
+        final updatedSetup = await fakeSetupRepo.fetchSetup(uid);
+        expect(updatedSetup.workBlocks.length, equals(1));
+        expect(updatedSetup.workBlocks.first.title, equals('Focus Time'));
+      },
+    );
+
+    testWidgets(
+      'In-sheet Remove button confirms and deletes work block from draft',
+      (tester) async {
+        const block = TimelineBlockDraft(
+          id: 'work-delete-test-1',
+          section: 'work',
+          title: 'Morning Operations',
+          startMinute: 9 * 60,
+          endMinute: 11 * 60,
+          repeatDays: [1, 2, 3, 4, 5],
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        final setup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          workBlocks: const [block],
+        );
+
+        final fakeOnboardingRepo = FakeOnboardingRepository();
+        final fakeSetupRepo = FakeBaseTimelineSetupRepository(
+          onboardingRepo: fakeOnboardingRepo,
+        );
+        await fakeSetupRepo.saveSetup(uid, setup);
+        final fakeRoutineRepo = FakeRoutineRepository();
+        final fakeTxRepo = FakeRoutineTransactionRepository(
+          routineRepository: fakeRoutineRepo,
+          setupRepository: fakeSetupRepo,
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              userProfileProvider.overrideWith(
+                (ref) => UserProfileNotifier()
+                  ..loadSeedData(
+                    UserProfile(
+                      uid: uid,
+                      email: 'work@optivus.local',
+                      displayName: 'Work Test User',
+                    ),
+                  ),
+              ),
+              baseTimelineSetupRepositoryProvider.overrideWithValue(
+                fakeSetupRepo,
+              ),
+              routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
+              routineTransactionRepositoryProvider.overrideWithValue(
+                fakeTxRepo,
+              ),
+            ],
+            child: MaterialApp(
+              theme: ThemeData.dark(),
+              home: WorkBaseSetupScreen(onBack: () {}),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        // Enter Source Selection
+        await tester.tap(find.text('Change setup'));
+        await tester.pumpAndSettle();
+
+        // Tap Edit current work schedule
+        await tester.tap(find.text('Set up manually'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(WorkReviewView), findsOneWidget);
+        expect(find.text('Morning Operations'), findsOneWidget);
+
+        // Tap the block to edit
+        await tester.tap(find.text('Morning Operations'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Edit Work Block'), findsOneWidget);
+
+        // Scroll to the remove button in the sheet
+        final removeButton = find.text('Remove work block');
+        await tester.scrollUntilVisible(
+          removeButton,
+          100,
+          scrollable: find.byType(Scrollable).last,
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(removeButton);
+        await tester.pumpAndSettle();
+
+        // Confirmation dialog
+        expect(find.text('Remove this work block?'), findsOneWidget);
+        await tester.tap(find.text('Remove'));
+        await tester.pumpAndSettle();
+
+        // Block is now deleted from working blocks!
+        expect(find.text('No work blocks scheduled'), findsOneWidget);
+        expect(find.text('0 blocks scheduled'), findsOneWidget);
       },
     );
   });

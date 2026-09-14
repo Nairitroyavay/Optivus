@@ -235,10 +235,7 @@ abstract interface class UploadedAssetPreviewResolver {
     required UploadedAsset asset,
   });
 
-  Future<Uri?> resolveKey({
-    required String uid,
-    required String objectKey,
-  });
+  Future<Uri?> resolveKey({required String uid, required String objectKey});
 }
 
 /// R2 objects are private and the current upload Worker has no authenticated

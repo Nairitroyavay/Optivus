@@ -1,40 +1,75 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/routine/models/routine_week_day_summary.dart';
 import 'package:optivus/features/routine/routine_state.dart';
-import 'package:optivus/features/routine/services/routine_materializer.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
-import 'package:optivus/models/routine_item.dart';
 
+/// Shows the Routine Week Planner sheet.
 void showRoutineWeekPlannerSheet(BuildContext context, WidgetRef ref) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (ctx) => const _WeekPlannerSheet(),
+    builder: (ctx) => const WeekPlannerSheet(),
   );
 }
 
-class _WeekPlannerSheet extends ConsumerWidget {
-  const _WeekPlannerSheet();
+class WeekPlannerSheet extends ConsumerStatefulWidget {
+  const WeekPlannerSheet({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<WeekPlannerSheet> createState() => _WeekPlannerSheetState();
+}
+
+class _WeekPlannerSheetState extends ConsumerState<WeekPlannerSheet> {
+  late DateTime _visibleWeekStart;
+
+  @override
+  void initState() {
+    super.initState();
+    final selected = ref.read(routineNotifierProvider).selectedDay;
+    _visibleWeekStart = TimelineUtils.weekStart(selected);
+  }
+
+  void _goToPreviousWeek() {
+    setState(() {
+      _visibleWeekStart = _visibleWeekStart.subtract(const Duration(days: 7));
+    });
+  }
+
+  void _goToNextWeek() {
+    setState(() {
+      _visibleWeekStart = _visibleWeekStart.add(const Duration(days: 7));
+    });
+  }
+
+  void _goToThisWeek() {
+    setState(() {
+      _visibleWeekStart = TimelineUtils.weekStart(DateTime.now());
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(routineNotifierProvider);
-    final allItems = state.items;
-    final selected = state.selectedDay;
-    final startOfWeek = selected.subtract(Duration(days: selected.weekday - 1));
+    final selectedDay = state.selectedDay;
+    final isCurrentWeek = DateUtils.isSameDay(
+      _visibleWeekStart,
+      TimelineUtils.weekStart(DateTime.now()),
+    );
+
     final days = List.generate(
       7,
       (index) => DateTime(
-        startOfWeek.year,
-        startOfWeek.month,
-        startOfWeek.day + index,
+        _visibleWeekStart.year,
+        _visibleWeekStart.month,
+        _visibleWeekStart.day + index,
       ),
     );
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.78,
+      initialChildSize: 0.82,
       minChildSize: 0.5,
       maxChildSize: 0.94,
       builder: (context, scrollController) {
@@ -54,6 +89,7 @@ class _WeekPlannerSheet extends ConsumerWidget {
             controller: scrollController,
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
             children: [
+              // Grab handle
               Center(
                 child: Container(
                   width: 48,
@@ -65,72 +101,149 @@ class _WeekPlannerSheet extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Week Planner',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  color: OptivusColors.textPrimary,
+
+              // Title and navigation row
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Week Planner',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: OptivusColors.textPrimary,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                  ),
+                  if (!isCurrentWeek)
+                    GestureDetector(
+                      onTap: _goToThisWeek,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: OptivusColors.routineAccent.withValues(
+                            alpha: 0.12,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: OptivusColors.routineAccent.withValues(
+                              alpha: 0.25,
+                            ),
+                          ),
+                        ),
+                        child: const Text(
+                          'This week',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: OptivusColors.routineAccent,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+
+              // Week selector bar
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.7),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.chevron_left_rounded),
+                      iconSize: 22,
+                      visualDensity: VisualDensity.compact,
+                      color: OptivusColors.ink,
+                      onPressed: _goToPreviousWeek,
+                    ),
+                    Expanded(
+                      child: Text(
+                        '${_dateLabel(days.first)} – ${_dateLabel(days.last)}',
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: OptivusColors.ink,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.chevron_right_rounded),
+                      iconSize: 22,
+                      visualDensity: VisualDensity.compact,
+                      color: OptivusColors.ink,
+                      onPressed: _goToNextWeek,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 6),
-              Text(
-                'Monday to Sunday • ${_dateLabel(days.first)} - ${_dateLabel(days.last)}',
-                style: const TextStyle(
+              const SizedBox(height: 8),
+
+              // Subtitle describing planning window
+              const Text(
+                'Actual schedule • Free time uses 6 AM–11 PM',
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: OptivusColors.textSecondary,
                 ),
               ),
               const SizedBox(height: 16),
-              ...days.map((day) {
-                final items = RoutineMaterializer.itemsForDay(allItems, day);
-                final hardBlocks = items
-                    .where((item) => item.isHardBlock)
-                    .length;
-                final habits = items
-                    .where(
-                      (item) =>
-                          item.blockType == RoutineBlockType.flexibleTask ||
-                          item.category == RoutineCategory.habit,
-                    )
-                    .length;
-                final freeMinutes = _freeMinutes(items);
-                final completed = items
-                    .where(
-                      (item) =>
-                          item.status == RoutineStatus.completed ||
-                          item.isCompleted,
-                    )
-                    .length;
-                return _WeekDayCard(
-                  day: day,
-                  selected: DateUtils.isSameDay(day, selected),
-                  total: items.length,
-                  completed: completed,
-                  hardBlocks: hardBlocks,
-                  habits: habits,
-                  freeMinutes: freeMinutes,
-                  onTap: () {
-                    ref
-                        .read(routineNotifierProvider.notifier)
-                        .updateSelectedDay(day);
-                    Navigator.of(context).pop();
-                  },
-                );
-              }),
+
+              // Loading check
+              if (state.loading && state.items.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 40),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        OptivusColors.routineAccent,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                ...days.map((day) {
+                  final summary = RoutineWeekDaySummary.compute(
+                    day: day,
+                    templates: state.items,
+                    occurrences: state.occurrences,
+                  );
+                  final isSelected = DateUtils.isSameDay(day, selectedDay);
+                  final isToday = TimelineUtils.isToday(day);
+
+                  return _WeekDayCard(
+                    summary: summary,
+                    isSelected: isSelected,
+                    isToday: isToday,
+                    onTap: () {
+                      ref
+                          .read(routineNotifierProvider.notifier)
+                          .updateSelectedDay(day);
+                      Navigator.of(context).pop();
+                    },
+                  );
+                }),
             ],
           ),
         );
       },
     );
-  }
-
-  int _freeMinutes(List<RoutineItem> items) {
-    final busy = items.fold<int>(0, (sum, item) {
-      return sum + item.durationMinutes.clamp(0, 24 * 60).toInt();
-    });
-    return (24 * 60 - busy).clamp(0, 24 * 60).toInt();
   }
 
   String _dateLabel(DateTime date) {
@@ -153,29 +266,22 @@ class _WeekPlannerSheet extends ConsumerWidget {
 }
 
 class _WeekDayCard extends StatelessWidget {
-  final DateTime day;
-  final bool selected;
-  final int total;
-  final int completed;
-  final int hardBlocks;
-  final int habits;
-  final int freeMinutes;
+  final RoutineWeekDaySummary summary;
+  final bool isSelected;
+  final bool isToday;
   final VoidCallback onTap;
 
   const _WeekDayCard({
-    required this.day,
-    required this.selected,
-    required this.total,
-    required this.completed,
-    required this.hardBlocks,
-    required this.habits,
-    required this.freeMinutes,
+    required this.summary,
+    required this.isSelected,
+    required this.isToday,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    const color = OptivusColors.routineAccent;
+    final day = summary.day;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: GestureDetector(
@@ -183,19 +289,20 @@ class _WeekDayCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: selected
+            color: isSelected
                 ? OptivusColors.ink.withValues(alpha: 0.92)
-                : Colors.white.withValues(alpha: 0.55),
+                : Colors.white.withValues(alpha: 0.58),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: selected
-                  ? Colors.white.withValues(alpha: 0.6)
+              color: isSelected
+                  ? Colors.white.withValues(alpha: 0.55)
                   : Colors.white.withValues(alpha: 0.78),
+              width: isSelected ? 1.5 : 1.0,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 12,
+                color: Colors.black.withValues(alpha: isSelected ? 0.1 : 0.04),
+                blurRadius: 14,
                 offset: const Offset(0, 5),
               ),
             ],
@@ -203,37 +310,141 @@ class _WeekDayCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Day row with Today / Selected indicator
               Row(
                 children: [
                   Expanded(
                     child: Text(
                       '${TimelineUtils.getShortDayName(day.weekday)} ${day.day}',
                       style: TextStyle(
-                        fontSize: 15,
+                        fontSize: 16,
                         fontWeight: FontWeight.w900,
-                        color: selected ? Colors.white : OptivusColors.ink,
+                        color: isSelected ? Colors.white : OptivusColors.ink,
                       ),
                     ),
                   ),
-                  Icon(
-                    Icons.check_circle_rounded,
-                    size: 18,
-                    color: selected ? Colors.white : color,
-                  ),
+                  if (isToday)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: OptivusColors.routineAccent,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'TODAY',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    )
+                  else if (isSelected)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'SELECTED',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(height: 10),
+
+              // Progress bar or neutral status
+              if (summary.hasActionableTasks) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${summary.completed}/${summary.actionableTotal} done',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: isSelected
+                            ? Colors.white.withValues(alpha: 0.9)
+                            : OptivusColors.ink,
+                      ),
+                    ),
+                    Text(
+                      '${(summary.progress * 100).round()}%',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: isSelected
+                            ? Colors.white.withValues(alpha: 0.7)
+                            : OptivusColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: summary.progress,
+                    minHeight: 5,
+                    backgroundColor: isSelected
+                        ? Colors.white.withValues(alpha: 0.15)
+                        : Colors.black.withValues(alpha: 0.06),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      isSelected
+                          ? OptivusColors.routineAccent
+                          : OptivusColors.routineAccent,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ] else ...[
+                Text(
+                  'No tasks',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isSelected
+                        ? Colors.white.withValues(alpha: 0.65)
+                        : OptivusColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+
+              // Chips row
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _chip('$completed/$total done', selected),
-                  _chip('$hardBlocks base blocks', selected),
-                  _chip('$habits habits', selected),
+                  _chip('${summary.baseBlockCount} base', inverted: isSelected),
                   _chip(
-                    '${TimelineUtils.formatDuration(freeMinutes)} free',
-                    selected,
+                    '${summary.flexibleTaskCount} flexible',
+                    inverted: isSelected,
                   ),
+                  _chip(
+                    '${TimelineUtils.formatDuration(summary.freeMinutes)} free',
+                    inverted: isSelected,
+                  ),
+                  if (summary.missed > 0)
+                    _chip(
+                      '${summary.missed} missed',
+                      inverted: isSelected,
+                      isWarning: true,
+                    ),
                 ],
               ),
             ],
@@ -243,22 +454,30 @@ class _WeekDayCard extends StatelessWidget {
     );
   }
 
-  Widget _chip(String text, bool inverted) {
+  Widget _chip(String text, {required bool inverted, bool isWarning = false}) {
+    Color bg;
+    Color fg;
+
+    if (isWarning) {
+      bg = Colors.red.withValues(alpha: inverted ? 0.25 : 0.12);
+      fg = inverted ? const Color(0xFFFF8A80) : Colors.red.shade700;
+    } else if (inverted) {
+      bg = Colors.white.withValues(alpha: 0.14);
+      fg = Colors.white;
+    } else {
+      bg = OptivusColors.routineAccent.withValues(alpha: 0.1);
+      fg = OptivusColors.ink;
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
-        color: inverted
-            ? Colors.white.withValues(alpha: 0.12)
-            : OptivusColors.routineAccent.withValues(alpha: 0.1),
+        color: bg,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         text,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: inverted ? Colors.white : OptivusColors.textSecondary,
-        ),
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: fg),
       ),
     );
   }

@@ -30,8 +30,7 @@ class RoutineEntryFilter {
   static bool matchesView(RoutineDayEntry entry, String view) {
     return switch (view) {
       'base_timeline' => isBaseTimeline(entry.item),
-      'flexible_tasks' =>
-        entry.item.blockType == RoutineBlockType.flexibleTask,
+      'flexible_tasks' => entry.item.blockType == RoutineBlockType.flexibleTask,
       'tracker_tasks' => entry.item.blockType == RoutineBlockType.trackerTask,
       'check_ins' => entry.item.blockType == RoutineBlockType.checkIn,
       _ => true, // 'all' or fallback
@@ -102,14 +101,16 @@ class RoutineEntryFilter {
     String status = 'any',
     String category = 'all',
   }) {
-    return entries.where((entry) {
-      if (!matchesView(entry, view)) return false;
-      if (!matchesStatus(entry, status)) return false;
-      if (category != 'all' && !matchesCategory(entry.item, category)) {
-        return false;
-      }
-      return true;
-    }).toList(growable: false);
+    return entries
+        .where((entry) {
+          if (!matchesView(entry, view)) return false;
+          if (!matchesStatus(entry, status)) return false;
+          if (category != 'all' && !matchesCategory(entry.item, category)) {
+            return false;
+          }
+          return true;
+        })
+        .toList(growable: false);
   }
 
   /// Returns the subset of [categoryFilters] (excluding 'all') that match at least

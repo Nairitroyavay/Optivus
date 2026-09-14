@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/work_timeline_card.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 
@@ -80,18 +81,7 @@ class BaseTimelineDomainCard extends StatelessWidget {
     BaseTimelineCardDomain domain,
   ) {
     return switch (domain) {
-      BaseTimelineCardDomain.work => () {
-        final hasLoc = block.location?.trim().isNotEmpty == true;
-        final hasSection = block.sectionLabel?.trim().isNotEmpty == true;
-        final notes = block.notes?.trim() ?? '';
-        final notesExtra = notes.isEmpty
-            ? 0.0
-            : (notes.length > 50 ? 50.0 : 32.0);
-        return 94.0 +
-            (hasLoc ? 20.0 : 0.0) +
-            (hasSection ? 20.0 : 0.0) +
-            notesExtra;
-      }(),
+      BaseTimelineCardDomain.work => WorkTimelineCard.minimumHeight(block),
       BaseTimelineCardDomain.eating => () {
         final validDishes = block.dishes
             .where((e) => e.trim().isNotEmpty)

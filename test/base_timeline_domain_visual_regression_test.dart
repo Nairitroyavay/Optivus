@@ -6,8 +6,12 @@ import 'package:optivus/features/onboarding/timeline/adapters/meal_timeline_adap
 import 'package:optivus/features/onboarding/timeline/adapters/skin_timeline_adapter.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_timeline_adapter.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
+import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/views/work_review_view.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/views/work_source_selection_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/work_timeline_card.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 
 void main() {
@@ -393,6 +397,219 @@ void main() {
 
         await tester.tap(find.text('Retry'));
         expect(retryClicked, isTrue);
+      },
+    );
+
+    testWidgets(
+      'WorkTimelineCard renders complete metadata without overflow or trash can on card face',
+      (tester) async {
+        const block = TimelineBlockDraft(
+          id: 'work-test-card-1',
+          section: 'work',
+          title: 'Executive Client Briefing',
+          startMinute: 14 * 60,
+          endMinute: 16 * 60,
+          repeatDays: [1, 2, 3, 4, 5],
+          blockType: TimelineBlockDraft.hardBlockKey,
+          location: 'Conference Room Alpha',
+          sectionLabel: 'Q4 Strategy',
+          notes: 'Deliver roadmap summary and action items.',
+        );
+
+        const adapter = BaseTimelineWorkAdapter();
+        final entry = adapter.toEntries(block).first;
+        final pos = PositionedTimelineEntry(
+          entry: entry,
+          top: 0,
+          height: WorkTimelineCard.minimumHeight(block),
+          left: 0,
+          width: 320,
+          column: 0,
+          columnCount: 1,
+        );
+
+        bool tapped = false;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 320,
+                  height: WorkTimelineCard.minimumHeight(block),
+                  child: WorkTimelineCard(
+                    positioned: pos,
+                    block: block,
+                    accent: OptivusColors.warning,
+                    isEditable: true,
+                    onTap: () => tapped = true,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        // Metadata assertions
+        expect(find.text('Executive Client Briefing'), findsOneWidget);
+        expect(find.text('Conference Room Alpha'), findsOneWidget);
+        expect(find.text('Q4 Strategy'), findsOneWidget);
+        expect(
+          find.text('Deliver roadmap summary and action items.'),
+          findsOneWidget,
+        );
+
+        // Verification: NO trash can icon anywhere on card face
+        expect(find.byIcon(Icons.delete_outline_rounded), findsNothing);
+        expect(find.byIcon(Icons.delete_rounded), findsNothing);
+
+        // Tap triggers callback
+        await tester.tap(find.text('Executive Client Briefing'));
+        expect(tapped, isTrue);
+
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'WorkTimelineCard renders exposed back card styling and triggers onTap to bring to front',
+      (tester) async {
+        const block = TimelineBlockDraft(
+          id: 'work-back-card',
+          section: 'work',
+          title: 'Back Office Operations',
+          startMinute: 10 * 60,
+          endMinute: 12 * 60,
+          repeatDays: [1, 2, 3],
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        const adapter = BaseTimelineWorkAdapter();
+        final entry = adapter.toEntries(block).first;
+        // Positioned with overlap where it is NOT front
+        final pos = PositionedTimelineEntry(
+          entry: entry,
+          top: 0,
+          height: 80,
+          left: 0,
+          width: 300,
+          column: 0,
+          columnCount: 1,
+          hasOverlap: true,
+          isFront: false,
+        );
+
+        bool broughtToFront = false;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 300,
+                  height: 80,
+                  child: WorkTimelineCard(
+                    positioned: pos,
+                    block: block,
+                    accent: OptivusColors.warning,
+                    isEditable: false,
+                    onTap: () => broughtToFront = true,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        expect(find.text('Back Office Operations'), findsOneWidget);
+        await tester.tap(find.text('Back Office Operations'));
+        expect(broughtToFront, isTrue);
+
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('WorkSourceSelectionView renders cleanly at 320dp width', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 700);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final setup = BaseTimelineSetup(
+        uid: 'user-source-test',
+        updatedAt: DateTime.now(),
+        workBlocks: const [],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark(),
+          home: Scaffold(
+            body: WorkSourceSelectionView(
+              setup: setup,
+              onCancel: () {},
+              onPickPhoto: (_) {},
+              onManualSetup: () {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('Update Work Schedule'), findsOneWidget);
+      expect(find.text('Take a Photo'), findsOneWidget);
+      expect(find.text('Choose from Gallery'), findsOneWidget);
+      expect(find.text('Set up manually'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+      'WorkReviewView renders cleanly at 320dp width with empty blocks',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 700);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: Scaffold(
+              body: WorkReviewView(
+                workingBlocks: const [],
+                workingAssetId: null,
+                workingR2Key: null,
+                workingLocalPreviewPath: null,
+                selectedDay: 1,
+                onDayChanged: (_) {},
+                droppedCount: 0,
+                droppedExamples: const [],
+                errorMessage: null,
+                onClearError: () {},
+                isSaving: false,
+                onCancel: () {},
+                onScanAgain: () {},
+                onAddBlock: () {},
+                onEditBlock: (_) {},
+                onSave: () {},
+              ),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        expect(find.text('Review Work Schedule'), findsOneWidget);
+        expect(find.text('No work blocks scheduled'), findsOneWidget);
+        expect(find.text('Change photo'), findsOneWidget);
+        expect(find.text('Add Work'), findsOneWidget);
+        expect(find.text('Use this work schedule'), findsOneWidget);
+        expect(tester.takeException(), isNull);
       },
     );
   });

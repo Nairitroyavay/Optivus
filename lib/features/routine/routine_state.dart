@@ -218,8 +218,7 @@ class RoutineState {
       selectedDay: selectedDay ?? this.selectedDay,
       selectedPrimaryFilter:
           selectedPrimaryFilter ?? this.selectedPrimaryFilter,
-      selectedStatusFilter:
-          selectedStatusFilter ?? this.selectedStatusFilter,
+      selectedStatusFilter: selectedStatusFilter ?? this.selectedStatusFilter,
       selectedCategoryFilter:
           selectedCategoryFilter ?? this.selectedCategoryFilter,
       showFullDay: showFullDay ?? this.showFullDay,
@@ -973,21 +972,26 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     _inFlightUid = uid;
     _inFlightLoad = completer.future;
 
-    _performLoadForOwner(uid).then((value) {
-      if (!completer.isCompleted) {
-        completer.complete();
-      }
-    }, onError: (Object error, StackTrace stack) {
-      if (!completer.isCompleted) {
-        completer.completeError(error, stack);
-      }
-    }).whenComplete(() {
-      if (identical(_inFlightLoad, completer.future)) {
-        _inFlightLoad = null;
-        _inFlightUid = null;
-        _inFlightGeneration = null;
-      }
-    });
+    _performLoadForOwner(uid)
+        .then(
+          (value) {
+            if (!completer.isCompleted) {
+              completer.complete();
+            }
+          },
+          onError: (Object error, StackTrace stack) {
+            if (!completer.isCompleted) {
+              completer.completeError(error, stack);
+            }
+          },
+        )
+        .whenComplete(() {
+          if (identical(_inFlightLoad, completer.future)) {
+            _inFlightLoad = null;
+            _inFlightUid = null;
+            _inFlightGeneration = null;
+          }
+        });
 
     return completer.future;
   }
@@ -1535,6 +1539,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         filter == 'all' || categoryFilters.any((entry) => entry.key == filter);
     state = state.copyWith(selectedCategoryFilter: supported ? filter : 'all');
   }
+
   void toggleAiSuggestions(bool value) =>
       state = state.copyWith(aiRoutineSuggestionsEnabled: value);
   void toggleNotifications(bool value) =>
@@ -3900,7 +3905,7 @@ class RoutineFilters {
         .toList();
   }
 
-  static bool _matchesCategory(RoutineItem item, String filter) =>
+  static bool matchesCategory(RoutineItem item, String filter) =>
       RoutineEntryFilter.matchesCategory(item, filter);
 }
 

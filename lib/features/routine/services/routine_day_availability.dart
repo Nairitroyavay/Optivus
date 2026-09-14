@@ -76,6 +76,10 @@ class RoutineDayAvailability {
     return largest;
   }
 
+  /// Formatted free time string within the planning window (e.g., "17h free", "13h free").
+  String get freeTimeFormatted =>
+      '${TimelineUtils.formatDuration(freeMinutes)} free';
+
   /// Computes availability from occurrence-aware [RoutineDayEntry] items.
   ///
   /// This is the authoritative engine entry point for the Routine tab,
@@ -110,10 +114,7 @@ class RoutineDayAvailability {
 
       if (clippedEnd > clippedStart) {
         rawIntervals.add(
-          RoutineTimeInterval(
-            startMinute: clippedStart,
-            endMinute: clippedEnd,
-          ),
+          RoutineTimeInterval(startMinute: clippedStart, endMinute: clippedEnd),
         );
       }
     }
@@ -155,10 +156,7 @@ class RoutineDayAvailability {
 
       if (clippedEnd > clippedStart) {
         rawIntervals.add(
-          RoutineTimeInterval(
-            startMinute: clippedStart,
-            endMinute: clippedEnd,
-          ),
+          RoutineTimeInterval(startMinute: clippedStart, endMinute: clippedEnd),
         );
       }
     }
@@ -207,20 +205,14 @@ class RoutineDayAvailability {
     for (final occ in mergedOccupied) {
       if (occ.startMinute > cursor) {
         freeIntervals.add(
-          RoutineTimeInterval(
-            startMinute: cursor,
-            endMinute: occ.startMinute,
-          ),
+          RoutineTimeInterval(startMinute: cursor, endMinute: occ.startMinute),
         );
       }
       cursor = max(cursor, occ.endMinute);
     }
     if (cursor < windowEndMinute) {
       freeIntervals.add(
-        RoutineTimeInterval(
-          startMinute: cursor,
-          endMinute: windowEndMinute,
-        ),
+        RoutineTimeInterval(startMinute: cursor, endMinute: windowEndMinute),
       );
     }
 
@@ -249,10 +241,7 @@ class RoutineDayAvailability {
   ///
   /// For example, if a free gap begins at 07:03 and [snapMinutes] is 5,
   /// the earliest aligned candidate is 07:05. If [snapMinutes] is 1, it is 07:03.
-  int? findFirstFreeSlot({
-    required int durationMinutes,
-    int snapMinutes = 5,
-  }) {
+  int? findFirstFreeSlot({required int durationMinutes, int snapMinutes = 5}) {
     if (durationMinutes <= 0) return windowStartMinute;
 
     for (final free in freeIntervals) {

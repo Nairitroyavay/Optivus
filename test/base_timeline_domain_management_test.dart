@@ -278,7 +278,7 @@ void main() {
       expect(addSheet, isNot(contains('.updateItem(')));
       expect(addSheet, contains('.addItem(item)'));
       final workFlow = File(
-        'lib/features/routine/managers/base_timeline/screens/schedule_setup_flow.dart',
+        'lib/features/routine/managers/base_timeline/screens/work_base_setup_screen.dart',
       ).readAsStringSync();
       expect(workFlow, isNot(contains('ClassRoutineBlock')));
       expect(workFlow, isNot(contains('showClassEditSheet')));

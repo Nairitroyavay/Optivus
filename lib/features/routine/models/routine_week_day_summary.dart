@@ -67,9 +67,11 @@ class RoutineWeekDaySummary {
   bool get hasActionableTasks => actionableTotal > 0;
 
   /// Completion progress between 0.0 and 1.0. Returns 0.0 if there are no tasks.
-  double get progress => actionableTotal > 0
-      ? (completed / actionableTotal).clamp(0.0, 1.0)
-      : 0.0;
+  double get progress =>
+      actionableTotal > 0 ? (completed / actionableTotal).clamp(0.0, 1.0) : 0.0;
+
+  /// Formatted free time string from availability engine.
+  String get freeTimeFormatted => availability.freeTimeFormatted;
 
   /// Computes the summary from raw templates and occurrences using the authoritative projector.
   factory RoutineWeekDaySummary.compute({
@@ -114,14 +116,11 @@ class RoutineWeekDaySummary {
     final actionableTotal = actionable.length;
     final completed = actionable
         .where(
-          (e) =>
-              e.item.isCompleted || e.item.status == RoutineStatus.completed,
+          (e) => e.item.isCompleted || e.item.status == RoutineStatus.completed,
         )
         .length;
     final missed = actionable
-        .where(
-          (e) => e.item.isMissed || e.item.status == RoutineStatus.missed,
-        )
+        .where((e) => e.item.isMissed || e.item.status == RoutineStatus.missed)
         .length;
     final skipped = actionable
         .where((e) => e.item.status == RoutineStatus.skipped)

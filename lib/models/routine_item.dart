@@ -359,6 +359,7 @@ class RoutineItem {
     String? courseCode,
     String? classType,
     String? sectionLabel,
+    bool clearSectionLabel = false,
     bool? hardBlock,
     List<String>? allowedOverlaps,
     List<RoutineConflictAllowance>? allowedConflicts,
@@ -423,7 +424,9 @@ class RoutineItem {
       professor: professor ?? this.professor,
       courseCode: courseCode ?? this.courseCode,
       classType: classType ?? this.classType,
-      sectionLabel: sectionLabel ?? this.sectionLabel,
+      sectionLabel: clearSectionLabel
+          ? null
+          : (sectionLabel ?? this.sectionLabel),
       hardBlock: hardBlock ?? this.hardBlock,
       allowedOverlaps: allowedOverlaps ?? this.allowedOverlaps,
       allowedConflicts: allowedConflicts ?? this.allowedConflicts,

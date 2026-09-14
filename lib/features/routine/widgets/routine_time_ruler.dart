@@ -138,7 +138,11 @@ class _TimeRulerPainter extends CustomPainter {
     }
 
     for (int m = startMinute; m <= endMinute; m++) {
-      final y = TimelineUtils.minuteToY(m, layout: layout, visualScale: visualScale);
+      final y = TimelineUtils.minuteToY(
+        m,
+        layout: layout,
+        visualScale: visualScale,
+      );
 
       if (y < -20 || y > size.height + 20) continue;
 

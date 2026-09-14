@@ -953,9 +953,11 @@ class Step14FinalTimelineState extends State<Step14FinalTimeline> {
             startY: prepared.layout.scale.yForMinute(
               firstRegionByItemId[item.entry.id]!.startMinute,
             ),
-            tabHeight: prepared.tabHeightByRegionKey[
-                    firstRegionByItemId[item.entry.id]!
-                        .keyForDay(prepared.selectedDay)] ??
+            tabHeight:
+                prepared.tabHeightByRegionKey[firstRegionByItemId[item
+                        .entry
+                        .id]!
+                    .keyForDay(prepared.selectedDay)] ??
                 44.0,
           ),
       ];

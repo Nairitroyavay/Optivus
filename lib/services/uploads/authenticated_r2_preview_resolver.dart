@@ -29,10 +29,8 @@ class AuthenticatedR2PreviewResolver implements UploadedAssetPreviewResolver {
   }
 
   @override
-  Future<Uri?> resolveKey({
-    required String uid,
-    required String objectKey,
-  }) => resolveR2Key(uid: uid, r2Key: objectKey);
+  Future<Uri?> resolveKey({required String uid, required String objectKey}) =>
+      resolveR2Key(uid: uid, r2Key: objectKey);
 
   Future<Uri?> resolveR2Key({
     required String uid,

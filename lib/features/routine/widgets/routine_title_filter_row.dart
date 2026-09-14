@@ -6,301 +6,33 @@ import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/widgets/routine_glass_filter.dart'; // For GlassHighlightPainter
 import 'package:optivus/features/routine/widgets/routine_day_picker.dart';
 import 'package:optivus/features/routine/sheets/week_planner_sheet.dart';
+import 'package:optivus/features/routine/sheets/routine_filter_sheet.dart';
 
 /// Filter row for Routine.
 ///
-/// Shows a single [Filter] glass pill that opens a beautiful glass overlay dropdown menu.
-/// When filters are selected, it updates the pill text to reflect the selection.
-class RoutineTitleFilterRow extends ConsumerStatefulWidget {
+/// Contains [Day], [Week], and compact [Filter] controls.
+/// Tapping [Filter] opens the authoritative filter bottom sheet.
+class RoutineTitleFilterRow extends ConsumerWidget {
   const RoutineTitleFilterRow({super.key});
 
   @override
-  ConsumerState<RoutineTitleFilterRow> createState() =>
-      _RoutineTitleFilterRowState();
-}
-
-class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
-    with SingleTickerProviderStateMixin {
-  OverlayEntry? _overlay;
-  late final AnimationController _anim;
-  late final Animation<double> _fade;
-  final LayerLink _link = LayerLink();
-  final double _widgetWidth = 190.0;
-
-  @override
-  void initState() {
-    super.initState();
-    _anim = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _fade = CurvedAnimation(parent: _anim, curve: Curves.easeOut);
-  }
-
-  @override
-  void dispose() {
-    _closeDropdown(immediate: true);
-    _anim.dispose();
-    super.dispose();
-  }
-
-  void _openDropdown() {
-    _overlay = OverlayEntry(
-      builder: (_) {
-        return GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: _closeDropdown,
-          child: Stack(
-            children: [
-              CompositedTransformFollower(
-                link: _link,
-                showWhenUnlinked: false,
-                targetAnchor: Alignment.bottomRight,
-                followerAnchor: Alignment.topRight,
-                offset: const Offset(0, 8),
-                child: ScaleTransition(
-                  scale: _fade,
-                  alignment: Alignment.topRight,
-                  child: _buildGlassMenu(),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-
-    Overlay.of(context).insert(_overlay!);
-    _anim.forward();
-  }
-
-  void _closeDropdown({bool immediate = false}) async {
-    if (_overlay == null) return;
-    if (!immediate && mounted) {
-      await _anim.reverse();
-    }
-    _overlay?.remove();
-    _overlay = null;
-  }
-
-  Widget _buildGlassMenu() {
-    const double outerR = 22.0;
-    const double rim = 8.0;
-    const double innerR = outerR - rim + 2;
-
-    final state = ref.watch(routineNotifierProvider);
-    final filter = state.selectedPrimaryFilter;
-    final categoryFilter = state.selectedCategoryFilter;
-
-    final List<Widget> rows = [];
-
-    // View section header
-    rows.add(_buildSectionHeader('View'));
-    for (int i = 0; i < primaryFilters.length; i++) {
-      final f = primaryFilters[i];
-      rows.add(
-        _buildOptionRow(
-          f: f,
-          isSelected: filter == f.key,
-          onTap: () {
-            ref.read(routineNotifierProvider.notifier).setPrimaryFilter(f.key);
-          },
-        ),
-      );
-    }
-
-    // Category section header
-    rows.add(const SizedBox(height: 8));
-    rows.add(_buildDivider());
-    rows.add(_buildSectionHeader('Category'));
-    for (int i = 0; i < categoryFilters.length; i++) {
-      final f = categoryFilters[i];
-      rows.add(
-        _buildOptionRow(
-          f: f,
-          isSelected: categoryFilter == f.key,
-          onTap: () {
-            ref.read(routineNotifierProvider.notifier).setCategoryFilter(f.key);
-          },
-        ),
-      );
-    }
-
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        width: _widgetWidth,
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.65,
-        ),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(outerR),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
-              blurRadius: 24,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(outerR),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-            child: Stack(
-              fit: StackFit.passthrough,
-              children: [
-                // Scrollable content
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: rows,
-                    ),
-                  ),
-                ),
-                // Transparent tint overlay
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(outerR),
-                        color: Colors.white.withValues(alpha: 0.06),
-                      ),
-                    ),
-                  ),
-                ),
-                // Glass rim highlights
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: CustomPaint(
-                      painter: GlassHighlightPainter(
-                        outerR: outerR,
-                        innerR: innerR,
-                        rim: rim,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(
+      routineNotifierProvider.select(
+        (s) => (
+          primary: s.selectedPrimaryFilter,
+          status: s.selectedStatusFilter,
+          category: s.selectedCategoryFilter,
         ),
       ),
     );
-  }
 
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 14, right: 14, top: 12, bottom: 6),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Text(
-          title.toUpperCase(),
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w900,
-            color: OptivusColors.ink.withValues(alpha: 0.5),
-            letterSpacing: 0.5,
-            decoration: TextDecoration.none,
-          ),
-        ),
-      ),
-    );
-  }
+    int activeCount = 0;
+    if (state.primary != 'all') activeCount++;
+    if (state.status != 'any') activeCount++;
+    if (state.category != 'all') activeCount++;
 
-  Widget _buildDivider() {
-    return Divider(
-      height: 0.5,
-      thickness: 0.5,
-      color: Colors.white.withValues(alpha: 0.30),
-      indent: 14,
-      endIndent: 14,
-    );
-  }
-
-  Widget _buildOptionRow({
-    required RoutineFilterOption f,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        color: isSelected
-            ? Colors.white.withValues(alpha: 0.18)
-            : Colors.transparent,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-        child: Row(
-          children: [
-            Text(
-              f.emoji,
-              style: const TextStyle(
-                fontSize: 15,
-                decoration: TextDecoration.none,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                f.label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  color: OptivusColors.ink.withValues(
-                    alpha: isSelected ? 1.0 : 0.80,
-                  ),
-                  letterSpacing: -0.1,
-                  height: 1.2,
-                  decoration: TextDecoration.none,
-                ),
-              ),
-            ),
-            if (isSelected)
-              Icon(
-                Icons.check_rounded,
-                size: 14,
-                color: OptivusColors.ink.withValues(alpha: 0.85),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final state = ref.watch(routineNotifierProvider);
-    final filter = state.selectedPrimaryFilter;
-    final categoryFilter = state.selectedCategoryFilter;
-
-    final activeFilters = <RoutineFilterOption>[];
-    if (filter != 'all') {
-      activeFilters.add(
-        primaryFilters.firstWhere(
-          (f) => f.key == filter,
-          orElse: () => primaryFilters.first,
-        ),
-      );
-    }
-    if (categoryFilter != 'all') {
-      activeFilters.add(
-        categoryFilters.firstWhere(
-          (f) => f.key == categoryFilter,
-          orElse: () => categoryFilters.first,
-        ),
-      );
-    }
-
-    String pillLabel = 'Filter';
-    if (activeFilters.length == 1) {
-      pillLabel = activeFilters.first.label;
-    } else if (activeFilters.length == 2) {
-      pillLabel = '${activeFilters[0].label} • ${activeFilters[1].label}';
-    }
+    final pillLabel = activeCount == 0 ? 'Filter' : 'Filter • $activeCount';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -352,15 +84,11 @@ class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: CompositedTransformTarget(
-              link: _link,
-              child: GestureDetector(
-                onTap: () =>
-                    _overlay == null ? _openDropdown() : _closeDropdown(),
-                child: _RoutineGlassPill(
-                  label: pillLabel,
-                  maxWidth: _widgetWidth,
-                ),
+            child: GestureDetector(
+              onTap: () => showRoutineFilterSheet(context, ref),
+              child: _RoutineGlassPill(
+                label: pillLabel,
+                isActive: activeCount > 0,
               ),
             ),
           ),
@@ -372,9 +100,9 @@ class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
 
 class _RoutineGlassPill extends StatelessWidget {
   final String label;
-  final double maxWidth;
+  final bool isActive;
 
-  const _RoutineGlassPill({required this.label, required this.maxWidth});
+  const _RoutineGlassPill({required this.label, this.isActive = false});
 
   static const double outerR = 20.0;
   static const double rim = 7.0;
@@ -383,7 +111,6 @@ class _RoutineGlassPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: BoxConstraints(maxWidth: maxWidth),
       height: 40,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(outerR),
@@ -404,12 +131,16 @@ class _RoutineGlassPill extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.all(rim),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
+                    color: isActive
+                        ? OptivusColors.routineAccent.withValues(alpha: 0.22)
+                        : Colors.white.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(innerR),
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.6),
+                      color: isActive
+                          ? OptivusColors.routineAccent.withValues(alpha: 0.6)
+                          : Colors.white.withValues(alpha: 0.6),
                       width: 1.0,
                     ),
                     boxShadow: [
@@ -430,21 +161,27 @@ class _RoutineGlassPill extends StatelessWidget {
                           child: Text(
                             label,
                             maxLines: 1,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: OptivusColors.routineInkDark,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: isActive
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
+                              color: isActive
+                                  ? OptivusColors.routineAccent
+                                  : OptivusColors.routineInkDark,
                               letterSpacing: -0.2,
                               decoration: TextDecoration.none,
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      const Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        size: 18,
-                        color: OptivusColors.routineInkDark,
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.tune_rounded,
+                        size: 15,
+                        color: isActive
+                            ? OptivusColors.routineAccent
+                            : OptivusColors.routineInkDark,
                       ),
                     ],
                   ),

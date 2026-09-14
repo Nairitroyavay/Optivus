@@ -23,7 +23,8 @@ class RoutineCurrentTimeLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveMinute = currentMinute ??
+    final effectiveMinute =
+        currentMinute ??
         () {
           final now = DateTime.now();
           return now.hour * 60 + now.minute;
