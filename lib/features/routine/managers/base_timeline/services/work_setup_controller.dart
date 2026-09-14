@@ -33,6 +33,22 @@ enum WorkSetupStage {
   error,
 }
 
+enum WorkRemoveOutcomeStatus { removed, refreshPending, conflict, failed }
+
+@immutable
+class WorkRemoveOutcome {
+  final WorkRemoveOutcomeStatus status;
+  final String? message;
+
+  const WorkRemoveOutcome({required this.status, this.message});
+
+  bool get isSuccessful =>
+      status == WorkRemoveOutcomeStatus.removed ||
+      status == WorkRemoveOutcomeStatus.refreshPending;
+}
+
+enum WorkSetupErrorKind { load, upload, extraction, save, remove, concurrency }
+
 /// Computes the initial weekday tab to display for a list of work blocks.
 int computeInitialWorkWeekday(
   List<TimelineBlockDraft> blocks, {
@@ -92,6 +108,7 @@ class WorkSetupState {
   final bool isDirty;
   final bool isSaving;
   final String? errorMessage;
+  final WorkSetupErrorKind? errorKind;
   final String? frontBlockId;
   final int sessionGeneration;
   final bool hasRunStartupCleanup;
@@ -118,6 +135,7 @@ class WorkSetupState {
     this.isDirty = false,
     this.isSaving = false,
     this.errorMessage,
+    this.errorKind,
     this.frontBlockId,
     this.sessionGeneration = 0,
     this.hasRunStartupCleanup = false,
@@ -151,6 +169,8 @@ class WorkSetupState {
     bool? isSaving,
     String? errorMessage,
     bool clearErrorMessage = false,
+    WorkSetupErrorKind? errorKind,
+    bool clearErrorKind = false,
     String? frontBlockId,
     bool clearFrontBlockId = false,
     int? sessionGeneration,
@@ -195,6 +215,7 @@ class WorkSetupState {
       errorMessage: clearErrorMessage
           ? null
           : (errorMessage ?? this.errorMessage),
+      errorKind: clearErrorKind ? null : (errorKind ?? this.errorKind),
       frontBlockId: clearFrontBlockId
           ? null
           : (frontBlockId ?? this.frontBlockId),
@@ -294,6 +315,47 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
     );
   }
 
+  /// Retires any uncommitted candidate and working assets for this user session.
+  /// Canonical committed assets are safely preserved.
+  void retireUncommittedWorkAssets({required String uid}) {
+    final trimmedUid = uid.trim();
+    if (trimmedUid.isEmpty) return;
+    final candidateId = state.candidateAssetId;
+    final candidateKey = state.candidateR2Key;
+    final workingId = state.workingAssetId;
+    final workingKey = state.workingR2Key;
+    final committedId = state.baseCommittedAssetId;
+    final committedKey = state.baseCommittedR2Key;
+
+    final hasUncommittedCandidate =
+        (candidateId != null && candidateId != committedId) ||
+        (candidateKey != null && candidateKey != committedKey);
+    if (hasUncommittedCandidate) {
+      _retireUncommittedBestEffort(
+        uid: trimmedUid,
+        assetId: candidateId,
+        objectKey: candidateKey,
+      );
+    }
+
+    final hasUncommittedWorking =
+        (workingId != null && workingId != committedId) ||
+        (workingKey != null && workingKey != committedKey);
+    if (hasUncommittedWorking) {
+      _retireUncommittedBestEffort(
+        uid: trimmedUid,
+        assetId: workingId,
+        objectKey: workingKey,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    retireUncommittedWorkAssets(uid: _ownerUid);
+    super.dispose();
+  }
+
   /// Safe startup cleanup. NEVER runs while BaseTimelineSetup is loading (null).
   /// Strictly owner-scoped; passes purposes: {workSchedule} and protected asset ID/key.
   Future<void> performStartupCleanup(
@@ -368,9 +430,11 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       clearCandidateAssetId: true,
       clearCandidateR2Key: true,
       clearErrorMessage: true,
+      clearErrorKind: true,
       isConcurrencyConflict: false,
     );
-    if (candidateId != null && candidateId != state.baseCommittedAssetId) {
+    if ((candidateId != null && candidateId != state.baseCommittedAssetId) ||
+        (candidateKey != null && candidateKey != state.baseCommittedR2Key)) {
       _retireUncommittedBestEffort(
         uid: uid,
         assetId: candidateId,
@@ -385,6 +449,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
           ? WorkSetupStage.review
           : WorkSetupStage.currentSetup,
       clearErrorMessage: true,
+      clearErrorKind: true,
     );
   }
 
@@ -397,8 +462,10 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       clearCandidateAssetId: true,
       clearCandidateR2Key: true,
       clearErrorMessage: true,
+      clearErrorKind: true,
     );
-    if (candidateId != null && candidateId != state.baseCommittedAssetId) {
+    if ((candidateId != null && candidateId != state.baseCommittedAssetId) ||
+        (candidateKey != null && candidateKey != state.baseCommittedR2Key)) {
       _retireUncommittedBestEffort(
         uid: uid,
         assetId: candidateId,
@@ -419,7 +486,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
 
   /// Start manual setup: clears photo asset IDs (manual provenance), loads existing blocks if any.
   void startManualSetup(BaseTimelineSetup setup) {
-    _retireCandidate();
+    retireUncommittedWorkAssets(uid: _ownerUid);
     final normalizedDay = normalizeSelectedWorkDay(
       currentDay: state.selectedDay,
       blocks: setup.workBlocks,
@@ -440,6 +507,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       droppedExamples: const [],
       isDirty: false,
       clearErrorMessage: true,
+      clearErrorKind: true,
       clearFrontBlockId: true,
       isConcurrencyConflict: false,
     );
@@ -470,6 +538,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       droppedExamples: const [],
       isDirty: false,
       clearErrorMessage: true,
+      clearErrorKind: true,
       clearFrontBlockId: true,
       isConcurrencyConflict: false,
     );
@@ -509,6 +578,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       state = state.copyWith(
         stage: WorkSetupStage.error,
         errorMessage: WorkSetupErrorMapper.mapUploadError(uploadError),
+        errorKind: WorkSetupErrorKind.upload,
       );
       return;
     }
@@ -541,6 +611,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       candidateAssetId: asset.assetId,
       candidateR2Key: asset.r2Key,
       clearErrorMessage: true,
+      clearErrorKind: true,
     );
 
     await _runAiExtraction(
@@ -626,6 +697,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
         state = state.copyWith(
           stage: WorkSetupStage.error,
           errorMessage: WorkSetupErrorMapper.mapAiExtractionError(err),
+          errorKind: WorkSetupErrorKind.extraction,
         );
         return;
       }
@@ -685,6 +757,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
             selectedDay: normalizedDay,
             isDirty: true,
             clearErrorMessage: true,
+            clearErrorKind: true,
             clearFrontBlockId: true,
           );
           return;
@@ -699,6 +772,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
           null,
           warnings: result.warnings,
         ),
+        errorKind: WorkSetupErrorKind.extraction,
       );
     } catch (e) {
       if (!_isActiveOwner(uid)) {
@@ -724,6 +798,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
         state = state.copyWith(
           stage: WorkSetupStage.error,
           errorMessage: WorkSetupErrorMapper.mapAiExtractionError(e),
+          errorKind: WorkSetupErrorKind.extraction,
         );
       }
     }
@@ -751,10 +826,13 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       clearCandidateAssetId: true,
       clearCandidateR2Key: true,
       clearErrorMessage: true,
+      clearErrorKind: true,
     );
 
-    if (candidateAssetId != null &&
-        candidateAssetId != state.baseCommittedAssetId) {
+    if ((candidateAssetId != null &&
+            candidateAssetId != state.baseCommittedAssetId) ||
+        (candidateR2Key != null &&
+            candidateR2Key != state.baseCommittedR2Key)) {
       _retireUncommittedBestEffort(
         uid: uid,
         assetId: candidateAssetId,
@@ -783,6 +861,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       stage: WorkSetupStage.extracting,
       sessionGeneration: sessionGen,
       clearErrorMessage: true,
+      clearErrorKind: true,
     );
 
     await _runAiExtraction(
@@ -846,6 +925,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       state = state.copyWith(
         errorMessage:
             'Cannot save an empty work schedule. Use "Remove Work Setup" to remove it.',
+        errorKind: WorkSetupErrorKind.save,
       );
       return;
     }
@@ -855,6 +935,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       if (block.title.trim().isEmpty) {
         state = state.copyWith(
           errorMessage: 'Role or title is required for each work block.',
+          errorKind: WorkSetupErrorKind.save,
         );
         return;
       }
@@ -862,12 +943,14 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
         state = state.copyWith(
           errorMessage:
               'End time must be after start time for "${block.title}".',
+          errorKind: WorkSetupErrorKind.save,
         );
         return;
       }
       if (block.repeatDays.isEmpty) {
         state = state.copyWith(
           errorMessage: 'Select at least one day for "${block.title}".',
+          errorKind: WorkSetupErrorKind.save,
         );
         return;
       }
@@ -886,6 +969,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       state = state.copyWith(
         errorMessage:
             "We couldn't verify the latest Work setup. Try reloading it.",
+        errorKind: WorkSetupErrorKind.save,
       );
       return;
     }
@@ -893,6 +977,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
     state = state.copyWith(
       isSaving: true,
       clearErrorMessage: true,
+      clearErrorKind: true,
       isConcurrencyConflict: false,
     );
 
@@ -915,7 +1000,9 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       // Clean up previous committed asset if replaced
       final oldAssetId = baseCommittedAssetId ?? setup?.workLogicalAssetId;
       final oldObjectKey = baseCommittedR2Key ?? setup?.workLogicalAssetR2Key;
-      if (oldAssetId != null && oldAssetId != workingAssetId) {
+      if (oldAssetId != null &&
+          (oldAssetId != workingAssetId ||
+              (oldObjectKey != null && oldObjectKey != workingR2Key))) {
         unawaited(
           _lifecycleHelper
               .retireReplacedAsset(
@@ -950,6 +1037,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
         droppedCount: 0,
         droppedExamples: const [],
         clearErrorMessage: true,
+        clearErrorKind: true,
         clearFrontBlockId: true,
         routineRefreshPending: commitResult.routineRefreshPending,
         committedRevision: commitResult.revision,
@@ -975,17 +1063,30 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
         stage: WorkSetupStage.review,
         isSaving: false,
         errorMessage: WorkSetupErrorMapper.mapSaveError(e),
+        errorKind: isConflict
+            ? WorkSetupErrorKind.concurrency
+            : WorkSetupErrorKind.save,
         isConcurrencyConflict: isConflict,
       );
     }
   }
 
-  Future<void> removeSetup({
+  Future<WorkRemoveOutcome> removeSetup({
     required String uid,
     required BaseTimelineSetup setup,
   }) async {
-    if (state.isSaving) return;
-    if (!_isActiveOwner(uid)) return;
+    if (state.isSaving) {
+      return const WorkRemoveOutcome(
+        status: WorkRemoveOutcomeStatus.failed,
+        message: 'A save or remove operation is already in progress.',
+      );
+    }
+    if (!_isActiveOwner(uid)) {
+      return const WorkRemoveOutcome(
+        status: WorkRemoveOutcomeStatus.failed,
+        message: 'Active user changed. Cannot remove work setup.',
+      );
+    }
 
     final expectedRevision = state.editorBaseRevision ?? setup.revision;
     final oldAssetId = setup.workLogicalAssetId;
@@ -994,6 +1095,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
     state = state.copyWith(
       isSaving: true,
       clearErrorMessage: true,
+      clearErrorKind: true,
       isConcurrencyConflict: false,
     );
     try {
@@ -1010,7 +1112,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
         ),
       );
 
-      if (oldAssetId != null) {
+      if (oldAssetId != null && oldAssetId.isNotEmpty) {
         unawaited(
           _lifecycleHelper
               .retireReplacedAsset(
@@ -1024,7 +1126,12 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
         );
       }
 
-      if (!_isActiveOwner(uid)) return;
+      if (!_isActiveOwner(uid)) {
+        return const WorkRemoveOutcome(
+          status: WorkRemoveOutcomeStatus.failed,
+          message: 'Active user changed during removal.',
+        );
+      }
 
       state = state.copyWith(
         stage: WorkSetupStage.currentSetup,
@@ -1039,6 +1146,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
         droppedCount: 0,
         droppedExamples: const [],
         clearErrorMessage: true,
+        clearErrorKind: true,
         clearFrontBlockId: true,
         routineRefreshPending: commitResult.routineRefreshPending,
         committedRevision: commitResult.revision,
@@ -1053,16 +1161,39 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
         clearBaseCommittedR2Key: true,
         isConcurrencyConflict: false,
       );
+
+      if (commitResult.routineRefreshPending) {
+        return WorkRemoveOutcome(
+          status: WorkRemoveOutcomeStatus.refreshPending,
+          message: commitResult.routineRefreshMessage,
+        );
+      }
+      return const WorkRemoveOutcome(status: WorkRemoveOutcomeStatus.removed);
     } catch (e) {
-      if (!_isActiveOwner(uid)) return;
+      if (!_isActiveOwner(uid)) {
+        return const WorkRemoveOutcome(
+          status: WorkRemoveOutcomeStatus.failed,
+          message: 'Active user changed during removal.',
+        );
+      }
       final isConflict =
           e is BaseTimelineConcurrencyException ||
           e.toString().toLowerCase().contains('concurrency') ||
           e.toString().toLowerCase().contains('conflict');
+      final mappedError = WorkSetupErrorMapper.mapRemoveError(e);
       state = state.copyWith(
         isSaving: false,
-        errorMessage: WorkSetupErrorMapper.mapSaveError(e),
+        errorMessage: mappedError,
+        errorKind: isConflict
+            ? WorkSetupErrorKind.concurrency
+            : WorkSetupErrorKind.remove,
         isConcurrencyConflict: isConflict,
+      );
+      return WorkRemoveOutcome(
+        status: isConflict
+            ? WorkRemoveOutcomeStatus.conflict
+            : WorkRemoveOutcomeStatus.failed,
+        message: mappedError,
       );
     }
   }
@@ -1097,7 +1228,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
 
   /// Discards local conflict working blocks and reloads latest canonical setup.
   void reloadFromCanonical(BaseTimelineSetup setup) {
-    _retireCandidate();
+    retireUncommittedWorkAssets(uid: _ownerUid);
     final normalizedDay = normalizeSelectedWorkDay(
       currentDay: state.selectedDay,
       blocks: setup.workBlocks,
@@ -1121,14 +1252,31 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       droppedCount: 0,
       droppedExamples: const [],
       clearErrorMessage: true,
+      clearErrorKind: true,
       clearFrontBlockId: true,
       isConcurrencyConflict: false,
+    );
+  }
+
+  @visibleForTesting
+  void setWorkingAssetsForTesting({
+    String? workingAssetId,
+    String? workingR2Key,
+    String? candidateAssetId,
+    String? candidateR2Key,
+  }) {
+    state = state.copyWith(
+      workingAssetId: workingAssetId,
+      workingR2Key: workingR2Key,
+      candidateAssetId: candidateAssetId,
+      candidateR2Key: candidateR2Key,
     );
   }
 
   void clearError() {
     state = state.copyWith(
       clearErrorMessage: true,
+      clearErrorKind: true,
       isConcurrencyConflict: false,
     );
   }
@@ -1142,11 +1290,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
     required String uid,
   }) async {
     if (!_isActiveOwner(uid)) return;
-    final candidateAssetId = state.candidateAssetId;
-    final candidateR2Key = state.candidateR2Key;
-    final workingAssetId = state.workingAssetId;
-    final workingR2Key = state.workingR2Key;
-    final baseCommittedAssetId = state.baseCommittedAssetId;
+    retireUncommittedWorkAssets(uid: uid);
 
     state = state.copyWith(
       stage: WorkSetupStage.currentSetup,
@@ -1160,34 +1304,20 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       droppedCount: 0,
       droppedExamples: const [],
       clearErrorMessage: true,
+      clearErrorKind: true,
       clearFrontBlockId: true,
       clearEditorBaseRevision: true,
       clearBaseCommittedAssetId: true,
       clearBaseCommittedR2Key: true,
       isConcurrencyConflict: false,
     );
-
-    if (candidateAssetId != null && candidateAssetId != baseCommittedAssetId) {
-      _retireUncommittedBestEffort(
-        uid: uid,
-        assetId: candidateAssetId,
-        objectKey: candidateR2Key,
-      );
-    }
-
-    if (workingAssetId != null && workingAssetId != baseCommittedAssetId) {
-      _retireUncommittedBestEffort(
-        uid: uid,
-        assetId: workingAssetId,
-        objectKey: workingR2Key,
-      );
-    }
   }
 
   void _retireCandidate() {
     final candidateId = state.candidateAssetId;
     final candidateKey = state.candidateR2Key;
-    if (candidateId != null) {
+    if ((candidateId != null && candidateId != state.baseCommittedAssetId) ||
+        (candidateKey != null && candidateKey != state.baseCommittedR2Key)) {
       _retireUncommittedBestEffort(
         uid: _ownerUid,
         assetId: candidateId,

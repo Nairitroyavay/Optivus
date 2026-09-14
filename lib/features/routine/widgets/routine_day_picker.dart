@@ -6,7 +6,7 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_motion.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
-import 'package:optivus/features/routine/widgets/routine_glass_filter.dart';
+import 'package:optivus/features/routine/widgets/routine_glass_highlight_painter.dart';
 
 enum _PickerPhase { closed, opening, open, closing }
 

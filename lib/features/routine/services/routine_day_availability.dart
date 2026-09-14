@@ -80,6 +80,33 @@ class RoutineDayAvailability {
   String get freeTimeFormatted =>
       '${TimelineUtils.formatDuration(freeMinutes)} free';
 
+  /// Helper converting a domain routine item into a raw interval.
+  static RoutineTimeInterval _intervalFromItem(
+    RoutineItem item, {
+    bool isContinuation = false,
+  }) {
+    final int startMinute;
+    final int endMinute;
+
+    if (isContinuation) {
+      startMinute = 0;
+      endMinute = item.endMinute;
+    } else if (item.crossesMidnight ||
+        item.endsNextDay ||
+        item.endMinute <= item.startMinute) {
+      startMinute = item.startMinute;
+      endMinute = TimelineUtils.normalizedEndMinute(item);
+    } else {
+      startMinute = item.startMinute;
+      endMinute = item.endMinute;
+    }
+
+    return RoutineTimeInterval(
+      startMinute: startMinute,
+      endMinute: max(startMinute, endMinute),
+    );
+  }
+
   /// Computes availability from occurrence-aware [RoutineDayEntry] items.
   ///
   /// This is the authoritative engine entry point for the Routine tab,
@@ -89,35 +116,14 @@ class RoutineDayAvailability {
     int windowStartMinute = kRoutinePlanningWindowStartMinute,
     int windowEndMinute = kRoutinePlanningWindowEndMinute,
   }) {
-    final rawIntervals = <RoutineTimeInterval>[];
-
-    for (final entry in entries) {
-      final item = entry.item;
-      int startMinute;
-      int endMinute;
-
-      if (entry.kind == RoutineDayEntryKind.continuation) {
-        startMinute = 0;
-        endMinute = item.endMinute;
-      } else if (item.crossesMidnight ||
-          item.endsNextDay ||
-          item.endMinute <= item.startMinute) {
-        startMinute = item.startMinute;
-        endMinute = TimelineUtils.normalizedEndMinute(item);
-      } else {
-        startMinute = item.startMinute;
-        endMinute = item.endMinute;
-      }
-
-      final clippedStart = max(windowStartMinute, startMinute);
-      final clippedEnd = min(windowEndMinute, endMinute);
-
-      if (clippedEnd > clippedStart) {
-        rawIntervals.add(
-          RoutineTimeInterval(startMinute: clippedStart, endMinute: clippedEnd),
-        );
-      }
-    }
+    final rawIntervals = entries
+        .map(
+          (entry) => _intervalFromItem(
+            entry.item,
+            isContinuation: entry.kind == RoutineDayEntryKind.continuation,
+          ),
+        )
+        .toList(growable: false);
 
     return RoutineDayAvailability.computeFromIntervals(
       rawIntervals,
@@ -127,39 +133,18 @@ class RoutineDayAvailability {
   }
 
   /// Computes availability from [RoutineItem]s for backwards compatibility.
+  @Deprecated('Use computeFromEntries for occurrence-aware availability')
   factory RoutineDayAvailability.computeFromItems(
     List<RoutineItem> items, {
     int windowStartMinute = kRoutinePlanningWindowStartMinute,
     int windowEndMinute = kRoutinePlanningWindowEndMinute,
   }) {
-    final rawIntervals = <RoutineTimeInterval>[];
-
-    for (final item in items) {
-      int startMinute;
-      int endMinute;
-
-      if (item.isContinuation) {
-        startMinute = 0;
-        endMinute = item.endMinute;
-      } else if (item.crossesMidnight ||
-          item.endsNextDay ||
-          item.endMinute <= item.startMinute) {
-        startMinute = item.startMinute;
-        endMinute = TimelineUtils.normalizedEndMinute(item);
-      } else {
-        startMinute = item.startMinute;
-        endMinute = item.endMinute;
-      }
-
-      final clippedStart = max(windowStartMinute, startMinute);
-      final clippedEnd = min(windowEndMinute, endMinute);
-
-      if (clippedEnd > clippedStart) {
-        rawIntervals.add(
-          RoutineTimeInterval(startMinute: clippedStart, endMinute: clippedEnd),
-        );
-      }
-    }
+    final rawIntervals = items
+        .map(
+          (item) =>
+              _intervalFromItem(item, isContinuation: item.isContinuation),
+        )
+        .toList(growable: false);
 
     return RoutineDayAvailability.computeFromIntervals(
       rawIntervals,
@@ -168,20 +153,42 @@ class RoutineDayAvailability {
     );
   }
 
-  /// Pure interval merging and complementary gap computation.
+  /// Pure interval merging, window clipping, and complementary gap computation.
+  ///
+  /// Guarantees that:
+  /// 1. Intervals outside [windowStartMinute, windowEndMinute] are safely clipped.
+  /// 2. Overlapping and touching intervals are unified.
+  /// 3. Invariant [occupiedMinutes] + [freeMinutes] == window duration always holds.
   factory RoutineDayAvailability.computeFromIntervals(
     List<RoutineTimeInterval> rawIntervals, {
     int windowStartMinute = kRoutinePlanningWindowStartMinute,
     int windowEndMinute = kRoutinePlanningWindowEndMinute,
   }) {
-    // 1. Sort intervals by startMinute, then endMinute
-    final sorted = List<RoutineTimeInterval>.from(rawIntervals)
+    assert(
+      windowStartMinute < windowEndMinute,
+      'windowStartMinute ($windowStartMinute) must be < windowEndMinute ($windowEndMinute)',
+    );
+
+    // 1. Clip raw intervals to the planning window and drop zero/inverted intervals
+    final clippedIntervals = <RoutineTimeInterval>[];
+    for (final raw in rawIntervals) {
+      final clippedStart = max(windowStartMinute, raw.startMinute);
+      final clippedEnd = min(windowEndMinute, raw.endMinute);
+      if (clippedEnd > clippedStart) {
+        clippedIntervals.add(
+          RoutineTimeInterval(startMinute: clippedStart, endMinute: clippedEnd),
+        );
+      }
+    }
+
+    // 2. Sort intervals by startMinute, then endMinute
+    final sorted = List<RoutineTimeInterval>.from(clippedIntervals)
       ..sort((a, b) {
         final cmp = a.startMinute.compareTo(b.startMinute);
         return cmp != 0 ? cmp : a.endMinute.compareTo(b.endMinute);
       });
 
-    // 2. Merge overlapping and touching intervals
+    // 3. Merge overlapping and touching intervals
     final mergedOccupied = <RoutineTimeInterval>[];
     for (final interval in sorted) {
       if (mergedOccupied.isEmpty) {
@@ -199,7 +206,7 @@ class RoutineDayAvailability {
       }
     }
 
-    // 3. Calculate complementary free intervals
+    // 4. Calculate complementary free intervals
     final freeIntervals = <RoutineTimeInterval>[];
     var cursor = windowStartMinute;
     for (final occ in mergedOccupied) {
@@ -216,7 +223,7 @@ class RoutineDayAvailability {
       );
     }
 
-    // 4. Sum up minutes
+    // 5. Sum up minutes
     final occupiedMinutes = mergedOccupied.fold<int>(
       0,
       (sum, interval) => sum + interval.durationMinutes,
@@ -224,6 +231,12 @@ class RoutineDayAvailability {
     final freeMinutes = freeIntervals.fold<int>(
       0,
       (sum, interval) => sum + interval.durationMinutes,
+    );
+
+    assert(
+      occupiedMinutes + freeMinutes == windowEndMinute - windowStartMinute,
+      'Invariant failed: occupiedMinutes ($occupiedMinutes) + freeMinutes ($freeMinutes) '
+      '!= window range (${windowEndMinute - windowStartMinute})',
     );
 
     return RoutineDayAvailability(

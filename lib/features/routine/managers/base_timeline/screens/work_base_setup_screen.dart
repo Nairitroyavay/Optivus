@@ -287,15 +287,32 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
     if (confirmed != true || !mounted) return;
 
     final controller = ref.read(workSetupControllerProvider.notifier);
-    await controller.removeSetup(uid: uid, setup: setup);
+    final outcome = await controller.removeSetup(uid: uid, setup: setup);
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Work setup removed.'),
-          duration: Duration(seconds: 3),
-        ),
-      );
+      if (outcome.isSuccessful) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              outcome.status == WorkRemoveOutcomeStatus.refreshPending
+                  ? 'Work setup removed. Routine update is pending.'
+                  : 'Work setup removed.',
+            ),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              outcome.message ??
+                  'Failed to remove work setup. Please try again.',
+            ),
+            backgroundColor: OptivusColors.danger,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     }
   }
 
@@ -841,6 +858,29 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
   ) {
     final controller = ref.read(workSetupControllerProvider.notifier);
 
+    final String errorTitle;
+    switch (state.errorKind) {
+      case WorkSetupErrorKind.upload:
+        errorTitle = 'Photo Upload Issue';
+        break;
+      case WorkSetupErrorKind.extraction:
+        errorTitle = 'Schedule Analysis Issue';
+        break;
+      case WorkSetupErrorKind.concurrency:
+        errorTitle = 'Schedule Conflict';
+        break;
+      case WorkSetupErrorKind.save:
+        errorTitle = 'Failed to Save Work Schedule';
+        break;
+      case WorkSetupErrorKind.remove:
+        errorTitle = 'Failed to Remove Work Setup';
+        break;
+      case WorkSetupErrorKind.load:
+      case null:
+        errorTitle = 'Work Schedule Processing Issue';
+        break;
+    }
+
     return SafeArea(
       child: Center(
         child: SingleChildScrollView(
@@ -873,10 +913,10 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Work Schedule Processing Issue',
+                  Text(
+                    errorTitle,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w800,
                       color: OptivusColors.textPrimary,
@@ -1095,6 +1135,7 @@ class _WorkSaveSuccessViewState extends State<_WorkSaveSuccessView>
   late final AnimationController _controller;
   late final Animation<double> _scaleAnimation;
   late final Animation<double> _fadeAnimation;
+  bool _didCompleteImmediately = false;
 
   @override
   void initState() {
@@ -1123,6 +1164,21 @@ class _WorkSaveSuccessViewState extends State<_WorkSaveSuccessView>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (disableAnimations && !_didCompleteImmediately) {
+      _didCompleteImmediately = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          widget.onComplete();
+        }
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     super.dispose();
@@ -1130,71 +1186,74 @@ class _WorkSaveSuccessViewState extends State<_WorkSaveSuccessView>
 
   @override
   Widget build(BuildContext context) {
+    final disableAnimations =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
+    final content = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(OptivusRadii.surfaceLarge),
+        border: Border.all(
+          color: OptivusColors.warning.withValues(alpha: 0.35),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: OptivusColors.warning.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: OptivusColors.warning.withValues(alpha: 0.5),
+                width: 2,
+              ),
+            ),
+            child: const Icon(
+              Icons.check_rounded,
+              color: OptivusColors.warning,
+              size: 32,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Work schedule saved!',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: OptivusColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Your Base Timeline has been updated.',
+            style: TextStyle(fontSize: 13, color: OptivusColors.textSecondary),
+          ),
+        ],
+      ),
+    );
+
+    if (disableAnimations) {
+      return SafeArea(child: Center(child: content));
+    }
+
     return SafeArea(
       child: Center(
         child: FadeTransition(
           opacity: _fadeAnimation,
-          child: ScaleTransition(
-            scale: _scaleAnimation,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
-              margin: const EdgeInsets.symmetric(horizontal: 24),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(OptivusRadii.surfaceLarge),
-                border: Border.all(
-                  color: OptivusColors.warning.withValues(alpha: 0.35),
-                  width: 1.5,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: OptivusColors.warning.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: OptivusColors.warning.withValues(alpha: 0.5),
-                        width: 2,
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.check_rounded,
-                      color: OptivusColors.warning,
-                      size: 32,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Work schedule saved!',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: OptivusColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Your Base Timeline has been updated.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: OptivusColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          child: ScaleTransition(scale: _scaleAnimation, child: content),
         ),
       ),
     );

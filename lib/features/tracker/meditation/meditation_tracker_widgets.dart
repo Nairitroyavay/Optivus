@@ -3,7 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/features/routine/widgets/routine_glass_filter.dart'
+import 'package:optivus/features/routine/widgets/routine_glass_highlight_painter.dart'
     show GlassHighlightPainter;
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 

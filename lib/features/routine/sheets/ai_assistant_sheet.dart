@@ -150,7 +150,6 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
   List<_RoutineSuggestion> _buildSuggestions() {
     final day = ref.watch(routineNotifierProvider).selectedDay;
     final entries = ref.watch(selectedDayRoutineEntriesProvider);
-    final items = entries.map((entry) => entry.item).toList(growable: false);
     final controller = ref.read(routineNotifierProvider.notifier);
     final suggestions = <_RoutineSuggestion>[];
 
@@ -182,8 +181,10 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
       );
     }
 
-    final freeGap = calculateLargestFreeGap(items);
-    if (freeGap.duration >= 15) {
+    final availability = RoutineDayAvailability.computeFromEntries(entries);
+    final largest = availability.largestFreeInterval;
+    if (largest != null && largest.durationMinutes >= 15) {
+      final freeGap = FreeGap(largest.startMinute, largest.endMinute);
       suggestions.add(
         _RoutineSuggestion(
           id: 'fill-${freeGap.start}-${freeGap.end}',
@@ -262,8 +263,19 @@ class FreeGap {
 }
 
 @visibleForTesting
-FreeGap calculateLargestFreeGap(List<RoutineItem> items) {
-  final availability = RoutineDayAvailability.computeFromItems(items);
+FreeGap calculateLargestFreeGap(dynamic itemsOrEntries) {
+  final RoutineDayAvailability availability;
+  if (itemsOrEntries is RoutineDayAvailability) {
+    availability = itemsOrEntries;
+  } else if (itemsOrEntries is List<RoutineDayEntry>) {
+    availability = RoutineDayAvailability.computeFromEntries(itemsOrEntries);
+  } else if (itemsOrEntries is List<RoutineItem>) {
+    availability = RoutineDayAvailability.computeFromItems(itemsOrEntries);
+  } else {
+    throw ArgumentError(
+      'calculateLargestFreeGap expects List<RoutineDayEntry>, List<RoutineItem>, or RoutineDayAvailability',
+    );
+  }
   final largest = availability.largestFreeInterval;
   if (largest == null || largest.durationMinutes <= 0) {
     return const FreeGap(18 * 60, 18 * 60);

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
-import 'package:optivus/features/routine/widgets/routine_glass_filter.dart'; // For GlassHighlightPainter
+import 'package:optivus/features/routine/widgets/routine_glass_highlight_painter.dart';
 import 'package:optivus/features/routine/widgets/routine_day_picker.dart';
 import 'package:optivus/features/routine/sheets/week_planner_sheet.dart';
 import 'package:optivus/features/routine/sheets/routine_filter_sheet.dart';
@@ -17,21 +17,10 @@ class RoutineTitleFilterRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(
-      routineNotifierProvider.select(
-        (s) => (
-          primary: s.selectedPrimaryFilter,
-          status: s.selectedStatusFilter,
-          category: s.selectedCategoryFilter,
-        ),
-      ),
+    final filterSelection = ref.watch(
+      routineNotifierProvider.select((s) => s.filterSelection),
     );
-
-    int activeCount = 0;
-    if (state.primary != 'all') activeCount++;
-    if (state.status != 'any') activeCount++;
-    if (state.category != 'all') activeCount++;
-
+    final activeCount = filterSelection.activeCount;
     final pillLabel = activeCount == 0 ? 'Filter' : 'Filter • $activeCount';
 
     return Padding(

@@ -516,5 +516,118 @@ void main() {
         expect(freeGap.duration, 780);
       },
     );
+
+    test(
+      'O. Interval completely before window produces 0 occupied minutes',
+      () {
+        final entry = RoutineDayEntry(
+          item: _item(
+            id: 'early',
+            title: 'Night Sleep',
+            startMinute: 60, // 01:00
+            endMinute: 240, // 04:00
+          ),
+          instanceId: 's:early:2026-09-14',
+          templateId: 'early',
+          occurrenceDateKey: '2026-09-14',
+          displayDateKey: '2026-09-14',
+          kind: RoutineDayEntryKind.scheduled,
+        );
+
+        final availability = RoutineDayAvailability.computeFromEntries([entry]);
+        expect(availability.occupiedMinutes, 0);
+        expect(availability.freeMinutes, 1020);
+        expect(availability.occupiedIntervals, isEmpty);
+        expect(availability.occupiedMinutes + availability.freeMinutes, 1020);
+      },
+    );
+
+    test('P. Interval completely after window produces 0 occupied minutes', () {
+      final entry = RoutineDayEntry(
+        item: _item(
+          id: 'late',
+          title: 'Late Night reading',
+          startMinute: 1390, // 23:10
+          endMinute: 1430, // 23:50
+        ),
+        instanceId: 's:late:2026-09-14',
+        templateId: 'late',
+        occurrenceDateKey: '2026-09-14',
+        displayDateKey: '2026-09-14',
+        kind: RoutineDayEntryKind.scheduled,
+      );
+
+      final availability = RoutineDayAvailability.computeFromEntries([entry]);
+      expect(availability.occupiedMinutes, 0);
+      expect(availability.freeMinutes, 1020);
+      expect(availability.occupiedIntervals, isEmpty);
+      expect(availability.occupiedMinutes + availability.freeMinutes, 1020);
+    });
+
+    test('Q. Interval straddling entire window clips to 1020m occupied', () {
+      final entry = RoutineDayEntry(
+        item: _item(
+          id: 'all_day',
+          title: 'Full Day Conference',
+          startMinute: 240, // 04:00
+          endMinute: 1440, // 24:00
+        ),
+        instanceId: 's:all_day:2026-09-14',
+        templateId: 'all_day',
+        occurrenceDateKey: '2026-09-14',
+        displayDateKey: '2026-09-14',
+        kind: RoutineDayEntryKind.scheduled,
+      );
+
+      final availability = RoutineDayAvailability.computeFromEntries([entry]);
+      expect(availability.occupiedMinutes, 1020);
+      expect(availability.freeMinutes, 0);
+      expect(availability.occupiedIntervals, [
+        const RoutineTimeInterval(startMinute: 360, endMinute: 1380),
+      ]);
+      expect(availability.freeIntervals, isEmpty);
+      expect(availability.largestFreeInterval, isNull);
+      expect(availability.occupiedMinutes + availability.freeMinutes, 1020);
+    });
+
+    test(
+      'R. Invariant occupiedMinutes + freeMinutes == windowSize holds strictly',
+      () {
+        // Test across arbitrary intervals
+        final intervals = [
+          const RoutineTimeInterval(startMinute: 200, endMinute: 500),
+          const RoutineTimeInterval(startMinute: 550, endMinute: 700),
+          const RoutineTimeInterval(startMinute: 650, endMinute: 900),
+          const RoutineTimeInterval(startMinute: 1200, endMinute: 1400),
+        ];
+        final availability = RoutineDayAvailability.computeFromIntervals(
+          intervals,
+        );
+
+        expect(
+          availability.occupiedMinutes + availability.freeMinutes,
+          availability.windowEndMinute - availability.windowStartMinute,
+        );
+      },
+    );
+
+    test('S. Custom window validates windowStartMinute < windowEndMinute', () {
+      expect(
+        () => RoutineDayAvailability.computeFromIntervals(
+          [],
+          windowStartMinute: 600,
+          windowEndMinute: 500,
+        ),
+        throwsAssertionError,
+      );
+      expect(
+        () => RoutineDayAvailability.computeFromIntervals(
+          [],
+          windowStartMinute: 600,
+          windowEndMinute: 600,
+        ),
+        throwsAssertionError,
+      );
+    });
   });
 }

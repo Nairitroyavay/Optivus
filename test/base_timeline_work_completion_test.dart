@@ -3,14 +3,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:optivus/features/onboarding/timeline/models/timeline_entry.dart';
+import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
+import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
+import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/work_current_setup_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/work_review_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/work_source_selection_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/work_base_setup_screen.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_upload_lifecycle_helper.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/work_setup_controller.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/work_timeline_adapter.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
-import 'package:optivus/features/routine/managers/base_timeline/widgets/work_detail_sheet.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/work_timeline_card.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -129,6 +136,29 @@ class _CustomResultAiController extends RoutineImportAiController {
     RoutineImportReviewDraft review,
   ) async {
     return resultToReturn;
+  }
+}
+
+class _FailingRemoveTxRepo extends FakeRoutineTransactionRepository {
+  final Object errorToThrow;
+
+  _FailingRemoveTxRepo({
+    super.routineRepository,
+    super.setupRepository,
+    this.errorToThrow = const FormatException('Simulated repository failure'),
+  });
+
+  @override
+  Future<BaseTimelineSectionCommitResult> replaceBaseTimelineSection({
+    required String uid,
+    required BaseTimelineSection section,
+    required int expectedRevision,
+    required List<RoutineItem> newRoutineItems,
+    List<String> additionalDeleteIds = const [],
+    required BaseTimelineSetup Function(BaseTimelineSetup liveSetup)
+    buildUpdatedSetup,
+  }) async {
+    throw errorToThrow;
   }
 }
 
@@ -602,7 +632,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Error message is displayed in error stage
-        expect(find.text('Work Schedule Processing Issue'), findsOneWidget);
+        expect(find.text('Schedule Analysis Issue'), findsOneWidget);
         expect(
           find.text('Image was too blurry to read work shifts.'),
           findsOneWidget,
@@ -626,7 +656,7 @@ void main() {
     );
 
     testWidgets(
-      'WorkDetailSheet opens when tapping a work card in current setup',
+      'Front card in current setup shows all details inline and does not open sheet',
       (tester) async {
         const block = TimelineBlockDraft(
           id: 'work-detail-1',
@@ -688,34 +718,27 @@ void main() {
 
         await tester.pumpAndSettle();
 
-        // Find the card and tap it
+        // Details are displayed directly on the front card inline
         expect(find.text('Project Deep Work'), findsOneWidget);
+        expect(find.text('HQ Floor 4'), findsOneWidget);
+        expect(find.text('Sprint 88'), findsOneWidget);
+        expect(find.text('Bring sprint checklist'), findsOneWidget);
+
+        // Tapping does NOT open any modal sheet (no bottom sheet / dialog opened)
         await tester.tap(find.text('Project Deep Work'));
         await tester.pumpAndSettle();
+        expect(find.byType(BottomSheet), findsNothing);
 
-        // WorkDetailSheet is displayed
-        expect(find.byType(WorkDetailSheet), findsOneWidget);
-        expect(
-          find.descendant(
-            of: find.byType(WorkDetailSheet),
-            matching: find.text('HQ Floor 4'),
-          ),
-          findsOneWidget,
+        // Semantics verification: front read-only card has button: false
+        final semanticsWidget = tester.widget<Semantics>(
+          find
+              .descendant(
+                of: find.byType(WorkTimelineCard),
+                matching: find.byType(Semantics),
+              )
+              .first,
         );
-        expect(
-          find.descendant(
-            of: find.byType(WorkDetailSheet),
-            matching: find.text('Sprint 88'),
-          ),
-          findsOneWidget,
-        );
-        expect(
-          find.descendant(
-            of: find.byType(WorkDetailSheet),
-            matching: find.text('Bring sprint checklist'),
-          ),
-          findsOneWidget,
-        );
+        expect(semanticsWidget.properties.button, isFalse);
       },
     );
 
@@ -950,7 +973,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Tap Edit current work schedule
-        await tester.tap(find.text('Set up manually'));
+        await tester.tap(find.text('Edit current work schedule'));
         await tester.pumpAndSettle();
 
         expect(find.byType(WorkReviewView), findsOneWidget);
@@ -982,6 +1005,767 @@ void main() {
         // Block is now deleted from working blocks!
         expect(find.text('No work blocks scheduled'), findsOneWidget);
         expect(find.text('0 blocks scheduled'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Overlapping work cards expose back card with bring-to-front action and semantics',
+      (tester) async {
+        const blockA = TimelineBlockDraft(
+          id: 'work-overlap-a',
+          section: 'work',
+          title: 'Planning Session',
+          startMinute: 9 * 60,
+          endMinute: 12 * 60,
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+        const blockB = TimelineBlockDraft(
+          id: 'work-overlap-b',
+          section: 'work',
+          title: 'Technical Sync',
+          startMinute: 10 * 60,
+          endMinute: 13 * 60,
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        final setup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          workBlocks: const [blockA, blockB],
+        );
+
+        final fakeOnboardingRepo = FakeOnboardingRepository();
+        final fakeSetupRepo = FakeBaseTimelineSetupRepository(
+          onboardingRepo: fakeOnboardingRepo,
+        );
+        await fakeSetupRepo.saveSetup(uid, setup);
+        final fakeRoutineRepo = FakeRoutineRepository();
+        final fakeTxRepo = FakeRoutineTransactionRepository(
+          routineRepository: fakeRoutineRepo,
+          setupRepository: fakeSetupRepo,
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              userProfileProvider.overrideWith(
+                (ref) => UserProfileNotifier()
+                  ..loadSeedData(
+                    UserProfile(
+                      uid: uid,
+                      email: 'work@optivus.local',
+                      displayName: 'Work Test User',
+                    ),
+                  ),
+              ),
+              baseTimelineSetupRepositoryProvider.overrideWithValue(
+                fakeSetupRepo,
+              ),
+              routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
+              routineTransactionRepositoryProvider.overrideWithValue(
+                fakeTxRepo,
+              ),
+            ],
+            child: MaterialApp(
+              theme: ThemeData.dark(),
+              home: WorkBaseSetupScreen(onBack: () {}),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        // Both cards should be rendered
+        expect(find.byType(WorkTimelineCard), findsNWidgets(2));
+
+        // Find the back card semantics which has 'Tap to bring to front.'
+        final backCardSemantics = find.byWidgetPredicate(
+          (w) =>
+              w is Semantics &&
+              w.properties.button == true &&
+              (w.properties.label?.contains('Tap to bring to front.') ?? false),
+        );
+        expect(backCardSemantics, findsOneWidget);
+
+        // Find the front card semantics which has button: false
+        final frontCardSemantics = find.byWidgetPredicate(
+          (w) =>
+              w is Semantics &&
+              w.properties.button == false &&
+              !(w.properties.label?.contains('Tap to bring to front.') ?? true),
+        );
+        expect(frontCardSemantics, findsOneWidget);
+
+        // Tap the back card to bring it to front
+        await tester.tap(backCardSemantics, warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        // Both semantics are still present (the swapped card is now back)
+        expect(backCardSemantics, findsOneWidget);
+        expect(frontCardSemantics, findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Remove Work Setup failure presents error SnackBar and preserves existing setup',
+      (tester) async {
+        const block = TimelineBlockDraft(
+          id: 'work-remove-fail-1',
+          section: 'work',
+          title: 'Mission Critical Operations',
+          startMinute: 9 * 60,
+          endMinute: 17 * 60,
+          repeatDays: [1, 2, 3, 4, 5],
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        final setup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          workBlocks: const [block],
+        );
+
+        final fakeOnboardingRepo = FakeOnboardingRepository();
+        final fakeSetupRepo = FakeBaseTimelineSetupRepository(
+          onboardingRepo: fakeOnboardingRepo,
+        );
+        await fakeSetupRepo.saveSetup(uid, setup);
+        final fakeRoutineRepo = FakeRoutineRepository();
+        final failingTxRepo = _FailingRemoveTxRepo(
+          routineRepository: fakeRoutineRepo,
+          setupRepository: fakeSetupRepo,
+          errorToThrow: const FormatException('Network failure during removal'),
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              userProfileProvider.overrideWith(
+                (ref) => UserProfileNotifier()
+                  ..loadSeedData(
+                    UserProfile(
+                      uid: uid,
+                      email: 'work@optivus.local',
+                      displayName: 'Work Test User',
+                    ),
+                  ),
+              ),
+              baseTimelineSetupRepositoryProvider.overrideWithValue(
+                fakeSetupRepo,
+              ),
+              routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
+              routineTransactionRepositoryProvider.overrideWithValue(
+                failingTxRepo,
+              ),
+            ],
+            child: MaterialApp(
+              theme: ThemeData.dark(),
+              home: WorkBaseSetupScreen(onBack: () {}),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        // Tap menu and select Remove Work Setup
+        await tester.tap(
+          find.byKey(const Key('base-timeline-header-menu-button')),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Remove Work Setup'));
+        await tester.pumpAndSettle();
+
+        // Confirm dialog
+        expect(find.text('Remove Work Setup?'), findsOneWidget);
+        await tester.tap(find.text('Remove'));
+        await tester.pumpAndSettle();
+
+        // Error SnackBar is shown with the failure message
+        expect(
+          find.textContaining('Failed to remove work setup'),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Your current setup is still active'),
+          findsOneWidget,
+        );
+
+        // Success SnackBar is NOT shown
+        expect(find.text('Work setup removed successfully.'), findsNothing);
+        expect(
+          find.text('Work setup removed, refreshing live state...'),
+          findsNothing,
+        );
+
+        // Setup in repo was NOT deleted
+        final remainingSetup = await fakeSetupRepo.fetchSetup(uid);
+        expect(remainingSetup.workBlocks, isNotEmpty);
+      },
+    );
+
+    test(
+      'reloadFromCanonical cleans uncommitted working assets without deleting canonical assets',
+      () async {
+        final setup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          workLogicalAssetId: 'canonical-work-asset-111',
+          workLogicalAssetR2Key: 'users/$uid/work/canonical.jpg',
+          workBlocks: const [
+            TimelineBlockDraft(
+              id: 'work-block-1',
+              section: 'work',
+              title: 'Canonical Job',
+              startMinute: 9 * 60,
+              endMinute: 17 * 60,
+              repeatDays: [1, 2, 3, 4, 5],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+          ],
+        );
+
+        final fakeOnboardingRepo = FakeOnboardingRepository();
+        final fakeSetupRepo = FakeBaseTimelineSetupRepository(
+          onboardingRepo: fakeOnboardingRepo,
+        );
+        await fakeSetupRepo.saveSetup(uid, setup);
+        final fakeRoutineRepo = FakeRoutineRepository();
+        final fakeTxRepo = FakeRoutineTransactionRepository(
+          routineRepository: fakeRoutineRepo,
+          setupRepository: fakeSetupRepo,
+        );
+        final trackingAssetRepo = _TrackingAssetRepo();
+        final trackingR2 = _TrackingR2Client();
+        final stubAuth = _StubAuthRepo();
+        final lifecycleHelper = BaseTimelineUploadLifecycleHelper(
+          assetRepository: trackingAssetRepo,
+          r2UploadClient: trackingR2,
+          authRepository: stubAuth,
+        );
+
+        final container = ProviderContainer(
+          overrides: [
+            userProfileProvider.overrideWith(
+              (ref) => UserProfileNotifier()
+                ..loadSeedData(
+                  UserProfile(
+                    uid: uid,
+                    email: 'work@optivus.local',
+                    displayName: 'Work Test User',
+                  ),
+                ),
+            ),
+            baseTimelineSetupRepositoryProvider.overrideWithValue(
+              fakeSetupRepo,
+            ),
+            routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
+            routineTransactionRepositoryProvider.overrideWithValue(fakeTxRepo),
+            baseTimelineUploadLifecycleHelperProvider.overrideWithValue(
+              lifecycleHelper,
+            ),
+            uploadedAssetRepositoryProvider.overrideWithValue(
+              trackingAssetRepo,
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final controller = container.read(workSetupControllerProvider.notifier);
+
+        // Simulate an uncommitted working asset set via draft update
+        controller.setWorkingAssetsForTesting(
+          workingAssetId: 'uncommitted-working-asset-999',
+          workingR2Key: 'users/$uid/work/uncommitted-working.jpg',
+        );
+
+        // Now reload from canonical
+        controller.reloadFromCanonical(setup);
+        await pumpEventQueue(times: 20);
+
+        // The uncommitted working assets were retired
+        expect(
+          trackingAssetRepo.deletedAssetIds,
+          contains('uncommitted-working-asset-999'),
+        );
+        expect(
+          trackingR2.deletedKeys,
+          contains('users/$uid/work/uncommitted-working.jpg'),
+        );
+
+        // Canonical assets were NOT deleted
+        expect(
+          trackingAssetRepo.deletedAssetIds,
+          isNot(contains('canonical-work-asset-111')),
+        );
+        expect(
+          trackingR2.deletedKeys,
+          isNot(contains('users/$uid/work/canonical.jpg')),
+        );
+      },
+    );
+
+    testWidgets(
+      'WorkSourceSelectionView displays correct contextual copy for photo, manual configured, and unconfigured setups',
+      (tester) async {
+        // 1. Configured with photo
+        final photoSetup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          workLogicalAssetR2Key: 'users/$uid/work/schedule.jpg',
+          workBlocks: const [
+            TimelineBlockDraft(
+              id: 'b1',
+              section: 'work',
+              title: 'Photo Shift',
+              startMinute: 9 * 60,
+              endMinute: 17 * 60,
+              repeatDays: [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+          ],
+        );
+
+        final trackingAssetRepo = _TrackingAssetRepo();
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              uploadedAssetRepositoryProvider.overrideWithValue(
+                trackingAssetRepo,
+              ),
+            ],
+            child: MaterialApp(
+              theme: ThemeData.dark(),
+              home: Scaffold(
+                body: WorkSourceSelectionView(
+                  setup: photoSetup,
+                  onCancel: () {},
+                  onPickPhoto: (_) {},
+                  onManualSetup: () {},
+                  onEditCurrent: () {},
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Edit current work schedule'), findsOneWidget);
+        expect(
+          find.text('Keep schedule photo and adjust blocks'),
+          findsOneWidget,
+        );
+
+        // 2. Configured manual (no photo)
+        final manualSetup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          workBlocks: const [
+            TimelineBlockDraft(
+              id: 'b2',
+              section: 'work',
+              title: 'Manual Shift',
+              startMinute: 9 * 60,
+              endMinute: 17 * 60,
+              repeatDays: [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+          ],
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              uploadedAssetRepositoryProvider.overrideWithValue(
+                trackingAssetRepo,
+              ),
+            ],
+            child: MaterialApp(
+              theme: ThemeData.dark(),
+              home: Scaffold(
+                body: WorkSourceSelectionView(
+                  setup: manualSetup,
+                  onCancel: () {},
+                  onPickPhoto: (_) {},
+                  onManualSetup: () {},
+                  onEditCurrent: () {},
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Edit current work schedule'), findsOneWidget);
+        expect(
+          find.text('Keep your current blocks and adjust them manually'),
+          findsOneWidget,
+        );
+
+        // 3. Unconfigured
+        final unconfiguredSetup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          workBlocks: const [],
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              uploadedAssetRepositoryProvider.overrideWithValue(
+                trackingAssetRepo,
+              ),
+            ],
+            child: MaterialApp(
+              theme: ThemeData.dark(),
+              home: Scaffold(
+                body: WorkSourceSelectionView(
+                  setup: unconfiguredSetup,
+                  onCancel: () {},
+                  onPickPhoto: (_) {},
+                  onManualSetup: () {},
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Set up manually'), findsOneWidget);
+        expect(find.text('Add your work blocks day by day'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'WorkReviewView displays photo preview and "Change photo" when workingAssetId exists, or "Add photo" when none',
+      (tester) async {
+        final trackingAssetRepo = _TrackingAssetRepo();
+
+        // 1. With workingAssetId
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              uploadedAssetRepositoryProvider.overrideWithValue(
+                trackingAssetRepo,
+              ),
+            ],
+            child: MaterialApp(
+              theme: ThemeData.dark(),
+              home: Scaffold(
+                body: WorkReviewView(
+                  workingBlocks: const [
+                    TimelineBlockDraft(
+                      id: 'rev-1',
+                      section: 'work',
+                      title: 'Office',
+                      startMinute: 9 * 60,
+                      endMinute: 17 * 60,
+                      repeatDays: [1],
+                      blockType: TimelineBlockDraft.hardBlockKey,
+                    ),
+                  ],
+                  workingAssetId: 'working-asset-abc-123',
+                  workingR2Key: null,
+                  workingLocalPreviewPath: null,
+                  selectedDay: 1,
+                  onDayChanged: (_) {},
+                  droppedCount: 0,
+                  droppedExamples: const [],
+                  errorMessage: null,
+                  onClearError: () {},
+                  isSaving: false,
+                  onCancel: () {},
+                  onScanAgain: () {},
+                  onAddBlock: () {},
+                  onEditBlock: (_) {},
+                  onSave: () {},
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(BaseTimelinePhotoPreviewCard), findsOneWidget);
+        expect(find.text('Change photo'), findsOneWidget);
+        expect(find.byIcon(Icons.photo_library_outlined), findsOneWidget);
+
+        // 2. Without any working source
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              uploadedAssetRepositoryProvider.overrideWithValue(
+                trackingAssetRepo,
+              ),
+            ],
+            child: MaterialApp(
+              theme: ThemeData.dark(),
+              home: Scaffold(
+                body: WorkReviewView(
+                  workingBlocks: const [
+                    TimelineBlockDraft(
+                      id: 'rev-2',
+                      section: 'work',
+                      title: 'Office',
+                      startMinute: 9 * 60,
+                      endMinute: 17 * 60,
+                      repeatDays: [1],
+                      blockType: TimelineBlockDraft.hardBlockKey,
+                    ),
+                  ],
+                  workingAssetId: null,
+                  workingR2Key: null,
+                  workingLocalPreviewPath: null,
+                  selectedDay: 1,
+                  onDayChanged: (_) {},
+                  droppedCount: 0,
+                  droppedExamples: const [],
+                  errorMessage: null,
+                  onClearError: () {},
+                  isSaving: false,
+                  onCancel: () {},
+                  onScanAgain: () {},
+                  onAddBlock: () {},
+                  onEditBlock: (_) {},
+                  onSave: () {},
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(BaseTimelinePhotoPreviewCard), findsNothing);
+        expect(find.text('Add photo'), findsOneWidget);
+        expect(find.byIcon(Icons.camera_alt_outlined), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Work edit sheet guards last repeat day from being deselected and validates end time > start time',
+      (tester) async {
+        const block = TimelineBlockDraft(
+          id: 'test-edit-guard',
+          section: 'work',
+          title: 'Engineering Sprint',
+          startMinute: 10 * 60,
+          endMinute: 12 * 60,
+          repeatDays: [1], // Only Monday
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) {
+                  return ElevatedButton(
+                    onPressed: () {
+                      BaseTimelineWorkAdapter.showEditSheet(
+                        context: context,
+                        block: block,
+                        onSave: (_) async => true,
+                      );
+                    },
+                    child: const Text('Open Edit Sheet'),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Open Edit Sheet'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Edit Work Block'), findsOneWidget);
+
+        // Find Monday chip (Mon)
+        final mondayChip = find.widgetWithText(FilterChip, 'Mon');
+        expect(mondayChip, findsOneWidget);
+        expect(tester.widget<FilterChip>(mondayChip).selected, isTrue);
+
+        // Tap Monday to attempt deselecting it
+        await tester.tap(mondayChip);
+        await tester.pumpAndSettle();
+
+        // Monday must still be selected because days.length == 1
+        expect(tester.widget<FilterChip>(mondayChip).selected, isTrue);
+
+        // Now select Tuesday (Tue)
+        final tuesdayChip = find.widgetWithText(FilterChip, 'Tue');
+        await tester.tap(tuesdayChip);
+        await tester.pumpAndSettle();
+
+        // Now both Monday and Tuesday are selected
+        expect(tester.widget<FilterChip>(mondayChip).selected, isTrue);
+        expect(tester.widget<FilterChip>(tuesdayChip).selected, isTrue);
+
+        // Now deselect Tuesday (since days.length == 2, it succeeds)
+        await tester.tap(tuesdayChip);
+        await tester.pumpAndSettle();
+
+        expect(tester.widget<FilterChip>(tuesdayChip).selected, isFalse);
+        expect(tester.widget<FilterChip>(mondayChip).selected, isTrue);
+
+        // Attempt deselecting Monday again - guarded!
+        await tester.tap(mondayChip);
+        await tester.pumpAndSettle();
+        expect(tester.widget<FilterChip>(mondayChip).selected, isTrue);
+
+        // Verify valid range has no error
+        expect(find.text('End time must be after start time.'), findsNothing);
+
+        // Close sheet
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+
+        // Open edit sheet with invalid time range (start >= end)
+        const invalidBlock = TimelineBlockDraft(
+          id: 'test-invalid-time',
+          section: 'work',
+          title: 'Invalid Time Shift',
+          startMinute: 14 * 60,
+          endMinute: 12 * 60,
+          repeatDays: [1],
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) {
+                  return ElevatedButton(
+                    onPressed: () {
+                      BaseTimelineWorkAdapter.showEditSheet(
+                        context: context,
+                        block: invalidBlock,
+                        onSave: (_) async => true,
+                      );
+                    },
+                    child: const Text('Open Invalid Edit Sheet'),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Open Invalid Edit Sheet'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('End time must be after start time.'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'WorkTimelineCard minimumHeight dynamically calculates expanded height and wraps all fields without overflow',
+      (tester) async {
+        const block = TimelineBlockDraft(
+          id: 'multiline-work-card',
+          section: 'work',
+          title:
+              'Executive Architecture Review & Global Infrastructure Operations Summit',
+          location: 'Building B, Floor 14, East Conference Room Alpha',
+          sectionLabel: 'Infrastructure Core Team 2026',
+          notes:
+              'Present cross-region failover benchmarks, disaster recovery SLAs, and multi-tenant security guarantees',
+          startMinute: 9 * 60,
+          endMinute: 12 * 60,
+          repeatDays: [1],
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.physicalSize = const Size(800, 1200);
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final dynamicHeight = WorkTimelineCard.minimumHeight(
+          block,
+          contentWidth: 220,
+          textScale: 1.4,
+        );
+
+        // Must dynamically exceed the default minimum height of 96.0
+        expect(dynamicHeight, greaterThan(150.0));
+
+        const entry = TimelineEntry(
+          id: 'entry-multiline',
+          sourceId: 'multiline-work-card',
+          title:
+              'Executive Architecture Review & Global Infrastructure Operations Summit',
+          subtitle: 'Building B, Floor 14, East Conference Room Alpha',
+          startMinute: 9 * 60,
+          endMinute: 12 * 60,
+          repeatDays: [1],
+          category: TimelineCategory.work,
+        );
+
+        final positioned = PositionedTimelineEntry(
+          entry: entry,
+          left: 0,
+          top: 0,
+          width: 220,
+          height: dynamicHeight,
+          column: 0,
+          columnCount: 1,
+          isFront: true,
+          hasOverlap: false,
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: MediaQuery(
+              data: const MediaQueryData(textScaler: TextScaler.linear(1.4)),
+              child: Scaffold(
+                body: SingleChildScrollView(
+                  child: SizedBox(
+                    width: 220,
+                    height: dynamicHeight,
+                    child: WorkTimelineCard(
+                      positioned: positioned,
+                      block: block,
+                      isEditable: false,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        final exception = tester.takeException();
+        expect(exception, isNull);
+
+        // All fields are fully rendered
+        expect(
+          find.text(
+            'Executive Architecture Review & Global Infrastructure Operations Summit',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Building B, Floor 14, East Conference Room Alpha'),
+          findsOneWidget,
+        );
+        expect(find.text('Infrastructure Core Team 2026'), findsOneWidget);
+        expect(
+          find.text(
+            'Present cross-region failover benchmarks, disaster recovery SLAs, and multi-tenant security guarantees',
+          ),
+          findsOneWidget,
+        );
       },
     );
   });

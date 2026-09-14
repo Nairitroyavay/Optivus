@@ -166,21 +166,23 @@ class WorkSourceSelectionView extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   const LiquidSectionHeader(title: 'OR SET UP MANUALLY'),
-                  if ((snapshot.sourceR2Key != null ||
-                          snapshot.sourceAssetId != null) &&
-                      onEditCurrent != null)
+                  if (snapshot.isConfigured || setup.workBlocks.isNotEmpty)
                     _buildSourceActionCard(
                       icon: Icons.edit_calendar_rounded,
                       title: 'Edit current work schedule',
-                      subtitle: 'Keep schedule photo and adjust blocks',
+                      subtitle:
+                          (snapshot.sourceR2Key != null ||
+                              snapshot.sourceAssetId != null)
+                          ? 'Keep schedule photo and adjust blocks'
+                          : 'Keep your current blocks and adjust them manually',
                       accent: OptivusColors.routineAccent,
-                      onTap: onEditCurrent!,
+                      onTap: onEditCurrent ?? onManualSetup,
                     )
                   else
                     _buildSourceActionCard(
                       icon: Icons.edit_calendar_rounded,
                       title: 'Set up manually',
-                      subtitle: 'Add or adjust work blocks day by day',
+                      subtitle: 'Add your work blocks day by day',
                       accent: OptivusColors.routineAccent,
                       onTap: onManualSetup,
                     ),

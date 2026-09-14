@@ -231,6 +231,18 @@ class BaseTimelineWorkAdapter {
                     ),
                   ],
                 ),
+              if (endMinute <= startMinute)
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    'End time must be after start time.',
+                    style: TextStyle(
+                      color: OptivusColors.danger,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
               const SizedBox(height: 16),
               const Text(
                 'REPEAT DAYS',
@@ -262,7 +274,11 @@ class BaseTimelineWorkAdapter {
                     selected: days.contains(day),
                     selectedColor: accent.withValues(alpha: .25),
                     onSelected: (selected) => setSheetState(() {
-                      selected ? days.add(day) : days.remove(day);
+                      if (selected) {
+                        days.add(day);
+                      } else if (days.length > 1) {
+                        days.remove(day);
+                      }
                     }),
                   );
                 }),

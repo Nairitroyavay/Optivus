@@ -34,6 +34,11 @@ import 'package:optivus/features/routine/models/routine_day_entry.dart';
 import 'package:optivus/features/routine/services/routine_transition_policy.dart';
 import 'package:optivus/features/routine/services/routine_day_availability.dart';
 import 'package:optivus/features/routine/services/routine_entry_filter.dart';
+import 'package:optivus/features/routine/models/routine_filter_definitions.dart';
+import 'package:optivus/features/routine/models/routine_filter_selection.dart';
+
+export 'package:optivus/features/routine/models/routine_filter_definitions.dart';
+export 'package:optivus/features/routine/models/routine_filter_selection.dart';
 
 enum RoutineWriteAction { create, update, delete, moveTemplate, batchCreate }
 
@@ -251,46 +256,14 @@ class RoutineState {
           this.failedBatchIntentsByOperationId,
     );
   }
+
+  /// Canonical filter selection across View, Status, and Category axes.
+  RoutineFilterSelection get filterSelection => RoutineFilterSelection(
+    view: selectedPrimaryFilter,
+    status: selectedStatusFilter,
+    category: selectedCategoryFilter,
+  );
 }
-
-/// Primary filter options with labels and emojis.
-class RoutineFilterOption {
-  final String key;
-  final String label;
-  final String emoji;
-
-  const RoutineFilterOption(this.key, this.label, this.emoji);
-}
-
-const List<RoutineFilterOption> primaryFilters = [
-  RoutineFilterOption('all', 'All', 'All'),
-  RoutineFilterOption('base_timeline', 'Base Timeline', 'Base'),
-  RoutineFilterOption('flexible_tasks', 'Flexible Tasks', 'Flex'),
-  RoutineFilterOption('tracker_tasks', 'Tracker Tasks', 'Track'),
-  RoutineFilterOption('check_ins', 'Check-ins', 'Check'),
-];
-
-const List<RoutineFilterOption> statusFilters = [
-  RoutineFilterOption('any', 'Any', 'Any'),
-  RoutineFilterOption('todo', 'To do', 'To do'),
-  RoutineFilterOption('done', 'Done', 'Done'),
-  RoutineFilterOption('missed', 'Missed', 'Missed'),
-];
-
-const List<RoutineFilterOption> categoryFilters = [
-  RoutineFilterOption('all', 'All Categories', 'All'),
-  RoutineFilterOption('classes', 'Classes', 'Class'),
-  RoutineFilterOption('job', 'Job / Work', 'Work'),
-  RoutineFilterOption('eating', 'Eating', 'Food'),
-  RoutineFilterOption('fixed', 'Fixed', 'Fixed'),
-  RoutineFilterOption('skin_care', 'Skin Care', 'Skin'),
-  RoutineFilterOption('good_habits', 'Good Habits', 'Good'),
-  RoutineFilterOption('bad_habits', 'Bad Habits', 'Bad'),
-  RoutineFilterOption('money', 'Money System', 'Money'),
-  RoutineFilterOption('meditation', 'Meditation', 'Mind'),
-  RoutineFilterOption('hydration', 'Hydration', 'Water'),
-  RoutineFilterOption('screen_time', 'Screen Time', 'Screen'),
-];
 
 class TrackerLaunchIntent {
   final TrackerType trackerType;
@@ -904,6 +877,31 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     }
   }
 
+  @override
+  set state(RoutineState value) {
+    if (value.selectedCategoryFilter != 'all') {
+      final itemsOrOccurrencesChanged =
+          (value.items != state.items ||
+              value.occurrences != state.occurrences) &&
+          (value.items.isNotEmpty ||
+              state.items.isNotEmpty ||
+              value.occurrences.isNotEmpty ||
+              state.occurrences.isNotEmpty);
+      if (itemsOrOccurrencesChanged) {
+        final dayEntries = RoutineOccurrenceProjector.entriesForDay(
+          value.items,
+          value.occurrences,
+          value.selectedDay,
+        );
+        final normalized = value.filterSelection.normalizedFor(dayEntries);
+        if (normalized.category != value.selectedCategoryFilter) {
+          value = value.copyWith(selectedCategoryFilter: normalized.category);
+        }
+      }
+    }
+    super.state = value;
+  }
+
   Future<void>? _inFlightLoad;
   String? _inFlightUid;
   int? _inFlightGeneration;
@@ -1495,23 +1493,16 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
 
   void updateSelectedDay(DateTime day) {
     final normalized = TimelineUtils.dateOnly(day);
-    var category = state.selectedCategoryFilter;
-    if (category != 'all') {
-      final dayEntries = RoutineOccurrenceProjector.entriesForDay(
-        state.items,
-        state.occurrences,
-        normalized,
-      );
-      final hasCategory = dayEntries.any(
-        (entry) => RoutineEntryFilter.matchesCategory(entry.item, category),
-      );
-      if (!hasCategory) {
-        category = 'all';
-      }
-    }
+    if (state.selectedDay == normalized) return;
+    final entries = RoutineOccurrenceProjector.entriesForDay(
+      state.items,
+      state.occurrences,
+      normalized,
+    );
+    final normalizedSelection = state.filterSelection.normalizedFor(entries);
     state = state.copyWith(
       selectedDay: normalized,
-      selectedCategoryFilter: category,
+      selectedCategoryFilter: normalizedSelection.category,
     );
   }
 
@@ -3780,20 +3771,15 @@ final selectedDayRoutineEntriesProvider = Provider<List<RoutineDayEntry>>((
 /// Apply primary and category filters, preserving stable instanceIds.
 final filteredRoutineEntriesProvider = Provider<List<RoutineDayEntry>>((ref) {
   final entries = ref.watch(selectedDayRoutineEntriesProvider);
-  final filters = ref.watch(
-    routineNotifierProvider.select(
-      (state) => (
-        primary: state.selectedPrimaryFilter,
-        status: state.selectedStatusFilter,
-        category: state.selectedCategoryFilter,
-      ),
-    ),
+  final filterSelection = ref.watch(
+    routineNotifierProvider.select((state) => state.filterSelection),
   );
+  final effective = filterSelection.normalizedFor(entries);
   final result = RoutineEntryFilter.apply(
     entries,
-    view: filters.primary,
-    status: filters.status,
-    category: filters.category,
+    view: effective.view,
+    status: effective.status,
+    category: effective.category,
   );
   if (kDebugMode) {
     debugPrint(

@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:optivus/features/routine/models/routine_day_entry.dart';
-import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/models/routine_filter_definitions.dart';
 import 'package:optivus/models/routine_item.dart';
 
 /// Authoritative filtering engine for Routine day entries.
@@ -14,8 +14,13 @@ class RoutineEntryFilter {
   const RoutineEntryFilter._();
 
   /// Whether an item belongs to the Base Timeline (anchor/foundation blocks).
+  ///
+  /// This is the canonical Base Timeline classifier used across both
+  /// Routine timeline filtering and Week Planner base block counting.
   static bool isBaseTimeline(RoutineItem item) {
-    return item.baseTimelineSection != null ||
+    return item.isHardBlock ||
+        item.blockType == RoutineBlockType.hardBlock ||
+        item.baseTimelineSection != null ||
         item.source == RoutineSource.baseTimeline ||
         item.category == RoutineCategory.sleep ||
         (item.source == RoutineSource.onboarding &&
@@ -26,13 +31,25 @@ class RoutineEntryFilter {
                 item.category == RoutineCategory.skinCare));
   }
 
+  /// Whether an item is a flexible task.
+  static bool isFlexible(RoutineItem item) =>
+      item.blockType == RoutineBlockType.flexibleTask;
+
+  /// Whether an item is a tracker task.
+  static bool isTracker(RoutineItem item) =>
+      item.blockType == RoutineBlockType.trackerTask;
+
+  /// Whether an item is a check-in item.
+  static bool isCheckIn(RoutineItem item) =>
+      item.blockType == RoutineBlockType.checkIn;
+
   /// Evaluates the view axis.
   static bool matchesView(RoutineDayEntry entry, String view) {
     return switch (view) {
       'base_timeline' => isBaseTimeline(entry.item),
-      'flexible_tasks' => entry.item.blockType == RoutineBlockType.flexibleTask,
-      'tracker_tasks' => entry.item.blockType == RoutineBlockType.trackerTask,
-      'check_ins' => entry.item.blockType == RoutineBlockType.checkIn,
+      'flexible_tasks' => isFlexible(entry.item),
+      'tracker_tasks' => isTracker(entry.item),
+      'check_ins' => isCheckIn(entry.item),
       _ => true, // 'all' or fallback
     };
   }
@@ -59,6 +76,21 @@ class RoutineEntryFilter {
   }
 
   /// Evaluates the category axis against the canonical Routine category rules.
+  ///
+  /// Complete taxonomy covering all [RoutineCategory] enum values:
+  /// - classes: classBlock
+  /// - job: job
+  /// - eating: eating
+  /// - fixed: fixed, sleep
+  /// - skin_care: skinCare
+  /// - good_habits: habit, identity
+  /// - bad_habits: badHabit, or keyword
+  /// - money: finance, moneyTask
+  /// - health: health (Option A explicit category)
+  /// - focus: focus, or focus tracker (Option A explicit category)
+  /// - meditation: meditation, or meditation tracker
+  /// - hydration: hydration, or hydration tracker
+  /// - screen_time: screenTime
   static bool matchesCategory(RoutineItem item, String category) {
     if (category == 'all') return true;
     final title = item.title.toLowerCase();
@@ -81,6 +113,10 @@ class RoutineEntryFilter {
       'money' =>
         item.category == RoutineCategory.finance ||
             item.blockType == RoutineBlockType.moneyTask,
+      'health' => item.category == RoutineCategory.health,
+      'focus' =>
+        item.category == RoutineCategory.focus ||
+            item.trackerType == TrackerType.focus,
       'meditation' =>
         item.category == RoutineCategory.meditation ||
             item.trackerType == TrackerType.meditation ||

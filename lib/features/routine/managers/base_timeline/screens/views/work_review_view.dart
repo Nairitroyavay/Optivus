@@ -89,6 +89,11 @@ class _WorkReviewViewState extends State<WorkReviewView> {
       sanitizedIssues,
     );
 
+    final hasWorkingSource =
+        (widget.workingLocalPreviewPath?.isNotEmpty ?? false) ||
+        (widget.workingR2Key?.isNotEmpty ?? false) ||
+        (widget.workingAssetId?.isNotEmpty ?? false);
+
     return SafeArea(
       bottom: false,
       child: Column(
@@ -167,14 +172,16 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
-                    icon: const Icon(
-                      Icons.photo_library_outlined,
+                    icon: Icon(
+                      hasWorkingSource
+                          ? Icons.photo_library_outlined
+                          : Icons.camera_alt_outlined,
                       size: 18,
                       color: OptivusColors.warning,
                     ),
-                    label: const Text(
-                      'Change photo',
-                      style: TextStyle(
+                    label: Text(
+                      hasWorkingSource ? 'Change photo' : 'Add photo',
+                      style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         color: OptivusColors.warning,
                       ),
@@ -386,8 +393,7 @@ class _WorkReviewViewState extends State<WorkReviewView> {
           ),
 
           // 6. Scanned Photo Preview (Fixed-height compact row below Timeline)
-          if (widget.workingLocalPreviewPath != null ||
-              widget.workingR2Key != null)
+          if (hasWorkingSource)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
               child: BaseTimelinePhotoPreviewCard(

@@ -269,6 +269,49 @@ void main() {
       expect(classEntries.length, 1);
       expect(classEntries.first.item.id, 'hb1');
     });
+
+    test(
+      '4. Option A Health and Focus category filtering matches correctly',
+      () {
+        final healthItem = _createTestItem(
+          id: 'hlth1',
+          title: 'Vitamins & Health',
+          startMinute: 480,
+          endMinute: 500,
+          category: RoutineCategory.health,
+        );
+        final focusItem = _createTestItem(
+          id: 'foc1',
+          title: 'Deep Coding',
+          startMinute: 600,
+          endMinute: 720,
+          category: RoutineCategory.focus,
+        );
+
+        final testEntries = [
+          _createDayEntry(healthItem),
+          _createDayEntry(focusItem),
+        ];
+
+        final healthMatches = RoutineEntryFilter.apply(
+          testEntries,
+          view: 'all',
+          status: 'any',
+          category: 'health',
+        );
+        expect(healthMatches.length, 1);
+        expect(healthMatches.first.item.id, 'hlth1');
+
+        final focusMatches = RoutineEntryFilter.apply(
+          testEntries,
+          view: 'all',
+          status: 'any',
+          category: 'focus',
+        );
+        expect(focusMatches.length, 1);
+        expect(focusMatches.first.item.id, 'foc1');
+      },
+    );
   });
 
   group('RoutineState Filter Methods & Providers', () {
@@ -444,6 +487,50 @@ void main() {
       expect(filtered.length, 1);
       expect(filtered.first.item.id, '1');
     });
+
+    test(
+      '4. Same-day item deletion auto-resets unavailable category filter to all',
+      () {
+        final jobItem = _createTestItem(
+          id: 'j1',
+          title: 'Work Shift',
+          startMinute: 540,
+          endMinute: 660,
+          category: RoutineCategory.job,
+          repeatDays: const [1],
+        );
+
+        final container = ProviderContainer(
+          overrides: [
+            routineNotifierProvider.overrideWith(
+              (ref) => _FilterTestNotifier(
+                ref,
+                initialItems: [jobItem],
+                initialSelectedDay: DateTime(2026, 9, 14),
+                categoryFilter: 'job',
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        expect(
+          container.read(routineNotifierProvider).selectedCategoryFilter,
+          'job',
+        );
+
+        // Now mutate state items by removing jobItem
+        container.read(routineNotifierProvider.notifier).state = container
+            .read(routineNotifierProvider)
+            .copyWith(items: const []);
+
+        // Category filter should auto-reset to 'all' because job is no longer present!
+        expect(
+          container.read(routineNotifierProvider).selectedCategoryFilter,
+          'all',
+        );
+      },
+    );
   });
 
   group('RoutineTitleFilterRow & RoutineFilterSheet Widget Tests', () {
@@ -625,5 +712,152 @@ void main() {
         'flexible_tasks',
       );
     });
+
+    testWidgets(
+      'RoutineFilterSheet closed without apply discards staged edits',
+      (tester) async {
+        final testItem = _createTestItem(
+          id: 'item_1',
+          title: 'Task A',
+          startMinute: 600,
+          endMinute: 660,
+          blockType: RoutineBlockType.flexibleTask,
+          category: RoutineCategory.classBlock,
+          status: RoutineStatus.planned,
+        );
+
+        late WidgetRef capturedRef;
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              routineNotifierProvider.overrideWith(
+                (ref) => _FilterTestNotifier(
+                  ref,
+                  initialItems: [testItem],
+                  initialSelectedDay: DateTime(2026, 9, 14),
+                ),
+              ),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: Consumer(
+                  builder: (context, ref, child) {
+                    capturedRef = ref;
+                    return ElevatedButton(
+                      onPressed: () => showRoutineFilterSheet(context, ref),
+                      child: const Text('Open Filters'),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Open sheet
+        await tester.tap(find.text('Open Filters'));
+        await tester.pumpAndSettle();
+
+        // Select 'Flexible Tasks'
+        await tester.tap(find.text('Flexible Tasks'));
+        await tester.pumpAndSettle();
+
+        // Pop sheet directly without tapping Apply
+        Navigator.of(tester.element(find.text('Filter Routine'))).pop();
+        await tester.pumpAndSettle();
+
+        // State is STILL 'all' because Apply was not tapped!
+        expect(
+          capturedRef.read(routineNotifierProvider).selectedPrimaryFilter,
+          'all',
+        );
+      },
+    );
+
+    testWidgets(
+      'RoutineFilterSheet auto-expands when selected category is past collapsed limit',
+      (tester) async {
+        // Create items with 6 distinct categories
+        final items = [
+          _createTestItem(
+            id: '1',
+            title: 'Class',
+            startMinute: 500,
+            endMinute: 550,
+            category: RoutineCategory.classBlock,
+          ),
+          _createTestItem(
+            id: '2',
+            title: 'Job',
+            startMinute: 560,
+            endMinute: 600,
+            category: RoutineCategory.job,
+          ),
+          _createTestItem(
+            id: '3',
+            title: 'Eat',
+            startMinute: 610,
+            endMinute: 650,
+            category: RoutineCategory.eating,
+          ),
+          _createTestItem(
+            id: '4',
+            title: 'Fixed',
+            startMinute: 660,
+            endMinute: 700,
+            category: RoutineCategory.fixed,
+          ),
+          _createTestItem(
+            id: '5',
+            title: 'Skin',
+            startMinute: 710,
+            endMinute: 750,
+            category: RoutineCategory.skinCare,
+          ),
+          _createTestItem(
+            id: '6',
+            title: 'Habit',
+            startMinute: 760,
+            endMinute: 800,
+            category: RoutineCategory.habit,
+          ),
+        ];
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              routineNotifierProvider.overrideWith(
+                (ref) => _FilterTestNotifier(
+                  ref,
+                  initialItems: items,
+                  initialSelectedDay: DateTime(2026, 9, 14),
+                  categoryFilter: 'good_habits', // 6th category (index 5)
+                ),
+              ),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: Consumer(
+                  builder: (context, ref, child) {
+                    return ElevatedButton(
+                      onPressed: () => showRoutineFilterSheet(context, ref),
+                      child: const Text('Open Filters'),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Open Filters'));
+        await tester.pumpAndSettle();
+
+        // Because good_habits is at index 5, the category list auto-expands and 'Good Habits' is visible
+        expect(find.text('Good Habits'), findsOneWidget);
+      },
+    );
   });
 }

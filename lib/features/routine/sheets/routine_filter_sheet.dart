@@ -35,13 +35,35 @@ class _RoutineFilterSheetState extends ConsumerState<RoutineFilterSheet> {
     _stagedView = current.selectedPrimaryFilter;
     _stagedStatus = current.selectedStatusFilter;
     _stagedCategory = current.selectedCategoryFilter;
+
+    // If initial selected category is beyond collapsed threshold, auto-expand
+    final dayEntries = widget.parentRef.read(selectedDayRoutineEntriesProvider);
+    final dynamicCategories = RoutineEntryFilter.dynamicCategoryOptions(
+      dayEntries,
+    );
+    final selectedIdx = dynamicCategories.indexWhere(
+      (c) => c.key == _stagedCategory,
+    );
+    if (selectedIdx >= 5) {
+      _showAllCategories = true;
+    }
   }
 
   void _apply() {
+    final dayEntries = widget.parentRef.read(selectedDayRoutineEntriesProvider);
+    final dynamicCategories = RoutineEntryFilter.dynamicCategoryOptions(
+      dayEntries,
+    );
+    final effectiveCategory =
+        (_stagedCategory != 'all' &&
+            !dynamicCategories.any((c) => c.key == _stagedCategory))
+        ? 'all'
+        : _stagedCategory;
+
     final notifier = widget.parentRef.read(routineNotifierProvider.notifier);
     notifier.setPrimaryFilter(_stagedView);
     notifier.setStatusFilter(_stagedStatus);
-    notifier.setCategoryFilter(_stagedCategory);
+    notifier.setCategoryFilter(effectiveCategory);
     Navigator.of(context).pop();
   }
 
@@ -63,18 +85,25 @@ class _RoutineFilterSheetState extends ConsumerState<RoutineFilterSheet> {
       dayEntries,
     );
 
-    // If previously staged category is no longer valid, gracefully fall back to 'all'
-    if (_stagedCategory != 'all' &&
-        !dynamicCategories.any((c) => c.key == _stagedCategory)) {
-      _stagedCategory = 'all';
-    }
+    // Compute effective category without mutating state fields during build()
+    final effectiveStagedCategory =
+        (_stagedCategory != 'all' &&
+            !dynamicCategories.any((c) => c.key == _stagedCategory))
+        ? 'all'
+        : _stagedCategory;
+
+    // Auto-expand if the active/staged category is beyond the collapsed threshold
+    final selectedIdx = dynamicCategories.indexWhere(
+      (c) => c.key == effectiveStagedCategory,
+    );
+    final isExpanded = _showAllCategories || selectedIdx >= 5;
 
     // Calculate real-time filtered results count for staged preview
     final matchingEntries = RoutineEntryFilter.apply(
       dayEntries,
       view: _stagedView,
       status: _stagedStatus,
-      category: _stagedCategory,
+      category: effectiveStagedCategory,
     );
     final count = matchingEntries.length;
 
@@ -86,7 +115,7 @@ class _RoutineFilterSheetState extends ConsumerState<RoutineFilterSheet> {
     );
     final visibleCategoryOptions = <RoutineFilterOption>[
       allCategoryOption,
-      if (_showAllCategories || dynamicCategories.length <= 6)
+      if (isExpanded || dynamicCategories.length <= 6)
         ...dynamicCategories
       else
         ...dynamicCategories.take(5),
@@ -221,8 +250,18 @@ class _RoutineFilterSheetState extends ConsumerState<RoutineFilterSheet> {
                     else ...[
                       _buildOptionsGrid(
                         options: visibleCategoryOptions,
-                        selectedValue: _stagedCategory,
-                        onSelect: (v) => setState(() => _stagedCategory = v),
+                        selectedValue: effectiveStagedCategory,
+                        onSelect: (v) {
+                          final idx = dynamicCategories.indexWhere(
+                            (c) => c.key == v,
+                          );
+                          setState(() {
+                            _stagedCategory = v;
+                            if (idx >= 5) {
+                              _showAllCategories = true;
+                            }
+                          });
+                        },
                       ),
                       if (hasCategoryOverflow)
                         Padding(
@@ -232,7 +271,7 @@ class _RoutineFilterSheetState extends ConsumerState<RoutineFilterSheet> {
                             child: TextButton(
                               onPressed: () {
                                 setState(() {
-                                  _showAllCategories = !_showAllCategories;
+                                  _showAllCategories = !isExpanded;
                                 });
                               },
                               style: TextButton.styleFrom(
@@ -242,7 +281,7 @@ class _RoutineFilterSheetState extends ConsumerState<RoutineFilterSheet> {
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               child: Text(
-                                _showAllCategories
+                                isExpanded
                                     ? 'Show fewer categories'
                                     : '+${dynamicCategories.length - 5} more categories',
                                 style: const TextStyle(

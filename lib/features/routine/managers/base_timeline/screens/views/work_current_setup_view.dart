@@ -10,7 +10,6 @@ import 'package:optivus/features/routine/managers/base_timeline/services/work_ti
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
-import 'package:optivus/features/routine/managers/base_timeline/widgets/work_detail_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/work_timeline_card.dart';
 
 /// Read-only Current Setup view for Work / Business Base Timeline.
@@ -190,19 +189,21 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
                     styleBuilder: (entry) => adapter.styleForEntry(entry),
                     blockBuilder: (context, positioned) {
                       final block = blockMap[positioned.entry.sourceId];
+                      final canPromote =
+                          positioned.hasOverlap && !positioned.isFront;
                       return WorkTimelineCard(
                         positioned: positioned,
                         block: block,
                         isEditable: false,
                         accent: OptivusColors.warning,
-                        onTap: () {
-                          if (positioned.hasOverlap && !positioned.isFront) {
-                            HapticFeedback.lightImpact();
-                            setState(() => _frontBlockId = positioned.entry.id);
-                          } else if (block != null) {
-                            WorkDetailSheet.show(context, block);
-                          }
-                        },
+                        onTap: canPromote
+                            ? () {
+                                HapticFeedback.lightImpact();
+                                setState(
+                                  () => _frontBlockId = positioned.entry.id,
+                                );
+                              }
+                            : null,
                       );
                     },
                     onEntryTapped: null,

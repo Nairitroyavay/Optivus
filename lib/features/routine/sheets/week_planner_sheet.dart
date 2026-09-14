@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/state/app_state.dart';
 import 'package:optivus/features/routine/models/routine_week_day_summary.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
@@ -52,8 +53,22 @@ class _WeekPlannerSheetState extends ConsumerState<WeekPlannerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(routineNotifierProvider);
-    final selectedDay = state.selectedDay;
+    final plannerState = ref.watch(
+      routineNotifierProvider.select(
+        (s) => (
+          items: s.items,
+          occurrences: s.occurrences,
+          selectedDay: s.selectedDay,
+          loading: s.loading,
+          error: s.error,
+        ),
+      ),
+    );
+    final selectedDay = plannerState.selectedDay;
+    final items = plannerState.items;
+    final occurrences = plannerState.occurrences;
+    final loading = plannerState.loading;
+    final error = plannerState.error;
     final isCurrentWeek = DateUtils.isSameDay(
       _visibleWeekStart,
       TimelineUtils.weekStart(DateTime.now()),
@@ -206,7 +221,7 @@ class _WeekPlannerSheetState extends ConsumerState<WeekPlannerSheet> {
               const SizedBox(height: 16),
 
               // Loading check
-              if (state.loading && state.items.isEmpty)
+              if (loading && items.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 40),
                   child: Center(
@@ -217,12 +232,109 @@ class _WeekPlannerSheetState extends ConsumerState<WeekPlannerSheet> {
                     ),
                   ),
                 )
-              else
+              else if (error != null && items.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.red.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons.error_outline_rounded,
+                          color: Colors.redAccent,
+                          size: 36,
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          "Couldn't load your routine",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: OptivusColors.ink,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          "Your schedule couldn't be loaded",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: OptivusColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () {
+                            final profile = ref.read(userProfileProvider);
+                            if (profile.uid.trim().isNotEmpty) {
+                              ref
+                                  .read(routineNotifierProvider.notifier)
+                                  .loadForOwner(profile.uid);
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: OptivusColors.routineAccent,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else ...[
+                if (items.isEmpty && !loading && error == null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.55),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.75),
+                        ),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline_rounded,
+                            size: 20,
+                            color: OptivusColors.routineAccent,
+                          ),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'No routines scheduled yet',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: OptivusColors.ink,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ...days.map((day) {
                   final summary = RoutineWeekDaySummary.compute(
                     day: day,
-                    templates: state.items,
-                    occurrences: state.occurrences,
+                    templates: items,
+                    occurrences: occurrences,
                   );
                   final isSelected = DateUtils.isSameDay(day, selectedDay);
                   final isToday = TimelineUtils.isToday(day);
@@ -239,6 +351,7 @@ class _WeekPlannerSheetState extends ConsumerState<WeekPlannerSheet> {
                     },
                   );
                 }),
+              ],
             ],
           ),
         );
@@ -430,15 +543,19 @@ class _WeekDayCard extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _chip('${summary.baseBlockCount} base', inverted: isSelected),
-                  _chip(
-                    '${summary.flexibleTaskCount} flexible',
-                    inverted: isSelected,
-                  ),
-                  _chip(
-                    '${TimelineUtils.formatDuration(summary.freeMinutes)} free',
-                    inverted: isSelected,
-                  ),
+                  if (summary.baseBlockCount > 0)
+                    _chip(
+                      '${summary.baseBlockCount} base',
+                      inverted: isSelected,
+                    ),
+                  if (summary.flexibleTaskCount > 0)
+                    _chip(
+                      '${summary.flexibleTaskCount} flexible',
+                      inverted: isSelected,
+                    ),
+                  _chip(summary.freeTimeFormatted, inverted: isSelected),
+                  if (summary.skipped > 0)
+                    _chip('${summary.skipped} skipped', inverted: isSelected),
                   if (summary.missed > 0)
                     _chip(
                       '${summary.missed} missed',

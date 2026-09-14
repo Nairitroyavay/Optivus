@@ -10,6 +10,9 @@ import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/routine_occurrence.dart';
 import 'package:optivus/repositories/routine_history_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
+import 'package:optivus/models/user_profile.dart';
+import 'package:optivus/state/app_state.dart';
+import 'package:optivus/features/routine/services/routine_day_availability.dart';
 import 'package:optivus/repositories/routine_transaction_repository.dart';
 
 RoutineItem _item({
@@ -67,11 +70,15 @@ RoutineOccurrenceRecord _occurrence({
 }
 
 class _WeekTestNotifier extends RoutineNotifier {
+  bool loadForOwnerCalled = false;
+
   _WeekTestNotifier(
     Ref ref, {
     List<RoutineItem> initialItems = const [],
     List<RoutineOccurrenceRecord> initialOccurrences = const [],
     DateTime? initialSelectedDay,
+    bool loading = false,
+    String? error,
   }) : super(
          FakeRoutineRepository(),
          FakeRoutineHistoryRepository(),
@@ -82,13 +89,15 @@ class _WeekTestNotifier extends RoutineNotifier {
       items: initialItems,
       occurrences: initialOccurrences,
       selectedDay: initialSelectedDay ?? DateTime(2026, 9, 14), // Monday
-      loading: false,
+      loading: loading,
+      error: error,
     );
   }
 
   @override
   Future<void> loadForOwner(String uid, {bool force = false}) async {
-    state = state.copyWith(loading: false);
+    loadForOwnerCalled = true;
+    state = state.copyWith(loading: false, error: null);
   }
 }
 
@@ -312,6 +321,133 @@ void main() {
         expect(tuesdaySummary.actionableTotal, 1);
         expect(tuesdaySummary.freeMinutes, 1020 - 60);
         expect(tuesdaySummary.freeTimeFormatted, '16h free');
+      },
+    );
+
+    test('6. Moved time overrides template times in summary availability', () {
+      final template = _item(
+        id: 'task_orig',
+        title: 'Project Review',
+        startMinute: 9 * 60, // 09:00
+        endMinute: 10 * 60, // 10:00 (60m)
+        repeatDays: const [1], // Monday
+      );
+
+      final occurrence = _occurrence(
+        id: 'occ_move_time',
+        routineItemId: 'task_orig',
+        occurrenceDateKey: '2026-09-14',
+        movedToDateKey: '2026-09-14', // same day
+        movedStartMinute: 14 * 60, // moved to 14:00
+        movedEndMinute: 16 * 60, // moved to 16:00 (120m)
+        status: RoutineStatus.moved,
+      );
+
+      final entries = RoutineOccurrenceProjector.entriesForDay(
+        [template],
+        [occurrence],
+        DateTime(2026, 9, 14),
+      );
+      final summary = RoutineWeekDaySummary.fromEntries(
+        day: DateTime(2026, 9, 14),
+        entries: entries,
+      );
+
+      expect(summary.availability.occupiedMinutes, 120);
+      expect(summary.availability.occupiedIntervals, [
+        const RoutineTimeInterval(startMinute: 840, endMinute: 960),
+      ]);
+      expect(summary.freeMinutes, 1020 - 120);
+      expect(summary.freeTimeFormatted, '15h free');
+    });
+
+    test(
+      '7. Overnight routine crosses midnight, occupying time across both days in summary',
+      () {
+        final sleepItem = _item(
+          id: 'sleep_1',
+          title: 'Sleep',
+          startMinute: 22 * 60, // 22:00
+          endMinute: 7 * 60, // 07:00 next day
+          crossesMidnight: true,
+          repeatDays: const [1], // Monday night into Tuesday morning
+          blockType: RoutineBlockType.hardBlock,
+        );
+
+        // Day 1: Monday (2026-09-14)
+        final mondayEntries = RoutineOccurrenceProjector.entriesForDay(
+          [sleepItem],
+          [],
+          DateTime(2026, 9, 14),
+        );
+        final mondaySummary = RoutineWeekDaySummary.fromEntries(
+          day: DateTime(2026, 9, 14),
+          entries: mondayEntries,
+        );
+
+        // Window 06:00-23:00 (360-1380). 22:00-23:00 is 60m occupied.
+        expect(mondaySummary.availability.occupiedMinutes, 60);
+        expect(mondaySummary.baseBlockCount, 1);
+
+        // Day 2: Tuesday (2026-09-15)
+        final tuesdayEntries = RoutineOccurrenceProjector.entriesForDay(
+          [sleepItem],
+          [],
+          DateTime(2026, 9, 15),
+        );
+        final tuesdaySummary = RoutineWeekDaySummary.fromEntries(
+          day: DateTime(2026, 9, 15),
+          entries: tuesdayEntries,
+        );
+
+        // Continuation segment 00:00-07:00. Clipped to window 06:00-07:00 (60m).
+        expect(tuesdaySummary.availability.occupiedMinutes, 60);
+        // Continuation segment does NOT increment baseBlockCount!
+        expect(tuesdaySummary.baseBlockCount, 0);
+      },
+    );
+
+    test(
+      '8. Skipped and Missed counts are independently tracked in summary',
+      () {
+        final itemSkipped = RoutineDayEntry(
+          item: _item(
+            id: 'sk1',
+            title: 'Skipped Habit',
+            startMinute: 600,
+            endMinute: 630,
+            status: RoutineStatus.skipped,
+          ),
+          instanceId: 'sk1',
+          templateId: 'sk1',
+          occurrenceDateKey: '2026-09-14',
+          displayDateKey: '2026-09-14',
+          kind: RoutineDayEntryKind.scheduled,
+        );
+        final itemMissed = RoutineDayEntry(
+          item: _item(
+            id: 'ms1',
+            title: 'Missed Habit',
+            startMinute: 700,
+            endMinute: 730,
+            status: RoutineStatus.missed,
+          ),
+          instanceId: 'ms1',
+          templateId: 'ms1',
+          occurrenceDateKey: '2026-09-14',
+          displayDateKey: '2026-09-14',
+          kind: RoutineDayEntryKind.scheduled,
+        );
+
+        final summary = RoutineWeekDaySummary.fromEntries(
+          day: DateTime(2026, 9, 14),
+          entries: [itemSkipped, itemMissed],
+        );
+
+        expect(summary.actionableTotal, 2);
+        expect(summary.completed, 0);
+        expect(summary.skipped, 1);
+        expect(summary.missed, 1);
       },
     );
   });
@@ -609,5 +745,157 @@ void main() {
       expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
       expect(find.byIcon(Icons.error_outline), findsNothing);
     });
+
+    testWidgets(
+      'Hides 0 base and 0 flexible chips, displays skipped and missed only when positive',
+      (tester) async {
+        // Monday has 1 flexible, 0 base, 1 skipped, 1 missed
+        final flexItem = _item(
+          id: 'f1',
+          title: 'Exercise',
+          startMinute: 600,
+          endMinute: 660,
+          repeatDays: const [1], // Monday
+          blockType: RoutineBlockType.flexibleTask,
+        );
+        final occSkipped = _occurrence(
+          id: 'occ_sk',
+          routineItemId: 'f1',
+          occurrenceDateKey: '2026-09-14',
+          status: RoutineStatus.skipped,
+        );
+
+        final missedItem = _item(
+          id: 'f2',
+          title: 'Missed Task',
+          startMinute: 700,
+          endMinute: 760,
+          repeatDays: const [1], // Monday
+          blockType: RoutineBlockType.flexibleTask,
+        );
+        final occMissed = _occurrence(
+          id: 'occ_ms',
+          routineItemId: 'f2',
+          occurrenceDateKey: '2026-09-14',
+          status: RoutineStatus.missed,
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              routineNotifierProvider.overrideWith(
+                (ref) => _WeekTestNotifier(
+                  ref,
+                  initialItems: [flexItem, missedItem],
+                  initialOccurrences: [occSkipped, occMissed],
+                  initialSelectedDay: DateTime(2026, 9, 14),
+                ),
+              ),
+            ],
+            child: const MaterialApp(home: Scaffold(body: WeekPlannerSheet())),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Zero-count chips MUST be hidden
+        expect(find.textContaining('0 base'), findsNothing);
+        expect(find.textContaining('0 flexible'), findsNothing);
+
+        // Positive chips MUST be shown
+        expect(find.text('2 flexible'), findsOneWidget);
+        expect(find.text('1 skipped'), findsOneWidget);
+        expect(find.text('1 missed'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Renders loading spinner when loading is true and items is empty',
+      (tester) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              routineNotifierProvider.overrideWith(
+                (ref) => _WeekTestNotifier(
+                  ref,
+                  initialItems: const [],
+                  loading: true,
+                ),
+              ),
+            ],
+            child: const MaterialApp(home: Scaffold(body: WeekPlannerSheet())),
+          ),
+        );
+        await tester.pump();
+
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        // Day cards should not be shown during initial load
+        expect(find.textContaining('MON'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Renders error card with retry button when error is set and items is empty',
+      (tester) async {
+        late _WeekTestNotifier testNotifier;
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              userProfileProvider.overrideWith(
+                (ref) =>
+                    UserProfileNotifier()
+                      ..updateProfile(UserProfile.empty(uid: 'test_user_123')),
+              ),
+              routineNotifierProvider.overrideWith((ref) {
+                testNotifier = _WeekTestNotifier(
+                  ref,
+                  initialItems: const [],
+                  error: 'Network connection failed',
+                );
+                return testNotifier;
+              }),
+            ],
+            child: const MaterialApp(home: Scaffold(body: WeekPlannerSheet())),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text("Couldn't load your routine"), findsOneWidget);
+        expect(find.text("Your schedule couldn't be loaded"), findsOneWidget);
+        expect(find.text('Retry'), findsOneWidget);
+
+        // Tapping retry triggers loadForOwner
+        await tester.tap(find.text('Retry'));
+        await tester.pumpAndSettle();
+
+        expect(testNotifier.loadForOwnerCalled, isTrue);
+      },
+    );
+
+    testWidgets(
+      'Renders true-empty banner when items is empty, not loading, and error is null',
+      (tester) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              routineNotifierProvider.overrideWith(
+                (ref) => _WeekTestNotifier(
+                  ref,
+                  initialItems: const [],
+                  loading: false,
+                  error: null,
+                ),
+              ),
+            ],
+            child: const MaterialApp(home: Scaffold(body: WeekPlannerSheet())),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('No routines scheduled yet'), findsOneWidget);
+        // Days are still visible to browse free time
+        expect(find.textContaining('MON'), findsOneWidget);
+      },
+    );
   });
 }

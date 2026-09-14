@@ -33,15 +33,131 @@ class WorkTimelineCard extends StatelessWidget {
 
   /// Single authoritative content-adaptive minimum height calculation
   /// shared across adapter and renderer.
-  static double minimumHeight(TimelineBlockDraft block) {
-    final hasLoc = block.location?.trim().isNotEmpty == true;
-    final hasSection = block.sectionLabel?.trim().isNotEmpty == true;
+  static double minimumHeight(
+    TimelineBlockDraft block, {
+    double contentWidth = 220.0,
+    double textScale = 1.0,
+  }) {
+    final title = block.title.trim();
+    final location = block.location?.trim() ?? '';
+    final sectionLabel = block.sectionLabel?.trim() ?? '';
     final notes = block.notes?.trim() ?? '';
-    final notesExtra = notes.isEmpty ? 0.0 : (notes.length > 50 ? 50.0 : 32.0);
-    return 94.0 +
-        (hasLoc ? 20.0 : 0.0) +
-        (hasSection ? 20.0 : 0.0) +
-        notesExtra;
+
+    // Card chrome & padding:
+    // Horizontal padding in rich card: 12 left + 12 right = 24 (or 16 if narrow < 120)
+    final isNarrow = contentWidth < 120.0;
+    final horizontalPadding = isNarrow ? 16.0 : 24.0;
+    final innerWidth = (contentWidth - horizontalPadding).clamp(
+      30.0,
+      double.infinity,
+    );
+
+    // Vertical padding: 6 top + 6 bottom = 12.0
+    // Border / margin: 2.0
+    double totalHeight = 14.0;
+
+    // 1. Header row: work icon (20px) + spacing (6px) + edit icon allowance (17px)
+    final titleWidth = (innerWidth - 20.0 - 6.0 - 17.0).clamp(
+      30.0,
+      double.infinity,
+    );
+    final titleHeight = _measureTextHeight(
+      text: title.isNotEmpty ? title : 'Work',
+      style: const TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w800,
+        height: 1.25,
+      ),
+      maxWidth: titleWidth,
+      textScale: textScale,
+    );
+    totalHeight += titleHeight > 21.0 ? titleHeight : 21.0;
+
+    // 2. Section badge / label
+    if (sectionLabel.isNotEmpty) {
+      totalHeight += 3.0;
+      final badgeTextHeight = _measureTextHeight(
+        text: sectionLabel,
+        style: const TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          height: 1.2,
+          letterSpacing: 0.2,
+        ),
+        maxWidth: innerWidth,
+        textScale: textScale,
+      );
+      totalHeight += badgeTextHeight + 5.0; // 1.5 top + 1.5 bottom + 2 border
+    }
+
+    // 3. Time label
+    totalHeight += 3.0;
+    final timeHeight = _measureTextHeight(
+      text: TimelineUtils.formatTimeRange(block.startMinute, block.endMinute),
+      style: const TextStyle(
+        fontSize: 10.5,
+        fontWeight: FontWeight.w700,
+        height: 1.25,
+      ),
+      maxWidth: innerWidth,
+      textScale: textScale,
+    );
+    totalHeight += timeHeight;
+
+    // 4. Location
+    if (location.isNotEmpty) {
+      totalHeight += 3.0;
+      final locWidth = (innerWidth - 13.0).clamp(30.0, double.infinity);
+      final locHeight = _measureTextHeight(
+        text: location,
+        style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
+          height: 1.25,
+        ),
+        maxWidth: locWidth,
+        textScale: textScale,
+      );
+      totalHeight += locHeight > 12.5 ? locHeight : 12.5;
+    }
+
+    // 5. Notes
+    if (notes.isNotEmpty) {
+      totalHeight += 3.0;
+      final notesWidth = (innerWidth - 14.0).clamp(30.0, double.infinity);
+      final notesHeight = _measureTextHeight(
+        text: notes,
+        style: const TextStyle(
+          fontSize: 9.5,
+          height: 1.25,
+          fontStyle: FontStyle.italic,
+        ),
+        maxWidth: notesWidth,
+        textScale: textScale,
+      );
+      totalHeight += notesHeight > 12.5 ? notesHeight : 12.5;
+    }
+
+    // Bottom safety buffer
+    totalHeight += 12.0;
+
+    return totalHeight < 96.0 ? 96.0 : totalHeight.ceilToDouble();
+  }
+
+  static double _measureTextHeight({
+    required String text,
+    required TextStyle style,
+    required double maxWidth,
+    double textScale = 1.0,
+  }) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: TextScaler.linear(textScale),
+    )..layout(maxWidth: maxWidth);
+    final h = painter.size.height;
+    painter.dispose();
+    return h;
   }
 
   @override
@@ -75,10 +191,10 @@ class WorkTimelineCard extends StatelessWidget {
         '${location.isNotEmpty ? ", Workplace: $location" : ""}'
         '${sectionLabel.isNotEmpty ? ", Section: $sectionLabel" : ""}'
         '${notes.isNotEmpty ? ", Details: $notes" : ""}'
-        '${isEditable ? ", tap to edit" : ", tap for details"}';
+        '${isEditable ? ", tap to edit" : ""}';
 
     final card = Semantics(
-      button: true,
+      button: isEditable,
       label: semanticLabel,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
@@ -317,35 +433,41 @@ class WorkTimelineCard extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 20,
-              height: 20,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(6),
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Container(
+                width: 20,
+                height: 20,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(Icons.work_rounded, size: 12, color: accent),
               ),
-              child: Icon(Icons.work_rounded, size: 12, color: accent),
             ),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
                 title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w800,
+                  height: 1.25,
                   color: OptivusColors.textPrimary,
                 ),
               ),
             ),
             if (isEditable)
-              Icon(
-                Icons.edit_rounded,
-                size: 13,
-                color: accent.withValues(alpha: 0.7),
+              Padding(
+                padding: const EdgeInsets.only(left: 4, top: 2),
+                child: Icon(
+                  Icons.edit_rounded,
+                  size: 13,
+                  color: accent.withValues(alpha: 0.7),
+                ),
               ),
           ],
         ),
@@ -356,31 +478,33 @@ class WorkTimelineCard extends StatelessWidget {
         ],
         Text(
           timeLabel,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontSize: 10.5,
             fontWeight: FontWeight.w700,
+            height: 1.25,
             color: accent.withValues(alpha: 0.90),
           ),
         ),
         if (location.isNotEmpty) ...[
           const SizedBox(height: 3),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
-                Icons.location_on_outlined,
-                size: 11,
-                color: OptivusColors.textSecondary,
+              const Padding(
+                padding: EdgeInsets.only(top: 1.5),
+                child: Icon(
+                  Icons.location_on_outlined,
+                  size: 11,
+                  color: OptivusColors.textSecondary,
+                ),
               ),
               const SizedBox(width: 2),
-              Flexible(
+              Expanded(
                 child: Text(
                   location,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 10,
+                    height: 1.25,
                     color: OptivusColors.textSecondary,
                     fontWeight: FontWeight.w500,
                   ),
@@ -406,8 +530,6 @@ class WorkTimelineCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   notes,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 9.5,
                     height: 1.25,
@@ -436,6 +558,7 @@ class WorkTimelineCard extends StatelessWidget {
         style: TextStyle(
           fontSize: 9,
           fontWeight: FontWeight.w700,
+          height: 1.2,
           color: color,
           letterSpacing: 0.2,
         ),
@@ -452,7 +575,7 @@ class WorkTimelineCard extends StatelessWidget {
       entry.endMinute,
     );
 
-    final semanticLabel = 'Show $title in front, $timeFull';
+    final semanticLabel = '$title, $timeFull. Tap to bring to front.';
 
     final card = Semantics(
       button: true,

@@ -606,7 +606,7 @@ void main() {
 
         expect(find.text('Review Work Schedule'), findsOneWidget);
         expect(find.text('No work blocks scheduled'), findsOneWidget);
-        expect(find.text('Change photo'), findsOneWidget);
+        expect(find.text('Add photo'), findsOneWidget);
         expect(find.text('Add Work'), findsOneWidget);
         expect(find.text('Use this work schedule'), findsOneWidget);
         expect(tester.takeException(), isNull);

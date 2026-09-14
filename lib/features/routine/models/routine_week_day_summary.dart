@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:optivus/features/routine/models/routine_day_entry.dart';
-import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/models/routine_filter_definitions.dart';
 import 'package:optivus/features/routine/services/routine_day_availability.dart';
 import 'package:optivus/features/routine/services/routine_entry_filter.dart';
 import 'package:optivus/features/routine/services/routine_materializer.dart';
@@ -41,7 +41,7 @@ class RoutineWeekDaySummary {
   /// Occupied minutes within the canonical 06:00–23:00 planning window.
   final int occupiedMinutes;
 
-  /// The largest contiguous free gap within the planning window.
+  /// The largest contiguous free interval within the planning window.
   final RoutineTimeInterval? largestFreeInterval;
 
   /// Category keys present on this day.
@@ -126,21 +126,17 @@ class RoutineWeekDaySummary {
         .where((e) => e.item.status == RoutineStatus.skipped)
         .length;
 
-    // 4. Count base blocks and flexible tasks accurately without conflating with "habits".
+    // 4. Count base blocks and flexible tasks using canonical predicates.
+    // Base block counting matches RoutineEntryFilter.isBaseTimeline exactly.
     final baseBlockCount = nonContinuation
-        .where(
-          (e) =>
-              e.item.isHardBlock ||
-              e.item.blockType == RoutineBlockType.hardBlock ||
-              e.item.source == RoutineSource.baseTimeline,
-        )
+        .where((e) => RoutineEntryFilter.isBaseTimeline(e.item))
         .length;
 
     final flexibleTaskCount = nonContinuation
-        .where((e) => e.item.blockType == RoutineBlockType.flexibleTask)
+        .where((e) => RoutineEntryFilter.isFlexible(e.item))
         .length;
 
-    // 5. Gather category keys present on this day
+    // 5. Gather category keys present on this day from canonical category options
     final categoryKeys = <String>{};
     for (final opt in categoryFilters) {
       if (opt.key == 'all') continue;

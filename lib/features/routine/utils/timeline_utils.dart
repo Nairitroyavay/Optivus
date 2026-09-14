@@ -4,6 +4,7 @@ import 'package:optivus/core/timeline/timeline_visual_layout.dart';
 import 'package:optivus/core/timeline/timeline_visual_models.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/timeline_layout.dart';
+import 'package:optivus/features/routine/services/routine_entry_filter.dart';
 
 /// Utility functions for routine timeline calculations.
 class TimelineUtils {
@@ -267,37 +268,20 @@ class TimelineUtils {
   }
 
   /// Filter routine items by the active filter.
+  ///
+  /// Delegates directly to the canonical [RoutineEntryFilter] predicates.
   static List<RoutineItem> filterItems(List<RoutineItem> items, String filter) {
     switch (filter) {
       case 'all':
         return items;
       case 'base_timeline':
-        return items
-            .where(
-              (i) =>
-                  i.baseTimelineSection != null ||
-                  i.source == RoutineSource.baseTimeline ||
-                  i.category == RoutineCategory.sleep ||
-                  (i.source == RoutineSource.onboarding &&
-                      (i.category == RoutineCategory.classBlock ||
-                          i.category == RoutineCategory.job ||
-                          i.category == RoutineCategory.eating ||
-                          i.category == RoutineCategory.fixed ||
-                          i.category == RoutineCategory.skinCare)),
-            )
-            .toList();
+        return items.where(RoutineEntryFilter.isBaseTimeline).toList();
       case 'flexible_tasks':
-        return items
-            .where((i) => i.blockType == RoutineBlockType.flexibleTask)
-            .toList();
+        return items.where(RoutineEntryFilter.isFlexible).toList();
       case 'tracker_tasks':
-        return items
-            .where((i) => i.blockType == RoutineBlockType.trackerTask)
-            .toList();
+        return items.where(RoutineEntryFilter.isTracker).toList();
       case 'check_ins':
-        return items
-            .where((i) => i.blockType == RoutineBlockType.checkIn)
-            .toList();
+        return items.where(RoutineEntryFilter.isCheckIn).toList();
       case 'completed':
         return items
             .where((i) => i.isCompleted || i.status == RoutineStatus.completed)

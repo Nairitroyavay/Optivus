@@ -57,6 +57,47 @@ class WorkSetupErrorMapper {
         'Your current setup is still active. Please try again.';
   }
 
+  /// Maps removal errors to actionable user-facing messages.
+  static String mapRemoveError(Object error) {
+    if (error is BaseTimelineConcurrencyException) {
+      return 'Your Work setup changed while you were editing.\n'
+          'Reload the latest setup before trying again.';
+    }
+
+    final errStr = error.toString().toLowerCase();
+
+    if (errStr.contains('stale') ||
+        errStr.contains('revision') ||
+        errStr.contains('conflict') ||
+        errStr.contains('concurrency')) {
+      return 'Your Work setup changed while you were editing.\n'
+          'Reload the latest setup before trying again.';
+    }
+
+    if (errStr.contains('unauthenticated') ||
+        errStr.contains('session') ||
+        errStr.contains('permission-denied') ||
+        errStr.contains('auth')) {
+      return 'Your session changed. Sign in again before trying again.';
+    }
+
+    if (error is TimeoutException || errStr.contains('timeout')) {
+      return 'Failed to remove work setup.\n'
+          'Removal timed out. Your current setup is still active. Please retry.';
+    }
+
+    if (errStr.contains('network') ||
+        errStr.contains('unavailable') ||
+        errStr.contains('offline') ||
+        errStr.contains('connection')) {
+      return 'Failed to remove work setup.\n'
+          'Your current setup is still active. Please retry.';
+    }
+
+    return 'Failed to remove work setup.\n'
+        'Your current setup is still active. Please try again.';
+  }
+
   /// Maps photo selection, permission, and cloud storage upload errors into user-facing messages.
   static String mapUploadError(Object error) {
     final errStr = error.toString().toLowerCase();
