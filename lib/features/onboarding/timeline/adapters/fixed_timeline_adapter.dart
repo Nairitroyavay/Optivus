@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/optivus_colors.dart';
 import '../../../../models/onboarding_draft.dart';
+import '../../../routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
 import '../../../routine/utils/timeline_utils.dart';
 import '../models/timeline_entry.dart';
 import '../models/timeline_style.dart';
@@ -19,6 +20,11 @@ class FixedTimelineAdapter
 
   @override
   List<TimelineEntry> toEntries(TimelineBlockDraft block) {
+    final entryMinHeight = BaseTimelineDomainCard.minimumHeight(
+      block,
+      BaseTimelineCardDomain.fixed,
+    );
+
     // Normal non-overnight block
     if (block.startMinute < block.endMinute && !block.crossesMidnight) {
       return [
@@ -33,10 +39,7 @@ class FixedTimelineAdapter
           category: TimelineCategory.fixed,
           isEditable: true,
           adapterKey: 'fixed',
-          minHeight:
-              88 +
-              (block.location?.trim().isNotEmpty == true ? 18 : 0) +
-              (block.notes?.trim().isNotEmpty == true ? 34 : 0),
+          minHeight: entryMinHeight,
         ),
       ];
     }
@@ -61,10 +64,7 @@ class FixedTimelineAdapter
             category: TimelineCategory.fixed,
             isEditable: true,
             adapterKey: 'fixed',
-            minHeight:
-                106 +
-                (block.location?.trim().isNotEmpty == true ? 18 : 0) +
-                (block.notes?.trim().isNotEmpty == true ? 34 : 0),
+            minHeight: entryMinHeight,
           ),
         );
       }
@@ -85,10 +85,7 @@ class FixedTimelineAdapter
             category: TimelineCategory.fixed,
             isEditable: true,
             adapterKey: 'fixed',
-            minHeight:
-                106 +
-                (block.location?.trim().isNotEmpty == true ? 18 : 0) +
-                (block.notes?.trim().isNotEmpty == true ? 34 : 0),
+            minHeight: entryMinHeight,
           ),
         );
       }
@@ -128,6 +125,9 @@ class FixedTimelineAdapter
     required Future<bool> Function(TimelineBlockDraft updated) onSave,
     Color accent = OptivusColors.purpleAccent,
   }) {
+    final isRequiredBlock =
+        block.id == BaseTimelineDraft.fixedSleepId ||
+        block.id == BaseTimelineDraft.fixedBathId;
     final titleCtrl = TextEditingController(text: block.title);
     final locationCtrl = TextEditingController(text: block.location ?? '');
     final notesCtrl = TextEditingController(text: block.notes ?? '');
@@ -146,7 +146,7 @@ class FixedTimelineAdapter
       accent: accent,
       onSave: () async {
         if (!formKey.currentState!.validate()) return false;
-        final title = titleCtrl.text.trim();
+        final title = isRequiredBlock ? block.title : titleCtrl.text.trim();
         if (title.isEmpty) {
           throw Exception('Title is required.');
         }
@@ -157,6 +157,7 @@ class FixedTimelineAdapter
           throw Exception('Select at least one day.');
         }
 
+        final isOvernight = crossesMidnight;
         final updated = block.copyWith(
           title: title,
           location: locationCtrl.text.trim(),
@@ -164,7 +165,8 @@ class FixedTimelineAdapter
           startMinute: startMinute,
           endMinute: endMinute,
           repeatDays: selectedDays.toList()..sort(),
-          crossesMidnight: crossesMidnight,
+          crossesMidnight: isOvernight,
+          endsNextDay: isOvernight,
         );
 
         return await onSave(updated);
@@ -191,10 +193,16 @@ class FixedTimelineAdapter
                   TextFormField(
                     key: const Key('timeline-edit-fixed-title-field'),
                     controller: titleCtrl,
+                    readOnly: isRequiredBlock,
                     decoration: InputDecoration(
                       hintText: 'e.g. Sleep / Bath',
+                      helperText: isRequiredBlock
+                          ? 'Core routine block name cannot be changed'
+                          : null,
                       filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.6),
+                      fillColor: isRequiredBlock
+                          ? Colors.white.withValues(alpha: 0.1)
+                          : Colors.white.withValues(alpha: 0.6),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(

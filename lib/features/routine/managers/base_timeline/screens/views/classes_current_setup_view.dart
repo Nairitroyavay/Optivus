@@ -182,9 +182,7 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
       decoration: BoxDecoration(
         color: OptivusColors.warning.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: OptivusColors.warning.withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: OptivusColors.warning.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -248,8 +246,7 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
           _buildHeader(context, snapshot),
 
           // Routine Refresh Pending Banner
-          if (widget.routineRefreshPending)
-            _buildRefreshPendingBanner(context),
+          if (widget.routineRefreshPending) _buildRefreshPendingBanner(context),
 
           // 2. Large Timetable Photo Preview directly below header
           if (hasSourcePhoto)

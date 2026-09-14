@@ -14,6 +14,7 @@ import 'package:optivus/features/routine/managers/base_timeline/services/eating_
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_ai_thinking_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -73,12 +74,18 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
   late List<TimelineBlockDraft> _workingBlocks;
   String? _workingGoal;
   int? _workingMealsPerDay;
+  String? _workingEatingMode;
   String? _workingFoodType;
+  String? _workingFoodStyleCustomText;
+  int? _workingBreakfastMinute;
+  int? _workingLunchMinute;
+  int? _workingDinnerMinute;
+  int? _workingSnackMinute;
+  int? _workingExtraSnackMinute;
   int? _workingTargetCalories;
   int? _workingTargetProtein;
   String? _workingAssetId;
   String? _workingR2Key;
-  String? _workingSetupPath;
   String? _initialAssetId;
   String? _initialR2Key;
   int? _editorBaseRevision;
@@ -92,14 +99,20 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     _workingBlocks = List.from(setup.eatingBlocks);
     _workingGoal = setup.mealPlanningGoal ?? 'maintain';
     _workingMealsPerDay = setup.mealsPerDay ?? 3;
-    _workingFoodType = setup.foodType ?? 'Balanced';
+    _workingEatingMode = setup.eatingMode ?? 'india';
+    _workingFoodType = setup.foodType ?? 'mixed';
+    _workingFoodStyleCustomText = setup.foodStyleCustomText;
+    _workingBreakfastMinute = setup.breakfastMinute ?? 480;
+    _workingLunchMinute = setup.lunchMinute ?? 780;
+    _workingDinnerMinute = setup.dinnerMinute ?? 1230;
+    _workingSnackMinute = setup.snackMinute ?? 1020;
+    _workingExtraSnackMinute = setup.extraSnackMinute ?? 660;
     _workingTargetCalories = setup.targetCalories ?? 2000;
     _workingTargetProtein = setup.targetProtein ?? 130;
     _workingAssetId = setup.eatingPhotoAssetId;
     _workingR2Key = setup.eatingPhotoR2Key;
     _initialAssetId = setup.eatingPhotoAssetId;
     _initialR2Key = setup.eatingPhotoR2Key;
-    _workingSetupPath = setup.eatingSetupPath ?? 'create';
     _editorBaseRevision = setup.revision;
     _editorOwnerUid = setup.uid;
     _isDirty = false;
@@ -208,19 +221,6 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     if (uid.trim().isEmpty) return;
     final generation = ++_requestGeneration;
     final lifecycleHelper = ref.read(baseTimelineUploadLifecycleHelperProvider);
-
-    // Retire any previously uncommitted upload before starting new one
-    if (_workingAssetId != null && _workingAssetId != _initialAssetId) {
-      try {
-        final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
-        await helper.retireUncommittedUpload(
-          uid: uid,
-          assetId: _workingAssetId,
-          objectKey: _workingR2Key,
-        );
-      } catch (_) {}
-    }
-
     final uploadNotifier = ref.read(uploadControllerProvider.notifier);
 
     setState(() {
@@ -233,6 +233,9 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         'Formatting timeline entries...',
       ];
     });
+
+    String? candidateAssetId;
+    String? candidateR2Key;
 
     try {
       final asset = await uploadNotifier.startUpload(
@@ -247,9 +250,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         return;
       }
 
-      _workingAssetId = asset.assetId;
-      _workingR2Key = asset.r2Key;
-      _workingSetupPath = 'has_routine';
+      candidateAssetId = asset.assetId;
+      candidateR2Key = asset.r2Key;
 
       final reviewDraft = RoutineImportReviewDraft(
         id: 'rev_${asset.assetId}',
@@ -271,73 +273,510 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
           ref.read(userProfileProvider).uid != uid) {
         await lifecycleHelper.retireUncommittedUpload(
           uid: uid,
-          assetId: asset.assetId,
-          objectKey: asset.r2Key,
+          assetId: candidateAssetId,
+          objectKey: candidateR2Key,
         );
         return;
       }
 
-      if (result != null && result.candidates.isNotEmpty) {
-        final validCandidates = result.candidates.where(
-          (candidate) =>
-              candidate.repeatDays.isNotEmpty &&
-              candidate.repeatDays.toSet().length ==
-                  candidate.repeatDays.length &&
-              candidate.repeatDays.every((day) => day >= 1 && day <= 7) &&
-              _importedMealDishes(candidate).isNotEmpty,
-        );
-        final extracted = validCandidates.map((c) {
-          return TimelineBlockDraft(
-            id: c.id,
-            title: c.title,
-            startMinute: c.startMinute,
-            endMinute: c.endMinute,
-            repeatDays: c.repeatDays,
-            section: 'eating',
-            blockType: TimelineBlockDraft.softBlockKey,
-            mealCategory: c.mealCategory,
-            mealSlot: c.mealSlot,
-            dishes: _importedMealDishes(c),
-            calories: c.caloriesEstimate,
-            protein: c.proteinEstimate,
-            location: c.location,
-            notes: c.notes,
-            source: c.extractionEngine,
-            provenanceSourceIds: [
-              if (c.sourceAssetId?.trim().isNotEmpty == true) c.sourceAssetId!,
-            ],
-          );
-        }).toList();
+      final validCandidates =
+          result?.candidates
+              .where(
+                (candidate) =>
+                    candidate.repeatDays.isNotEmpty &&
+                    candidate.repeatDays.toSet().length ==
+                        candidate.repeatDays.length &&
+                    candidate.repeatDays.every((day) => day >= 1 && day <= 7) &&
+                    _importedMealDishes(candidate).isNotEmpty,
+              )
+              .toList() ??
+          [];
 
-        if (mounted) {
-          setState(() {
-            _workingBlocks = extracted;
-            _isDirty = true;
-            _isExtracting = false;
-            if (extracted.length != result.candidates.length) {
-              _errorMessage =
-                  'Some imported meals need repeat-day review and were not added.';
-            }
-          });
-        }
-      } else {
+      if (validCandidates.isEmpty) {
+        // Cleaning candidate asset while preserving existing schedule intact!
+        await lifecycleHelper.retireUncommittedUpload(
+          uid: uid,
+          assetId: candidateAssetId,
+          objectKey: candidateR2Key,
+        );
         if (mounted) {
           setState(() {
             _isExtracting = false;
             _errorMessage =
                 result?.warnings.firstOrNull ??
-                'No meals detected. You can add meals manually.';
+                'No meals detected in photo. Your existing eating schedule was preserved.';
           });
         }
+        return;
+      }
+
+      final extracted = validCandidates.map((c) {
+        return TimelineBlockDraft(
+          id: c.id,
+          title: c.title,
+          startMinute: c.startMinute,
+          endMinute: c.endMinute,
+          repeatDays: c.repeatDays,
+          section: 'eating',
+          blockType: TimelineBlockDraft.softBlockKey,
+          mealCategory: c.mealCategory,
+          mealSlot: c.mealSlot,
+          dishes: _importedMealDishes(c),
+          calories: c.caloriesEstimate,
+          protein: c.proteinEstimate,
+          location: c.location,
+          notes: c.notes,
+          source: c.extractionEngine,
+          provenanceSourceIds: [
+            if (c.sourceAssetId?.trim().isNotEmpty == true) c.sourceAssetId!,
+          ],
+        );
+      }).toList();
+
+      // Extraction succeeded: retire previous uncommitted upload if different from initial
+      if (_workingAssetId != null && _workingAssetId != _initialAssetId) {
+        try {
+          await lifecycleHelper.retireUncommittedUpload(
+            uid: uid,
+            assetId: _workingAssetId,
+            objectKey: _workingR2Key,
+          );
+        } catch (_) {}
+      }
+
+      if (mounted) {
+        setState(() {
+          _workingAssetId = candidateAssetId;
+          _workingR2Key = candidateR2Key;
+          _workingBlocks = extracted;
+          _isDirty = true;
+          _isExtracting = false;
+          if (extracted.length != (result?.candidates.length ?? 0)) {
+            _errorMessage =
+                'Some imported meals need repeat-day review and were not added.';
+          }
+        });
       }
     } catch (e) {
+      if (candidateAssetId != null) {
+        try {
+          await lifecycleHelper.retireUncommittedUpload(
+            uid: uid,
+            assetId: candidateAssetId,
+            objectKey: candidateR2Key,
+          );
+        } catch (_) {}
+      }
       if (mounted) {
         setState(() {
           _isExtracting = false;
-          _errorMessage = 'Upload failed. Please try again or edit manually.';
+          _errorMessage =
+              'Upload failed. Your existing schedule was preserved.';
         });
       }
     }
+  }
+
+  void _showBuildBalancedPlanSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: OptivusColors.backgroundBottom,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        var goal = _workingGoal ?? 'maintain';
+        var meals = _workingMealsPerDay ?? 3;
+        var mode = _workingEatingMode ?? 'india';
+        var type = _workingFoodType ?? 'mixed';
+        final customController = TextEditingController(
+          text: _workingFoodStyleCustomText ?? '',
+        );
+        var breakfastMin = _workingBreakfastMinute ?? 480;
+        var lunchMin = _workingLunchMinute ?? 780;
+        var dinnerMin = _workingDinnerMinute ?? 1230;
+        var snackMin = _workingSnackMinute ?? 1020;
+        var extraSnackMin = _workingExtraSnackMinute ?? 660;
+
+        String formatMin(int min) {
+          final h = (min ~/ 60) % 24;
+          final m = min % 60;
+          final p = h >= 12 ? 'PM' : 'AM';
+          final dh = h == 0 ? 12 : (h > 12 ? h - 12 : h);
+          return '$dh:${m.toString().padLeft(2, '0')} $p';
+        }
+
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 16,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Build Balanced Meal Plan',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: OptivusColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              color: OptivusColors.textSecondary,
+                            ),
+                            onPressed: () => Navigator.pop(ctx),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Goal',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: OptivusColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          for (final opt in const [
+                            ('gain', 'Gain'),
+                            ('lose', 'Lose'),
+                            ('maintain', 'Maintain'),
+                          ])
+                            ChoiceChip(
+                              label: Text(opt.$2),
+                              selected: goal == opt.$1,
+                              selectedColor: OptivusColors.roseAccent
+                                  .withValues(alpha: 0.3),
+                              onSelected: (sel) {
+                                if (sel) setSheetState(() => goal = opt.$1);
+                              },
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Meals per Day',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: OptivusColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          for (final count in const [3, 4, 5])
+                            ChoiceChip(
+                              label: Text('$count meals'),
+                              selected: meals == count,
+                              selectedColor: OptivusColors.roseAccent
+                                  .withValues(alpha: 0.3),
+                              onSelected: (sel) {
+                                if (sel) setSheetState(() => meals = count);
+                              },
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Food Culture & Style',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: OptivusColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          for (final opt in const [
+                            ('india', 'India'),
+                            ('us', 'US'),
+                            ('germany', 'Germany'),
+                            ('mixed', 'Mixed'),
+                            ('custom', 'Custom'),
+                          ])
+                            ChoiceChip(
+                              label: Text(opt.$2),
+                              selected: mode == opt.$1,
+                              selectedColor: OptivusColors.roseAccent
+                                  .withValues(alpha: 0.3),
+                              onSelected: (sel) {
+                                if (sel) setSheetState(() => mode = opt.$1);
+                              },
+                            ),
+                        ],
+                      ),
+                      if (mode == 'custom') ...[
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: customController,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'e.g. Mediterranean, high protein, keto',
+                            hintStyle: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.3),
+                            ),
+                            filled: true,
+                            fillColor: Colors.white.withValues(alpha: 0.05),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Dietary Preference',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: OptivusColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          for (final opt in const [
+                            ('veg', 'Veg'),
+                            ('non_veg', 'Non-veg'),
+                            ('mixed', 'Mixed'),
+                          ])
+                            ChoiceChip(
+                              label: Text(opt.$2),
+                              selected: type == opt.$1,
+                              selectedColor: OptivusColors.roseAccent
+                                  .withValues(alpha: 0.3),
+                              onSelected: (sel) {
+                                if (sel) setSheetState(() => type = opt.$1);
+                              },
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Meal Times',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: OptivusColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      ListTile(
+                        dense: true,
+                        title: const Text(
+                          'Breakfast',
+                          style: TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                        trailing: Text(
+                          formatMin(breakfastMin),
+                          style: const TextStyle(
+                            color: OptivusColors.roseAccent,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        onTap: () async {
+                          final tod = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay(
+                              hour: breakfastMin ~/ 60,
+                              minute: breakfastMin % 60,
+                            ),
+                          );
+                          if (tod != null) {
+                            setSheetState(
+                              () => breakfastMin = tod.hour * 60 + tod.minute,
+                            );
+                          }
+                        },
+                      ),
+                      if (meals == 5)
+                        ListTile(
+                          dense: true,
+                          title: const Text(
+                            'Morning Snack',
+                            style: TextStyle(color: Colors.white, fontSize: 13),
+                          ),
+                          trailing: Text(
+                            formatMin(extraSnackMin),
+                            style: const TextStyle(
+                              color: OptivusColors.roseAccent,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          onTap: () async {
+                            final tod = await showTimePicker(
+                              context: context,
+                              initialTime: TimeOfDay(
+                                hour: extraSnackMin ~/ 60,
+                                minute: extraSnackMin % 60,
+                              ),
+                            );
+                            if (tod != null) {
+                              setSheetState(
+                                () =>
+                                    extraSnackMin = tod.hour * 60 + tod.minute,
+                              );
+                            }
+                          },
+                        ),
+                      ListTile(
+                        dense: true,
+                        title: const Text(
+                          'Lunch',
+                          style: TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                        trailing: Text(
+                          formatMin(lunchMin),
+                          style: const TextStyle(
+                            color: OptivusColors.roseAccent,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        onTap: () async {
+                          final tod = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay(
+                              hour: lunchMin ~/ 60,
+                              minute: lunchMin % 60,
+                            ),
+                          );
+                          if (tod != null) {
+                            setSheetState(
+                              () => lunchMin = tod.hour * 60 + tod.minute,
+                            );
+                          }
+                        },
+                      ),
+                      if (meals >= 4)
+                        ListTile(
+                          dense: true,
+                          title: const Text(
+                            'Afternoon Snack',
+                            style: TextStyle(color: Colors.white, fontSize: 13),
+                          ),
+                          trailing: Text(
+                            formatMin(snackMin),
+                            style: const TextStyle(
+                              color: OptivusColors.roseAccent,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          onTap: () async {
+                            final tod = await showTimePicker(
+                              context: context,
+                              initialTime: TimeOfDay(
+                                hour: snackMin ~/ 60,
+                                minute: snackMin % 60,
+                              ),
+                            );
+                            if (tod != null) {
+                              setSheetState(
+                                () => snackMin = tod.hour * 60 + tod.minute,
+                              );
+                            }
+                          },
+                        ),
+                      ListTile(
+                        dense: true,
+                        title: const Text(
+                          'Dinner',
+                          style: TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                        trailing: Text(
+                          formatMin(dinnerMin),
+                          style: const TextStyle(
+                            color: OptivusColors.roseAccent,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        onTap: () async {
+                          final tod = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay(
+                              hour: dinnerMin ~/ 60,
+                              minute: dinnerMin % 60,
+                            ),
+                          );
+                          if (tod != null) {
+                            setSheetState(
+                              () => dinnerMin = tod.hour * 60 + tod.minute,
+                            );
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: OptivusColors.roseAccent,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                        label: const Text(
+                          'Generate Balanced Plan',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          setState(() {
+                            _workingGoal = goal;
+                            _workingMealsPerDay = meals;
+                            _workingEatingMode = mode;
+                            _workingFoodType = type;
+                            _workingFoodStyleCustomText = mode == 'custom'
+                                ? customController.text.trim()
+                                : null;
+                            _workingBreakfastMinute = breakfastMin;
+                            _workingExtraSnackMinute = extraSnackMin;
+                            _workingLunchMinute = lunchMin;
+                            _workingSnackMinute = snackMin;
+                            _workingDinnerMinute = dinnerMin;
+                          });
+                          _generateBalancedPlan();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _generateBalancedPlan() async {
@@ -357,7 +796,14 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     final workingSetup = currentSetup.copyWith(
       mealPlanningGoal: _workingGoal,
       mealsPerDay: _workingMealsPerDay,
+      eatingMode: _workingEatingMode,
       foodType: _workingFoodType,
+      foodStyleCustomText: _workingFoodStyleCustomText,
+      breakfastMinute: _workingBreakfastMinute,
+      lunchMinute: _workingLunchMinute,
+      dinnerMinute: _workingDinnerMinute,
+      snackMinute: _workingSnackMinute,
+      extraSnackMinute: _workingExtraSnackMinute,
       targetCalories: _workingTargetCalories,
       targetProtein: _workingTargetProtein,
     );
@@ -411,7 +857,6 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         }
         setState(() {
           _workingBlocks = blocks;
-          _workingSetupPath = 'create';
           _workingTargetCalories = targets.targetCalories;
           _workingTargetProtein = targets.proteinTarget?.round();
           // Clear photo provenance when switching to generated mode
@@ -487,6 +932,17 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
 
   Future<void> _saveWorkingSetup() async {
     if (_isSaving) return;
+    if (_workingBlocks.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Cannot save an empty eating schedule. Add meals or build a plan.',
+          ),
+          backgroundColor: OptivusColors.danger,
+        ),
+      );
+      return;
+    }
     setState(() => _isSaving = true);
     try {
       final uid = ref.read(userProfileProvider).uid;
@@ -499,20 +955,28 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         section: BaseTimelineSection.eating,
         newBlocks: _workingBlocks,
         expectedRevision: _editorBaseRevision,
-        updateSetup: (current) => current.copyWith(
-          eatingBlocks: _workingBlocks,
-          eatingSetupPath: _workingSetupPath,
-          mealPlanningGoal: _workingGoal,
-          mealsPerDay: _workingMealsPerDay,
-          foodType: _workingFoodType,
-          targetCalories: _workingTargetCalories,
-          targetProtein: _workingTargetProtein,
-          eatingPhotoAssetId: _workingAssetId,
-          clearEatingPhotoAssetId: _workingAssetId == null,
-          eatingPhotoR2Key: _workingR2Key,
-          clearEatingPhotoR2Key: _workingR2Key == null,
-          updatedAt: DateTime.now(),
-        ),
+        updateSetup: (current) => _workingAssetId != null
+            ? current.asEatingPhoto(
+                photoAssetId: _workingAssetId!,
+                photoR2Key: _workingR2Key!,
+                blocks: _workingBlocks,
+                meals: _workingMealsPerDay,
+              )
+            : current.asEatingGenerated(
+                blocks: _workingBlocks,
+                goal: _workingGoal,
+                meals: _workingMealsPerDay,
+                mode: _workingEatingMode,
+                type: _workingFoodType,
+                styleCustomText: _workingFoodStyleCustomText,
+                breakfast: _workingBreakfastMinute,
+                lunch: _workingLunchMinute,
+                dinner: _workingDinnerMinute,
+                snack: _workingSnackMinute,
+                extraSnack: _workingExtraSnackMinute,
+                calories: _workingTargetCalories,
+                protein: _workingTargetProtein,
+              ),
       );
 
       // Retire replaced asset if photo changed
@@ -553,7 +1017,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       }
     } catch (e) {
       if (mounted) {
-        final isConflict = e.toString().toLowerCase().contains('conflict') ||
+        final isConflict =
+            e.toString().toLowerCase().contains('conflict') ||
             e.toString().toLowerCase().contains('concurrency');
         setState(() {
           _isSaving = false;
@@ -564,6 +1029,96 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to update eating schedule: $e'),
+            backgroundColor: OptivusColors.danger,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _resetEatingSetup(BaseTimelineSetup currentSetup) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: OptivusColors.backgroundBottom,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Reset Eating Setup?',
+          style: TextStyle(
+            color: OptivusColors.textPrimary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: const Text(
+          'This will remove your custom eating schedule and reset all meal planning preferences to default. This action cannot be undone.',
+          style: TextStyle(color: OptivusColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: OptivusColors.danger,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final uid = ref.read(userProfileProvider).uid;
+    if (uid.trim().isEmpty) return;
+
+    try {
+      final coordinator = ref.read(baseTimelineTransactionCoordinatorProvider);
+      final result = await coordinator.replaceSection(
+        uid: uid,
+        section: BaseTimelineSection.eating,
+        newBlocks: const [],
+        expectedRevision: currentSetup.revision,
+        updateSetup: (current) => current.asEatingReset(),
+      );
+
+      if (currentSetup.eatingPhotoAssetId != null) {
+        try {
+          final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
+          await helper.retireReplacedAsset(
+            uid: uid,
+            oldAssetId: currentSetup.eatingPhotoAssetId!,
+            oldObjectKey: currentSetup.eatingPhotoR2Key,
+          );
+        } catch (_) {}
+      }
+
+      if (mounted) {
+        setState(() {
+          _isEditing = false;
+          _isDirty = false;
+          _refreshPendingRevision = result.routineRefreshPending
+              ? result.revision
+              : null;
+          _refreshPendingMessage = result.routineRefreshMessage;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.routineRefreshPending
+                  ? 'Reset saved. Routine needs to refresh.'
+                  : 'Eating schedule reset successfully.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to reset eating schedule: $e'),
             backgroundColor: OptivusColors.danger,
           ),
         );
@@ -729,7 +1284,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                               label: const Text('Build Balanced Plan'),
                               onPressed: _isExtracting
                                   ? null
-                                  : _generateBalancedPlan,
+                                  : _showBuildBalancedPlanSheet,
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -886,74 +1441,27 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Top Nav Header
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(
-                          Icons.arrow_back_rounded,
-                          color: OptivusColors.textPrimary,
-                        ),
-                        onPressed: widget.onBack,
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.1),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Eating',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                color: OptivusColors.textPrimary,
-                              ),
-                            ),
-                            Text(
-                              snapshot.summary,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: OptivusColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      FilledButton.icon(
-                        icon: const Icon(Icons.edit_calendar_rounded, size: 16),
-                        label: Text(
-                          snapshot.isConfigured
-                              ? 'Change setup'
-                              : 'Set up Eating',
-                        ),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: OptivusColors.roseAccent,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () {
-                          _initWorkingState(setup);
-                          setState(() {
-                            _isEditing = true;
-                            _isDirty = false;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
+                BaseTimelineCurrentSetupHeader(
+                  title: 'Eating',
+                  summary: snapshot.summary,
+                  accent: OptivusColors.roseAccent,
+                  onBack: widget.onBack,
+                  primaryButtonLabel: snapshot.isConfigured
+                      ? 'Change setup'
+                      : 'Set up Eating',
+                  onPrimaryAction: () {
+                    _initWorkingState(setup);
+                    setState(() {
+                      _isEditing = true;
+                      _isDirty = false;
+                    });
+                  },
+                  resetLabel: snapshot.isConfigured
+                      ? 'Reset Eating Setup'
+                      : null,
+                  onReset: snapshot.isConfigured
+                      ? () => _resetEatingSetup(setup)
+                      : null,
                 ),
 
                 // Targets card
@@ -972,74 +1480,97 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                       ),
                     ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        Column(
-                          children: [
-                            Text(
-                              '${setup.targetCalories ?? 2100} kcal',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 15,
-                                color: Colors.white,
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  '${setup.targetCalories ?? 2100} kcal',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 15,
+                                    color: Colors.white,
+                                  ),
+                                ),
                               ),
-                            ),
-                            const Text(
-                              'Daily Target',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: OptivusColors.textSecondary,
+                              const Text(
+                                'Daily Target',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: OptivusColors.textSecondary,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                         Container(
                           height: 24,
                           width: 1,
                           color: Colors.white.withValues(alpha: 0.15),
                         ),
-                        Column(
-                          children: [
-                            Text(
-                              '${setup.targetProtein ?? 140} g',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 15,
-                                color: Colors.white,
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  '${setup.targetProtein ?? 140} g',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 15,
+                                    color: Colors.white,
+                                  ),
+                                ),
                               ),
-                            ),
-                            const Text(
-                              'Protein',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: OptivusColors.textSecondary,
+                              const Text(
+                                'Protein',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: OptivusColors.textSecondary,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                         Container(
                           height: 24,
                           width: 1,
                           color: Colors.white.withValues(alpha: 0.15),
                         ),
-                        Column(
-                          children: [
-                            Text(
-                              '${setup.mealsPerDay ?? 3} meals',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 15,
-                                color: Colors.white,
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  '${setup.mealsPerDay ?? 3} meals',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 15,
+                                    color: Colors.white,
+                                  ),
+                                ),
                               ),
-                            ),
-                            const Text(
-                              'Frequency',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: OptivusColors.textSecondary,
+                              const Text(
+                                'Frequency',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: OptivusColors.textSecondary,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ],
                     ),

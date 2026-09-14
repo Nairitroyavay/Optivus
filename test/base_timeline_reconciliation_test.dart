@@ -207,8 +207,9 @@ void main() {
           baseTimelineSetupNotifierProvider.notifier,
         );
         expect(setupNotifierB.uid, userB);
-        final currentBSetup =
-            container.read(baseTimelineSetupNotifierProvider).valueOrNull;
+        final currentBSetup = container
+            .read(baseTimelineSetupNotifierProvider)
+            .valueOrNull;
         expect(currentBSetup?.workBlocks.isEmpty ?? true, isTrue);
 
         final routineItemsB = container.read(routineNotifierProvider).items;
@@ -228,11 +229,12 @@ void main() {
                 displayName: 'User A',
               ),
             );
-        await container.read(routineNotifierProvider.notifier).loadForOwner(
-          userA,
-        );
-        final reconstructedItems =
-            container.read(routineNotifierProvider).items;
+        await container
+            .read(routineNotifierProvider.notifier)
+            .loadForOwner(userA);
+        final reconstructedItems = container
+            .read(routineNotifierProvider)
+            .items;
         expect(reconstructedItems.length, 1);
         expect(reconstructedItems.first.title, 'Deep Work A');
         expect(reconstructedItems.first.userId, userA);
@@ -517,16 +519,14 @@ void main() {
         expect(
           coordinator.latestRefreshStatusFor(userA),
           isNot(BaseTimelineRoutineRefreshStatus.refreshed),
-          reason: 'Revision 2 must not publish refreshed after revision 3 committed',
+          reason:
+              'Revision 2 must not publish refreshed after revision 3 committed',
         );
         expect(
           coordinator.latestRefreshStatusFor(userA),
           BaseTimelineRoutineRefreshStatus.notAttempted,
         );
-        expect(
-          coordinator.latestRefreshRevisionFor(userA),
-          3,
-        );
+        expect(coordinator.latestRefreshRevisionFor(userA), 3);
 
         // Release commit 2's post-commit reload fetch #6
         delayGate6.complete();
@@ -553,10 +553,7 @@ void main() {
           coordinator.latestRefreshStatusFor(userA),
           BaseTimelineRoutineRefreshStatus.refreshed,
         );
-        expect(
-          coordinator.latestRefreshRevisionFor(userA),
-          3,
-        );
+        expect(coordinator.latestRefreshRevisionFor(userA), 3);
       },
     );
 
@@ -639,10 +636,7 @@ void main() {
           targetRevision: 2,
         );
 
-        expect(
-          retryResult.status,
-          BaseTimelineRoutineRefreshStatus.refreshed,
-        );
+        expect(retryResult.status, BaseTimelineRoutineRefreshStatus.refreshed);
         expect(retryResult.isRefreshed, isTrue);
         // Transaction was NOT called again
         expect(
@@ -738,7 +732,9 @@ void main() {
                   ),
                 ),
             ),
-            baseTimelineSetupRepositoryProvider.overrideWithValue(fakeSetupRepo),
+            baseTimelineSetupRepositoryProvider.overrideWithValue(
+              fakeSetupRepo,
+            ),
             routineRepositoryProvider.overrideWithValue(gatedRoutineRepo),
             routineTransactionRepositoryProvider.overrideWithValue(hookTxRepo),
           ],
@@ -809,10 +805,7 @@ void main() {
           coordinator.latestRefreshStatusFor(userA),
           BaseTimelineRoutineRefreshStatus.refreshPending,
         );
-        expect(
-          coordinator.latestRefreshRevisionFor(userA),
-          2,
-        );
+        expect(coordinator.latestRefreshRevisionFor(userA), 2);
         expect(hookTxRepo.replaceCallCount, 1);
 
         // Now retryRoutineRefresh succeeds without repeating transaction
@@ -822,18 +815,12 @@ void main() {
         );
 
         expect(retryResult.isRefreshed, isTrue);
-        expect(
-          retryResult.status,
-          BaseTimelineRoutineRefreshStatus.refreshed,
-        );
+        expect(retryResult.status, BaseTimelineRoutineRefreshStatus.refreshed);
         expect(
           coordinator.latestRefreshStatusFor(userA),
           BaseTimelineRoutineRefreshStatus.refreshed,
         );
-        expect(
-          coordinator.latestRefreshRevisionFor(userA),
-          2,
-        );
+        expect(coordinator.latestRefreshRevisionFor(userA), 2);
         // Transaction call count must remain 1
         expect(hookTxRepo.replaceCallCount, 1);
         final setup = await fakeSetupRepo.fetchSetup(userA);
@@ -886,7 +873,9 @@ void main() {
                   ),
                 ),
             ),
-            baseTimelineSetupRepositoryProvider.overrideWithValue(fakeSetupRepo),
+            baseTimelineSetupRepositoryProvider.overrideWithValue(
+              fakeSetupRepo,
+            ),
             routineRepositoryProvider.overrideWithValue(gatedRoutineRepo),
             routineTransactionRepositoryProvider.overrideWithValue(hookTxRepo),
           ],
@@ -905,7 +894,10 @@ void main() {
 
         // Configure gate on fetch #3 (User A post-commit routine reload)
         final postCommitFetchGate = Completer<void>();
-        gatedRoutineRepo.gateForFetchNumber(fetchNum: 3, gate: postCommitFetchGate);
+        gatedRoutineRepo.gateForFetchNumber(
+          fetchNum: 3,
+          gate: postCommitFetchGate,
+        );
 
         // Start replaceSection for User A
         final replaceFuture = coordinator.replaceSection(
@@ -920,13 +912,15 @@ void main() {
         await Future<void>.delayed(Duration.zero);
 
         // While fetch #3 is blocked: switch profile to User B and start User B Routine load
-        container.read(userProfileProvider.notifier).loadSeedData(
-          UserProfile(
-            uid: userB,
-            email: 'b@optivus.app',
-            displayName: 'User B',
-          ),
-        );
+        container
+            .read(userProfileProvider.notifier)
+            .loadSeedData(
+              UserProfile(
+                uid: userB,
+                email: 'b@optivus.app',
+                displayName: 'User B',
+              ),
+            );
         final loadBFuture = routineNotifier.loadForOwner(userB);
 
         // Release User A's blocked fetch #3
@@ -958,10 +952,7 @@ void main() {
           coordinator.latestRefreshStatusFor(userA),
           BaseTimelineRoutineRefreshStatus.notAttempted,
         );
-        expect(
-          coordinator.latestRefreshRevisionFor(userA),
-          2,
-        );
+        expect(coordinator.latestRefreshRevisionFor(userA), 2);
 
         // 5. User B Routine state contains NO User A data
         final itemsB = container.read(routineNotifierProvider).items;
@@ -1005,7 +996,9 @@ void main() {
                   ),
                 ),
             ),
-            baseTimelineSetupRepositoryProvider.overrideWithValue(fakeSetupRepo),
+            baseTimelineSetupRepositoryProvider.overrideWithValue(
+              fakeSetupRepo,
+            ),
             routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
             routineTransactionRepositoryProvider.overrideWithValue(fakeTxRepo),
           ],
@@ -1049,7 +1042,10 @@ void main() {
           uid: userA,
           targetRevision: 1,
         );
-        expect(supersededRetry.message, contains('Superseded by newer revision'));
+        expect(
+          supersededRetry.message,
+          contains('Superseded by newer revision'),
+        );
         expect(
           supersededRetry.status,
           coordinator.latestRefreshStatusFor(userA),
@@ -1113,7 +1109,10 @@ class _GatedRoutineRepository extends FakeRoutineRepository {
   final Map<int, Object> _errors = {};
   final Map<int, void Function()> _onFetchStarted = {};
 
-  void gateForFetchNumber({required int fetchNum, required Completer<void> gate}) {
+  void gateForFetchNumber({
+    required int fetchNum,
+    required Completer<void> gate,
+  }) {
     _gates[fetchNum] = gate;
   }
 
@@ -1150,9 +1149,7 @@ class _FailingFollowUpRoutineRepository implements RoutineRepository {
   bool failOnFollowUp = true;
   final RoutineRepository delegate;
 
-  _FailingFollowUpRoutineRepository({
-    required this.delegate,
-  });
+  _FailingFollowUpRoutineRepository({required this.delegate});
 
   @override
   Future<List<RoutineItem>> fetchRoutineItems(String uid) {

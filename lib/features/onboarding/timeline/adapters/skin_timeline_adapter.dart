@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/optivus_colors.dart';
 import '../../../../models/onboarding_draft.dart';
+import '../../../routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
 import '../../steps/onboarding_base_timeline_helpers.dart';
 import '../../steps/onboarding_step_7_skin_care_scheduler.dart';
 import '../models/timeline_entry.dart';
@@ -33,12 +34,10 @@ class SkinTimelineAdapter
         category: TimelineCategory.skinCare,
         isEditable: true,
         adapterKey: 'skin_care',
-        minHeight:
-            110.0 +
-            (block.skincareProducts.length +
-                    block.skincareSteps.length +
-                    block.skincareMissingItems.length) *
-                20.0,
+        minHeight: BaseTimelineDomainCard.minimumHeight(
+          block,
+          BaseTimelineCardDomain.skinCare,
+        ),
       ),
     ];
   }

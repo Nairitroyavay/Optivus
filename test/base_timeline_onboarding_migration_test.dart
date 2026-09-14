@@ -486,25 +486,28 @@ void main() {
       },
     );
 
-    test('initialization and migration save failures surface for retry', () async {
-      const uid = 'migration-write-failure';
-      final repo = _FailingSaveBaseTimelineRepository();
-      repo.failSaves = true;
-      await expectLater(repo.fetchSetup(uid), throwsStateError);
+    test(
+      'initialization and migration save failures surface for retry',
+      () async {
+        const uid = 'migration-write-failure';
+        final repo = _FailingSaveBaseTimelineRepository();
+        repo.failSaves = true;
+        await expectLater(repo.fetchSetup(uid), throwsStateError);
 
-      repo.failSaves = false;
-      await repo.saveSetup(
-        uid,
-        BaseTimelineSetup(
-          uid: uid,
-          updatedAt: DateTime.utc(2026, 9, 13),
-          schemaVersion: 2,
-          revision: 4,
-        ),
-      );
-      repo.failSaves = true;
-      await expectLater(repo.fetchSetup(uid), throwsStateError);
-    });
+        repo.failSaves = false;
+        await repo.saveSetup(
+          uid,
+          BaseTimelineSetup(
+            uid: uid,
+            updatedAt: DateTime.utc(2026, 9, 13),
+            schemaVersion: 2,
+            revision: 4,
+          ),
+        );
+        repo.failSaves = true;
+        await expectLater(repo.fetchSetup(uid), throwsStateError);
+      },
+    );
   });
 }
 

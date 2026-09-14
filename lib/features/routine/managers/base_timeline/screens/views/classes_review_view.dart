@@ -156,8 +156,9 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
                 Expanded(
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
-                      backgroundColor:
-                          OptivusColors.blueAccent.withValues(alpha: 0.12),
+                      backgroundColor: OptivusColors.blueAccent.withValues(
+                        alpha: 0.12,
+                      ),
                       side: BorderSide(
                         color: OptivusColors.blueAccent.withValues(alpha: 0.5),
                         width: 1.5,

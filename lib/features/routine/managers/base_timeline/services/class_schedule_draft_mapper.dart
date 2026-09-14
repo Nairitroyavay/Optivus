@@ -144,7 +144,8 @@ class ClassScheduleDraftMapper {
       if (provenanceR2Key != null && provenanceR2Key.trim().isNotEmpty)
         provenanceR2Key.trim(),
     ];
-    final resolvedSource = source ??
+    final resolvedSource =
+        source ??
         ((provenanceAssetId != null && provenanceAssetId.trim().isNotEmpty) ||
                 (provenanceR2Key != null && provenanceR2Key.trim().isNotEmpty)
             ? 'ai_import'

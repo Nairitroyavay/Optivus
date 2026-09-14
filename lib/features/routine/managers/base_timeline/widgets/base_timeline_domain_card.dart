@@ -80,22 +80,54 @@ class BaseTimelineDomainCard extends StatelessWidget {
     BaseTimelineCardDomain domain,
   ) {
     return switch (domain) {
-      BaseTimelineCardDomain.work =>
-        94 +
-            (block.location?.trim().isNotEmpty == true ? 18 : 0) +
-            (block.notes?.trim().isNotEmpty == true ? 34 : 0),
-      BaseTimelineCardDomain.eating =>
-        108 + block.dishes.where((e) => e.trim().isNotEmpty).length * 20,
-      BaseTimelineCardDomain.fixed =>
-        88 +
-            (block.location?.trim().isNotEmpty == true ? 18 : 0) +
-            (block.notes?.trim().isNotEmpty == true ? 34 : 0),
-      BaseTimelineCardDomain.skinCare =>
-        110 +
-            (block.skincareSteps.length +
-                    block.skincareProducts.length +
-                    block.skincareMissingItems.length) *
-                20,
+      BaseTimelineCardDomain.work => () {
+        final hasLoc = block.location?.trim().isNotEmpty == true;
+        final hasSection = block.sectionLabel?.trim().isNotEmpty == true;
+        final notes = block.notes?.trim() ?? '';
+        final notesExtra = notes.isEmpty
+            ? 0.0
+            : (notes.length > 50 ? 50.0 : 32.0);
+        return 94.0 +
+            (hasLoc ? 20.0 : 0.0) +
+            (hasSection ? 20.0 : 0.0) +
+            notesExtra;
+      }(),
+      BaseTimelineCardDomain.eating => () {
+        final validDishes = block.dishes
+            .where((e) => e.trim().isNotEmpty)
+            .length;
+        final hasLabels =
+            (block.mealSlot?.trim().isNotEmpty == true) ||
+            (block.mealCategory?.trim().isNotEmpty == true);
+        final hasMacros = block.calories != null || block.protein != null;
+        return 90.0 +
+            (hasLabels ? 20.0 : 0.0) +
+            (hasMacros ? 20.0 : 0.0) +
+            (validDishes > 0 ? 18.0 + validDishes * 22.0 : 0.0);
+      }(),
+      BaseTimelineCardDomain.fixed => () {
+        final isOvernight = block.crossesMidnight || block.endsNextDay;
+        final hasLoc = block.location?.trim().isNotEmpty == true;
+        final notes = block.notes?.trim() ?? '';
+        final notesExtra = notes.isEmpty
+            ? 0.0
+            : (notes.length > 50 ? 50.0 : 32.0);
+        return 88.0 +
+            (isOvernight ? 22.0 : 0.0) +
+            (hasLoc ? 20.0 : 0.0) +
+            notesExtra;
+      }(),
+      BaseTimelineCardDomain.skinCare => () {
+        final hasSlot = block.skincareSlotLabel?.trim().isNotEmpty == true;
+        final stepsCount = block.skincareSteps.length;
+        final prodCount = block.skincareProducts.length;
+        final missCount = block.skincareMissingItems.length;
+        return 88.0 +
+            (hasSlot ? 22.0 : 0.0) +
+            (stepsCount > 0 ? 18.0 + stepsCount * 22.0 : 0.0) +
+            (prodCount > 0 ? 18.0 + prodCount * 22.0 : 0.0) +
+            (missCount > 0 ? 18.0 + missCount * 22.0 : 0.0);
+      }(),
     };
   }
 

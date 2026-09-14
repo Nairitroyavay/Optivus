@@ -13,6 +13,7 @@ import 'package:optivus/features/routine/managers/base_timeline/widgets/base_tim
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
+import 'package:optivus/repositories/base_timeline_setup_repository.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
@@ -124,18 +125,6 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
     final generation = ++_operationGeneration;
     final lifecycleHelper = ref.read(baseTimelineUploadLifecycleHelperProvider);
 
-    // Retire any previously uncommitted upload before starting new one
-    if (_assetId != null && _assetId != widget.initialAssetId) {
-      try {
-        final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
-        await helper.retireUncommittedUpload(
-          uid: uid,
-          assetId: _assetId,
-          objectKey: _r2Key,
-        );
-      } catch (_) {}
-    }
-
     final uploadNotifier = ref.read(uploadControllerProvider.notifier);
     final purpose = widget.config.source == RoutineImportReviewSource.classes
         ? UploadedAssetPurpose.classTimetable
@@ -145,6 +134,9 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
       _isExtracting = true;
       _errorMessage = null;
     });
+
+    String? candidateAssetId;
+    String? candidateR2Key;
 
     try {
       final asset = await uploadNotifier.startUpload(
@@ -163,8 +155,8 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
         return;
       }
 
-      _assetId = asset.assetId;
-      _r2Key = asset.r2Key;
+      candidateAssetId = asset.assetId;
+      candidateR2Key = asset.r2Key;
 
       // Run AI Extraction
       final reviewDraft = RoutineImportReviewDraft(
@@ -187,8 +179,8 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
           ref.read(userProfileProvider).uid != uid) {
         await lifecycleHelper.retireUncommittedUpload(
           uid: uid,
-          assetId: asset.assetId,
-          objectKey: asset.r2Key,
+          assetId: candidateAssetId,
+          objectKey: candidateR2Key,
         );
         return;
       }
@@ -200,6 +192,17 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
         );
 
         if (mappingResult.blocks.isNotEmpty) {
+          // Extraction succeeded! Retire previously uncommitted asset if replaced
+          if (_assetId != null && _assetId != widget.initialAssetId) {
+            try {
+              await lifecycleHelper.retireUncommittedUpload(
+                uid: uid,
+                assetId: _assetId,
+                objectKey: _r2Key,
+              );
+            } catch (_) {}
+          }
+
           if (mounted) {
             final candidatesById = {
               for (final candidate in result.candidates)
@@ -224,11 +227,19 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
             }).toList();
             setState(() {
               _blocks = mappedBlocks;
+              _assetId = candidateAssetId;
+              _r2Key = candidateR2Key;
               _isDirty = true;
               _isExtracting = false;
             });
           }
         } else {
+          // Clean candidate upload and preserve existing blocks and working asset
+          await lifecycleHelper.retireUncommittedUpload(
+            uid: uid,
+            assetId: candidateAssetId,
+            objectKey: candidateR2Key,
+          );
           if (mounted) {
             setState(() {
               _isExtracting = false;
@@ -239,6 +250,12 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
           }
         }
       } else {
+        // Clean candidate upload and preserve existing blocks and working asset
+        await lifecycleHelper.retireUncommittedUpload(
+          uid: uid,
+          assetId: candidateAssetId,
+          objectKey: candidateR2Key,
+        );
         if (mounted) {
           setState(() {
             _isExtracting = false;
@@ -249,6 +266,15 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
         }
       }
     } catch (e) {
+      if (candidateAssetId != null) {
+        try {
+          await lifecycleHelper.retireUncommittedUpload(
+            uid: uid,
+            assetId: candidateAssetId,
+            objectKey: candidateR2Key,
+          );
+        } catch (_) {}
+      }
       if (mounted) {
         setState(() {
           _isExtracting = false;
@@ -424,9 +450,7 @@ class _ScheduleSetupFlowState extends ConsumerState<ScheduleSetupFlow> {
       canPop: !_isDirty && !_isSaving && !_isExtracting,
       onPopInvokedWithResult: (didPop, _) async {
         if (!didPop) {
-          if (await _confirmDiscard()) {
-            widget.onCancel();
-          }
+          _handleCancel();
         }
       },
       child: Scaffold(

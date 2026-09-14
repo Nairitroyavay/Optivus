@@ -628,6 +628,31 @@ class BaseTimelineSetup {
     );
   }
 
+  /// Resets Eating setup to unconfigured defaults.
+  BaseTimelineSetup asEatingReset() {
+    return copyWith(
+      clearEatingSetupPath: true,
+      eatingBlocks: const [],
+      eatingRoutineItemIds: const [],
+      clearMealPlanningGoal: true,
+      clearMealsPerDay: true,
+      clearEatingMode: true,
+      clearFoodType: true,
+      clearFoodStyleCustomText: true,
+      clearMealBudget: true,
+      clearCookingAbility: true,
+      clearBreakfastMinute: true,
+      clearLunchMinute: true,
+      clearDinnerMinute: true,
+      clearSnackMinute: true,
+      clearExtraSnackMinute: true,
+      clearTargetCalories: true,
+      clearTargetProtein: true,
+      clearEatingPhotoAssetId: true,
+      clearEatingPhotoR2Key: true,
+    );
+  }
+
   BaseTimelineSetup copyWith({
     String? uid,
     DateTime? updatedAt,

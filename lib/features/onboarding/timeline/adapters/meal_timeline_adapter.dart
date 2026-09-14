@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/optivus_colors.dart';
 import '../../../../models/onboarding_draft.dart';
+import '../../../routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
 import '../../../routine/utils/timeline_utils.dart';
 import '../models/timeline_entry.dart';
 import '../models/timeline_style.dart';
@@ -28,7 +29,10 @@ class MealTimelineAdapter
         category: TimelineCategory.meal,
         isEditable: true,
         adapterKey: 'eating',
-        minHeight: 72.0 + block.dishes.length * 40.0,
+        minHeight: BaseTimelineDomainCard.minimumHeight(
+          block,
+          BaseTimelineCardDomain.eating,
+        ),
       ),
     ];
   }
@@ -233,5 +237,4 @@ class MealTimelineAdapter
       ),
     );
   }
-
 }

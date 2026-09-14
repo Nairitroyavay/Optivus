@@ -6,9 +6,12 @@ import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_mod
 import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
+import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/schedule_setup_flow.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_upload_lifecycle_helper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_timeline_adapter.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
 import 'package:optivus/repositories/base_timeline_setup_repository.dart';
@@ -32,6 +35,112 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
   String? _refreshPendingMessage;
   int? _editorBaseRevision;
   String? _editorOwnerUid;
+
+  Future<void> _handleRemoveWorkSetup(
+    BaseTimelineSetup setup,
+    String uid,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: OptivusColors.backgroundBottom,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Remove Work Setup?',
+          style: TextStyle(
+            color: OptivusColors.textPrimary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: const Text(
+          'This will remove all work and business blocks from your Base Timeline. This action cannot be undone.',
+          style: TextStyle(color: OptivusColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('work-confirm-remove-button'),
+            style: FilledButton.styleFrom(
+              backgroundColor: OptivusColors.danger,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final expectedRevision = _editorBaseRevision ?? setup.revision;
+    final oldAssetId = setup.workLogicalAssetId;
+    final oldObjectKey = setup.workLogicalAssetR2Key;
+
+    try {
+      final coordinator = ref.read(baseTimelineTransactionCoordinatorProvider);
+      final result = await coordinator.replaceSection(
+        uid: uid,
+        section: BaseTimelineSection.work,
+        newBlocks: const [],
+        expectedRevision: expectedRevision,
+        updateSetup: (current) => current.copyWith(
+          workBlocks: const [],
+          clearWorkLogicalAssetId: true,
+          clearWorkLogicalAssetR2Key: true,
+          updatedAt: DateTime.now(),
+        ),
+      );
+
+      if (oldAssetId != null) {
+        try {
+          final lifecycleHelper = ref.read(
+            baseTimelineUploadLifecycleHelperProvider,
+          );
+          await lifecycleHelper.retireReplacedAsset(
+            uid: uid,
+            oldAssetId: oldAssetId,
+            oldObjectKey: oldObjectKey,
+          );
+        } catch (err) {
+          debugPrint('Failed retiring old work asset on remove: $err');
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _isEditing = false;
+          _editorBaseRevision = result.revision;
+          _refreshPendingRevision = result.routineRefreshPending
+              ? result.revision
+              : null;
+          _refreshPendingMessage = result.routineRefreshMessage;
+        });
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              result.routineRefreshPending
+                  ? 'Work setup removed. Routine needs to refresh.'
+                  : 'Work setup removed.',
+            ),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Failed to remove Work setup: $e'),
+            backgroundColor: OptivusColors.danger,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -155,72 +264,23 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Top Nav Header
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(
-                          Icons.arrow_back_rounded,
-                          color: OptivusColors.textPrimary,
-                        ),
-                        onPressed: widget.onBack,
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.1),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Work / Business',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                color: OptivusColors.textPrimary,
-                              ),
-                            ),
-                            Text(
-                              snapshot.summary,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: OptivusColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      FilledButton.icon(
-                        icon: const Icon(Icons.edit_calendar_rounded, size: 16),
-                        label: Text(
-                          snapshot.isConfigured
-                              ? 'Change setup'
-                              : 'Set up Work',
-                        ),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: OptivusColors.warning,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () => setState(() {
-                          _editorBaseRevision = setup.revision;
-                          _editorOwnerUid = setup.uid;
-                          _isEditing = true;
-                        }),
-                      ),
-                    ],
-                  ),
+                BaseTimelineCurrentSetupHeader(
+                  title: 'Work / Business',
+                  summary: snapshot.summary,
+                  accent: OptivusColors.warning,
+                  onBack: widget.onBack,
+                  primaryButtonLabel: snapshot.isConfigured
+                      ? 'Change setup'
+                      : 'Set up Work',
+                  onPrimaryAction: () => setState(() {
+                    _editorBaseRevision = setup.revision;
+                    _editorOwnerUid = setup.uid;
+                    _isEditing = true;
+                  }),
+                  removeLabel: 'Remove Work Setup',
+                  onRemove: snapshot.isConfigured
+                      ? () => _handleRemoveWorkSetup(setup, setup.uid)
+                      : null,
                 ),
 
                 // Source Photo Preview
@@ -236,56 +296,23 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
                   ),
 
                 if (_refreshPendingRevision != null)
-                  Container(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 6,
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: OptivusColors.warning.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.sync_problem_rounded,
-                          color: OptivusColors.warning,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _refreshPendingMessage ??
-                                'Saved, but Routine needs to refresh.',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () async {
-                            final uid = ref.read(userProfileProvider).uid;
-                            final result = await ref
-                                .read(
-                                  baseTimelineTransactionCoordinatorProvider,
-                                )
-                                .retryRoutineRefresh(
-                                  uid: uid,
-                                  targetRevision: _refreshPendingRevision,
-                                );
-                            if (mounted && result.isRefreshed) {
-                              setState(() {
-                                _refreshPendingRevision = null;
-                                _refreshPendingMessage = null;
-                              });
-                            }
-                          },
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
+                  BaseTimelineRefreshPendingBanner(
+                    message: _refreshPendingMessage,
+                    onRetry: () async {
+                      final uid = ref.read(userProfileProvider).uid;
+                      final result = await ref
+                          .read(baseTimelineTransactionCoordinatorProvider)
+                          .retryRoutineRefresh(
+                            uid: uid,
+                            targetRevision: _refreshPendingRevision,
+                          );
+                      if (mounted && result.isRefreshed) {
+                        setState(() {
+                          _refreshPendingRevision = null;
+                          _refreshPendingMessage = null;
+                        });
+                      }
+                    },
                   ),
 
                 // Timeline View

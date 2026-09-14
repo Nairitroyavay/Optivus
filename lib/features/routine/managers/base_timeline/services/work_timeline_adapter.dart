@@ -3,6 +3,7 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_entry.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_style.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/timeline_edit_sheet_shell.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 
@@ -26,10 +27,10 @@ class BaseTimelineWorkAdapter {
       category: TimelineCategory.work,
       isEditable: true,
       adapterKey: 'base_timeline_work',
-      minHeight:
-          94 +
-          (block.location?.trim().isNotEmpty == true ? 18 : 0) +
-          (block.notes?.trim().isNotEmpty == true ? 34 : 0),
+      minHeight: BaseTimelineDomainCard.minimumHeight(
+        block,
+        BaseTimelineCardDomain.work,
+      ),
     ),
   ];
 

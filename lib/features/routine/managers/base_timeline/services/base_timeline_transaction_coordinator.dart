@@ -25,13 +25,9 @@ class BaseTimelineRoutineRefreshResult {
   final BaseTimelineRoutineRefreshStatus status;
   final String? message;
 
-  const BaseTimelineRoutineRefreshResult({
-    required this.status,
-    this.message,
-  });
+  const BaseTimelineRoutineRefreshResult({required this.status, this.message});
 
-  bool get isRefreshed =>
-      status == BaseTimelineRoutineRefreshStatus.refreshed;
+  bool get isRefreshed => status == BaseTimelineRoutineRefreshStatus.refreshed;
   bool get isPending =>
       status == BaseTimelineRoutineRefreshStatus.refreshPending;
 }
@@ -55,8 +51,7 @@ class BaseTimelineSectionReplaceResult {
   int get revision => commit.revision;
 
   bool get routineRefreshPending =>
-      routineRefreshStatus ==
-      BaseTimelineRoutineRefreshStatus.refreshPending;
+      routineRefreshStatus == BaseTimelineRoutineRefreshStatus.refreshPending;
 }
 
 /// Immutable snapshot pairing a durable Base Timeline revision with its
@@ -80,7 +75,8 @@ class BaseTimelineTransactionCoordinator {
   final BaseTimelineSetupRepository _setupRepo;
   final Ref? _ref;
   final Map<String, int> _latestCommittedRevisionByUid = {};
-  final Map<String, BaseTimelineRoutineRefreshState> _latestRefreshStateByUid = {};
+  final Map<String, BaseTimelineRoutineRefreshState> _latestRefreshStateByUid =
+      {};
   final Map<String, Future<void>> _reconciliationTailByUid = {};
 
   BaseTimelineTransactionCoordinator({
@@ -147,8 +143,10 @@ class BaseTimelineTransactionCoordinator {
       return false;
     }
 
-    final routineOwner =
-        ref.read(routineNotifierProvider.notifier).ownerUid?.trim();
+    final routineOwner = ref
+        .read(routineNotifierProvider.notifier)
+        .ownerUid
+        ?.trim();
     if (routineOwner != null &&
         routineOwner.isNotEmpty &&
         routineOwner != targetUid) {
@@ -490,8 +488,9 @@ class BaseTimelineTransactionCoordinator {
 
     // Safe in-memory publication: ensure target notifier is bound to this UID
     try {
-      final setupNotifier =
-          _ref.read(baseTimelineSetupNotifierProvider.notifier);
+      final setupNotifier = _ref.read(
+        baseTimelineSetupNotifierProvider.notifier,
+      );
       if (setupNotifier.uid == uid) {
         setupNotifier.updateInMemory(commitResult.committedSetup);
       }
@@ -540,12 +539,14 @@ class BaseTimelineTransactionCoordinator {
         uid: uid,
         revision: committedRevision,
         status: BaseTimelineRoutineRefreshStatus.notAttempted,
-        message: accountSwitchedMessage ??
+        message:
+            accountSwitchedMessage ??
             'Active session does not match requested owner.',
       );
       return BaseTimelineRoutineRefreshResult(
         status: BaseTimelineRoutineRefreshStatus.notAttempted,
-        message: accountSwitchedMessage ??
+        message:
+            accountSwitchedMessage ??
             'Active session does not match requested owner.',
       );
     }
@@ -570,12 +571,14 @@ class BaseTimelineTransactionCoordinator {
           uid: uid,
           revision: committedRevision,
           status: BaseTimelineRoutineRefreshStatus.notAttempted,
-          message: accountSwitchedMessage ??
+          message:
+              accountSwitchedMessage ??
               'Active session does not match requested owner.',
         );
         return BaseTimelineRoutineRefreshResult(
           status: BaseTimelineRoutineRefreshStatus.notAttempted,
-          message: accountSwitchedMessage ??
+          message:
+              accountSwitchedMessage ??
               'Active session does not match requested owner.',
         );
       }
@@ -592,12 +595,14 @@ class BaseTimelineTransactionCoordinator {
             uid: uid,
             revision: committedRevision,
             status: BaseTimelineRoutineRefreshStatus.notAttempted,
-            message: accountSwitchedMessage ??
+            message:
+                accountSwitchedMessage ??
                 'Saved, but local refresh was skipped because the active account changed.',
           );
           return BaseTimelineRoutineRefreshResult(
             status: BaseTimelineRoutineRefreshStatus.notAttempted,
-            message: accountSwitchedMessage ??
+            message:
+                accountSwitchedMessage ??
                 'Saved, but local refresh was skipped because the active account changed.',
           );
         }

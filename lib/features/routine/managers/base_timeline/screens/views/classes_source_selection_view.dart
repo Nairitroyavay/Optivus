@@ -132,9 +132,7 @@ class ClassesSourceSelectionView extends StatelessWidget {
                 children: [
                   if (snapshot.sourceR2Key != null ||
                       snapshot.sourceAssetId != null) ...[
-                    const LiquidSectionHeader(
-                      title: 'CURRENT PHOTO',
-                    ),
+                    const LiquidSectionHeader(title: 'CURRENT PHOTO'),
                     BaseTimelinePhotoPreviewCard(
                       r2Key: snapshot.sourceR2Key,
                       assetId: snapshot.sourceAssetId,
@@ -145,7 +143,8 @@ class ClassesSourceSelectionView extends StatelessWidget {
                     const SizedBox(height: 16),
                   ],
                   LiquidSectionHeader(
-                    title: (snapshot.sourceR2Key != null ||
+                    title:
+                        (snapshot.sourceR2Key != null ||
                             snapshot.sourceAssetId != null)
                         ? 'USE A NEW TIMETABLE PHOTO'
                         : 'USE A TIMETABLE PHOTO',
@@ -166,9 +165,7 @@ class ClassesSourceSelectionView extends StatelessWidget {
                     onTap: () => onPickPhoto(ImageSource.gallery),
                   ),
                   const SizedBox(height: 16),
-                  const LiquidSectionHeader(
-                    title: 'OR SET UP MANUALLY',
-                  ),
+                  const LiquidSectionHeader(title: 'OR SET UP MANUALLY'),
                   if ((snapshot.sourceR2Key != null ||
                           snapshot.sourceAssetId != null) &&
                       onEditCurrent != null)

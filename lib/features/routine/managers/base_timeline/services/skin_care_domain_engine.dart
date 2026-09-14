@@ -3,6 +3,20 @@ import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_sc
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/services/skin_care_ai_client.dart';
 
+class SkinCareBuildResult {
+  final List<TimelineBlockDraft> blocks;
+  final List<SkinCareProductRecommendationDraft> productRecommendations;
+  final List<String> selectedProductNames;
+  final List<String> specialCareNotes;
+
+  const SkinCareBuildResult({
+    required this.blocks,
+    this.productRecommendations = const [],
+    this.selectedProductNames = const [],
+    this.specialCareNotes = const [],
+  });
+}
+
 class SkinCareDomainEngine {
   final SkinCareAiClient _client;
 
@@ -87,13 +101,15 @@ class SkinCareDomainEngine {
     return scheduleResult.blocks;
   }
 
-  Future<List<TimelineBlockDraft>> generateBuildForMeRoutine({
+  Future<SkinCareBuildResult> generateBuildForMeRoutine({
     required String uid,
     required String idToken,
     required String skinType,
     required List<String> problems,
     required int desiredApplicationsPerDay,
     required BaseTimelineDraft baseTimeline,
+    String? budget,
+    String? preference,
     String? facePhotoR2Key,
   }) async {
     final routineParams = {
@@ -101,8 +117,8 @@ class SkinCareDomainEngine {
       'skinType': skinType,
       'mainProblem': problems.isNotEmpty ? problems.first : 'none',
       'skinConcerns': problems,
-      'budget': 'medium',
-      'routinePreference': 'balanced',
+      'budget': budget ?? 'medium',
+      'routinePreference': preference ?? 'balanced',
       'desiredApplicationsPerDay': desiredApplicationsPerDay,
       'facePhotoR2Key': ?facePhotoR2Key,
     };
@@ -171,7 +187,27 @@ class SkinCareDomainEngine {
       );
     }
 
-    return scheduleResult.blocks;
+    final recommendations = result.recommendedProducts
+        .map(
+          (rec) => SkinCareProductRecommendationDraft(
+            name: rec.name,
+            brand: rec.brand,
+            category: rec.category,
+            estimatedPrice: rec.estimatedPrice,
+            currencyCode: rec.currencyCode,
+            reason: rec.reason,
+          ),
+        )
+        .toList();
+
+    return SkinCareBuildResult(
+      blocks: scheduleResult.blocks,
+      productRecommendations: recommendations,
+      selectedProductNames: allProductNames.isNotEmpty
+          ? allProductNames
+          : fallbackProductNames,
+      specialCareNotes: [...result.warnings, ...result.rejectedPlanReasons],
+    );
   }
 
   BaseTimelineDraft _ensureBathAndSleepInDraft(BaseTimelineDraft draft) {

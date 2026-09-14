@@ -153,23 +153,20 @@ void main() {
       },
     );
 
-    test(
-      'unknown skin care setup path safely throws validation error',
-      () {
-        const uid = 'unknown-path-user';
-        final initialMap = <String, dynamic>{
-          'uid': uid,
-          'schemaVersion': BaseTimelineSetup.currentSchemaVersion,
-          'revision': 1,
-          'skinCareSetupPath': 'unsupported_custom_path',
-        };
+    test('unknown skin care setup path safely throws validation error', () {
+      const uid = 'unknown-path-user';
+      final initialMap = <String, dynamic>{
+        'uid': uid,
+        'schemaVersion': BaseTimelineSetup.currentSchemaVersion,
+        'revision': 1,
+        'skinCareSetupPath': 'unsupported_custom_path',
+      };
 
-        expect(
-          () => BaseTimelineSetup.fromMap(initialMap, uid: uid),
-          throwsA(isA<ArgumentError>()),
-        );
-      },
-    );
+      expect(
+        () => BaseTimelineSetup.fromMap(initialMap, uid: uid),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
 
     test(
       'legacy onboarding completion bundle with has_products migrates safely',
@@ -212,10 +209,7 @@ void main() {
         expect(setup.skinCareProductNames, 'Retinol, Moisturizer');
 
         // Also test fromOnboardingDraft
-        final draftSetup = BaseTimelineSetup.fromOnboardingDraft(
-          uid,
-          draft,
-        );
+        final draftSetup = BaseTimelineSetup.fromOnboardingDraft(uid, draft);
         expect(draftSetup.skinCareSetupPath, 'products');
         expect(draftSetup.skinCareProductNames, 'Retinol, Moisturizer');
       },
@@ -263,10 +257,7 @@ void main() {
         expect(setup.skinCareSkinType, 'dry');
 
         // Also test fromOnboardingDraft
-        final draftSetup = BaseTimelineSetup.fromOnboardingDraft(
-          uid,
-          draft,
-        );
+        final draftSetup = BaseTimelineSetup.fromOnboardingDraft(uid, draft);
         expect(draftSetup.skinCareSetupPath, 'build_for_me');
         expect(draftSetup.skinCareSkinType, 'dry');
       },

@@ -307,10 +307,7 @@ void main() {
             UploadedAssetPurpose.skinProducts,
             UploadedAssetPurpose.skinFace,
           },
-          committedAssetIds: {
-            committedProducts.assetId,
-            committedFace.assetId,
-          },
+          committedAssetIds: {committedProducts.assetId, committedFace.assetId},
           committedR2Keys: {committedProducts.r2Key, committedFace.r2Key},
         );
 
@@ -501,30 +498,27 @@ void main() {
       },
     );
 
-    test(
-      'Already deleted assets are skipped and not retired again',
-      () async {
-        const uid = 'user-already-deleted';
-        final staleTime = DateTime.now().subtract(const Duration(minutes: 20));
+    test('Already deleted assets are skipped and not retired again', () async {
+      const uid = 'user-already-deleted';
+      final staleTime = DateTime.now().subtract(const Duration(minutes: 20));
 
-        final deletedAsset = _makeAsset(
-          uid: uid,
-          assetId: 'asset-already-deleted',
-          purpose: UploadedAssetPurpose.classTimetable,
-          updatedAt: staleTime,
-          status: UploadedAssetStatus.deleted,
-        );
-        await assetRepo.saveAsset(deletedAsset);
+      final deletedAsset = _makeAsset(
+        uid: uid,
+        assetId: 'asset-already-deleted',
+        purpose: UploadedAssetPurpose.classTimetable,
+        updatedAt: staleTime,
+        status: UploadedAssetStatus.deleted,
+      );
+      await assetRepo.saveAsset(deletedAsset);
 
-        final cleaned = await helper.cleanupStaleUncommittedAssets(
-          uid: uid,
-          purposes: const {UploadedAssetPurpose.classTimetable},
-        );
+      final cleaned = await helper.cleanupStaleUncommittedAssets(
+        uid: uid,
+        purposes: const {UploadedAssetPurpose.classTimetable},
+      );
 
-        expect(cleaned, 0);
-        expect(r2Client.deletedKeys, isEmpty);
-      },
-    );
+      expect(cleaned, 0);
+      expect(r2Client.deletedKeys, isEmpty);
+    });
 
     test(
       'Partial failure resilience: R2 deletion failure does not abort cleanup of other assets',

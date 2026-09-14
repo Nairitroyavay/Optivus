@@ -1004,137 +1004,128 @@ void main() {
     );
   });
 
-  group(
-    'Gap 11: Commit Success + Follow-up Fetch Failure Resiliency (Req 38)',
-    () {
-      test(
-        'replaceSection succeeds with refreshPending when follow-up routine fetch throws, and retryRoutineRefresh reconciles without rerunning transaction',
-        () async {
-          final fakeSetupRepo = FakeBaseTimelineSetupRepository(
-            onboardingRepo: FakeOnboardingRepository(),
-          );
-          final failingRoutineRepo = _FailingFollowUpFetchRoutineRepository();
-          final fakeTxRepo = _CountingFakeRoutineTransactionRepository(
-            routineRepository: failingRoutineRepo,
-            setupRepository: fakeSetupRepo,
-          );
+  group('Gap 11: Commit Success + Follow-up Fetch Failure Resiliency (Req 38)', () {
+    test(
+      'replaceSection succeeds with refreshPending when follow-up routine fetch throws, and retryRoutineRefresh reconciles without rerunning transaction',
+      () async {
+        final fakeSetupRepo = FakeBaseTimelineSetupRepository(
+          onboardingRepo: FakeOnboardingRepository(),
+        );
+        final failingRoutineRepo = _FailingFollowUpFetchRoutineRepository();
+        final fakeTxRepo = _CountingFakeRoutineTransactionRepository(
+          routineRepository: failingRoutineRepo,
+          setupRepository: fakeSetupRepo,
+        );
 
-          final container = ProviderContainer(
-            overrides: [
-              fakeDataAllowedProvider.overrideWithValue(false),
-              userProfileProvider.overrideWith(
-                (ref) => UserProfileNotifier()
-                  ..loadSeedData(
-                    UserProfile(
-                      uid: 'user-commit-success',
-                      email: 'test@optivus.app',
-                      displayName: 'Test User',
-                    ),
+        final container = ProviderContainer(
+          overrides: [
+            fakeDataAllowedProvider.overrideWithValue(false),
+            userProfileProvider.overrideWith(
+              (ref) => UserProfileNotifier()
+                ..loadSeedData(
+                  UserProfile(
+                    uid: 'user-commit-success',
+                    email: 'test@optivus.app',
+                    displayName: 'Test User',
                   ),
-              ),
-              baseTimelineSetupRepositoryProvider.overrideWithValue(
-                fakeSetupRepo,
-              ),
-              routineRepositoryProvider.overrideWithValue(failingRoutineRepo),
-              routineTransactionRepositoryProvider.overrideWithValue(
-                fakeTxRepo,
-              ),
-            ],
-          );
-          addTearDown(container.dispose);
-
-          final coordinator = container.read(
-            baseTimelineTransactionCoordinatorProvider,
-          );
-
-          const List<TimelineBlockDraft> newBlocks = [
-            TimelineBlockDraft(
-              id: 'cls-commit-test',
-              section: 'classes',
-              title: 'Compiler Design',
-              startMinute: 600,
-              endMinute: 660,
-              repeatDays: [1, 3],
-              blockType: TimelineBlockDraft.hardBlockKey,
+                ),
             ),
-          ];
+            baseTimelineSetupRepositoryProvider.overrideWithValue(
+              fakeSetupRepo,
+            ),
+            routineRepositoryProvider.overrideWithValue(failingRoutineRepo),
+            routineTransactionRepositoryProvider.overrideWithValue(fakeTxRepo),
+          ],
+        );
+        addTearDown(container.dispose);
 
-          final result = await coordinator.replaceSection(
-            uid: 'user-commit-success',
-            section: BaseTimelineSection.classes,
-            newBlocks: newBlocks,
-            updateSetup: (curr) => curr.copyWith(classBlocks: newBlocks),
-          );
+        final coordinator = container.read(
+          baseTimelineTransactionCoordinatorProvider,
+        );
 
-          // 1. Transaction succeeded
-          expect(result, isA<BaseTimelineSectionReplaceResult>());
-          expect(result.commit, isA<BaseTimelineSectionCommitResult>());
-          expect(result.committedSetup.classBlocks.length, 1);
-          expect(
-            result.committedSetup.classBlocks.first.title,
-            'Compiler Design',
-          );
-          expect(result.revision, 2);
+        const List<TimelineBlockDraft> newBlocks = [
+          TimelineBlockDraft(
+            id: 'cls-commit-test',
+            section: 'classes',
+            title: 'Compiler Design',
+            startMinute: 600,
+            endMinute: 660,
+            repeatDays: [1, 3],
+            blockType: TimelineBlockDraft.hardBlockKey,
+          ),
+        ];
 
-          // 2. Reconciliation failure is observable and truthful
-          expect(
-            result.routineRefreshStatus,
-            BaseTimelineRoutineRefreshStatus.refreshPending,
-          );
-          expect(result.routineRefreshPending, isTrue);
-          expect(
-            result.routineRefreshMessage,
-            'Saved, but Routine needs to refresh.',
-          );
-          expect(
-            coordinator.latestRefreshStatusFor('user-commit-success'),
-            BaseTimelineRoutineRefreshStatus.refreshPending,
-          );
+        final result = await coordinator.replaceSection(
+          uid: 'user-commit-success',
+          section: BaseTimelineSection.classes,
+          newBlocks: newBlocks,
+          updateSetup: (curr) => curr.copyWith(classBlocks: newBlocks),
+        );
 
-          // 3. Durable setup was NOT rolled back, and in-memory was updated
-          final inMemory = container
-              .read(baseTimelineSetupNotifierProvider)
-              .value;
-          expect(inMemory, isNotNull);
-          expect(inMemory!.classBlocks.length, 1);
-          expect(inMemory.classBlocks.first.title, 'Compiler Design');
-          expect(inMemory.revision, 2);
+        // 1. Transaction succeeded
+        expect(result, isA<BaseTimelineSectionReplaceResult>());
+        expect(result.commit, isA<BaseTimelineSectionCommitResult>());
+        expect(result.committedSetup.classBlocks.length, 1);
+        expect(
+          result.committedSetup.classBlocks.first.title,
+          'Compiler Design',
+        );
+        expect(result.revision, 2);
 
-          // Transaction repo was called exactly once for the durable commit
-          expect(fakeTxRepo.replaceBaseTimelineSectionCalls, 1);
+        // 2. Reconciliation failure is observable and truthful
+        expect(
+          result.routineRefreshStatus,
+          BaseTimelineRoutineRefreshStatus.refreshPending,
+        );
+        expect(result.routineRefreshPending, isTrue);
+        expect(
+          result.routineRefreshMessage,
+          'Saved, but Routine needs to refresh.',
+        );
+        expect(
+          coordinator.latestRefreshStatusFor('user-commit-success'),
+          BaseTimelineRoutineRefreshStatus.refreshPending,
+        );
 
-          // 4. Now enable fetch to succeed and test retryRoutineRefresh
-          failingRoutineRepo.failOnFollowUp = false;
-          final retryResult = await coordinator.retryRoutineRefresh(
-            uid: 'user-commit-success',
-          );
+        // 3. Durable setup was NOT rolled back, and in-memory was updated
+        final inMemory = container
+            .read(baseTimelineSetupNotifierProvider)
+            .value;
+        expect(inMemory, isNotNull);
+        expect(inMemory!.classBlocks.length, 1);
+        expect(inMemory.classBlocks.first.title, 'Compiler Design');
+        expect(inMemory.revision, 2);
 
-          expect(retryResult.isRefreshed, isTrue);
-          expect(retryResult.isPending, isFalse);
-          expect(
-            retryResult.status,
-            BaseTimelineRoutineRefreshStatus.refreshed,
-          );
-          expect(
-            coordinator.latestRefreshStatusFor('user-commit-success'),
-            BaseTimelineRoutineRefreshStatus.refreshed,
-          );
+        // Transaction repo was called exactly once for the durable commit
+        expect(fakeTxRepo.replaceBaseTimelineSectionCalls, 1);
 
-          // 5. CRITICAL: retry must NEVER rerun durable transaction or increment revision
-          expect(fakeTxRepo.replaceBaseTimelineSectionCalls, 1);
-          final finalSetup = await fakeSetupRepo.fetchSetup('user-commit-success');
-          expect(finalSetup.revision, 2);
+        // 4. Now enable fetch to succeed and test retryRoutineRefresh
+        failingRoutineRepo.failOnFollowUp = false;
+        final retryResult = await coordinator.retryRoutineRefresh(
+          uid: 'user-commit-success',
+        );
 
-          // 6. Routine state in notifier is now refreshed with new items
-          final routineItems = container.read(routineNotifierProvider).items;
-          expect(
-            routineItems.any((i) => i.title == 'Compiler Design'),
-            isTrue,
-          );
-        },
-      );
-    },
-  );
+        expect(retryResult.isRefreshed, isTrue);
+        expect(retryResult.isPending, isFalse);
+        expect(retryResult.status, BaseTimelineRoutineRefreshStatus.refreshed);
+        expect(
+          coordinator.latestRefreshStatusFor('user-commit-success'),
+          BaseTimelineRoutineRefreshStatus.refreshed,
+        );
+
+        // 5. CRITICAL: retry must NEVER rerun durable transaction or increment revision
+        expect(fakeTxRepo.replaceBaseTimelineSectionCalls, 1);
+        final finalSetup = await fakeSetupRepo.fetchSetup(
+          'user-commit-success',
+        );
+        expect(finalSetup.revision, 2);
+
+        // 6. Routine state in notifier is now refreshed with new items
+        final routineItems = container.read(routineNotifierProvider).items;
+        expect(routineItems.any((i) => i.title == 'Compiler Design'), isTrue);
+      },
+    );
+  });
 
   group('Gap 12: Cancel AI Extraction Then Retry Immediately (Req 39)', () {
     test(

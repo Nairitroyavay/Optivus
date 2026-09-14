@@ -539,9 +539,7 @@ class _ClassesBaseSetupScreenState
               backgroundColor: Colors.white.withValues(alpha: 0.12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(OptivusRadii.md),
-                side: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.2),
-                ),
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
               ),
             ),
           ),
@@ -814,8 +812,9 @@ class _ClassesBaseSetupScreenState
                         ),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
-                      onPressed: () =>
-                          ref.read(baseTimelineSetupNotifierProvider.notifier).load(),
+                      onPressed: () => ref
+                          .read(baseTimelineSetupNotifierProvider.notifier)
+                          .load(),
                       child: const Text(
                         'Reload setup',
                         style: TextStyle(fontWeight: FontWeight.w700),
@@ -930,8 +929,9 @@ class _ClassesBaseSetupScreenState
                         Expanded(
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
-                              backgroundColor:
-                                  Colors.white.withValues(alpha: 0.08),
+                              backgroundColor: Colors.white.withValues(
+                                alpha: 0.08,
+                              ),
                               side: BorderSide(
                                 color: Colors.white.withValues(alpha: 0.25),
                               ),
@@ -961,8 +961,7 @@ class _ClassesBaseSetupScreenState
                       width: double.infinity,
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
-                          backgroundColor:
-                              Colors.white.withValues(alpha: 0.08),
+                          backgroundColor: Colors.white.withValues(alpha: 0.08),
                           side: BorderSide(
                             color: Colors.white.withValues(alpha: 0.25),
                           ),
@@ -991,8 +990,9 @@ class _ClassesBaseSetupScreenState
                         Expanded(
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
-                              backgroundColor:
-                                  Colors.white.withValues(alpha: 0.08),
+                              backgroundColor: Colors.white.withValues(
+                                alpha: 0.08,
+                              ),
                               side: BorderSide(
                                 color: Colors.white.withValues(alpha: 0.25),
                               ),
@@ -1044,8 +1044,7 @@ class _ClassesBaseSetupScreenState
                       width: double.infinity,
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
-                          backgroundColor:
-                              Colors.white.withValues(alpha: 0.08),
+                          backgroundColor: Colors.white.withValues(alpha: 0.08),
                           side: BorderSide(
                             color: Colors.white.withValues(alpha: 0.25),
                           ),

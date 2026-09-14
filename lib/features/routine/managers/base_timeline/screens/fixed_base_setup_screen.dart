@@ -8,6 +8,7 @@ import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.da
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/repositories/base_timeline_setup_repository.dart';
@@ -44,8 +45,15 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
   ) {
     _editorBaseRevision = revision;
     _editorOwnerUid = ownerUid;
-    if (existing.isEmpty) {
-      _workingBlocks = [
+    final working = List<TimelineBlockDraft>.from(existing);
+    final hasSleep = working.any(
+      (b) =>
+          b.id == BaseTimelineDraft.fixedSleepId ||
+          b.title.trim().toLowerCase() == 'sleep',
+    );
+    if (!hasSleep) {
+      working.insert(
+        0,
         TimelineBlockDraft(
           id: BaseTimelineDraft.fixedSleepId,
           title: 'Sleep',
@@ -57,6 +65,15 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
           crossesMidnight: true,
           endsNextDay: true,
         ),
+      );
+    }
+    final hasBath = working.any(
+      (b) =>
+          b.id == BaseTimelineDraft.fixedBathId ||
+          b.title.trim().toLowerCase().contains('bath'),
+    );
+    if (!hasBath) {
+      working.add(
         TimelineBlockDraft(
           id: BaseTimelineDraft.fixedBathId,
           title: 'Bath & Grooming',
@@ -66,10 +83,9 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
           section: 'fixed',
           blockType: TimelineBlockDraft.hardBlockKey,
         ),
-      ];
-    } else {
-      _workingBlocks = List.from(existing);
+      );
     }
+    _workingBlocks = working;
   }
 
   Future<bool> _confirmDiscard() async {
@@ -164,6 +180,26 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
 
   Future<void> _saveWorkingBlocks() async {
     if (_isSaving) return;
+    final hasSleep = _workingBlocks.any(
+      (b) =>
+          b.id == BaseTimelineDraft.fixedSleepId ||
+          b.title.trim().toLowerCase() == 'sleep',
+    );
+    final hasBath = _workingBlocks.any(
+      (b) =>
+          b.id == BaseTimelineDraft.fixedBathId ||
+          b.title.trim().toLowerCase().contains('bath'),
+    );
+    if (!hasSleep || !hasBath) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sleep and Bath blocks are required.'),
+          backgroundColor: OptivusColors.danger,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSaving = true);
     try {
       final uid = ref.read(userProfileProvider).uid;
@@ -199,13 +235,14 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
                   ? 'Saved. Routine needs to refresh.'
                   : 'Fixed routine blocks updated successfully',
             ),
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        final isConflict = e.toString().toLowerCase().contains('conflict') ||
+        final isConflict =
+            e.toString().toLowerCase().contains('conflict') ||
             e.toString().toLowerCase().contains('concurrency');
         setState(() {
           _isSaving = false;
@@ -216,6 +253,123 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to update fixed blocks: $e'),
+            backgroundColor: OptivusColors.danger,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _resetFixedSetup() async {
+    if (_isSaving) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: OptivusColors.backgroundBottom,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Reset Fixed Setup?',
+          style: TextStyle(
+            color: OptivusColors.textPrimary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: const Text(
+          'This will restore default Sleep and Bath times and remove any custom fixed blocks.',
+          style: TextStyle(color: OptivusColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('fixed-confirm-reset-button'),
+            style: FilledButton.styleFrom(
+              backgroundColor: OptivusColors.warning,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    setState(() => _isSaving = true);
+    try {
+      final uid = ref.read(userProfileProvider).uid;
+      final defaultBlocks = [
+        TimelineBlockDraft(
+          id: BaseTimelineDraft.fixedSleepId,
+          title: 'Sleep',
+          startMinute: 23 * 60,
+          endMinute: 7 * 60,
+          repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+          section: 'fixed',
+          blockType: TimelineBlockDraft.hardBlockKey,
+          crossesMidnight: true,
+          endsNextDay: true,
+        ),
+        TimelineBlockDraft(
+          id: BaseTimelineDraft.fixedBathId,
+          title: 'Bath & Grooming',
+          startMinute: 7 * 60 + 15,
+          endMinute: 7 * 60 + 45,
+          repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+          section: 'fixed',
+          blockType: TimelineBlockDraft.hardBlockKey,
+        ),
+      ];
+
+      final coordinator = ref.read(baseTimelineTransactionCoordinatorProvider);
+      final result = await coordinator.replaceSection(
+        uid: uid,
+        section: BaseTimelineSection.fixed,
+        newBlocks: defaultBlocks,
+        expectedRevision: _editorBaseRevision,
+        updateSetup: (current) => current.copyWith(
+          fixedBlocks: defaultBlocks,
+          updatedAt: DateTime.now(),
+        ),
+      );
+
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+          _isEditing = false;
+          _isDirty = false;
+          _editorBaseRevision = result.revision;
+          _refreshPendingRevision = result.routineRefreshPending
+              ? result.revision
+              : null;
+          _refreshPendingMessage = result.routineRefreshMessage;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.routineRefreshPending
+                  ? 'Reset complete. Routine needs to refresh.'
+                  : 'Fixed setup reset to defaults',
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        final isConflict =
+            e.toString().toLowerCase().contains('conflict') ||
+            e.toString().toLowerCase().contains('concurrency');
+        setState(() {
+          _isSaving = false;
+          _errorMessage = isConflict
+              ? 'This setup changed elsewhere. Reload the latest setup before resetting.'
+              : 'Failed to reset Fixed setup: $e';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to reset Fixed setup: $e'),
             backgroundColor: OptivusColors.danger,
           ),
         );
@@ -586,78 +740,27 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Top Nav Header
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(
-                          Icons.arrow_back_rounded,
-                          color: OptivusColors.textPrimary,
-                        ),
-                        onPressed: widget.onBack,
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.1),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Fixed',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                color: OptivusColors.textPrimary,
-                              ),
-                            ),
-                            Text(
-                              snapshot.summary,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: OptivusColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      FilledButton.icon(
-                        icon: const Icon(Icons.edit_calendar_rounded, size: 16),
-                        label: Text(
-                          snapshot.isConfigured
-                              ? 'Change setup'
-                              : 'Set up Fixed',
-                        ),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: OptivusColors.purpleAccent,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () {
-                          _initWorkingBlocks(
-                            setup.fixedBlocks,
-                            setup.revision,
-                            setup.uid,
-                          );
-                          setState(() {
-                            _isEditing = true;
-                            _isDirty = false;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
+                BaseTimelineCurrentSetupHeader(
+                  title: 'Fixed',
+                  summary: snapshot.summary,
+                  accent: OptivusColors.purpleAccent,
+                  onBack: widget.onBack,
+                  primaryButtonLabel: snapshot.isConfigured
+                      ? 'Change setup'
+                      : 'Set up Fixed',
+                  onPrimaryAction: () {
+                    _initWorkingBlocks(
+                      setup.fixedBlocks,
+                      setup.revision,
+                      setup.uid,
+                    );
+                    setState(() {
+                      _isEditing = true;
+                      _isDirty = false;
+                    });
+                  },
+                  resetLabel: 'Reset Fixed Setup',
+                  onReset: snapshot.isConfigured ? _resetFixedSetup : null,
                 ),
 
                 // Timeline View

@@ -32,6 +32,8 @@ import 'package:optivus/features/routine/services/routine_countdown_allocator.da
 import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/features/routine/models/routine_day_entry.dart';
 import 'package:optivus/features/routine/services/routine_transition_policy.dart';
+import 'package:optivus/features/routine/services/routine_day_availability.dart';
+import 'package:optivus/features/routine/services/routine_entry_filter.dart';
 
 enum RoutineWriteAction { create, update, delete, moveTemplate, batchCreate }
 
@@ -122,6 +124,7 @@ class RoutineState {
   final List<RoutineCorruptEvent> corruptEvents;
   final DateTime selectedDay;
   final String selectedPrimaryFilter;
+  final String selectedStatusFilter;
   final String selectedCategoryFilter;
   final bool showFullDay;
   final bool compactMode;
@@ -151,6 +154,7 @@ class RoutineState {
     this.corruptEvents = const [],
     required this.selectedDay,
     this.selectedPrimaryFilter = 'all',
+    this.selectedStatusFilter = 'any',
     this.selectedCategoryFilter = 'all',
     this.showFullDay = false,
     this.compactMode = false,
@@ -180,6 +184,7 @@ class RoutineState {
     List<RoutineCorruptEvent>? corruptEvents,
     DateTime? selectedDay,
     String? selectedPrimaryFilter,
+    String? selectedStatusFilter,
     String? selectedCategoryFilter,
     bool? showFullDay,
     bool? compactMode,
@@ -213,6 +218,8 @@ class RoutineState {
       selectedDay: selectedDay ?? this.selectedDay,
       selectedPrimaryFilter:
           selectedPrimaryFilter ?? this.selectedPrimaryFilter,
+      selectedStatusFilter:
+          selectedStatusFilter ?? this.selectedStatusFilter,
       selectedCategoryFilter:
           selectedCategoryFilter ?? this.selectedCategoryFilter,
       showFullDay: showFullDay ?? this.showFullDay,
@@ -262,8 +269,13 @@ const List<RoutineFilterOption> primaryFilters = [
   RoutineFilterOption('flexible_tasks', 'Flexible Tasks', 'Flex'),
   RoutineFilterOption('tracker_tasks', 'Tracker Tasks', 'Track'),
   RoutineFilterOption('check_ins', 'Check-ins', 'Check'),
-  RoutineFilterOption('completed', 'Completed', 'Done'),
-  RoutineFilterOption('missed', 'Missed', 'Miss'),
+];
+
+const List<RoutineFilterOption> statusFilters = [
+  RoutineFilterOption('any', 'Any', 'Any'),
+  RoutineFilterOption('todo', 'To do', 'To do'),
+  RoutineFilterOption('done', 'Done', 'Done'),
+  RoutineFilterOption('missed', 'Missed', 'Missed'),
 ];
 
 const List<RoutineFilterOption> categoryFilters = [
@@ -1478,7 +1490,25 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   }
 
   void updateSelectedDay(DateTime day) {
-    state = state.copyWith(selectedDay: TimelineUtils.dateOnly(day));
+    final normalized = TimelineUtils.dateOnly(day);
+    var category = state.selectedCategoryFilter;
+    if (category != 'all') {
+      final dayEntries = RoutineOccurrenceProjector.entriesForDay(
+        state.items,
+        state.occurrences,
+        normalized,
+      );
+      final hasCategory = dayEntries.any(
+        (entry) => RoutineEntryFilter.matchesCategory(entry.item, category),
+      );
+      if (!hasCategory) {
+        category = 'all';
+      }
+    }
+    state = state.copyWith(
+      selectedDay: normalized,
+      selectedCategoryFilter: category,
+    );
   }
 
   void toggleFullDay(bool value) => state = state.copyWith(showFullDay: value);
@@ -1495,8 +1525,16 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     state = state.copyWith(selectedPrimaryFilter: supported ? filter : 'all');
   }
 
-  void setCategoryFilter(String filter) =>
-      state = state.copyWith(selectedCategoryFilter: filter);
+  void setStatusFilter(String filter) {
+    final supported = statusFilters.any((entry) => entry.key == filter);
+    state = state.copyWith(selectedStatusFilter: supported ? filter : 'any');
+  }
+
+  void setCategoryFilter(String filter) {
+    final supported =
+        filter == 'all' || categoryFilters.any((entry) => entry.key == filter);
+    state = state.copyWith(selectedCategoryFilter: supported ? filter : 'all');
+  }
   void toggleAiSuggestions(bool value) =>
       state = state.copyWith(aiRoutineSuggestionsEnabled: value);
   void toggleNotifications(bool value) =>
@@ -3591,7 +3629,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   }) {
     final duration = durationMinutes ?? item.durationMinutes;
     final targetOccurrenceDateKey = routineLocalDateKey(occurrenceDate ?? date);
-    final dayItems =
+    final dayEntries =
         RoutineOccurrenceProjector.entriesForDay(
               state.items,
               state.occurrences,
@@ -3602,19 +3640,13 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
                   candidate.templateId != item.id ||
                   candidate.occurrenceDateKey != targetOccurrenceDateKey,
             )
-            .map((candidate) => candidate.item)
             .toList(growable: false);
+    final availability = RoutineDayAvailability.computeFromEntries(dayEntries);
     final snap = state.precisionMode ? 1 : 5;
-    for (int start = 6 * 60; start + duration <= 23 * 60; start += snap) {
-      final end = start + duration;
-      final overlapsAny = dayItems.any((existing) {
-        final existingStart = existing.startMinute;
-        final existingEnd = TimelineUtils.normalizedEndMinute(existing);
-        return existingStart < end && existingEnd > start;
-      });
-      if (!overlapsAny) return start;
-    }
-    return null;
+    return availability.findFirstFreeSlot(
+      durationMinutes: duration,
+      snapMinutes: snap,
+    );
   }
 
   TrackerType _inferTrackerType(RoutineItem item) {
@@ -3685,17 +3717,8 @@ final selectedDayRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
 });
 
 final filteredRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
-  final items = ref.watch(selectedDayRoutineItemsProvider);
-  final filters = ref.watch(
-    routineNotifierProvider.select(
-      (state) => (
-        primary: state.selectedPrimaryFilter,
-        category: state.selectedCategoryFilter,
-      ),
-    ),
-  );
-  final primary = TimelineUtils.filterItems(items, filters.primary);
-  return RoutineFilters.applyCategory(primary, filters.category);
+  final entries = ref.watch(filteredRoutineEntriesProvider);
+  return entries.map((e) => e.item).toList(growable: false);
 });
 
 /// Occurrence-aware entries for the selected day, including stable instanceIds.
@@ -3756,26 +3779,17 @@ final filteredRoutineEntriesProvider = Provider<List<RoutineDayEntry>>((ref) {
     routineNotifierProvider.select(
       (state) => (
         primary: state.selectedPrimaryFilter,
+        status: state.selectedStatusFilter,
         category: state.selectedCategoryFilter,
       ),
     ),
   );
-  final primaryFiltered = entries
-      .where((entry) {
-        final filtered = TimelineUtils.filterItems([
-          entry.item,
-        ], filters.primary);
-        return filtered.isNotEmpty;
-      })
-      .toList(growable: false);
-  final result = filters.category == 'all'
-      ? primaryFiltered
-      : primaryFiltered
-            .where(
-              (entry) =>
-                  RoutineFilters._matchesCategory(entry.item, filters.category),
-            )
-            .toList(growable: false);
+  final result = RoutineEntryFilter.apply(
+    entries,
+    view: filters.primary,
+    status: filters.status,
+    category: filters.category,
+  );
   if (kDebugMode) {
     debugPrint(
       'RoutineTimelineFiltered: ${_routineCategoryCounts(result.map((e) => e.item))} '
@@ -3881,42 +3895,13 @@ class RoutineFilters {
     String filter,
   ) {
     if (filter == 'all') return items;
-    return items.where((item) => _matchesCategory(item, filter)).toList();
+    return items
+        .where((item) => RoutineEntryFilter.matchesCategory(item, filter))
+        .toList();
   }
 
-  static bool _matchesCategory(RoutineItem item, String filter) {
-    final title = item.title.toLowerCase();
-    return switch (filter) {
-      'classes' => item.category == RoutineCategory.classBlock,
-      'job' => item.category == RoutineCategory.job,
-      'eating' => item.category == RoutineCategory.eating,
-      'fixed' =>
-        item.category == RoutineCategory.fixed ||
-            item.category == RoutineCategory.sleep,
-      'skin_care' => item.category == RoutineCategory.skinCare,
-      'good_habits' =>
-        item.category == RoutineCategory.habit ||
-            item.category == RoutineCategory.identity,
-      'bad_habits' =>
-        item.category == RoutineCategory.badHabit ||
-            title.contains('smok') ||
-            title.contains('alcohol') ||
-            title.contains('junk'),
-      'money' =>
-        item.category == RoutineCategory.finance ||
-            item.blockType == RoutineBlockType.moneyTask,
-      'meditation' =>
-        item.category == RoutineCategory.meditation ||
-            item.trackerType == TrackerType.meditation ||
-            title.contains('meditat'),
-      'hydration' =>
-        item.category == RoutineCategory.hydration ||
-            item.trackerType == TrackerType.hydration ||
-            title.contains('water'),
-      'screen_time' => item.category == RoutineCategory.screenTime,
-      _ => true,
-    };
-  }
+  static bool _matchesCategory(RoutineItem item, String filter) =>
+      RoutineEntryFilter.matchesCategory(item, filter);
 }
 
 // ── Generic Settings Providers ──
