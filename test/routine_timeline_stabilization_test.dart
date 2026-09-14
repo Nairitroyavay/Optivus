@@ -12,6 +12,7 @@ import 'package:optivus/features/routine/widgets/cards/routine_card_base.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_rich_timeline_card.dart';
 import 'package:optivus/features/routine/widgets/routine_current_time_line.dart';
+import 'package:optivus/features/routine/widgets/routine_time_ruler.dart';
 import 'package:optivus/features/routine/widgets/routine_timeline_adapter.dart';
 import 'package:optivus/features/routine/widgets/routine_timeline_viewport.dart';
 import 'package:optivus/models/coach_models.dart';
@@ -239,7 +240,7 @@ void main() {
   testWidgets(
     'Today line renders at required minute; non-Today owner omits it',
     (tester) async {
-      const minute = 17 * 60;
+      const minute = 17 * 60 + 13; // 5:13 PM
       final layout = TimelineUtils.calculateVisibleRange([
         RoutineItem(
           id: 'morning',
@@ -265,7 +266,8 @@ void main() {
           ),
         ),
       );
-      expect(find.text('Now — 5:00 PM'), findsOneWidget);
+      expect(find.text('5:13'), findsOneWidget);
+      expect(find.textContaining('Now'), findsNothing);
 
       await tester.pumpWidget(
         ProviderScope(
@@ -283,7 +285,252 @@ void main() {
           ),
         ),
       );
-      expect(find.text('Now — 5:00 PM'), findsNothing);
+      expect(find.text('5:13'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'current time between ticks (10:13): renders 10:13 left of rail, no Now, no AM/PM, exact Y, dashed line begins at rail',
+    (tester) async {
+      const minute = 10 * 60 + 13; // 613
+      const layout = TimelineLayout(
+        visibleStartMinute: 480,
+        visibleEndMinute: 1080,
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 900,
+            child: RoutineCurrentTimeLine(
+              layout: layout,
+              currentMinute: minute,
+            ),
+          ),
+        ),
+      );
+
+      // Label assertions
+      expect(find.text('10:13'), findsOneWidget);
+      expect(find.textContaining('Now'), findsNothing);
+      expect(find.textContaining('AM'), findsNothing);
+      expect(find.textContaining('PM'), findsNothing);
+
+      final labelRect = tester.getRect(find.text('10:13'));
+      // Label sits strictly to the left of the rail
+      expect(labelRect.right, lessThanOrEqualTo(kTimelineTimeRailWidth));
+      expect(labelRect.right, lessThanOrEqualTo(kTimelineLabelRight));
+      // Exact minute Y position is preserved
+      final expectedY = layout.topForMinute(minute);
+      expect(labelRect.center.dy, closeTo(expectedY, 1.0));
+
+      // Live dot assertions
+      final dotFinder = find.descendant(
+        of: find.byType(RoutineCurrentTimeLine),
+        matching: find.byType(Container),
+      );
+      expect(dotFinder, findsOneWidget);
+      final dotRect = tester.getRect(dotFinder);
+      // Small live dot aligned with vertical rail
+      expect(dotRect.center.dx, closeTo(kTimelineRailX, 0.5));
+      expect(dotRect.center.dy, closeTo(expectedY, 0.5));
+
+      // Dashed line assertions
+      final linePaintFinder = find.descendant(
+        of: find.byType(RoutineCurrentTimeLine),
+        matching: find.byType(CustomPaint),
+      );
+      expect(linePaintFinder, findsOneWidget);
+      final lineRect = tester.getRect(linePaintFinder);
+      // Begins at the vertical rail and extends right
+      expect(lineRect.left, closeTo(kTimelineRailX, 0.5));
+      expect(lineRect.right, greaterThan(kTimelineRailX));
+      expect(lineRect.center.dy, closeTo(expectedY, 1.0));
+    },
+  );
+
+  testWidgets(
+    'current time exactly on a tick (10:20): no duplicate 10:20, no Now, exact Y preserved',
+    (tester) async {
+      const minute = 10 * 60 + 20; // 620
+      const layout = TimelineLayout(
+        visibleStartMinute: 480,
+        visibleEndMinute: 1080,
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 900,
+            child: RoutineCurrentTimeLine(
+              layout: layout,
+              currentMinute: minute,
+            ),
+          ),
+        ),
+      );
+
+      // Must not render a separate live label (no duplicate 10:20)
+      expect(
+        find.descendant(
+          of: find.byType(RoutineCurrentTimeLine),
+          matching: find.byType(Text),
+        ),
+        findsNothing,
+      );
+      expect(find.text('10:20'), findsNothing);
+      expect(find.textContaining('Now'), findsNothing);
+
+      // Dot and dashed line still render at exact Y position aligned with rail
+      final expectedY = layout.topForMinute(minute);
+      final dotFinder = find.descendant(
+        of: find.byType(RoutineCurrentTimeLine),
+        matching: find.byType(Container),
+      );
+      expect(dotFinder, findsOneWidget);
+      final dotRect = tester.getRect(dotFinder);
+      expect(dotRect.center.dx, closeTo(kTimelineRailX, 0.5));
+      expect(dotRect.center.dy, closeTo(expectedY, 0.5));
+
+      final linePaintFinder = find.descendant(
+        of: find.byType(RoutineCurrentTimeLine),
+        matching: find.byType(CustomPaint),
+      );
+      expect(linePaintFinder, findsOneWidget);
+      final lineRect = tester.getRect(linePaintFinder);
+      expect(lineRect.left, closeTo(kTimelineRailX, 0.5));
+      expect(lineRect.center.dy, closeTo(expectedY, 1.0));
+    },
+  );
+
+  test(
+    'collision detection suppresses neighbouring tick labels only on visual overlap',
+    () {
+      const layout = TimelineLayout(
+        visibleStartMinute: 480,
+        visibleEndMinute: 1080,
+      );
+
+      // At 10:13 (613): distance to 10:10 (610) is 15px >= ~14px threshold -> false (not suppressed)
+      expect(
+        RoutineTimeRuler.shouldSuppressTickLabel(
+          tickMinute: 610,
+          currentMinute: 613,
+          layout: layout,
+        ),
+        isFalse,
+      );
+      // At 10:13 (613): distance to 10:20 (620) is 35px >= ~14px threshold -> false (not suppressed)
+      expect(
+        RoutineTimeRuler.shouldSuppressTickLabel(
+          tickMinute: 620,
+          currentMinute: 613,
+          layout: layout,
+        ),
+        isFalse,
+      );
+
+      // At 10:11 (611): distance to 10:10 (610) is 5px < threshold -> true (suppressed)
+      expect(
+        RoutineTimeRuler.shouldSuppressTickLabel(
+          tickMinute: 610,
+          currentMinute: 611,
+          layout: layout,
+        ),
+        isTrue,
+      );
+
+      // At 10:19 (619): distance to 10:20 (620) is 5px < threshold -> true (suppressed)
+      expect(
+        RoutineTimeRuler.shouldSuppressTickLabel(
+          tickMinute: 620,
+          currentMinute: 619,
+          layout: layout,
+        ),
+        isTrue,
+      );
+
+      // At 10:20 (620, on tick): is live tick -> false (not suppressed)
+      expect(
+        RoutineTimeRuler.shouldSuppressTickLabel(
+          tickMinute: 620,
+          currentMinute: 620,
+          layout: layout,
+        ),
+        isFalse,
+      );
+    },
+  );
+
+  testWidgets(
+    'viewport renders dashed line behind routine cards in background layer',
+    (tester) async {
+      final entry = legacyRoutineDayEntriesForTesting([
+        RoutineItem(
+          id: 'card-10am',
+          title: 'Card at 10 AM',
+          startMinute: 600,
+          endMinute: 660,
+          blockType: RoutineBlockType.hardBlock,
+        ),
+      ]).single;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: SizedBox(
+              width: 400,
+              height: 800,
+              child: RoutineTimelineViewport(
+                items: [entry],
+                layout: const TimelineLayout(
+                  visibleStartMinute: 540,
+                  visibleEndMinute: 720,
+                ),
+                isToday: true,
+                currentMinute: 613,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Find the inner Stack that holds ruler, current time line, and cards
+      final stackFinder = find.descendant(
+        of: find.byType(SingleChildScrollView),
+        matching: find.byType(Stack),
+      );
+      expect(stackFinder, findsWidgets);
+      final stack = tester.widget<Stack>(stackFinder.first);
+
+      var liveLineIndex = -1;
+      var cardIndex = -1;
+      for (var i = 0; i < stack.children.length; i++) {
+        final child = stack.children[i];
+        if (child is Positioned) {
+          final inner = child.child;
+          if (inner is RepaintBoundary && inner.child is IgnorePointer) {
+            final target = (inner.child as IgnorePointer).child;
+            if (target is RoutineCurrentTimeLine) {
+              liveLineIndex = i;
+            }
+          }
+        }
+        if (child.key == const ValueKey('routine-timeline-card-card-10am')) {
+          cardIndex = i;
+        }
+      }
+
+      expect(liveLineIndex, isNot(-1));
+      expect(cardIndex, isNot(-1));
+      expect(
+        liveLineIndex,
+        lessThan(cardIndex),
+        reason: 'Live time line must render before routine cards in Stack',
+      );
     },
   );
 

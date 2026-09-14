@@ -483,6 +483,57 @@ class BaseTimelineSetup {
     );
   }
 
+  /// Canonical Skin Care setup-path values: 'products', 'build_for_me', 'skip'.
+  /// Historical onboarding aliases ('has_products', 'no_products') are
+  /// mapped to their canonical equivalents before strict validation.
+  static String? normalizeSkinCareSetupPath(String? raw) {
+    if (raw == null) return null;
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return null;
+    return switch (trimmed) {
+      'has_products' || 'products' => 'products',
+      'no_products' || 'build_for_me' => 'build_for_me',
+      'skip' => 'skip',
+      _ => trimmed,
+    };
+  }
+
+  /// Ensures that Skin Care mode metadata is semantically consistent:
+  /// - 'products': preserves product photo & names, clears build_for_me face & recommendation fields
+  /// - 'build_for_me': preserves face photo & recommendation fields, clears product inputs
+  /// - 'skip': clears both product and face fields, sets skinCareSkipped: true, empties routine blocks
+  BaseTimelineSetup normalizeSkinCareMode() {
+    final normalizedPath = normalizeSkinCareSetupPath(skinCareSetupPath);
+    if (skinCareSkipped || normalizedPath == 'skip') {
+      return asSkinCareSkipped();
+    }
+    if (normalizedPath == 'products') {
+      return asSkinCareProducts(
+        productNames: skinCareProductNames,
+        productPhotoAssetId: skinCareProductPhotoAssetId,
+        productPhotoR2Key: skinCareProductPhotoR2Key,
+        reviewedProducts: skinCareReviewedProducts,
+        blocks: skinCareBlocks,
+      );
+    }
+    if (normalizedPath == 'build_for_me') {
+      return asSkinCareBuildForMe(
+        facePhotoAssetId: skinCareFacePhotoAssetId,
+        facePhotoR2Key: skinCareFacePhotoR2Key,
+        facePhotoSkipped: skinCareFacePhotoSkipped,
+        skinType: skinCareSkinType,
+        problems: skinCareProblems,
+        budget: skinCareBudget,
+        preference: skinCarePreference,
+        selectedProductNames: skinCareSelectedProductNames,
+        productRecommendations: skinCareProductRecommendations,
+        specialCareNotes: skinCareSpecialCareNotes,
+        blocks: skinCareBlocks,
+      );
+    }
+    return copyWith(skinCareSetupPath: normalizedPath);
+  }
+
   /// Sets Skin Care as skipped.
   BaseTimelineSetup asSkinCareSkipped() {
     return copyWith(
@@ -1079,7 +1130,9 @@ class BaseTimelineSetup {
       eatingPhotoAssetId: map['eatingPhotoAssetId'] as String?,
       eatingPhotoR2Key: map['eatingPhotoR2Key'] as String?,
       fixedBlocks: parseBlocks(map['fixedBlocks']),
-      skinCareSetupPath: map['skinCareSetupPath'] as String?,
+      skinCareSetupPath: normalizeSkinCareSetupPath(
+        map['skinCareSetupPath'] as String?,
+      ),
       skinCareSkipped: map['skinCareSkipped'] as bool? ?? false,
       skinCareBlocks: parseBlocks(map['skinCareBlocks']),
       skinCareProductNames: map['skinCareProductNames'] as String?,
@@ -1125,7 +1178,7 @@ class BaseTimelineSetup {
         map['skinCareSpecialCareNotes'],
         'skinCareSpecialCareNotes',
       ),
-    );
+    ).normalizeSkinCareMode();
     setup.validateForOwner(pathUid);
     return setup;
   }
@@ -1188,7 +1241,7 @@ class BaseTimelineSetup {
 
     final targets = draft.canonicalNutritionTargets();
 
-    return BaseTimelineSetup(
+    final setup = BaseTimelineSetup(
       uid: uid,
       updatedAt: draft.updatedAt ?? DateTime.now(),
       schemaVersion: currentSchemaVersion,
@@ -1224,7 +1277,7 @@ class BaseTimelineSetup {
       eatingPhotoAssetId: eatingAssetId,
       eatingPhotoR2Key: eatingR2Key,
       fixedBlocks: fixedBlocks,
-      skinCareSetupPath: base.skinCareSetupPath,
+      skinCareSetupPath: normalizeSkinCareSetupPath(base.skinCareSetupPath),
       skinCareSkipped: base.skinCareSkipped,
       skinCareBlocks: skinCareBlocks,
       skinCareProductNames: base.skinCareProductNames,
@@ -1241,7 +1294,9 @@ class BaseTimelineSetup {
       skinCareSelectedProductNames: base.skinCareSelectedProductNames,
       skinCareProductRecommendations: base.skinCareProductRecommendations,
       skinCareSpecialCareNotes: base.skinCareSpecialCareNotes,
-    );
+    ).normalizeSkinCareMode();
+    setup.validateForOwner(uid);
+    return setup;
   }
 
   factory BaseTimelineSetup.fromOnboardingCompletion({
@@ -1378,7 +1433,7 @@ class BaseTimelineSetup {
 
     final targets = finalDraft.canonicalNutritionTargets();
 
-    return BaseTimelineSetup(
+    final setup = BaseTimelineSetup(
       uid: bundle.uid,
       updatedAt: bundle.updatedAt,
       schemaVersion: currentSchemaVersion,
@@ -1415,7 +1470,7 @@ class BaseTimelineSetup {
       eatingPhotoAssetId: eatingAssetId,
       eatingPhotoR2Key: eatingR2Key,
       fixedBlocks: fixedBlocks,
-      skinCareSetupPath: base.skinCareSetupPath,
+      skinCareSetupPath: normalizeSkinCareSetupPath(base.skinCareSetupPath),
       skinCareSkipped: base.skinCareSkipped,
       skinCareBlocks: skinCareBlocks,
       skinCareProductNames: base.skinCareProductNames,
@@ -1432,7 +1487,9 @@ class BaseTimelineSetup {
       skinCareSelectedProductNames: base.skinCareSelectedProductNames,
       skinCareProductRecommendations: base.skinCareProductRecommendations,
       skinCareSpecialCareNotes: base.skinCareSpecialCareNotes,
-    );
+    ).normalizeSkinCareMode();
+    setup.validateForOwner(bundle.uid);
+    return setup;
   }
 
   factory BaseTimelineSetup.fromCompletionBundle(
@@ -1558,7 +1615,10 @@ class BaseTimelineSetup {
         .map((e) => e.id)
         .toList();
 
-    return BaseTimelineSetup(
+    final inferredPath = skinCareProductAssetId != null
+        ? 'products'
+        : (skinCareFaceAssetId != null ? 'build_for_me' : null);
+    final setup = BaseTimelineSetup(
       uid: uid,
       updatedAt: bundle.updatedAt,
       schemaVersion: currentSchemaVersion,
@@ -1578,11 +1638,14 @@ class BaseTimelineSetup {
       eatingPhotoAssetId: eatingAssetId,
       eatingPhotoR2Key: eatingR2Key,
       fixedBlocks: fixedBlocks,
+      skinCareSetupPath: inferredPath,
       skinCareBlocks: skinCareBlocks,
       skinCareProductPhotoAssetId: skinCareProductAssetId,
       skinCareProductPhotoR2Key: skinCareProductR2Key,
       skinCareFacePhotoAssetId: skinCareFaceAssetId,
       skinCareFacePhotoR2Key: skinCareFaceR2Key,
-    );
+    ).normalizeSkinCareMode();
+    setup.validateForOwner(uid);
+    return setup;
   }
 }

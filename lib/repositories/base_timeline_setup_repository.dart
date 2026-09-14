@@ -28,12 +28,17 @@ class FakeBaseTimelineSetupRepository implements BaseTimelineSetupRepository {
   Future<BaseTimelineSetup> fetchSetup(String uid) async {
     final existing = _setups[uid];
     if (existing != null) {
-      if (existing.schemaVersion < BaseTimelineSetup.currentSchemaVersion) {
+      final rawPath = existing.skinCareSetupPath;
+      final hasLegacySkinCarePath =
+          rawPath == 'has_products' || rawPath == 'no_products';
+      if (existing.schemaVersion < BaseTimelineSetup.currentSchemaVersion ||
+          hasLegacySkinCarePath) {
         final sourceResult = await _fetchOnboardingSource(uid, _onboardingRepo);
         if (sourceResult.readFailed) return existing;
         final migrated = migrateBaseTimelineSetupIfNeeded(
           existing: existing,
           onboardingSource: sourceResult.setup,
+          hasLegacySkinCarePath: hasLegacySkinCarePath,
         );
         await saveSetup(uid, migrated);
         return migrated;
@@ -69,6 +74,11 @@ class FakeBaseTimelineSetupRepository implements BaseTimelineSetupRepository {
       () => StreamController<BaseTimelineSetup?>.broadcast(),
     );
     yield* controller.stream;
+  }
+
+  /// Seeds in-memory setup directly without validation, useful for simulating legacy database documents.
+  void seedSetup(BaseTimelineSetup setup) {
+    _setups[setup.uid] = setup;
   }
 }
 
@@ -191,13 +201,18 @@ class FirestoreBaseTimelineSetupRepository
     final data = doc.data();
 
     if (doc.exists && data != null) {
+      final rawSkinCarePath = data['skinCareSetupPath'] as String?;
+      final hasLegacySkinCarePath =
+          rawSkinCarePath == 'has_products' || rawSkinCarePath == 'no_products';
       final existing = BaseTimelineSetup.fromMap(data, uid: uid);
-      if (existing.schemaVersion < BaseTimelineSetup.currentSchemaVersion) {
+      if (existing.schemaVersion < BaseTimelineSetup.currentSchemaVersion ||
+          hasLegacySkinCarePath) {
         final sourceResult = await _fetchOnboardingSource(uid, _onboardingRepo);
         if (sourceResult.readFailed) return existing;
         final migrated = migrateBaseTimelineSetupIfNeeded(
           existing: existing,
           onboardingSource: sourceResult.setup,
+          hasLegacySkinCarePath: hasLegacySkinCarePath,
         );
         await saveSetup(uid, migrated);
         return migrated;
@@ -414,14 +429,23 @@ Future<_OnboardingSourceFetchResult> _fetchOnboardingSource(
 BaseTimelineSetup migrateBaseTimelineSetupIfNeeded({
   required BaseTimelineSetup existing,
   BaseTimelineSetup? onboardingSource,
+  bool hasLegacySkinCarePath = false,
 }) {
-  if (existing.schemaVersion >= BaseTimelineSetup.currentSchemaVersion) {
+  final normalizedExisting = existing.normalizeSkinCareMode();
+  final needsSkinCareRewrite = hasLegacySkinCarePath ||
+      existing.skinCareSetupPath != normalizedExisting.skinCareSetupPath;
+
+  if (existing.schemaVersion >= BaseTimelineSetup.currentSchemaVersion &&
+      !needsSkinCareRewrite) {
     return existing;
   }
 
-  var migrated = existing.copyWith(
+  var migrated = normalizedExisting.copyWith(
     schemaVersion: BaseTimelineSetup.currentSchemaVersion,
-    revision: existing.revision < 1 ? 1 : existing.revision,
+    revision: existing.schemaVersion < BaseTimelineSetup.currentSchemaVersion
+        ? (existing.revision < 1 ? 1 : existing.revision)
+        : existing.revision + 1,
+    updatedAt: DateTime.now(),
   );
 
   if (onboardingSource != null) {
@@ -544,5 +568,5 @@ BaseTimelineSetup migrateBaseTimelineSetupIfNeeded({
     }
   }
 
-  return migrated;
+  return migrated.normalizeSkinCareMode();
 }

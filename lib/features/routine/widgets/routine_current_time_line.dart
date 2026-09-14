@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:optivus/core/timeline/timeline_visual_layout.dart';
 import 'package:optivus/core/timeline/timeline_visual_models.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
@@ -24,8 +23,12 @@ class RoutineCurrentTimeLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final effectiveMinute = currentMinute ?? now.hour * 60 + now.minute;
+    final effectiveMinute = currentMinute ??
+        () {
+          final now = DateTime.now();
+          return now.hour * 60 + now.minute;
+        }();
+
     // Only show if current time is within visible range
     if (!layout.isMinuteVisible(effectiveMinute)) {
       return const SizedBox.shrink();
@@ -33,59 +36,66 @@ class RoutineCurrentTimeLine extends StatelessWidget {
 
     if (layout.totalMinutes <= 0) return const SizedBox.shrink();
 
-    final topOffset =
-        visualScale?.yForMinute(effectiveMinute) ??
-        layout.topForMinute(effectiveMinute);
-    const dotSize = 8.0;
-
-    final displayTimeStr =
-        'Now — ${TimelineUtils.formatMinute(effectiveMinute)}';
+    final topOffset = TimelineUtils.minuteToY(
+      effectiveMinute,
+      layout: layout,
+      visualScale: visualScale,
+    );
+    const dotSize = kTimelineLiveDotSize;
+    final isOnTick = TimelineUtils.isRulerTick(effectiveMinute);
 
     return Stack(
       clipBehavior: Clip.none,
       children: [
+        // 1. Horizontal dashed line starting at the rail and extending right
+        Positioned(
+          top: topOffset - 0.7,
+          left: kTimelineRailX,
+          right: 0,
+          height: 1.4,
+          child: CustomPaint(
+            painter: _DottedLinePainter(color: OptivusColors.roseAccent),
+          ),
+        ),
+
+        // 2. Small orange live dot aligned with the vertical time rail
         Positioned(
           top: topOffset - dotSize / 2,
-          left: 0,
-          right: 0,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const SizedBox(width: kTimelineTimeRailWidth),
-              Container(
-                width: dotSize,
-                height: dotSize,
-                margin: EdgeInsets.only(
-                  left: (kTimelineRailDotColumnWidth - dotSize) / 2,
-                  right: kTimelineContentGap,
-                ),
-                decoration: const BoxDecoration(
-                  color: OptivusColors.roseAccent,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
+          left: kTimelineRailX - dotSize / 2,
+          width: dotSize,
+          height: dotSize,
+          child: Container(
+            width: dotSize,
+            height: dotSize,
+            decoration: const BoxDecoration(
+              color: OptivusColors.roseAccent,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+
+        // 3. Current-time label strictly left of the vertical time rail (when between ticks)
+        if (!isOnTick)
+          Positioned(
+            top: topOffset,
+            left: 0,
+            width: kTimelineLabelRight,
+            child: FractionalTranslation(
+              translation: const Offset(0.0, -0.5),
+              child: Align(
+                alignment: Alignment.centerRight,
                 child: Text(
-                  displayTimeStr,
+                  TimelineUtils.formatMinuteShort(effectiveMinute),
                   maxLines: 1,
                   style: const TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w900,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
                     color: OptivusColors.roseAccent,
                   ),
                 ),
               ),
-              Expanded(
-                child: CustomPaint(
-                  painter: _DottedLinePainter(color: OptivusColors.roseAccent),
-                  size: const Size.fromHeight(1),
-                ),
-              ),
-              const SizedBox(width: 16),
-            ],
+            ),
           ),
-        ),
       ],
     );
   }

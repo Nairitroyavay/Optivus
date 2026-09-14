@@ -1,11 +1,28 @@
 import 'dart:math';
 
+import 'package:optivus/core/timeline/timeline_visual_layout.dart';
+import 'package:optivus/core/timeline/timeline_visual_models.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/timeline_layout.dart';
 
 /// Utility functions for routine timeline calculations.
 class TimelineUtils {
   TimelineUtils._();
+
+  /// Canonical tick interval in minutes for the routine ruler.
+  static const int kTimelineTickMinutes = 10;
+
+  /// Whether [minute] falls exactly on a ruler tick.
+  static bool isRulerTick(int minute) => minute % kTimelineTickMinutes == 0;
+
+  /// Single shared Y-coordinate calculation for a minute across ruler, dot, live line, and cards.
+  static double minuteToY(
+    int minute, {
+    required TimelineLayout layout,
+    TimelineVisualScale? visualScale,
+  }) {
+    return visualScale?.yForMinute(minute) ?? layout.topForMinute(minute);
+  }
 
   /// Display label for sleep/overnight items on a selected day.
   /// Returns 'Sleep continues' for continuation segments.

@@ -245,6 +245,12 @@ class RoutineTimelineViewportState
             item.id: _isFrontItem(prepared, item),
         };
 
+        final effectiveCurrentMinute = widget.currentMinute ??
+            () {
+              final now = DateTime.now();
+              return now.hour * 60 + now.minute;
+            }();
+
         return BackdropGroup(
           child: SingleChildScrollView(
             controller: _scrollController,
@@ -290,6 +296,10 @@ class RoutineTimelineViewportState
                       child: RoutineTimeRuler(
                         layout: widget.layout,
                         visualScale: prepared.scale,
+                        currentMinute:
+                            widget.isToday && widget.showCurrentTimeLine
+                                ? effectiveCurrentMinute
+                                : null,
                       ),
                     ),
                   ),
@@ -316,14 +326,7 @@ class RoutineTimelineViewportState
                     ),
                   ),
 
-                  // Real condensed card layers remain behind the promoted card.
-                  ..._buildExposedBackCards(prepared),
-
-                  // Full-detail front/non-overlapping cards.
-                  for (final item in _cardPaintOrder(prepared))
-                    _buildCard(context, prepared, item, writeState),
-
-                  // ── Current time indicator ──
+                  // ── Current time indicator (timeline background layer behind cards) ──
                   if (widget.isToday && widget.showCurrentTimeLine)
                     Positioned(
                       top: 0,
@@ -335,11 +338,18 @@ class RoutineTimelineViewportState
                           child: RoutineCurrentTimeLine(
                             layout: widget.layout,
                             visualScale: prepared.scale,
-                            currentMinute: widget.currentMinute,
+                            currentMinute: effectiveCurrentMinute,
                           ),
                         ),
                       ),
                     ),
+
+                  // Real condensed card layers remain behind the promoted card.
+                  ..._buildExposedBackCards(prepared),
+
+                  // Full-detail front/non-overlapping cards.
+                  for (final item in _cardPaintOrder(prepared))
+                    _buildCard(context, prepared, item, writeState),
                 ],
               ),
             ),
