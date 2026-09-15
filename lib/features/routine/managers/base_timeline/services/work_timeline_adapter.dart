@@ -7,29 +7,101 @@ import 'package:optivus/features/routine/managers/base_timeline/widgets/work_tim
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 
+/// Helper for Work schedule block layout and card width calculation.
+class WorkTimelineLayoutHelper {
+  const WorkTimelineLayoutHelper._();
+
+  /// Calculates effective front card width given container width and overlap status
+  /// matching [TimelineOverlapPresentation.frontAndExposed] geometry.
+  static double effectiveCardWidth({
+    required double availableWidth,
+    bool hasOverlap = false,
+    double leftOffset = 62.0,
+    double rightPadding = 16.0,
+  }) {
+    final usableWidth = (availableWidth - leftOffset - rightPadding).clamp(
+      60.0,
+      double.infinity,
+    );
+    if (!hasOverlap) {
+      return usableWidth;
+    }
+    const minFrontWidth = 140.0;
+    const minLabelWidth = 60.0;
+    const maxLabelWidth = 76.0;
+
+    final double exposedLabelWidth;
+    if (usableWidth >= minFrontWidth + maxLabelWidth) {
+      exposedLabelWidth = maxLabelWidth;
+    } else if (usableWidth > minFrontWidth) {
+      exposedLabelWidth = (usableWidth - minFrontWidth).clamp(
+        minLabelWidth,
+        maxLabelWidth,
+      );
+    } else {
+      exposedLabelWidth = (usableWidth * 0.35).clamp(0.0, minLabelWidth);
+    }
+    return (usableWidth - exposedLabelWidth).clamp(30.0, double.infinity);
+  }
+
+  /// Checks if [block] overlaps with any other block in [allBlocks] on any shared active day.
+  static bool hasOverlap(
+    TimelineBlockDraft block,
+    List<TimelineBlockDraft> allBlocks,
+  ) {
+    for (final other in allBlocks) {
+      if (identical(other, block) || other.id == block.id) continue;
+      final sharesDay = other.repeatDays.any(block.repeatDays.contains);
+      if (!sharesDay) continue;
+      if (other.startMinute < block.endMinute &&
+          block.startMinute < other.endMinute) {
+        return true;
+      }
+    }
+    return false;
+  }
+}
+
 /// Base Timeline Work adapter. Unlike the onboarding adapter, this operates on
 /// the canonical typed draft and therefore preserves provenance and every
 /// unexposed field during edits.
 class BaseTimelineWorkAdapter {
   final Color accent;
+  final bool defaultEditable;
 
-  const BaseTimelineWorkAdapter({this.accent = OptivusColors.warning});
+  const BaseTimelineWorkAdapter({
+    this.accent = OptivusColors.warning,
+    this.defaultEditable = true,
+  });
 
-  List<TimelineEntry> toEntries(TimelineBlockDraft block) => [
-    TimelineEntry(
-      id: block.id,
-      sourceId: block.id,
-      startMinute: block.startMinute,
-      endMinute: block.endMinute,
-      repeatDays: block.repeatDays,
-      title: block.title,
-      subtitle: block.location,
-      category: TimelineCategory.work,
-      isEditable: true,
-      adapterKey: 'base_timeline_work',
-      minHeight: WorkTimelineCard.minimumHeight(block),
-    ),
-  ];
+  List<TimelineEntry> toEntries(
+    TimelineBlockDraft block, {
+    double? contentWidth,
+    double textScale = 1.0,
+    bool? isEditable,
+  }) {
+    final editable = isEditable ?? defaultEditable;
+    return [
+      TimelineEntry(
+        id: block.id,
+        sourceId: block.id,
+        startMinute: block.startMinute,
+        endMinute: block.endMinute,
+        repeatDays: block.repeatDays,
+        title: block.title,
+        subtitle: block.location,
+        category: TimelineCategory.work,
+        isEditable: editable,
+        adapterKey: 'base_timeline_work',
+        minHeight: WorkTimelineCard.minimumHeight(
+          block,
+          contentWidth: contentWidth ?? 220.0,
+          textScale: textScale,
+          isEditable: editable,
+        ),
+      ),
+    ];
+  }
 
   TimelineEntryStyle styleForEntry(TimelineEntry entry) => TimelineEntryStyle(
     accentColor: accent,

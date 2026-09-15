@@ -1,13 +1,16 @@
 import 'package:flutter/foundation.dart';
 
-/// Primary filter options with labels and emojis.
+/// Filter option for Routine dropdown and category filtering.
 @immutable
 class RoutineFilterOption {
   final String key;
   final String label;
-  final String emoji;
+  final String? shortLabel;
 
-  const RoutineFilterOption(this.key, this.label, this.emoji);
+  const RoutineFilterOption(this.key, this.label, [this.shortLabel]);
+
+  /// Backwards-compatible alias for previous emoji property.
+  String get emoji => shortLabel ?? label;
 
   @override
   bool operator ==(Object other) =>

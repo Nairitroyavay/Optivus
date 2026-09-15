@@ -72,7 +72,7 @@ class BaseTimelineUploadLifecycleHelper {
   /// Retires an asset that was replaced by a new photo in a committed setup.
   Future<void> retireReplacedAsset({
     required String uid,
-    required String oldAssetId,
+    String? oldAssetId,
     String? oldObjectKey,
   }) async {
     await retireUncommittedUpload(

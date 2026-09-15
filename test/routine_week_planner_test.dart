@@ -26,6 +26,9 @@ RoutineItem _item({
   bool crossesMidnight = false,
   bool endsNextDay = false,
   RoutineStatus status = RoutineStatus.planned,
+  RoutineSource source = RoutineSource.manual,
+  String? baseTimelineSection,
+  RoutineCategory category = RoutineCategory.fixed,
 }) {
   return RoutineItem(
     id: id,
@@ -40,6 +43,9 @@ RoutineItem _item({
     crossesMidnight: crossesMidnight,
     endsNextDay: endsNextDay,
     status: status,
+    source: source,
+    baseTimelineSection: baseTimelineSection,
+    category: category,
   );
 }
 
@@ -112,17 +118,19 @@ void main() {
       );
 
       expect(summary.entries, isEmpty);
-      expect(summary.actionableTotal, 0);
+      expect(summary.routineTotal, 0);
       expect(summary.completed, 0);
       expect(summary.progress, 0.0);
       expect(summary.freeMinutes, 1020);
       expect(summary.freeTimeFormatted, '17h free');
       expect(summary.baseBlockCount, 0);
       expect(summary.flexibleTaskCount, 0);
+      expect(summary.hasRoutines, isFalse);
+      expect(summary.continuationCount, 0);
     });
 
     test(
-      '2. Hard blocks are excluded from actionable total & completed count',
+      '2. All routine occurrences (hard, soft, flexible) are counted in routineTotal & completed count',
       () {
         final hardBlock1 = RoutineDayEntry(
           item: _item(
@@ -131,6 +139,8 @@ void main() {
             startMinute: 9 * 60,
             endMinute: 11 * 60,
             blockType: RoutineBlockType.hardBlock,
+            source: RoutineSource.baseTimeline,
+            baseTimelineSection: 'classes',
             status: RoutineStatus.completed,
           ),
           instanceId: 'hb1',
@@ -180,11 +190,11 @@ void main() {
         expect(summary.entries.length, 3);
         expect(summary.baseBlockCount, 1);
         expect(summary.flexibleTaskCount, 2);
-        // Hard block must NOT inflate actionableTotal
-        expect(summary.actionableTotal, 2);
-        // flexTask1 is completed, flexTask2 is planned -> 1 of 2
-        expect(summary.completed, 1);
-        expect(summary.progress, 0.5);
+        // All non-continuation routines are counted in routineTotal
+        expect(summary.routineTotal, 3);
+        // hardBlock1 is completed, flexTask1 is completed -> 2 of 3
+        expect(summary.completed, 2);
+        expect(summary.progress, 2 / 3);
         // Occupied: 2h (hardBlock) + 1h (flex1) + 1h (flex2) = 4h (240m)
         expect(summary.availability.occupiedMinutes, 240);
         expect(summary.freeMinutes, 1020 - 240); // 780m = 13h
@@ -215,10 +225,12 @@ void main() {
           entries: [continuation],
         );
 
-        // Continuation segment does NOT increment task counts
+        // Continuation segment does NOT increment routine counts
         expect(summary.baseBlockCount, 0);
         expect(summary.flexibleTaskCount, 0);
-        expect(summary.actionableTotal, 0);
+        expect(summary.routineTotal, 0);
+        expect(summary.continuationCount, 1);
+        expect(summary.hasRoutines, isFalse);
 
         // But inside 06:00-23:00 window, 06:00-07:00 (60 mins) is occupied
         expect(summary.availability.occupiedMinutes, 60);
@@ -318,7 +330,7 @@ void main() {
 
         expect(tuesdaySummary.entries.length, 1);
         expect(tuesdaySummary.flexibleTaskCount, 1);
-        expect(tuesdaySummary.actionableTotal, 1);
+        expect(tuesdaySummary.routineTotal, 1);
         expect(tuesdaySummary.freeMinutes, 1020 - 60);
         expect(tuesdaySummary.freeTimeFormatted, '16h free');
       },
@@ -372,6 +384,8 @@ void main() {
           crossesMidnight: true,
           repeatDays: const [1], // Monday night into Tuesday morning
           blockType: RoutineBlockType.hardBlock,
+          source: RoutineSource.baseTimeline,
+          baseTimelineSection: 'sleep',
         );
 
         // Day 1: Monday (2026-09-14)
@@ -444,10 +458,163 @@ void main() {
           entries: [itemSkipped, itemMissed],
         );
 
-        expect(summary.actionableTotal, 2);
+        expect(summary.routineTotal, 2);
         expect(summary.completed, 0);
         expect(summary.skipped, 1);
         expect(summary.missed, 1);
+      },
+    );
+
+    test(
+      '9. All six block types count in routineTotal and derive completion metrics',
+      () {
+        final entries = [
+          RoutineDayEntry(
+            item: _item(
+              id: 'b_hard',
+              title: 'Class',
+              startMinute: 540,
+              endMinute: 600,
+              blockType: RoutineBlockType.hardBlock,
+              source: RoutineSource.baseTimeline,
+              baseTimelineSection: 'classes',
+              status: RoutineStatus.completed,
+            ),
+            instanceId: 'i_hard',
+            templateId: 't_hard',
+            occurrenceDateKey: '2026-09-14',
+            displayDateKey: '2026-09-14',
+            kind: RoutineDayEntryKind.scheduled,
+          ),
+          RoutineDayEntry(
+            item: _item(
+              id: 'b_soft',
+              title: 'Lunch',
+              startMinute: 720,
+              endMinute: 760,
+              blockType: RoutineBlockType.softBlock,
+              source: RoutineSource.baseTimeline,
+              baseTimelineSection: 'eating',
+              status: RoutineStatus.planned,
+            ),
+            instanceId: 'i_soft',
+            templateId: 't_soft',
+            occurrenceDateKey: '2026-09-14',
+            displayDateKey: '2026-09-14',
+            kind: RoutineDayEntryKind.scheduled,
+          ),
+          RoutineDayEntry(
+            item: _item(
+              id: 'b_flex',
+              title: 'Exercise',
+              startMinute: 800,
+              endMinute: 860,
+              blockType: RoutineBlockType.flexibleTask,
+              status: RoutineStatus.completed,
+            ),
+            instanceId: 'i_flex',
+            templateId: 't_flex',
+            occurrenceDateKey: '2026-09-14',
+            displayDateKey: '2026-09-14',
+            kind: RoutineDayEntryKind.scheduled,
+          ),
+          RoutineDayEntry(
+            item: _item(
+              id: 'b_track',
+              title: 'Water Log',
+              startMinute: 900,
+              endMinute: 915,
+              blockType: RoutineBlockType.trackerTask,
+              status: RoutineStatus.planned,
+            ),
+            instanceId: 'i_track',
+            templateId: 't_track',
+            occurrenceDateKey: '2026-09-14',
+            displayDateKey: '2026-09-14',
+            kind: RoutineDayEntryKind.scheduled,
+          ),
+          RoutineDayEntry(
+            item: _item(
+              id: 'b_check',
+              title: 'Reflection',
+              startMinute: 1000,
+              endMinute: 1015,
+              blockType: RoutineBlockType.checkIn,
+              status: RoutineStatus.missed,
+            ),
+            instanceId: 'i_check',
+            templateId: 't_check',
+            occurrenceDateKey: '2026-09-14',
+            displayDateKey: '2026-09-14',
+            kind: RoutineDayEntryKind.scheduled,
+          ),
+          RoutineDayEntry(
+            item: _item(
+              id: 'b_money',
+              title: 'Budget',
+              startMinute: 1100,
+              endMinute: 1120,
+              blockType: RoutineBlockType.moneyTask,
+              status: RoutineStatus.skipped,
+            ),
+            instanceId: 'i_money',
+            templateId: 't_money',
+            occurrenceDateKey: '2026-09-14',
+            displayDateKey: '2026-09-14',
+            kind: RoutineDayEntryKind.scheduled,
+          ),
+        ];
+
+        final summary = RoutineWeekDaySummary.fromEntries(
+          day: DateTime(2026, 9, 14),
+          entries: entries,
+        );
+
+        expect(summary.routineTotal, 6);
+        expect(summary.completed, 2);
+        expect(summary.missed, 1);
+        expect(summary.skipped, 1);
+        expect(summary.progress, 2 / 6);
+        expect(summary.hasRoutines, isTrue);
+      },
+    );
+
+    test(
+      '10. Native and moved-in sibling occurrences from same template count separately',
+      () {
+        final template = _item(
+          id: 'tpl_repeat',
+          title: 'Study Session',
+          startMinute: 600,
+          endMinute: 660,
+          repeatDays: const [1, 2],
+        );
+
+        final nativeEntry = RoutineDayEntry(
+          item: template,
+          instanceId: 'inst_native',
+          templateId: 'tpl_repeat',
+          occurrenceDateKey: '2026-09-15',
+          displayDateKey: '2026-09-15',
+          kind: RoutineDayEntryKind.scheduled,
+        );
+
+        final movedInEntry = RoutineDayEntry(
+          item: template,
+          instanceId: 'inst_moved_in',
+          templateId: 'tpl_repeat',
+          occurrenceDateKey: '2026-09-14',
+          displayDateKey: '2026-09-15',
+          kind: RoutineDayEntryKind.movedIn,
+        );
+
+        final summary = RoutineWeekDaySummary.fromEntries(
+          day: DateTime(2026, 9, 15),
+          entries: [nativeEntry, movedInEntry],
+        );
+
+        expect(summary.routineTotal, 2);
+        expect(summary.hasRoutines, isTrue);
       },
     );
   });
@@ -637,6 +804,8 @@ void main() {
         endMinute: 12 * 60,
         repeatDays: const [1], // Monday
         blockType: RoutineBlockType.hardBlock,
+        source: RoutineSource.baseTimeline,
+        baseTimelineSection: 'job_work_business',
       );
       final flexTask = _item(
         id: 'ft1',
@@ -668,14 +837,123 @@ void main() {
       expect(find.text('1 flexible'), findsOneWidget);
       expect(find.text('13h free'), findsOneWidget);
 
-      // Monday has actionable task -> shows 0% completed (0 of 1)
+      // Monday has 2 routines (0 completed) -> shows 0/2 done (0%)
+      expect(find.text('0/2 done'), findsOneWidget);
       expect(find.text('0%'), findsOneWidget);
       expect(find.byType(LinearProgressIndicator), findsOneWidget);
 
-      // Other days (e.g. Tuesday) have no tasks -> displays 'No tasks'
-      expect(find.text('No tasks'), findsWidgets);
+      // Other days (e.g. Tuesday) have no routines -> displays 'No routines'
+      expect(find.text('No routines'), findsWidgets);
       expect(find.text('17h free'), findsWidgets);
     });
+
+    testWidgets(
+      'Base-only day with 3 occurrences produces 1/3 done and 3 base chips in UI',
+      (tester) async {
+        final class1 = _item(
+          id: 'c1',
+          title: 'Physics',
+          startMinute: 9 * 60,
+          endMinute: 10 * 60,
+          repeatDays: const [1],
+          blockType: RoutineBlockType.hardBlock,
+          source: RoutineSource.baseTimeline,
+          baseTimelineSection: 'classes',
+          status: RoutineStatus.completed,
+        );
+        final class2 = _item(
+          id: 'c2',
+          title: 'Calculus',
+          startMinute: 11 * 60,
+          endMinute: 12 * 60,
+          repeatDays: const [1],
+          blockType: RoutineBlockType.hardBlock,
+          source: RoutineSource.baseTimeline,
+          baseTimelineSection: 'classes',
+          status: RoutineStatus.planned,
+        );
+        final work = _item(
+          id: 'w1',
+          title: 'Job Shift',
+          startMinute: 14 * 60,
+          endMinute: 18 * 60,
+          repeatDays: const [1],
+          blockType: RoutineBlockType.hardBlock,
+          source: RoutineSource.baseTimeline,
+          baseTimelineSection: 'job_work_business',
+          status: RoutineStatus.planned,
+        );
+
+        final occCompleted = _occurrence(
+          id: 'occ_c1',
+          routineItemId: 'c1',
+          occurrenceDateKey: '2026-09-14',
+          status: RoutineStatus.completed,
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              routineNotifierProvider.overrideWith(
+                (ref) => _WeekTestNotifier(
+                  ref,
+                  initialItems: [class1, class2, work],
+                  initialOccurrences: [occCompleted],
+                  initialSelectedDay: DateTime(2026, 9, 14),
+                ),
+              ),
+            ],
+            child: const MaterialApp(home: Scaffold(body: WeekPlannerSheet())),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Must display 1/3 done and 3 base on Monday
+        expect(find.text('1/3 done'), findsOneWidget);
+        expect(find.text('33%'), findsOneWidget);
+        expect(find.text('3 base'), findsOneWidget);
+        // Must NOT display "No tasks"
+        expect(find.text('No tasks'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Continuation-only day displays No new routines and continuing chip',
+      (tester) async {
+        final sleepTemplate = _item(
+          id: 'sleep_1',
+          title: 'Sleep',
+          startMinute: 22 * 60,
+          endMinute: 7 * 60,
+          repeatDays: const [1], // Monday night into Tuesday morning
+          crossesMidnight: true,
+          endsNextDay: true,
+          blockType: RoutineBlockType.hardBlock,
+          source: RoutineSource.baseTimeline,
+          baseTimelineSection: 'sleep',
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              routineNotifierProvider.overrideWith(
+                (ref) => _WeekTestNotifier(
+                  ref,
+                  initialItems: [sleepTemplate],
+                  initialSelectedDay: DateTime(2026, 9, 15), // Tuesday
+                ),
+              ),
+            ],
+            child: const MaterialApp(home: Scaffold(body: WeekPlannerSheet())),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Tuesday has no starting routines, only continuation from Monday night
+        expect(find.text('No new routines'), findsOneWidget);
+        expect(find.text('1 continuing'), findsOneWidget);
+      },
+    );
 
     testWidgets('No RenderFlex overflow on narrow 320 px screen', (
       tester,

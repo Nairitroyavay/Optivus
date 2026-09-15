@@ -1531,6 +1531,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     state = state.copyWith(selectedCategoryFilter: supported ? filter : 'all');
   }
 
+  void resetFilters() {
+    state = state.copyWith(
+      selectedPrimaryFilter: 'all',
+      selectedStatusFilter: 'any',
+      selectedCategoryFilter: 'all',
+    );
+  }
+
   void toggleAiSuggestions(bool value) =>
       state = state.copyWith(aiRoutineSuggestionsEnabled: value);
   void toggleNotifications(bool value) =>
@@ -3853,31 +3861,6 @@ final nextRoutineItemProvider = Provider<RoutineItem?>((ref) {
   return candidates.isEmpty ? null : candidates.first;
 });
 
-final routineCompletionSummaryProvider = Provider<RoutineCompletionSummary>((
-  ref,
-) {
-  final items = ref.watch(todayRoutineItemsProvider);
-  final actionable = items
-      .where((item) {
-        return item.blockType != RoutineBlockType.hardBlock;
-      })
-      .toList(growable: false);
-  return RoutineCompletionSummary(
-    total: actionable.length,
-    completed: actionable
-        .where(
-          (item) => item.isCompleted || item.status == RoutineStatus.completed,
-        )
-        .length,
-    skipped: actionable
-        .where((item) => item.status == RoutineStatus.skipped)
-        .length,
-    missed: actionable
-        .where((item) => item.isMissed || item.status == RoutineStatus.missed)
-        .length,
-  );
-});
-
 class RoutineFilters {
   RoutineFilters._();
 
@@ -3898,16 +3881,3 @@ class RoutineFilters {
 // ── Generic Settings Providers ──
 final aiRoutineSuggestionsEnabledProvider = StateProvider<bool>((ref) => true);
 final routineNotificationsEnabledProvider = StateProvider<bool>((ref) => true);
-
-class RoutineCompletionSummary {
-  final int total;
-  final int completed;
-  final int skipped;
-  final int missed;
-  const RoutineCompletionSummary({
-    required this.total,
-    required this.completed,
-    required this.skipped,
-    required this.missed,
-  });
-}

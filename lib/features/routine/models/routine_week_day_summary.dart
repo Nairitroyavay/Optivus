@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:optivus/features/routine/models/routine_day_entry.dart';
-import 'package:optivus/features/routine/models/routine_filter_definitions.dart';
+import 'package:optivus/features/routine/models/routine_occurrence_summary.dart';
 import 'package:optivus/features/routine/services/routine_day_availability.dart';
 import 'package:optivus/features/routine/services/routine_entry_filter.dart';
 import 'package:optivus/features/routine/services/routine_materializer.dart';
@@ -17,17 +17,21 @@ class RoutineWeekDaySummary {
   final List<RoutineDayEntry> entries;
   final RoutineDayAvailability availability;
 
-  /// Total actionable tasks for this day (excludes hard schedule blocks).
-  final int actionableTotal;
+  /// Total routine occurrences starting/landing on this day
+  /// (excludes continuation segments).
+  final int routineTotal;
 
-  /// Completed actionable tasks on this day.
+  /// Completed routines on this day.
   final int completed;
 
-  /// Missed actionable tasks on this day.
+  /// Missed routines on this day.
   final int missed;
 
-  /// Skipped actionable tasks on this day.
+  /// Skipped routines on this day.
   final int skipped;
+
+  /// Overnight continuation segments continuing into this day.
+  final int continuationCount;
 
   /// Scheduled base/anchor blocks (e.g., classes, work, fixed routine).
   final int baseBlockCount;
@@ -44,31 +48,36 @@ class RoutineWeekDaySummary {
   /// The largest contiguous free interval within the planning window.
   final RoutineTimeInterval? largestFreeInterval;
 
-  /// Category keys present on this day.
-  final Set<String> availableCategoryKeys;
-
   const RoutineWeekDaySummary({
     required this.day,
     required this.entries,
     required this.availability,
-    required this.actionableTotal,
+    required this.routineTotal,
     required this.completed,
     required this.missed,
     required this.skipped,
+    required this.continuationCount,
     required this.baseBlockCount,
     required this.flexibleTaskCount,
     required this.freeMinutes,
     required this.occupiedMinutes,
     this.largestFreeInterval,
-    required this.availableCategoryKeys,
   });
 
-  /// Whether there is at least one actionable task on this day.
-  bool get hasActionableTasks => actionableTotal > 0;
+  /// Deprecated alias for backwards compatibility during migration.
+  @Deprecated('Use routineTotal instead')
+  int get actionableTotal => routineTotal;
 
-  /// Completion progress between 0.0 and 1.0. Returns 0.0 if there are no tasks.
+  /// Deprecated alias for backwards compatibility during migration.
+  @Deprecated('Use hasRoutines instead')
+  bool get hasActionableTasks => hasRoutines;
+
+  /// Whether there is at least one routine occurrence starting/landing on this day.
+  bool get hasRoutines => routineTotal > 0;
+
+  /// Completion progress between 0.0 and 1.0. Returns 0.0 if there are no routines.
   double get progress =>
-      actionableTotal > 0 ? (completed / actionableTotal).clamp(0.0, 1.0) : 0.0;
+      routineTotal > 0 ? (completed / routineTotal).clamp(0.0, 1.0) : 0.0;
 
   /// Formatted free time string from availability engine.
   String get freeTimeFormatted => availability.freeTimeFormatted;
@@ -97,37 +106,15 @@ class RoutineWeekDaySummary {
     // sleep or routines accurately occupy time on the continuation day.
     final availability = RoutineDayAvailability.computeFromEntries(entries);
 
-    // 2. Filter out continuation segments for task identity and completion counts.
-    // A continuation is schedule occupancy, not an independent task to complete.
+    // 2. Compute canonical occurrence summary.
+    // All non-continuation entries count toward routineTotal and completion metrics.
+    final occurrenceSummary = RoutineOccurrenceSummary.fromEntries(entries);
+
+    // 3. Count base blocks and flexible tasks using canonical predicates on non-continuation entries.
     final nonContinuation = entries
         .where((e) => e.kind != RoutineDayEntryKind.continuation)
         .toList(growable: false);
 
-    // 3. Exclude hard blocks from the actionable completion denominator.
-    // Hard blocks represent schedule anchors, not to-do tasks.
-    final actionable = nonContinuation
-        .where(
-          (e) =>
-              e.item.blockType != RoutineBlockType.hardBlock &&
-              !e.item.isHardBlock,
-        )
-        .toList(growable: false);
-
-    final actionableTotal = actionable.length;
-    final completed = actionable
-        .where(
-          (e) => e.item.isCompleted || e.item.status == RoutineStatus.completed,
-        )
-        .length;
-    final missed = actionable
-        .where((e) => e.item.isMissed || e.item.status == RoutineStatus.missed)
-        .length;
-    final skipped = actionable
-        .where((e) => e.item.status == RoutineStatus.skipped)
-        .length;
-
-    // 4. Count base blocks and flexible tasks using canonical predicates.
-    // Base block counting matches RoutineEntryFilter.isBaseTimeline exactly.
     final baseBlockCount = nonContinuation
         .where((e) => RoutineEntryFilter.isBaseTimeline(e.item))
         .length;
@@ -136,31 +123,20 @@ class RoutineWeekDaySummary {
         .where((e) => RoutineEntryFilter.isFlexible(e.item))
         .length;
 
-    // 5. Gather category keys present on this day from canonical category options
-    final categoryKeys = <String>{};
-    for (final opt in categoryFilters) {
-      if (opt.key == 'all') continue;
-      if (entries.any(
-        (e) => RoutineEntryFilter.matchesCategory(e.item, opt.key),
-      )) {
-        categoryKeys.add(opt.key);
-      }
-    }
-
     return RoutineWeekDaySummary(
       day: day,
       entries: entries,
       availability: availability,
-      actionableTotal: actionableTotal,
-      completed: completed,
-      missed: missed,
-      skipped: skipped,
+      routineTotal: occurrenceSummary.total,
+      completed: occurrenceSummary.completed,
+      missed: occurrenceSummary.missed,
+      skipped: occurrenceSummary.skipped,
+      continuationCount: occurrenceSummary.continuationCount,
       baseBlockCount: baseBlockCount,
       flexibleTaskCount: flexibleTaskCount,
       freeMinutes: availability.freeMinutes,
       occupiedMinutes: availability.occupiedMinutes,
       largestFreeInterval: availability.largestFreeInterval,
-      availableCategoryKeys: categoryKeys,
     );
   }
 }

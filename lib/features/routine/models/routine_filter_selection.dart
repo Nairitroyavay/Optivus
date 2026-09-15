@@ -25,6 +25,11 @@ class RoutineFilterSelection {
     return count;
   }
 
+  /// Convenience aliases matching filter semantics
+  String get selectedPrimaryFilter => view;
+  String get selectedStatusFilter => status;
+  String get selectedCategoryFilter => category;
+
   /// Returns a normalized filter selection where an unavailable category filter
   /// is reset to 'all' if no matching entry exists on the evaluated day.
   RoutineFilterSelection normalizedFor(List<RoutineDayEntry> entries) {

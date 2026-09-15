@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/features/routine/models/routine_day_entry.dart';
+import 'package:optivus/features/routine/models/routine_week_day_summary.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/services/routine_entry_filter.dart';
-import 'package:optivus/features/routine/sheets/routine_filter_sheet.dart';
 import 'package:optivus/features/routine/widgets/routine_title_filter_row.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/routine_occurrence.dart';
@@ -25,6 +25,7 @@ RoutineItem _createTestItem({
   bool isCompleted = false,
   bool isMissed = false,
   List<int> repeatDays = const [1],
+  String? baseTimelineSection,
 }) {
   return RoutineItem(
     id: id,
@@ -41,6 +42,7 @@ RoutineItem _createTestItem({
     isMissed: isMissed,
     repeatDays: repeatDays,
     repeatRule: repeatDays.isNotEmpty ? 'weekly' : 'once',
+    baseTimelineSection: baseTimelineSection,
   );
 }
 
@@ -531,6 +533,171 @@ void main() {
         );
       },
     );
+
+    test(
+      '8. Canonical Base Timeline classification provenance and section rules',
+      () {
+        // RoutineSource.baseTimeline + class -> Base true
+        final base1 = _createTestItem(
+          id: 'b1',
+          title: 'Class',
+          startMinute: 600,
+          endMinute: 660,
+          source: RoutineSource.baseTimeline,
+          category: RoutineCategory.classBlock,
+        );
+        expect(RoutineEntryFilter.isBaseTimeline(base1), isTrue);
+
+        // baseTimelineSection = eating + soft block -> Base true
+        final base2 = _createTestItem(
+          id: 'b2',
+          title: 'Lunch',
+          startMinute: 720,
+          endMinute: 780,
+          blockType: RoutineBlockType.softBlock,
+          category: RoutineCategory.eating,
+        ).copyWith(baseTimelineSection: 'eating');
+        expect(RoutineEntryFilter.isBaseTimeline(base2), isTrue);
+
+        // legacy onboarding class -> Base true
+        final obClass = _createTestItem(
+          id: 'ob1',
+          title: 'Math',
+          startMinute: 500,
+          endMinute: 560,
+          source: RoutineSource.onboarding,
+          category: RoutineCategory.classBlock,
+        );
+        expect(RoutineEntryFilter.isBaseTimeline(obClass), isTrue);
+
+        // legacy onboarding work -> Base true
+        final obWork = _createTestItem(
+          id: 'ob2',
+          title: 'Job',
+          startMinute: 600,
+          endMinute: 700,
+          source: RoutineSource.onboarding,
+          category: RoutineCategory.job,
+        );
+        expect(RoutineEntryFilter.isBaseTimeline(obWork), isTrue);
+
+        // legacy onboarding eating -> Base true
+        final obEat = _createTestItem(
+          id: 'ob3',
+          title: 'Dinner',
+          startMinute: 1100,
+          endMinute: 1160,
+          source: RoutineSource.onboarding,
+          category: RoutineCategory.eating,
+        );
+        expect(RoutineEntryFilter.isBaseTimeline(obEat), isTrue);
+
+        // legacy onboarding fixed/sleep -> Base true
+        final obSleep = _createTestItem(
+          id: 'ob4',
+          title: 'Sleep',
+          startMinute: 1300,
+          endMinute: 420,
+          source: RoutineSource.onboarding,
+          category: RoutineCategory.sleep,
+        );
+        expect(RoutineEntryFilter.isBaseTimeline(obSleep), isTrue);
+
+        // legacy onboarding skin care -> Base true
+        final obSkin = _createTestItem(
+          id: 'ob5',
+          title: 'Skincare',
+          startMinute: 450,
+          endMinute: 480,
+          source: RoutineSource.onboarding,
+          category: RoutineCategory.skinCare,
+        );
+        expect(RoutineEntryFilter.isBaseTimeline(obSkin), isTrue);
+
+        // manual hard appointment -> Base false (NOT base timeline owned!)
+        final manualAppt = _createTestItem(
+          id: 'm1',
+          title: 'Dentist Appointment',
+          startMinute: 800,
+          endMinute: 860,
+          blockType: RoutineBlockType.hardBlock,
+          source: RoutineSource.manual,
+          category: RoutineCategory.health,
+        );
+        expect(RoutineEntryFilter.isBaseTimeline(manualAppt), isFalse);
+
+        // imported hard event -> Base false
+        final importedHard = _createTestItem(
+          id: 'imp1',
+          title: 'Flight',
+          startMinute: 600,
+          endMinute: 780,
+          blockType: RoutineBlockType.hardBlock,
+          source: RoutineSource.imported,
+        );
+        expect(RoutineEntryFilter.isBaseTimeline(importedHard), isFalse);
+
+        // manual sleep with no Base provenance -> Base false
+        final manualSleep = _createTestItem(
+          id: 'ms1',
+          title: 'Sleep',
+          startMinute: 1320,
+          endMinute: 420,
+          blockType: RoutineBlockType.hardBlock,
+          source: RoutineSource.manual,
+          category: RoutineCategory.sleep,
+        );
+        expect(RoutineEntryFilter.isBaseTimeline(manualSleep), isFalse);
+      },
+    );
+
+    test(
+      '9. Cross-contract check: Week Planner baseBlockCount matches View -> Base',
+      () {
+        final baseItem = _createTestItem(
+          id: 'b1',
+          title: 'Class',
+          startMinute: 500,
+          endMinute: 600,
+          source: RoutineSource.baseTimeline,
+          baseTimelineSection: 'classes',
+        );
+        final manualHard = _createTestItem(
+          id: 'm1',
+          title: 'Dentist',
+          startMinute: 700,
+          endMinute: 760,
+          blockType: RoutineBlockType.hardBlock,
+          source: RoutineSource.manual,
+        );
+        final flexItem = _createTestItem(
+          id: 'f1',
+          title: 'Workout',
+          startMinute: 800,
+          endMinute: 860,
+          blockType: RoutineBlockType.flexibleTask,
+        );
+        final entries = [
+          _createDayEntry(baseItem),
+          _createDayEntry(manualHard),
+          _createDayEntry(flexItem),
+        ];
+
+        final summary = RoutineWeekDaySummary.fromEntries(
+          day: DateTime(2026, 9, 14),
+          entries: entries,
+        );
+
+        final matchingBaseEntries = RoutineEntryFilter.apply(
+          entries,
+          view: 'base_timeline',
+        );
+
+        expect(summary.baseBlockCount, 1);
+        expect(matchingBaseEntries.length, 1);
+        expect(summary.baseBlockCount, matchingBaseEntries.length);
+      },
+    );
   });
 
   group('RoutineTitleFilterRow & RoutineFilterSheet Widget Tests', () {
@@ -614,7 +781,131 @@ void main() {
       expect(find.text('Filter • 3'), findsOneWidget);
     });
 
-    testWidgets('RoutineFilterSheet staged edits apply only on confirmation', (
+    testWidgets(
+      'Tapping Filter opens anchored glass overlay, not bottom sheet',
+      (tester) async {
+        final container = ProviderContainer(
+          overrides: [
+            routineNotifierProvider.overrideWith(
+              (ref) => _FilterTestNotifier(ref),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(
+              home: Scaffold(body: RoutineTitleFilterRow()),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Tap Filter pill
+        await tester.tap(find.text('Filter'));
+        await tester.pumpAndSettle();
+
+        // Anchored dropdown content is visible
+        expect(find.text('FILTER ROUTINE'), findsOneWidget);
+        expect(find.text('VIEW'), findsOneWidget);
+        expect(find.text('STATUS'), findsOneWidget);
+        expect(find.text('CATEGORY'), findsOneWidget);
+
+        // No modal bottom sheet or draggable scrollable sheet exists
+        expect(find.byType(DraggableScrollableSheet), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Dropdown selections apply immediately and dropdown remains open',
+      (tester) async {
+        final testItem = _createTestItem(
+          id: 'item_1',
+          title: 'Task A',
+          startMinute: 600,
+          endMinute: 660,
+          blockType: RoutineBlockType.flexibleTask,
+          category: RoutineCategory.classBlock,
+          status: RoutineStatus.planned,
+        );
+
+        final container = ProviderContainer(
+          overrides: [
+            routineNotifierProvider.overrideWith(
+              (ref) => _FilterTestNotifier(
+                ref,
+                initialItems: [testItem],
+                initialSelectedDay: DateTime(2026, 9, 14),
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(
+              home: Scaffold(body: RoutineTitleFilterRow()),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Open dropdown
+        await tester.tap(find.text('Filter'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('FILTER ROUTINE'), findsOneWidget);
+
+        // 1. Select 'Flexible Tasks'
+        await tester.tap(find.text('Flexible Tasks'));
+        await tester.pumpAndSettle();
+
+        // Applied immediately in Riverpod state!
+        expect(
+          container.read(routineNotifierProvider).selectedPrimaryFilter,
+          'flexible_tasks',
+        );
+        // Dropdown remains open!
+        expect(find.text('FILTER ROUTINE'), findsOneWidget);
+        // Pill text updated immediately to Filter • 1
+        expect(find.text('Filter • 1'), findsOneWidget);
+
+        // 2. Select 'Done' status
+        await tester.tap(find.text('Done'));
+        await tester.pumpAndSettle();
+
+        // Applied immediately!
+        expect(
+          container.read(routineNotifierProvider).selectedStatusFilter,
+          'done',
+        );
+        // Dropdown remains open!
+        expect(find.text('FILTER ROUTINE'), findsOneWidget);
+        // Pill text updated to Filter • 2
+        expect(find.text('Filter • 2'), findsOneWidget);
+
+        // 3. Select 'Classes' category (which exists on this day)
+        await tester.ensureVisible(find.text('Classes'));
+        await tester.tap(find.text('Classes'));
+        await tester.pumpAndSettle();
+
+        // Applied immediately!
+        expect(
+          container.read(routineNotifierProvider).selectedCategoryFilter,
+          'classes',
+        );
+        // Dropdown remains open!
+        expect(find.text('FILTER ROUTINE'), findsOneWidget);
+        // Pill text updated to Filter • 3
+        expect(find.text('Filter • 3'), findsOneWidget);
+      },
+    );
+
+    testWidgets('Reset filters immediately resets all 3 filter axes', (
       tester,
     ) async {
       final testItem = _createTestItem(
@@ -627,158 +918,124 @@ void main() {
         status: RoutineStatus.planned,
       );
 
-      late WidgetRef capturedRef;
+      final container = ProviderContainer(
+        overrides: [
+          routineNotifierProvider.overrideWith(
+            (ref) => _FilterTestNotifier(
+              ref,
+              initialItems: [testItem],
+              primaryFilter: 'flexible_tasks',
+              statusFilter: 'done',
+              categoryFilter: 'classes',
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
       await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            routineNotifierProvider.overrideWith(
-              (ref) => _FilterTestNotifier(
-                ref,
-                initialItems: [testItem],
-                initialSelectedDay: DateTime(2026, 9, 14),
-              ),
-            ),
-          ],
-          child: MaterialApp(
-            home: Scaffold(
-              body: Consumer(
-                builder: (context, ref, child) {
-                  capturedRef = ref;
-                  return ElevatedButton(
-                    onPressed: () => showRoutineFilterSheet(context, ref),
-                    child: const Text('Open Filters'),
-                  );
-                },
-              ),
-            ),
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(body: RoutineTitleFilterRow()),
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      // Open sheet
-      await tester.tap(find.text('Open Filters'));
+      // Opens with activeCount == 3
+      expect(find.text('Filter • 3'), findsOneWidget);
+
+      // Open dropdown
+      await tester.tap(find.text('Filter • 3'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Filter Routine'), findsOneWidget);
-      expect(find.text('VIEW'), findsOneWidget);
-      expect(find.text('STATUS'), findsOneWidget);
-      expect(find.text('CATEGORY'), findsOneWidget);
+      // 'Reset filters' action is displayed
+      expect(find.text('Reset filters'), findsOneWidget);
 
-      // Staged state starts as all / any / all
-      expect(
-        capturedRef.read(routineNotifierProvider).selectedPrimaryFilter,
-        'all',
+      // Tap Reset filters
+      await tester.ensureVisible(find.text('Reset filters'));
+      await tester.tap(find.text('Reset filters'));
+      await tester.pumpAndSettle();
+
+      // All 3 filters reset immediately
+      final state = container.read(routineNotifierProvider);
+      expect(state.selectedPrimaryFilter, 'all');
+      expect(state.selectedStatusFilter, 'any');
+      expect(state.selectedCategoryFilter, 'all');
+
+      // Pill text resets to 'Filter'
+      expect(find.text('Filter'), findsOneWidget);
+    });
+
+    testWidgets('Outside tap closes the dropdown', (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          routineNotifierProvider.overrideWith(
+            (ref) => _FilterTestNotifier(ref),
+          ),
+        ],
       );
+      addTearDown(container.dispose);
 
-      // Tap 'Flexible Tasks' chip in the sheet
-      await tester.tap(find.text('Flexible Tasks'));
-      await tester.pumpAndSettle();
-
-      // State is NOT yet modified before Apply
-      expect(
-        capturedRef.read(routineNotifierProvider).selectedPrimaryFilter,
-        'all',
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(body: RoutineTitleFilterRow()),
+          ),
+        ),
       );
-
-      // Tap 'Done' status chip
-      await tester.tap(find.text('Done'));
       await tester.pumpAndSettle();
 
-      // Since item is planned, 0 items match -> button says 'Show 0 routines'
-      expect(find.text('Show 0 routines'), findsOneWidget);
-
-      // Tap 'Reset' button
-      await tester.tap(find.text('Reset'));
+      // Open dropdown
+      await tester.tap(find.text('Filter'));
       await tester.pumpAndSettle();
 
-      // Now 1 item matches again -> button says 'Show 1 routine'
-      expect(find.text('Show 1 routine'), findsOneWidget);
+      expect(find.text('FILTER ROUTINE'), findsOneWidget);
 
-      // Tap 'Flexible Tasks' again
-      await tester.tap(find.text('Flexible Tasks'));
+      // Tap outside (e.g. at (10, 10))
+      await tester.tapAt(const Offset(10, 10));
       await tester.pumpAndSettle();
 
-      // Apply button
-      await tester.tap(find.text('Show 1 routine'));
-      await tester.pumpAndSettle();
+      // Dropdown closed
+      expect(find.text('FILTER ROUTINE'), findsNothing);
+    });
 
-      // Sheet popped
-      expect(find.text('Filter Routine'), findsNothing);
-
-      // Now state IS updated!
-      expect(
-        capturedRef.read(routineNotifierProvider).selectedPrimaryFilter,
-        'flexible_tasks',
+    testWidgets('Second tap on Filter pill toggles close', (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          routineNotifierProvider.overrideWith(
+            (ref) => _FilterTestNotifier(ref),
+          ),
+        ],
       );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(body: RoutineTitleFilterRow()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 1st tap opens
+      await tester.tap(find.text('Filter'));
+      await tester.pumpAndSettle();
+      expect(find.text('FILTER ROUTINE'), findsOneWidget);
+
+      // 2nd tap closes (scrim or pill tap closes)
+      await tester.tap(find.text('Filter'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(find.text('FILTER ROUTINE'), findsNothing);
     });
 
     testWidgets(
-      'RoutineFilterSheet closed without apply discards staged edits',
+      'Category collapses to 5 with +N more and auto-expands when selected category is past collapsed limit',
       (tester) async {
-        final testItem = _createTestItem(
-          id: 'item_1',
-          title: 'Task A',
-          startMinute: 600,
-          endMinute: 660,
-          blockType: RoutineBlockType.flexibleTask,
-          category: RoutineCategory.classBlock,
-          status: RoutineStatus.planned,
-        );
-
-        late WidgetRef capturedRef;
-        await tester.pumpWidget(
-          ProviderScope(
-            overrides: [
-              routineNotifierProvider.overrideWith(
-                (ref) => _FilterTestNotifier(
-                  ref,
-                  initialItems: [testItem],
-                  initialSelectedDay: DateTime(2026, 9, 14),
-                ),
-              ),
-            ],
-            child: MaterialApp(
-              home: Scaffold(
-                body: Consumer(
-                  builder: (context, ref, child) {
-                    capturedRef = ref;
-                    return ElevatedButton(
-                      onPressed: () => showRoutineFilterSheet(context, ref),
-                      child: const Text('Open Filters'),
-                    );
-                  },
-                ),
-              ),
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        // Open sheet
-        await tester.tap(find.text('Open Filters'));
-        await tester.pumpAndSettle();
-
-        // Select 'Flexible Tasks'
-        await tester.tap(find.text('Flexible Tasks'));
-        await tester.pumpAndSettle();
-
-        // Pop sheet directly without tapping Apply
-        Navigator.of(tester.element(find.text('Filter Routine'))).pop();
-        await tester.pumpAndSettle();
-
-        // State is STILL 'all' because Apply was not tapped!
-        expect(
-          capturedRef.read(routineNotifierProvider).selectedPrimaryFilter,
-          'all',
-        );
-      },
-    );
-
-    testWidgets(
-      'RoutineFilterSheet auto-expands when selected category is past collapsed limit',
-      (tester) async {
-        // Create items with 6 distinct categories
         final items = [
           _createTestItem(
             id: '1',
@@ -822,42 +1079,145 @@ void main() {
             endMinute: 800,
             category: RoutineCategory.habit,
           ),
+          _createTestItem(
+            id: '7',
+            title: 'Finance',
+            startMinute: 810,
+            endMinute: 850,
+            category: RoutineCategory.finance,
+          ),
         ];
 
+        // Case A: Opened without category selected -> collapses and shows '+2 more'
+        final container = ProviderContainer(
+          overrides: [
+            routineNotifierProvider.overrideWith(
+              (ref) => _FilterTestNotifier(
+                ref,
+                initialItems: items,
+                initialSelectedDay: DateTime(2026, 9, 14),
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
         await tester.pumpWidget(
-          ProviderScope(
-            overrides: [
-              routineNotifierProvider.overrideWith(
-                (ref) => _FilterTestNotifier(
-                  ref,
-                  initialItems: items,
-                  initialSelectedDay: DateTime(2026, 9, 14),
-                  categoryFilter: 'good_habits', // 6th category (index 5)
-                ),
-              ),
-            ],
-            child: MaterialApp(
-              home: Scaffold(
-                body: Consumer(
-                  builder: (context, ref, child) {
-                    return ElevatedButton(
-                      onPressed: () => showRoutineFilterSheet(context, ref),
-                      child: const Text('Open Filters'),
-                    );
-                  },
-                ),
-              ),
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(
+              home: Scaffold(body: RoutineTitleFilterRow()),
             ),
           ),
         );
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Open Filters'));
+        await tester.tap(find.text('Filter'));
         await tester.pumpAndSettle();
 
-        // Because good_habits is at index 5, the category list auto-expands and 'Good Habits' is visible
+        expect(find.text('+2 more'), findsOneWidget);
+
+        // Tap '+2 more' to expand
+        await tester.ensureVisible(find.text('+2 more'));
+        await tester.tap(find.text('+2 more'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Show less'), findsOneWidget);
+        expect(find.text('Good Habits'), findsOneWidget);
+        expect(find.text('Money System'), findsOneWidget);
+
+        // Close dropdown
+        await tester.tapAt(const Offset(10, 10));
+        await tester.pumpAndSettle();
+
+        // Case B: Opened when 6th category ('good_habits') is already selected -> auto-expands
+        container
+            .read(routineNotifierProvider.notifier)
+            .setCategoryFilter('good_habits');
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Filter • 1'));
+        await tester.pumpAndSettle();
+
+        // Must auto-expand so selected category 'Good Habits' is visible!
         expect(find.text('Good Habits'), findsOneWidget);
       },
     );
+
+    testWidgets('Large text scale (1.5x) does not cause RenderFlex overflow', (
+      tester,
+    ) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+      addTearDown(
+        () => tester.platformDispatcher.clearTextScaleFactorTestValue(),
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          routineNotifierProvider.overrideWith(
+            (ref) => _FilterTestNotifier(ref),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(body: RoutineTitleFilterRow()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Filter'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('FILTER ROUTINE'), findsOneWidget);
+    });
+
+    testWidgets('Disposing with open dropdown causes no leaks or errors', (
+      tester,
+    ) async {
+      final container = ProviderContainer(
+        overrides: [
+          routineNotifierProvider.overrideWith(
+            (ref) => _FilterTestNotifier(ref),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(body: RoutineTitleFilterRow()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open dropdown
+      await tester.tap(find.text('Filter'));
+      await tester.pumpAndSettle();
+      expect(find.text('FILTER ROUTINE'), findsOneWidget);
+
+      // Now navigate away or replace widget
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: Scaffold(body: Text('Replaced'))),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // No exceptions thrown, overlay cleanly cleaned up
+      expect(tester.takeException(), isNull);
+      expect(find.text('FILTER ROUTINE'), findsNothing);
+      expect(find.text('Replaced'), findsOneWidget);
+    });
   });
 }

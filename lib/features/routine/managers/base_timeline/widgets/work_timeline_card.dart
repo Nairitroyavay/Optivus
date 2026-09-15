@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/theme/optivus_motion.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/onboarding_draft.dart';
@@ -37,6 +38,7 @@ class WorkTimelineCard extends StatelessWidget {
     TimelineBlockDraft block, {
     double contentWidth = 220.0,
     double textScale = 1.0,
+    bool isEditable = true,
   }) {
     final title = block.title.trim();
     final location = block.location?.trim() ?? '';
@@ -44,9 +46,9 @@ class WorkTimelineCard extends StatelessWidget {
     final notes = block.notes?.trim() ?? '';
 
     // Card chrome & padding:
-    // Horizontal padding in rich card: 12 left + 12 right = 24 (or 16 if narrow < 120)
+    // Horizontal padding in rich card: 12 left + 12 right = 24 (or 16 if narrow < 120), plus 2px for border
     final isNarrow = contentWidth < 120.0;
-    final horizontalPadding = isNarrow ? 16.0 : 24.0;
+    final horizontalPadding = isNarrow ? 18.0 : 26.0;
     final innerWidth = (contentWidth - horizontalPadding).clamp(
       30.0,
       double.infinity,
@@ -56,8 +58,9 @@ class WorkTimelineCard extends StatelessWidget {
     // Border / margin: 2.0
     double totalHeight = 14.0;
 
-    // 1. Header row: work icon (20px) + spacing (6px) + edit icon allowance (17px)
-    final titleWidth = (innerWidth - 20.0 - 6.0 - 17.0).clamp(
+    // 1. Header row: work icon (20px) + spacing (6px) + edit icon allowance (17px if editable)
+    final editAllowance = isEditable ? 17.0 : 0.0;
+    final titleWidth = (innerWidth - 20.0 - 6.0 - editAllowance).clamp(
       30.0,
       double.infinity,
     );
@@ -76,6 +79,7 @@ class WorkTimelineCard extends StatelessWidget {
     // 2. Section badge / label
     if (sectionLabel.isNotEmpty) {
       totalHeight += 3.0;
+      final badgeInnerWidth = (innerWidth - 12.0).clamp(30.0, double.infinity);
       final badgeTextHeight = _measureTextHeight(
         text: sectionLabel,
         style: const TextStyle(
@@ -84,7 +88,7 @@ class WorkTimelineCard extends StatelessWidget {
           height: 1.2,
           letterSpacing: 0.2,
         ),
-        maxWidth: innerWidth,
+        maxWidth: badgeInnerWidth,
         textScale: textScale,
       );
       totalHeight += badgeTextHeight + 5.0; // 1.5 top + 1.5 bottom + 2 border
@@ -138,8 +142,8 @@ class WorkTimelineCard extends StatelessWidget {
       totalHeight += notesHeight > 12.5 ? notesHeight : 12.5;
     }
 
-    // Bottom safety buffer
-    totalHeight += 12.0;
+    // Bottom safety buffer scaled with text scaling
+    totalHeight += (14.0 * textScale).clamp(14.0, 32.0);
 
     return totalHeight < 96.0 ? 96.0 : totalHeight.ceilToDouble();
   }
@@ -197,8 +201,8 @@ class WorkTimelineCard extends StatelessWidget {
       button: isEditable,
       label: semanticLabel,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
+        duration: OptivusMotion.duration(context, OptivusMotion.fastDuration),
+        curve: OptivusMotion.enterCurve,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           color: Colors.white.withValues(alpha: 0.88),
@@ -226,17 +230,20 @@ class WorkTimelineCard extends StatelessWidget {
               horizontal: isNarrow ? 8 : 12,
               vertical: isTiny ? 2 : (isCompact ? 4 : 6),
             ),
-            child: _buildBody(
-              isTiny: isTiny,
-              isCompact: isCompact,
-              isMedium: isMedium,
-              isRich: isRich,
-              isNarrow: isNarrow,
-              title: title,
-              location: location,
-              sectionLabel: sectionLabel,
-              notes: notes,
-              timeLabel: timeLabel,
+            child: SingleChildScrollView(
+              physics: const NeverScrollableScrollPhysics(),
+              child: _buildBody(
+                isTiny: isTiny,
+                isCompact: isCompact,
+                isMedium: isMedium,
+                isRich: isRich,
+                isNarrow: isNarrow,
+                title: title,
+                location: location,
+                sectionLabel: sectionLabel,
+                notes: notes,
+                timeLabel: timeLabel,
+              ),
             ),
           ),
         ),
@@ -581,8 +588,8 @@ class WorkTimelineCard extends StatelessWidget {
       button: true,
       label: semanticLabel,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
+        duration: OptivusMotion.duration(context, OptivusMotion.fastDuration),
+        curve: OptivusMotion.enterCurve,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           color: Colors.white.withValues(alpha: 0.88),

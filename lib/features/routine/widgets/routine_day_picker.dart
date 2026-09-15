@@ -290,35 +290,38 @@ class _RoutineDayPickerButtonState extends ConsumerState<RoutineDayPickerButton>
                             ),
                           ),
                           Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  weekdayAbbr,
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w900,
-                                    color: OptivusColors.ink.withValues(
-                                      alpha: 0.62,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    weekdayAbbr,
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w900,
+                                      color: OptivusColors.ink.withValues(
+                                        alpha: 0.62,
+                                      ),
+                                      letterSpacing: 0.8,
+                                      height: 1.0,
+                                      decoration: TextDecoration.none,
                                     ),
-                                    letterSpacing: 0.8,
-                                    height: 1.0,
-                                    decoration: TextDecoration.none,
                                   ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${selectedDay.day}',
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w900,
-                                    color: OptivusColors.ink,
-                                    height: 1.05,
-                                    decoration: TextDecoration.none,
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${selectedDay.day}',
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w900,
+                                      color: OptivusColors.ink,
+                                      height: 1.05,
+                                      decoration: TextDecoration.none,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ],

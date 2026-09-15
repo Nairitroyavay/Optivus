@@ -124,9 +124,6 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
     final snapshot = widget.setup.snapshotFor(BaseTimelineSection.work);
 
     const adapter = BaseTimelineWorkAdapter(accent: OptivusColors.warning);
-    final entries = widget.routineBlocks
-        .expand((b) => adapter.toEntries(b))
-        .toList();
     final blockMap = {for (final b in widget.routineBlocks) b.id: b};
     final hasSourcePhoto =
         snapshot.sourceR2Key != null || snapshot.sourceAssetId != null;
@@ -176,47 +173,73 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
           Expanded(
             child: isUnconfiguredEmpty
                 ? _buildEmptyState(context)
-                : FullScreenTimelineScaffold(
-                    entries: entries,
-                    selectedDay: widget.selectedDay,
-                    onDayChanged: widget.onDayChanged,
-                    scrollController: _scrollController,
-                    enableHaptics: true,
-                    overlapPresentation:
-                        TimelineOverlapPresentation.frontAndExposed,
-                    frontEntryId: _frontBlockId,
-                    onFrontSelected: (id) => setState(() => _frontBlockId = id),
-                    styleBuilder: (entry) => adapter.styleForEntry(entry),
-                    blockBuilder: (context, positioned) {
-                      final block = blockMap[positioned.entry.sourceId];
-                      final canPromote =
-                          positioned.hasOverlap && !positioned.isFront;
-                      return WorkTimelineCard(
-                        positioned: positioned,
-                        block: block,
-                        isEditable: false,
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final textScale = MediaQuery.textScalerOf(
+                        context,
+                      ).scale(1.0);
+                      final entries = widget.routineBlocks.expand((b) {
+                        final hasOverlap = WorkTimelineLayoutHelper.hasOverlap(
+                          b,
+                          widget.routineBlocks,
+                        );
+                        final cardWidth =
+                            WorkTimelineLayoutHelper.effectiveCardWidth(
+                              availableWidth: constraints.maxWidth,
+                              hasOverlap: hasOverlap,
+                            );
+                        return adapter.toEntries(
+                          b,
+                          contentWidth: cardWidth,
+                          textScale: textScale,
+                          isEditable: false,
+                        );
+                      }).toList();
+
+                      return FullScreenTimelineScaffold(
+                        entries: entries,
+                        selectedDay: widget.selectedDay,
+                        onDayChanged: widget.onDayChanged,
+                        scrollController: _scrollController,
+                        enableHaptics: true,
+                        overlapPresentation:
+                            TimelineOverlapPresentation.frontAndExposed,
+                        frontEntryId: _frontBlockId,
+                        onFrontSelected: (id) =>
+                            setState(() => _frontBlockId = id),
+                        styleBuilder: (entry) => adapter.styleForEntry(entry),
+                        blockBuilder: (context, positioned) {
+                          final block = blockMap[positioned.entry.sourceId];
+                          final canPromote =
+                              positioned.hasOverlap && !positioned.isFront;
+                          return WorkTimelineCard(
+                            positioned: positioned,
+                            block: block,
+                            isEditable: false,
+                            accent: OptivusColors.warning,
+                            onTap: canPromote
+                                ? () {
+                                    HapticFeedback.lightImpact();
+                                    setState(
+                                      () => _frontBlockId = positioned.entry.id,
+                                    );
+                                  }
+                                : null,
+                          );
+                        },
+                        onEntryTapped: null,
                         accent: OptivusColors.warning,
-                        onTap: canPromote
-                            ? () {
-                                HapticFeedback.lightImpact();
-                                setState(
-                                  () => _frontBlockId = positioned.entry.id,
-                                );
-                              }
-                            : null,
+                        mode: TimelineMode.previewReadOnly,
+                        geometryConfig: const TimelineGeometryConfig(
+                          bottomPadding: 100.0,
+                        ),
+                        visibleRangePolicy:
+                            TimelineVisibleRangePolicy.contentAdaptive,
+                        autoScrollToFirstEntry: false,
+                        stretchPolicy: TimelineStretchPolicy.constraintBased,
+                        emptyDayMessage: 'No work scheduled on this day.',
                       );
                     },
-                    onEntryTapped: null,
-                    accent: OptivusColors.warning,
-                    mode: TimelineMode.previewReadOnly,
-                    geometryConfig: const TimelineGeometryConfig(
-                      bottomPadding: 100.0,
-                    ),
-                    visibleRangePolicy:
-                        TimelineVisibleRangePolicy.contentAdaptive,
-                    autoScrollToFirstEntry: false,
-                    stretchPolicy: TimelineStretchPolicy.constraintBased,
-                    emptyDayMessage: 'No work scheduled on this day.',
                   ),
           ),
         ],

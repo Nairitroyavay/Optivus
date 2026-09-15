@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:optivus/core/theme/optivus_theme.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_entry.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
@@ -1766,6 +1767,516 @@ void main() {
           ),
           findsOneWidget,
         );
+      },
+    );
+
+    testWidgets(
+      'WorkCurrentSetupView and WorkReviewView render 5-minute short blocks at 320dp width without RenderFlex overflow at text scales 1.4 and 2.0',
+      (tester) async {
+        final shortBlock = TimelineBlockDraft(
+          id: 'short-block-1',
+          section: 'work',
+          title: 'Emergency Executive Sync & Architecture Review',
+          location: 'Floor 12 Executive Briefing Center Alpha',
+          sectionLabel: 'Infrastructure Core Engineering Operations',
+          notes:
+              'Review critical multi-tenant failover latency metrics and P0 disaster recovery protocol before APAC deployment',
+          startMinute: 9 * 60,
+          endMinute: 9 * 60 + 5,
+          repeatDays: const [1],
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        final setup = BaseTimelineSetup(
+          uid: 'user-1',
+          updatedAt: DateTime.now(),
+          workBlocks: [shortBlock],
+          revision: 1,
+        );
+
+        for (final scale in [1.4, 2.0]) {
+          tester.view.physicalSize = const Size(320 * 3, 640 * 3);
+          tester.view.devicePixelRatio = 3.0;
+          addTearDown(() {
+            tester.view.resetPhysicalSize();
+            tester.view.resetDevicePixelRatio();
+          });
+
+          // Test Current Setup View at 320dp
+          await tester.pumpWidget(
+            MaterialApp(
+              home: MediaQuery(
+                data: MediaQueryData(
+                  size: const Size(320, 640),
+                  textScaler: TextScaler.linear(scale),
+                ),
+                child: Scaffold(
+                  body: WorkCurrentSetupView(
+                    setup: setup,
+                    routineBlocks: [shortBlock],
+                    selectedDay: 1,
+                    onDayChanged: (_) {},
+                    onBack: () {},
+                    onChangeSetup: () {},
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final err = tester.takeException();
+          expect(err, isNull);
+          expect(
+            find.text('Emergency Executive Sync & Architecture Review'),
+            findsOneWidget,
+          );
+
+          // Test Review View at 320dp
+          await tester.pumpWidget(
+            MaterialApp(
+              home: MediaQuery(
+                data: MediaQueryData(
+                  size: const Size(320, 640),
+                  textScaler: TextScaler.linear(scale),
+                ),
+                child: Scaffold(
+                  body: WorkReviewView(
+                    workingBlocks: [shortBlock],
+                    workingAssetId: null,
+                    workingR2Key: null,
+                    workingLocalPreviewPath: null,
+                    selectedDay: 1,
+                    onDayChanged: (_) {},
+                    droppedCount: 0,
+                    droppedExamples: const [],
+                    errorMessage: null,
+                    onClearError: () {},
+                    isSaving: false,
+                    onCancel: () {},
+                    onScanAgain: () {},
+                    onAddBlock: () {},
+                    onEditBlock: (_) {},
+                    onSave: () {},
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          expect(
+            find.text('Emergency Executive Sync & Architecture Review'),
+            findsOneWidget,
+          );
+        }
+      },
+    );
+
+    test(
+      'Candidate asset double-retirement is strictly prevented on zero extraction and error catch',
+      () async {
+        final trackingAssetRepo = _TrackingAssetRepo();
+        final trackingR2Client = _TrackingR2Client();
+        final authRepo = _StubAuthRepo();
+        final lifecycleHelper = BaseTimelineUploadLifecycleHelper(
+          assetRepository: trackingAssetRepo,
+          r2UploadClient: trackingR2Client,
+          authRepository: authRepo,
+        );
+
+        final container = ProviderContainer(
+          overrides: [
+            userProfileProvider.overrideWith(
+              (ref) => UserProfileNotifier()
+                ..loadSeedData(
+                  UserProfile(
+                    uid: 'test-uid',
+                    email: 'test@example.com',
+                    displayName: 'Test User',
+                  ),
+                ),
+            ),
+            uploadedAssetRepositoryProvider.overrideWithValue(
+              trackingAssetRepo,
+            ),
+            r2UploadClientProvider.overrideWithValue(trackingR2Client),
+            baseTimelineUploadLifecycleHelperProvider.overrideWithValue(
+              lifecycleHelper,
+            ),
+            routineImportAiControllerProvider.overrideWith(
+              (ref) => _CustomResultAiController(
+                ref,
+                resultToReturn: RoutineImportExtractionResult(
+                  id: 'test-result-1',
+                  uid: 'test-uid',
+                  source: RoutineImportReviewSource.work,
+                  createdAt: DateTime.now(),
+                  candidates: const [],
+                ),
+              ),
+            ),
+            uploadControllerProvider.overrideWith(
+              (ref) => _DirectUploadController(
+                assetRepository: trackingAssetRepo,
+                assetToReturn: UploadedAsset(
+                  assetId: 'candidate-zero-blocks',
+                  ownerUid: 'test-uid',
+                  sourceFeature: 'routine_base_timeline',
+                  purpose: UploadedAssetPurpose.workSchedule,
+                  status: UploadedAssetStatus.uploaded,
+                  fileName: 'schedule.jpg',
+                  contentType: 'image/jpeg',
+                  sizeBytes: 1024,
+                  r2Key:
+                      'users/test-uid/routine_base_timeline/work/candidate_zero.jpg',
+                  createdAt: DateTime.now(),
+                  updatedAt: DateTime.now(),
+                ),
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final controller = container.read(workSetupControllerProvider.notifier);
+        final setup = BaseTimelineSetup(
+          uid: 'test-uid',
+          updatedAt: DateTime.now(),
+          workBlocks: const [
+            TimelineBlockDraft(
+              id: 'prev-block',
+              section: 'work',
+              title: 'Previous Work Block',
+              startMinute: 9 * 60,
+              endMinute: 17 * 60,
+              repeatDays: [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+          ],
+        );
+        controller.editCurrentWorkSchedule(setup);
+
+        // Upload photo and run extraction that yields 0 blocks
+        await controller.pickAndUploadPhoto(
+          uid: 'test-uid',
+          source: ImageSource.gallery,
+          setup: setup,
+        );
+
+        final stateAfterZero = container.read(workSetupControllerProvider);
+        expect(stateAfterZero.stage, WorkSetupStage.error);
+        expect(
+          trackingAssetRepo.deletedAssetIds,
+          equals(['candidate-zero-blocks']),
+        );
+        expect(stateAfterZero.candidateAssetId, isNull);
+        expect(stateAfterZero.candidateR2Key, isNull);
+
+        // User taps "Keep previous draft"
+        controller.keepPreviousDraft(setup, uid: 'test-uid');
+
+        final stateAfterKeep = container.read(workSetupControllerProvider);
+        expect(stateAfterKeep.stage, WorkSetupStage.review);
+        // Must NOT retire candidate again
+        expect(
+          trackingAssetRepo.deletedAssetIds,
+          equals(['candidate-zero-blocks']),
+        );
+      },
+    );
+
+    test(
+      'Legacy R2-key-only source retirement works on save replacement and on removeSetup',
+      () async {
+        final trackingAssetRepo = _TrackingAssetRepo();
+        final trackingR2Client = _TrackingR2Client();
+        final authRepo = _StubAuthRepo();
+        final fakeSetupRepo = FakeBaseTimelineSetupRepository();
+        final fakeRoutineRepo = FakeRoutineRepository();
+        final lifecycleHelper = BaseTimelineUploadLifecycleHelper(
+          assetRepository: trackingAssetRepo,
+          r2UploadClient: trackingR2Client,
+          authRepository: authRepo,
+        );
+
+        final legacySetup = BaseTimelineSetup(
+          uid: 'test-uid',
+          updatedAt: DateTime.now(),
+          workBlocks: const [
+            TimelineBlockDraft(
+              id: 'legacy-work-1',
+              section: 'work',
+              title: 'Legacy Shift',
+              startMinute: 9 * 60,
+              endMinute: 17 * 60,
+              repeatDays: [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+          ],
+          workLogicalAssetId: null,
+          workLogicalAssetR2Key:
+              'users/test-uid/routine_base_timeline/work/legacy_photo.jpg',
+          revision: 1,
+        );
+        await fakeSetupRepo.saveSetup('test-uid', legacySetup);
+
+        final container = ProviderContainer(
+          overrides: [
+            userProfileProvider.overrideWith(
+              (ref) => UserProfileNotifier()
+                ..loadSeedData(
+                  UserProfile(
+                    uid: 'test-uid',
+                    email: 'test@example.com',
+                    displayName: 'Test User',
+                  ),
+                ),
+            ),
+            uploadedAssetRepositoryProvider.overrideWithValue(
+              trackingAssetRepo,
+            ),
+            r2UploadClientProvider.overrideWithValue(trackingR2Client),
+            baseTimelineUploadLifecycleHelperProvider.overrideWithValue(
+              lifecycleHelper,
+            ),
+            baseTimelineSetupRepositoryProvider.overrideWithValue(
+              fakeSetupRepo,
+            ),
+            routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
+          ],
+        );
+        addTearDown(container.dispose);
+        final sub = container.listen(
+          workSetupControllerProvider,
+          (previous, next) {},
+        );
+        addTearDown(sub.close);
+
+        final controller = container.read(workSetupControllerProvider.notifier);
+
+        // 1. Test replacement via save():
+        controller.startManualSetup(legacySetup);
+        controller.addBlock(
+          const TimelineBlockDraft(
+            id: 'new-manual-block',
+            section: 'work',
+            title: 'New Manual Shift',
+            startMinute: 10 * 60,
+            endMinute: 18 * 60,
+            repeatDays: [1],
+            blockType: TimelineBlockDraft.hardBlockKey,
+          ),
+        );
+        await controller.save(uid: 'test-uid', setup: legacySetup);
+        await Future.delayed(const Duration(milliseconds: 50));
+
+        expect(
+          trackingR2Client.deletedKeys,
+          contains(
+            'users/test-uid/routine_base_timeline/work/legacy_photo.jpg',
+          ),
+        );
+
+        // 2. Test removal via removeSetup():
+        trackingR2Client.deletedKeys.clear();
+        final legacySetup2 = legacySetup.copyWith(
+          workLogicalAssetR2Key:
+              'users/test-uid/routine_base_timeline/work/legacy_to_remove.jpg',
+          revision: 2,
+        );
+        await fakeSetupRepo.saveSetup('test-uid', legacySetup2);
+
+        final outcome = await controller.removeSetup(
+          uid: 'test-uid',
+          setup: legacySetup2,
+        );
+        expect(outcome.status, WorkRemoveOutcomeStatus.removed);
+        await Future.delayed(const Duration(milliseconds: 50));
+
+        expect(
+          trackingR2Client.deletedKeys,
+          contains(
+            'users/test-uid/routine_base_timeline/work/legacy_to_remove.jpg',
+          ),
+        );
+      },
+    );
+
+    testWidgets(
+      'WorkBaseSetupScreen renders cleanly under OptivusTheme.lightTheme across currentSetup, chooseSource, review, and refresh banner',
+      (tester) async {
+        final setup = BaseTimelineSetup(
+          uid: 'test-uid',
+          updatedAt: DateTime.now(),
+          workBlocks: const [
+            TimelineBlockDraft(
+              id: 'work-1',
+              section: 'work',
+              title: 'Staff Engineer',
+              location: 'Optivus HQ',
+              startMinute: 9 * 60,
+              endMinute: 17 * 60,
+              repeatDays: [1, 2, 3, 4, 5],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+          ],
+          workLogicalAssetR2Key:
+              'users/test-uid/routine_base_timeline/work/office.jpg',
+          revision: 1,
+        );
+
+        final container = ProviderContainer(
+          overrides: [
+            userProfileProvider.overrideWith(
+              (ref) => UserProfileNotifier()
+                ..loadSeedData(
+                  UserProfile(
+                    uid: 'test-uid',
+                    email: 'test@example.com',
+                    displayName: 'Test User',
+                  ),
+                ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        // Current setup with photo and refresh pending banner
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              theme: OptivusTheme.lightTheme,
+              home: Scaffold(
+                body: WorkCurrentSetupView(
+                  setup: setup,
+                  routineBlocks: setup.workBlocks,
+                  selectedDay: 1,
+                  onDayChanged: (_) {},
+                  onBack: () {},
+                  onChangeSetup: () {},
+                  routineRefreshPending: true,
+                  routineRefreshMessage: 'Routine sync pending',
+                  onRetryRefresh: () {},
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.text('Work / Business'), findsOneWidget);
+        expect(find.text('Staff Engineer'), findsOneWidget);
+        expect(find.text('Routine sync pending'), findsOneWidget);
+
+        // Choose source view
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              theme: OptivusTheme.lightTheme,
+              home: Scaffold(
+                body: WorkSourceSelectionView(
+                  setup: setup,
+                  onCancel: () {},
+                  onPickPhoto: (_) {},
+                  onManualSetup: () {},
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.text('Update Work Schedule'), findsOneWidget);
+
+        // Review view
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              theme: OptivusTheme.lightTheme,
+              home: Scaffold(
+                body: WorkReviewView(
+                  workingBlocks: setup.workBlocks,
+                  workingAssetId: null,
+                  workingR2Key:
+                      'users/test-uid/routine_base_timeline/work/office.jpg',
+                  workingLocalPreviewPath: null,
+                  selectedDay: 1,
+                  onDayChanged: (_) {},
+                  droppedCount: 1,
+                  droppedExamples: const ['Overnight shift skipped'],
+                  errorMessage: null,
+                  onClearError: () {},
+                  isSaving: false,
+                  onCancel: () {},
+                  onScanAgain: () {},
+                  onAddBlock: () {},
+                  onEditBlock: (_) {},
+                  onSave: () {},
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.text('Review Work Schedule'), findsOneWidget);
+        expect(find.text('Use this work schedule'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Reduced-motion disableAnimations: true renders WorkTimelineCard without animation lag',
+      (tester) async {
+        final block = TimelineBlockDraft(
+          id: 'motion-block',
+          section: 'work',
+          title: 'Design Review',
+          startMinute: 10 * 60,
+          endMinute: 11 * 60,
+          repeatDays: const [1],
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        const positionedFront = PositionedTimelineEntry(
+          entry: TimelineEntry(
+            id: 'motion-entry',
+            sourceId: 'motion-block',
+            title: 'Design Review',
+            startMinute: 10 * 60,
+            endMinute: 11 * 60,
+            repeatDays: [1],
+            category: TimelineCategory.work,
+          ),
+          left: 0,
+          top: 0,
+          width: 220,
+          height: 100,
+          column: 0,
+          columnCount: 1,
+          isFront: true,
+          hasOverlap: false,
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(disableAnimations: true),
+              child: Scaffold(
+                body: WorkTimelineCard(
+                  positioned: positionedFront,
+                  block: block,
+                  isEditable: false,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+        expect(find.text('Design Review'), findsOneWidget);
       },
     );
   });

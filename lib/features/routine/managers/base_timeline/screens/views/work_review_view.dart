@@ -75,10 +75,6 @@ class _WorkReviewViewState extends State<WorkReviewView> {
   @override
   Widget build(BuildContext context) {
     const adapter = BaseTimelineWorkAdapter(accent: OptivusColors.warning);
-
-    final entries = widget.workingBlocks
-        .expand((b) => adapter.toEntries(b))
-        .toList();
     final blockMap = {for (final b in widget.workingBlocks) b.id: b};
 
     final sanitizedIssues = WorkSetupErrorMapper.sanitizeDroppedExamples(
@@ -125,10 +121,12 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Review Work Schedule',
-                        style: TextStyle(
-                          fontSize: 20,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 18,
                           fontWeight: FontWeight.w800,
                           color: OptivusColors.textPrimary,
                         ),
@@ -138,6 +136,8 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                         widget.droppedCount > 0
                             ? '${widget.workingBlocks.length} blocks scheduled · ${widget.droppedCount} ${widget.droppedCount == 1 ? 'entry was skipped' : 'entries were skipped'}'
                             : '${widget.workingBlocks.length} blocks scheduled',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 12,
                           color: OptivusColors.textSecondary,
@@ -181,6 +181,8 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                     ),
                     label: Text(
                       hasWorkingSource ? 'Change photo' : 'Add photo',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         color: OptivusColors.warning,
@@ -212,6 +214,8 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                     ),
                     label: const Text(
                       'Add Work',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         color: OptivusColors.textPrimary,
@@ -354,41 +358,69 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                       ),
                     ),
                   )
-                : FullScreenTimelineScaffold(
-                    entries: entries,
-                    selectedDay: widget.selectedDay,
-                    onDayChanged: widget.onDayChanged,
-                    scrollController: _scrollController,
-                    enableHaptics: true,
-                    overlapPresentation:
-                        TimelineOverlapPresentation.frontAndExposed,
-                    frontEntryId: widget.frontBlockId,
-                    onFrontSelected: widget.onFrontSelected,
-                    styleBuilder: (entry) => adapter.styleForEntry(entry),
-                    blockBuilder: (context, positioned) {
-                      final block = blockMap[positioned.entry.sourceId];
-                      return WorkTimelineCard(
-                        positioned: positioned,
-                        block: block,
-                        isEditable: true,
-                        accent: OptivusColors.warning,
-                        onTap: () {
-                          if (positioned.hasOverlap && !positioned.isFront) {
-                            HapticFeedback.lightImpact();
-                            widget.onFrontSelected?.call(positioned.entry.id);
-                          } else if (block != null) {
-                            widget.onEditBlock(block);
-                          }
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final textScale = MediaQuery.textScalerOf(
+                        context,
+                      ).scale(1.0);
+                      final entries = widget.workingBlocks.expand((b) {
+                        final hasOverlap = WorkTimelineLayoutHelper.hasOverlap(
+                          b,
+                          widget.workingBlocks,
+                        );
+                        final cardWidth =
+                            WorkTimelineLayoutHelper.effectiveCardWidth(
+                              availableWidth: constraints.maxWidth,
+                              hasOverlap: hasOverlap,
+                            );
+                        return adapter.toEntries(
+                          b,
+                          contentWidth: cardWidth,
+                          textScale: textScale,
+                          isEditable: true,
+                        );
+                      }).toList();
+
+                      return FullScreenTimelineScaffold(
+                        entries: entries,
+                        selectedDay: widget.selectedDay,
+                        onDayChanged: widget.onDayChanged,
+                        scrollController: _scrollController,
+                        enableHaptics: true,
+                        overlapPresentation:
+                            TimelineOverlapPresentation.frontAndExposed,
+                        frontEntryId: widget.frontBlockId,
+                        onFrontSelected: widget.onFrontSelected,
+                        styleBuilder: (entry) => adapter.styleForEntry(entry),
+                        blockBuilder: (context, positioned) {
+                          final block = blockMap[positioned.entry.sourceId];
+                          return WorkTimelineCard(
+                            positioned: positioned,
+                            block: block,
+                            isEditable: true,
+                            accent: OptivusColors.warning,
+                            onTap: () {
+                              if (positioned.hasOverlap &&
+                                  !positioned.isFront) {
+                                HapticFeedback.lightImpact();
+                                widget.onFrontSelected?.call(
+                                  positioned.entry.id,
+                                );
+                              } else if (block != null) {
+                                widget.onEditBlock(block);
+                              }
+                            },
+                          );
                         },
+                        onEntryTapped: null,
+                        accent: OptivusColors.warning,
+                        mode: TimelineMode.fullScreenEditable,
+                        visibleRangePolicy:
+                            TimelineVisibleRangePolicy.contentAdaptive,
+                        stretchPolicy: TimelineStretchPolicy.constraintBased,
+                        emptyDayMessage: 'No work scheduled on this day.',
                       );
                     },
-                    onEntryTapped: null,
-                    accent: OptivusColors.warning,
-                    mode: TimelineMode.fullScreenEditable,
-                    visibleRangePolicy:
-                        TimelineVisibleRangePolicy.contentAdaptive,
-                    stretchPolicy: TimelineStretchPolicy.constraintBased,
-                    emptyDayMessage: 'No work scheduled on this day.',
                   ),
           ),
 

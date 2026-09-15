@@ -515,7 +515,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
 
   /// Edit current work schedule: retains existing photo provenance and blocks.
   void editCurrentWorkSchedule(BaseTimelineSetup setup) {
-    _retireCandidate();
+    _retireAndClearCandidate();
     final normalizedDay = normalizeSelectedWorkDay(
       currentDay: state.selectedDay,
       blocks: setup.workBlocks,
@@ -765,7 +765,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       }
 
       // Extraction yielded 0 blocks: retire candidate asset, preserve previous working draft
-      _retireCandidate();
+      _retireAndClearCandidate();
       state = state.copyWith(
         stage: WorkSetupStage.error,
         errorMessage: WorkSetupErrorMapper.mapAiExtractionError(
@@ -794,7 +794,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       if (state.sessionGeneration != sessionGen) return;
       if (_ref.read(authGenerationProvider) == currentAuthGen &&
           _ref.read(userProfileProvider).uid == uid) {
-        _retireCandidate();
+        _retireAndClearCandidate();
         state = state.copyWith(
           stage: WorkSetupStage.error,
           errorMessage: WorkSetupErrorMapper.mapAiExtractionError(e),
@@ -1000,9 +1000,13 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       // Clean up previous committed asset if replaced
       final oldAssetId = baseCommittedAssetId ?? setup?.workLogicalAssetId;
       final oldObjectKey = baseCommittedR2Key ?? setup?.workLogicalAssetR2Key;
-      if (oldAssetId != null &&
-          (oldAssetId != workingAssetId ||
-              (oldObjectKey != null && oldObjectKey != workingR2Key))) {
+      final hasOldSource =
+          (oldAssetId != null && oldAssetId.isNotEmpty) ||
+          (oldObjectKey != null && oldObjectKey.isNotEmpty);
+      final isSourceReplaced =
+          (oldAssetId != null && oldAssetId != workingAssetId) ||
+          (oldObjectKey != null && oldObjectKey != workingR2Key);
+      if (hasOldSource && isSourceReplaced) {
         unawaited(
           _lifecycleHelper
               .retireReplacedAsset(
@@ -1112,7 +1116,8 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
         ),
       );
 
-      if (oldAssetId != null && oldAssetId.isNotEmpty) {
+      if ((oldAssetId != null && oldAssetId.isNotEmpty) ||
+          (oldObjectKey != null && oldObjectKey.isNotEmpty)) {
         unawaited(
           _lifecycleHelper
               .retireReplacedAsset(
@@ -1313,9 +1318,15 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
     );
   }
 
-  void _retireCandidate() {
+  void _retireAndClearCandidate() {
     final candidateId = state.candidateAssetId;
     final candidateKey = state.candidateR2Key;
+    if (candidateId != null || candidateKey != null) {
+      state = state.copyWith(
+        clearCandidateAssetId: true,
+        clearCandidateR2Key: true,
+      );
+    }
     if ((candidateId != null && candidateId != state.baseCommittedAssetId) ||
         (candidateKey != null && candidateKey != state.baseCommittedR2Key)) {
       _retireUncommittedBestEffort(

@@ -18,17 +18,22 @@ class RoutineEntryFilter {
   /// This is the canonical Base Timeline classifier used across both
   /// Routine timeline filtering and Week Planner base block counting.
   static bool isBaseTimeline(RoutineItem item) {
-    return item.isHardBlock ||
-        item.blockType == RoutineBlockType.hardBlock ||
-        item.baseTimelineSection != null ||
-        item.source == RoutineSource.baseTimeline ||
-        item.category == RoutineCategory.sleep ||
-        (item.source == RoutineSource.onboarding &&
-            (item.category == RoutineCategory.classBlock ||
-                item.category == RoutineCategory.job ||
-                item.category == RoutineCategory.eating ||
-                item.category == RoutineCategory.fixed ||
-                item.category == RoutineCategory.skinCare));
+    if (item.baseTimelineSection != null &&
+        item.baseTimelineSection!.trim().isNotEmpty) {
+      return true;
+    }
+    if (item.source == RoutineSource.baseTimeline) {
+      return true;
+    }
+    if (item.source == RoutineSource.onboarding) {
+      return item.category == RoutineCategory.classBlock ||
+          item.category == RoutineCategory.job ||
+          item.category == RoutineCategory.eating ||
+          item.category == RoutineCategory.fixed ||
+          item.category == RoutineCategory.sleep ||
+          item.category == RoutineCategory.skinCare;
+    }
+    return false;
   }
 
   /// Whether an item is a flexible task.

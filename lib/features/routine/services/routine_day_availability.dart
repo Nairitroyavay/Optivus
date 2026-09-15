@@ -164,6 +164,11 @@ class RoutineDayAvailability {
     int windowStartMinute = kRoutinePlanningWindowStartMinute,
     int windowEndMinute = kRoutinePlanningWindowEndMinute,
   }) {
+    if (windowStartMinute >= windowEndMinute) {
+      throw ArgumentError(
+        'windowStartMinute ($windowStartMinute) must be < windowEndMinute ($windowEndMinute)',
+      );
+    }
     assert(
       windowStartMinute < windowEndMinute,
       'windowStartMinute ($windowStartMinute) must be < windowEndMinute ($windowEndMinute)',

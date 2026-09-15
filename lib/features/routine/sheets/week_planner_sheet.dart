@@ -481,12 +481,12 @@ class _WeekDayCard extends StatelessWidget {
               const SizedBox(height: 10),
 
               // Progress bar or neutral status
-              if (summary.hasActionableTasks) ...[
+              if (summary.hasRoutines) ...[
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      '${summary.completed}/${summary.actionableTotal} done',
+                      '${summary.completed}/${summary.routineTotal} done',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -516,17 +516,17 @@ class _WeekDayCard extends StatelessWidget {
                     backgroundColor: isSelected
                         ? Colors.white.withValues(alpha: 0.15)
                         : Colors.black.withValues(alpha: 0.06),
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      isSelected
-                          ? OptivusColors.routineAccent
-                          : OptivusColors.routineAccent,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      OptivusColors.routineAccent,
                     ),
                   ),
                 ),
                 const SizedBox(height: 10),
               ] else ...[
                 Text(
-                  'No tasks',
+                  summary.continuationCount > 0
+                      ? 'No new routines'
+                      : 'No routines',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -551,6 +551,11 @@ class _WeekDayCard extends StatelessWidget {
                   if (summary.flexibleTaskCount > 0)
                     _chip(
                       '${summary.flexibleTaskCount} flexible',
+                      inverted: isSelected,
+                    ),
+                  if (summary.continuationCount > 0)
+                    _chip(
+                      '${summary.continuationCount} continuing',
                       inverted: isSelected,
                     ),
                   _chip(summary.freeTimeFormatted, inverted: isSelected),

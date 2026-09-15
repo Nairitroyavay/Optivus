@@ -611,23 +611,26 @@ void main() {
       },
     );
 
-    test('S. Custom window validates windowStartMinute < windowEndMinute', () {
-      expect(
-        () => RoutineDayAvailability.computeFromIntervals(
-          [],
-          windowStartMinute: 600,
-          windowEndMinute: 500,
-        ),
-        throwsAssertionError,
-      );
-      expect(
-        () => RoutineDayAvailability.computeFromIntervals(
-          [],
-          windowStartMinute: 600,
-          windowEndMinute: 600,
-        ),
-        throwsAssertionError,
-      );
-    });
+    test(
+      'S. Custom window validates windowStartMinute < windowEndMinute throws ArgumentError',
+      () {
+        expect(
+          () => RoutineDayAvailability.computeFromIntervals(
+            [],
+            windowStartMinute: 600,
+            windowEndMinute: 500,
+          ),
+          throwsArgumentError,
+        );
+        expect(
+          () => RoutineDayAvailability.computeFromIntervals(
+            [],
+            windowStartMinute: 600,
+            windowEndMinute: 600,
+          ),
+          throwsArgumentError,
+        );
+      },
+    );
   });
 }
