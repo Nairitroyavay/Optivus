@@ -2,11 +2,14 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/theme/optivus_motion.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/services/routine_entry_filter.dart';
 import 'package:optivus/features/routine/sheets/week_planner_sheet.dart';
 import 'package:optivus/features/routine/widgets/routine_day_picker.dart';
 import 'package:optivus/features/routine/widgets/routine_glass_highlight_painter.dart';
+
+enum _DropdownPhase { closed, opening, open, closing }
 
 /// Filter row for Routine.
 ///
@@ -26,7 +29,11 @@ class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
   OverlayEntry? _overlay;
   late final AnimationController _anim;
   late final Animation<double> _fade;
-  bool _isClosing = false;
+  late final Animation<double> _scale;
+  late final Animation<Offset> _slide;
+  late final Animation<double> _chevronTurns;
+  _DropdownPhase _phase = _DropdownPhase.closed;
+  double? _pillWidth;
 
   @override
   void initState() {
@@ -34,45 +41,138 @@ class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
     _anim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 220),
+      reverseDuration: const Duration(milliseconds: 180),
     );
-    _fade = CurvedAnimation(parent: _anim, curve: Curves.easeOutCubic);
+    _anim.addStatusListener(_handleAnimationStatus);
+
+    final curved = CurvedAnimation(
+      parent: _anim,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInOutCubic,
+    );
+
+    _fade = Tween<double>(begin: 0.0, end: 1.0).animate(curved);
+
+    _scale = Tween<double>(begin: 0.92, end: 1.0).animate(curved);
+
+    _slide = Tween<Offset>(
+      begin: const Offset(0, -0.025),
+      end: Offset.zero,
+    ).animate(curved);
+
+    _chevronTurns = Tween<double>(
+      begin: 0.0,
+      end: 0.5,
+    ).animate(curved);
+  }
+
+  void _handleAnimationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed &&
+        _phase == _DropdownPhase.opening) {
+      _phase = _DropdownPhase.open;
+    } else if (status == AnimationStatus.dismissed &&
+        _phase == _DropdownPhase.closing) {
+      _removeOverlaySynchronously();
+      _phase = _DropdownPhase.closed;
+    }
+  }
+
+  void _removeOverlaySynchronously() {
+    _overlay?.remove();
+    _overlay = null;
   }
 
   @override
   void dispose() {
-    _closeDropdown(immediate: true);
+    _anim.stop();
+    _anim.removeStatusListener(_handleAnimationStatus);
+    _removeOverlaySynchronously();
     _anim.dispose();
     super.dispose();
   }
 
+  void _toggleDropdown() {
+    switch (_phase) {
+      case _DropdownPhase.closed:
+        _openDropdown();
+        break;
+      case _DropdownPhase.closing:
+        _openDropdown();
+        break;
+      case _DropdownPhase.opening:
+      case _DropdownPhase.open:
+        _closeDropdown();
+        break;
+    }
+  }
+
   void _openDropdown() {
+    if (_phase == _DropdownPhase.open || _phase == _DropdownPhase.opening) return;
+
+    final isReduced = OptivusMotion.isReducedMotion(context);
+
+    if (_phase == _DropdownPhase.closing) {
+      _phase = _DropdownPhase.opening;
+      if (isReduced) {
+        _anim.value = 1.0;
+        _phase = _DropdownPhase.open;
+      } else {
+        _anim.forward();
+      }
+      return;
+    }
+
     if (_overlay != null) return;
 
     _overlay = OverlayEntry(
       builder: (overlayContext) {
         return Stack(
           children: [
+            // 1. Full-screen scrim behind popup
             Positioned.fill(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: _closeDropdown,
+                child: const ColoredBox(color: Colors.transparent),
               ),
             ),
+            // 2. Trigger proxy over pill so tapping pill while overlay is active toggles cleanly
+            CompositedTransformFollower(
+              link: _link,
+              showWhenUnlinked: false,
+              targetAnchor: Alignment.topLeft,
+              followerAnchor: Alignment.topLeft,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _toggleDropdown,
+                child: SizedBox(
+                  width: _pillWidth ?? 120.0,
+                  height: 40.0,
+                ),
+              ),
+            ),
+            // 3. Anchored floating glass dropdown
             CompositedTransformFollower(
               link: _link,
               showWhenUnlinked: false,
               targetAnchor: Alignment.bottomRight,
               followerAnchor: Alignment.topRight,
               offset: const Offset(0, 8),
-              child: Material(
-                type: MaterialType.transparency,
+              child: FadeTransition(
+                opacity: _fade,
                 child: ScaleTransition(
-                  scale: _fade,
+                  scale: _scale,
                   alignment: Alignment.topRight,
-                  child: FadeTransition(
-                    opacity: _fade,
-                    child: _RoutineGlassDropdownContent(
-                      onClose: _closeDropdown,
+                  child: SlideTransition(
+                    position: _slide,
+                    child: RepaintBoundary(
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: _RoutineGlassDropdownContent(
+                          width: _pillWidth ?? 200.0,
+                          onClose: _closeDropdown,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -83,27 +183,39 @@ class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
       },
     );
 
+    _phase = _DropdownPhase.opening;
     Overlay.of(context).insert(_overlay!);
-    _anim.forward();
-    if (mounted) setState(() {});
+
+    if (isReduced) {
+      _anim.value = 1.0;
+      _phase = _DropdownPhase.open;
+    } else {
+      _anim.forward(from: 0.0);
+    }
   }
 
-  void _closeDropdown({bool immediate = false}) async {
-    if (_overlay == null) return;
+  void _closeDropdown({bool immediate = false}) {
+    if (_phase == _DropdownPhase.closed && _overlay == null) return;
+
     if (immediate || !mounted) {
-      _overlay?.remove();
-      _overlay = null;
+      _anim.stop();
+      _removeOverlaySynchronously();
+      _phase = _DropdownPhase.closed;
       return;
     }
-    if (_isClosing) return;
-    _isClosing = true;
-    try {
-      await _anim.reverse();
-    } finally {
-      _isClosing = false;
-      _overlay?.remove();
-      _overlay = null;
-      if (mounted) setState(() {});
+
+    if (_phase == _DropdownPhase.closing) return;
+
+    _phase = _DropdownPhase.closing;
+    final isReduced = OptivusMotion.isReducedMotion(context);
+
+    if (isReduced) {
+      _anim.stop();
+      _removeOverlaySynchronously();
+      _anim.value = 0.0;
+      _phase = _DropdownPhase.closed;
+    } else {
+      _anim.reverse();
     }
   }
 
@@ -115,84 +227,96 @@ class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
     final activeCount = filterSelection.activeCount;
     final pillLabel = activeCount == 0 ? 'Filter' : 'Filter • $activeCount';
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Row(
-        children: [
-          const RoutineDayPickerButton(),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: () => showRoutineWeekPlannerSheet(context, ref),
-            child: Container(
-              height: 40,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.54),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.78),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 18,
-                    offset: const Offset(0, 7),
+    return PopScope(
+      canPop: _phase == _DropdownPhase.closed,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _phase != _DropdownPhase.closed) {
+          _closeDropdown();
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Row(
+          children: [
+            const RoutineDayPickerButton(),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => showRoutineWeekPlannerSheet(context, ref),
+              child: Container(
+                height: 40,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.54),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.78),
+                    width: 1,
                   ),
-                ],
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.calendar_view_week_rounded,
-                    size: 16,
-                    color: OptivusColors.ink,
-                  ),
-                  SizedBox(width: 6),
-                  Text(
-                    'Week',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: OptivusColors.ink,
-                      decoration: TextDecoration.none,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 18,
+                      offset: const Offset(0, 7),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: CompositedTransformTarget(
-              link: _link,
-              child: GestureDetector(
-                onTap: () {
-                  if (_overlay == null) {
-                    _openDropdown();
-                  } else {
-                    _closeDropdown();
-                  }
-                },
-                child: _RoutineGlassPill(
-                  label: pillLabel,
-                  isActive: activeCount > 0,
-                  isOpen: _overlay != null,
+                  ],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.calendar_view_week_rounded,
+                      size: 16,
+                      color: OptivusColors.ink,
+                    ),
+                    SizedBox(width: 6),
+                    Text(
+                      'Week',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: OptivusColors.ink,
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: 8),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  _pillWidth = constraints.maxWidth;
+                  return CompositedTransformTarget(
+                    link: _link,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _toggleDropdown,
+                      child: _RoutineGlassPill(
+                        label: pillLabel,
+                        isActive: activeCount > 0,
+                        chevronTurns: _chevronTurns,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _RoutineGlassDropdownContent extends ConsumerStatefulWidget {
+  final double width;
   final VoidCallback onClose;
 
-  const _RoutineGlassDropdownContent({required this.onClose});
+  const _RoutineGlassDropdownContent({
+    required this.width,
+    required this.onClose,
+  });
 
   @override
   ConsumerState<_RoutineGlassDropdownContent> createState() =>
@@ -228,168 +352,210 @@ class _RoutineGlassDropdownContentState
     final hasMoreCategories = availableCategories.length > 5;
 
     final screenSize = MediaQuery.sizeOf(context);
-    final width = (screenSize.width - 32).clamp(240.0, 280.0);
+    final width = widget.width.clamp(160.0, screenSize.width - 32);
     final maxHeight = screenSize.height * 0.62;
 
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: width, maxHeight: maxHeight),
-      child: Container(
+    const double outerR = 22.0;
+    const double rim = 8.0;
+    const double innerR = outerR - rim + 2;
+
+    return SizedBox(
+      width: width,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: width, maxHeight: maxHeight),
+        child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(outerR),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.14),
               blurRadius: 24,
-              offset: const Offset(0, 10),
+              offset: const Offset(0, 8),
             ),
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(outerR),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.82),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.85),
-                  width: 1.0,
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: Stack(
+              fit: StackFit.passthrough,
+              children: [
+                // 1. Transparent liquid glass tint base
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(outerR),
+                        color: Colors.white.withValues(alpha: 0.14),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Header
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
-                      child: Text(
-                        'FILTER ROUTINE',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w900,
-                          color: OptivusColors.ink.withValues(alpha: 0.45),
-                          letterSpacing: 0.8,
-                          decoration: TextDecoration.none,
-                        ),
-                      ),
-                    ),
-
-                    // VIEW Section
-                    _buildSectionHeader('VIEW'),
-                    for (final opt in primaryFilters)
-                      _buildOptionRow(
-                        label: opt.label,
-                        isSelected:
-                            filterSelection.selectedPrimaryFilter == opt.key,
-                        onTap: () {
-                          ref
-                              .read(routineNotifierProvider.notifier)
-                              .setPrimaryFilter(opt.key);
-                        },
-                      ),
-
-                    _buildDivider(),
-
-                    // STATUS Section
-                    _buildSectionHeader('STATUS'),
-                    for (final opt in statusFilters)
-                      _buildOptionRow(
-                        label: opt.label,
-                        isSelected:
-                            filterSelection.selectedStatusFilter == opt.key,
-                        onTap: () {
-                          ref
-                              .read(routineNotifierProvider.notifier)
-                              .setStatusFilter(opt.key);
-                        },
-                      ),
-
-                    _buildDivider(),
-
-                    // CATEGORY Section
-                    _buildSectionHeader('CATEGORY'),
-                    _buildOptionRow(
-                      label: 'All Categories',
-                      isSelected: selectedCat == 'all',
-                      onTap: () {
-                        ref
-                            .read(routineNotifierProvider.notifier)
-                            .setCategoryFilter('all');
-                      },
-                    ),
-                    for (final opt in displayedCategories)
-                      _buildOptionRow(
-                        label: opt.label,
-                        isSelected: selectedCat == opt.key,
-                        onTap: () {
-                          ref
-                              .read(routineNotifierProvider.notifier)
-                              .setCategoryFilter(opt.key);
-                        },
-                      ),
-
-                    if (hasMoreCategories && !shouldAutoExpand)
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () {
-                          setState(() {
-                            _categoriesExpanded = !_categoriesExpanded;
-                          });
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 7,
-                          ),
+                // 2. Scrollable content (isolated from static glass layer)
+                RepaintBoundary(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Header
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
                           child: Text(
-                            _categoriesExpanded
-                                ? 'Show less'
-                                : '+${availableCategories.length - 5} more',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: OptivusColors.routineAccent,
-                              decoration: TextDecoration.none,
-                            ),
-                          ),
-                        ),
-                      ),
-
-                    // Reset Filters
-                    if (filterSelection.activeCount > 0) ...[
-                      _buildDivider(),
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () {
-                          ref
-                              .read(routineNotifierProvider.notifier)
-                              .resetFilters();
-                        },
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 7,
-                          ),
-                          child: Text(
-                            'Reset filters',
+                            'FILTER ROUTINE',
                             style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: OptivusColors.routineAccent,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              color: OptivusColors.ink.withValues(alpha: 0.45),
+                              letterSpacing: 0.8,
                               decoration: TextDecoration.none,
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ],
+
+                        // VIEW Section
+                        _buildSectionHeader('VIEW'),
+                        for (final opt in primaryFilters)
+                          _buildOptionRow(
+                            label: opt.label,
+                            isSelected:
+                                filterSelection.selectedPrimaryFilter == opt.key,
+                            onTap: () {
+                              ref
+                                  .read(routineNotifierProvider.notifier)
+                                  .setPrimaryFilter(opt.key);
+                            },
+                          ),
+
+                        _buildDivider(),
+
+                        // STATUS Section
+                        _buildSectionHeader('STATUS'),
+                        for (final opt in statusFilters)
+                          _buildOptionRow(
+                            label: opt.label,
+                            isSelected:
+                                filterSelection.selectedStatusFilter == opt.key,
+                            onTap: () {
+                              ref
+                                  .read(routineNotifierProvider.notifier)
+                                  .setStatusFilter(opt.key);
+                            },
+                          ),
+
+                        _buildDivider(),
+
+                        // CATEGORY Section
+                        _buildSectionHeader('CATEGORY'),
+                        _buildOptionRow(
+                          label: 'All Categories',
+                          isSelected: selectedCat == 'all',
+                          onTap: () {
+                            ref
+                                .read(routineNotifierProvider.notifier)
+                                .setCategoryFilter('all');
+                          },
+                        ),
+                        AnimatedSize(
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeInOutCubic,
+                          alignment: Alignment.topCenter,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (final opt in displayedCategories)
+                                _buildOptionRow(
+                                  label: opt.label,
+                                  isSelected: selectedCat == opt.key,
+                                  onTap: () {
+                                    ref
+                                        .read(routineNotifierProvider.notifier)
+                                        .setCategoryFilter(opt.key);
+                                  },
+                                ),
+                            ],
+                          ),
+                        ),
+
+                        if (hasMoreCategories && !shouldAutoExpand)
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () {
+                              setState(() {
+                                _categoriesExpanded = !_categoriesExpanded;
+                              });
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 7,
+                              ),
+                              child: Text(
+                                _categoriesExpanded
+                                    ? 'Show less'
+                                    : '+${availableCategories.length - 5} more',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: OptivusColors.ink.withValues(alpha: 0.70),
+                                  decoration: TextDecoration.none,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                        // Reset Filters
+                        if (filterSelection.activeCount > 0) ...[
+                          _buildDivider(),
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () {
+                              ref
+                                  .read(routineNotifierProvider.notifier)
+                                  .resetFilters();
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 7,
+                              ),
+                              child: Text(
+                                'Reset filters',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: OptivusColors.ink.withValues(alpha: 0.85),
+                                  decoration: TextDecoration.none,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+                // 3. Glass highlight overlay with glare and rainbow prism
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: RepaintBoundary(
+                      child: CustomPaint(
+                        painter: GlassHighlightPainter(
+                          outerR: outerR,
+                          innerR: innerR,
+                          rim: rim,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
+          ),
           ),
         ),
       ),
@@ -398,14 +564,14 @@ class _RoutineGlassDropdownContentState
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 6, 14, 4),
+      padding: const EdgeInsets.fromLTRB(14, 7, 14, 3),
       child: Text(
         title,
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w800,
           color: OptivusColors.ink.withValues(alpha: 0.45),
-          letterSpacing: 0.5,
+          letterSpacing: 0.6,
           decoration: TextDecoration.none,
         ),
       ),
@@ -413,12 +579,10 @@ class _RoutineGlassDropdownContentState
   }
 
   Widget _buildDivider() {
-    return Divider(
-      height: 12,
-      thickness: 0.5,
-      color: OptivusColors.ink.withValues(alpha: 0.08),
-      indent: 14,
-      endIndent: 14,
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      height: 0.6,
+      color: Colors.white.withValues(alpha: 0.30),
     );
   }
 
@@ -431,32 +595,33 @@ class _RoutineGlassDropdownContentState
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        color: isSelected
-            ? OptivusColors.routineAccent.withValues(alpha: 0.12)
-            : Colors.transparent,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6.5),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Colors.white.withValues(alpha: 0.20)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  color: isSelected
-                      ? OptivusColors.routineAccent
-                      : OptivusColors.ink.withValues(alpha: 0.85),
-                  letterSpacing: -0.1,
-                  height: 1.2,
-                  decoration: TextDecoration.none,
-                ),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected
+                    ? OptivusColors.routineInkDark
+                    : OptivusColors.ink.withValues(alpha: 0.78),
+                decoration: TextDecoration.none,
               ),
             ),
             if (isSelected)
-              const Icon(
+              Icon(
                 Icons.check_rounded,
-                size: 16,
-                color: OptivusColors.routineAccent,
+                size: 15,
+                color: OptivusColors.routineInkDark,
               ),
           ],
         ),
@@ -468,12 +633,12 @@ class _RoutineGlassDropdownContentState
 class _RoutineGlassPill extends StatelessWidget {
   final String label;
   final bool isActive;
-  final bool isOpen;
+  final Animation<double>? chevronTurns;
 
   const _RoutineGlassPill({
     required this.label,
+    this.chevronTurns,
     this.isActive = false,
-    this.isOpen = false,
   });
 
   static const double outerR = 20.0;
@@ -505,14 +670,10 @@ class _RoutineGlassPill extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   decoration: BoxDecoration(
-                    color: isActive
-                        ? OptivusColors.routineAccent.withValues(alpha: 0.22)
-                        : Colors.white.withValues(alpha: 0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(innerR),
                     border: Border.all(
-                      color: isActive
-                          ? OptivusColors.routineAccent.withValues(alpha: 0.6)
-                          : Colors.white.withValues(alpha: 0.6),
+                      color: Colors.white.withValues(alpha: 0.6),
                       width: 1.0,
                     ),
                     boxShadow: [
@@ -537,10 +698,8 @@ class _RoutineGlassPill extends StatelessWidget {
                               fontSize: 13,
                               fontWeight: isActive
                                   ? FontWeight.w700
-                                  : FontWeight.w600,
-                              color: isActive
-                                  ? OptivusColors.routineAccent
-                                  : OptivusColors.routineInkDark,
+                                  : FontWeight.w500,
+                              color: OptivusColors.routineInkDark,
                               letterSpacing: -0.2,
                               decoration: TextDecoration.none,
                             ),
@@ -548,15 +707,15 @@ class _RoutineGlassPill extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      AnimatedRotation(
-                        turns: isOpen ? 0.5 : 0.0,
-                        duration: const Duration(milliseconds: 200),
-                        child: Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          size: 18,
-                          color: isActive
-                              ? OptivusColors.routineAccent
-                              : OptivusColors.routineInkDark,
+                      RepaintBoundary(
+                        child: RotationTransition(
+                          turns: chevronTurns ??
+                              const AlwaysStoppedAnimation<double>(0.0),
+                          child: const Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 18,
+                            color: OptivusColors.routineInkDark,
+                          ),
                         ),
                       ),
                     ],

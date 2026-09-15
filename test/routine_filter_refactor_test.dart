@@ -1219,5 +1219,118 @@ void main() {
       expect(find.text('FILTER ROUTINE'), findsNothing);
       expect(find.text('Replaced'), findsOneWidget);
     });
+
+    testWidgets(
+      'Dropdown uses synchronized FadeTransition, ScaleTransition, and SlideTransition for smooth opening and minimization',
+      (tester) async {
+        final container = ProviderContainer(
+          overrides: [
+            routineNotifierProvider.overrideWith(
+              (ref) => _FilterTestNotifier(ref),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(
+              home: Scaffold(body: RoutineTitleFilterRow()),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Filter'));
+        await tester.pumpAndSettle();
+
+        // Dropdown is open
+        expect(find.text('FILTER ROUTINE'), findsOneWidget);
+
+        // Verification: ScaleTransition anchored at topRight for smooth expanding and minimization
+        final scaleFinder = find.descendant(
+          of: find.byType(CompositedTransformFollower),
+          matching: find.byType(ScaleTransition),
+        );
+        expect(scaleFinder, findsOneWidget);
+        final scaleWidget = tester.widget<ScaleTransition>(scaleFinder);
+        expect(scaleWidget.alignment, Alignment.topRight);
+
+        // Verification: SlideTransition for smooth vertical glide
+        expect(
+          find.descendant(
+            of: find.byType(CompositedTransformFollower),
+            matching: find.byType(SlideTransition),
+          ),
+          findsOneWidget,
+        );
+
+        // Uses hardware-accelerated FadeTransition
+        expect(
+          find.descendant(
+            of: find.byType(CompositedTransformFollower),
+            matching: find.byType(FadeTransition),
+          ),
+          findsAtLeastNWidgets(1),
+        );
+
+        // Chevron uses synchronized RotationTransition
+        expect(
+          find.descendant(
+            of: find.byType(RoutineTitleFilterRow),
+            matching: find.byType(RotationTransition),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'Rapid toggles during in-flight animation do not crash or leak overlay',
+      (tester) async {
+        final container = ProviderContainer(
+          overrides: [
+            routineNotifierProvider.overrideWith(
+              (ref) => _FilterTestNotifier(ref),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(
+              home: Scaffold(body: RoutineTitleFilterRow()),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Rapid tap 1: starts open
+        await tester.tap(find.text('Filter'));
+        await tester.pump(const Duration(milliseconds: 30));
+
+        // Rapid tap 2: in-flight reverse
+        await tester.tap(find.text('Filter'), warnIfMissed: false);
+        await tester.pump(const Duration(milliseconds: 30));
+
+        // Rapid tap 3: in-flight re-open
+        await tester.tap(find.text('Filter'), warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        // Should settle open with no crash
+        expect(tester.takeException(), isNull);
+        expect(find.text('FILTER ROUTINE'), findsOneWidget);
+
+        // Tap to close and settle
+        await tester.tap(find.text('Filter'), warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        expect(find.text('FILTER ROUTINE'), findsNothing);
+      },
+    );
   });
 }
+
