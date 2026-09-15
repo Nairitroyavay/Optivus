@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_radii.dart';
 import 'package:optivus/core/widgets/liquid_section_header.dart';
+import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
@@ -16,6 +17,7 @@ class WorkSourceSelectionView extends StatelessWidget {
   final VoidCallback onManualSetup;
   final VoidCallback? onEditCurrent;
   final VoidCallback? onRemoveSetup;
+  final String? lifeRole;
 
   const WorkSourceSelectionView({
     super.key,
@@ -25,11 +27,20 @@ class WorkSourceSelectionView extends StatelessWidget {
     required this.onManualSetup,
     this.onEditCurrent,
     this.onRemoveSetup,
+    this.lifeRole,
   });
 
   @override
   Widget build(BuildContext context) {
     final snapshot = setup.snapshotFor(BaseTimelineSection.work);
+    final isBusiness = lifeRole == LifeRoleDraft.businessKey;
+    final isJob = lifeRole == LifeRoleDraft.workingKey;
+    final viewTitle = isBusiness
+        ? 'Update Business Hours'
+        : (isJob ? 'Update Work Schedule' : 'Update Work Schedule');
+    final viewSubtitle = isBusiness
+        ? 'Your current business hours stay active until you save new ones.'
+        : 'Your current setup stays active until you save a new one.';
 
     return SafeArea(
       child: Column(
@@ -56,22 +67,22 @@ class WorkSourceSelectionView extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Update Work Schedule',
-                        style: TextStyle(
+                        viewTitle,
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
                           color: OptivusColors.textPrimary,
                         ),
                       ),
-                      SizedBox(height: 2),
+                      const SizedBox(height: 2),
                       Text(
-                        'Your current setup stays active until you save a new one.',
-                        style: TextStyle(
+                        viewSubtitle,
+                        style: const TextStyle(
                           fontSize: 12,
                           color: OptivusColors.textSecondary,
                         ),
@@ -152,7 +163,11 @@ class WorkSourceSelectionView extends StatelessWidget {
                   _buildSourceActionCard(
                     icon: Icons.camera_alt_rounded,
                     title: 'Take a Photo',
-                    subtitle: 'Capture a printed schedule, contract, or screen',
+                    subtitle: isBusiness
+                        ? 'Capture store hours, operational plan, or screen'
+                        : (isJob
+                              ? 'Capture a printed shift roster, rota, or screen'
+                              : 'Capture a printed schedule, contract, or screen'),
                     accent: OptivusColors.warning,
                     onTap: () => onPickPhoto(ImageSource.camera),
                   ),
@@ -169,20 +184,28 @@ class WorkSourceSelectionView extends StatelessWidget {
                   if (snapshot.isConfigured || setup.workBlocks.isNotEmpty)
                     _buildSourceActionCard(
                       icon: Icons.edit_calendar_rounded,
-                      title: 'Edit current work schedule',
+                      title: isBusiness
+                          ? 'Edit current business hours'
+                          : 'Edit current work schedule',
                       subtitle:
                           (snapshot.sourceR2Key != null ||
                               snapshot.sourceAssetId != null)
                           ? 'Keep schedule photo and adjust blocks'
-                          : 'Keep your current blocks and adjust them manually',
+                          : (isBusiness
+                                ? 'Keep your current business blocks and adjust them manually'
+                                : 'Keep your current blocks and adjust them manually'),
                       accent: OptivusColors.routineAccent,
                       onTap: onEditCurrent ?? onManualSetup,
                     )
                   else
                     _buildSourceActionCard(
                       icon: Icons.edit_calendar_rounded,
-                      title: 'Set up manually',
-                      subtitle: 'Add your work blocks day by day',
+                      title: isBusiness
+                          ? 'Set up business hours manually'
+                          : 'Set up manually',
+                      subtitle: isBusiness
+                          ? 'Add your business and client blocks day by day'
+                          : 'Add your work blocks day by day',
                       accent: OptivusColors.routineAccent,
                       onTap: onManualSetup,
                     ),

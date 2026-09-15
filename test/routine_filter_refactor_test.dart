@@ -1221,7 +1221,7 @@ void main() {
     });
 
     testWidgets(
-      'Dropdown uses synchronized FadeTransition, ScaleTransition, and SlideTransition for smooth opening and minimization',
+      'Static glass shell invariant: BackdropFilter is never scaled or transformed',
       (tester) async {
         final container = ProviderContainer(
           overrides: [
@@ -1248,31 +1248,34 @@ void main() {
         // Dropdown is open
         expect(find.text('FILTER ROUTINE'), findsOneWidget);
 
-        // Verification: ScaleTransition anchored at topRight for smooth expanding and minimization
-        final scaleFinder = find.descendant(
-          of: find.byType(CompositedTransformFollower),
-          matching: find.byType(ScaleTransition),
-        );
-        expect(scaleFinder, findsOneWidget);
-        final scaleWidget = tester.widget<ScaleTransition>(scaleFinder);
-        expect(scaleWidget.alignment, Alignment.topRight);
+        // Find the CompositedTransformFollower for the dropdown
+        final dropdownFollower = find.byType(CompositedTransformFollower).last;
 
-        // Verification: SlideTransition for smooth vertical glide
+        // Invariant: No ScaleTransition wraps the BackdropFilter or dropdown
         expect(
           find.descendant(
-            of: find.byType(CompositedTransformFollower),
+            of: dropdownFollower,
+            matching: find.byType(ScaleTransition),
+          ),
+          findsNothing,
+        );
+
+        // Invariant: No AnimatedScale wraps the BackdropFilter or dropdown
+        expect(
+          find.descendant(
+            of: dropdownFollower,
+            matching: find.byType(AnimatedScale),
+          ),
+          findsNothing,
+        );
+
+        // Invariant: No SlideTransition wraps the BackdropFilter or dropdown
+        expect(
+          find.descendant(
+            of: dropdownFollower,
             matching: find.byType(SlideTransition),
           ),
-          findsOneWidget,
-        );
-
-        // Uses hardware-accelerated FadeTransition
-        expect(
-          find.descendant(
-            of: find.byType(CompositedTransformFollower),
-            matching: find.byType(FadeTransition),
-          ),
-          findsAtLeastNWidgets(1),
+          findsNothing,
         );
 
         // Chevron uses synchronized RotationTransition
@@ -1287,7 +1290,7 @@ void main() {
     );
 
     testWidgets(
-      'Rapid toggles during in-flight animation do not crash or leak overlay',
+      'Frame-by-frame open: post-frame start, monotonic foreground animation, stable anchor',
       (tester) async {
         final container = ProviderContainer(
           overrides: [
@@ -1308,29 +1311,219 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Rapid tap 1: starts open
+        // Tap Filter
         await tester.tap(find.text('Filter'));
-        await tester.pump(const Duration(milliseconds: 30));
+        // Frame 0: pump initial frame where overlay is inserted
+        await tester.pump();
 
-        // Rapid tap 2: in-flight reverse
-        await tester.tap(find.text('Filter'), warnIfMissed: false);
-        await tester.pump(const Duration(milliseconds: 30));
+        // Overlay entry is inserted
+        final followerFinder = find.byType(CompositedTransformFollower);
+        expect(followerFinder, findsAtLeastNWidgets(2)); // proxy + dropdown
 
-        // Rapid tap 3: in-flight re-open
-        await tester.tap(find.text('Filter'), warnIfMissed: false);
+        // Capture initial position of the glass shell
+        final initialRect = tester.getRect(find.byType(BackdropFilter).last);
+
+        // Foreground opacity at frame 0 is 0.0
+        final opacityFinder = find.descendant(
+          of: find.byType(BackdropFilter).last,
+          matching: find.byType(Opacity),
+        );
+        expect(opacityFinder, findsOneWidget);
+        expect(tester.widget<Opacity>(opacityFinder).opacity, 0.0);
+
+        // Step forward in time: 16ms
+        await tester.pump(const Duration(milliseconds: 16));
+        final opacity16 = tester.widget<Opacity>(opacityFinder).opacity;
+        expect(opacity16, greaterThanOrEqualTo(0.0));
+
+        // Step forward: 32ms
+        await tester.pump(const Duration(milliseconds: 32));
+        final opacity48 = tester.widget<Opacity>(opacityFinder).opacity;
+        expect(opacity48, greaterThan(opacity16));
+
+        // Step forward: 64ms
+        await tester.pump(const Duration(milliseconds: 64));
+        final opacity112 = tester.widget<Opacity>(opacityFinder).opacity;
+        expect(opacity112, greaterThan(opacity48));
+
+        // Assert that the glass shell geometry remained completely static throughout
+        final midRect = tester.getRect(find.byType(BackdropFilter).last);
+        expect(midRect.top, initialRect.top);
+        expect(midRect.right, initialRect.right);
+        expect(midRect.size, initialRect.size);
+
+        // Settle animation
+        await tester.pumpAndSettle();
+        final finalOpacity = tester.widget<Opacity>(opacityFinder).opacity;
+        expect(finalOpacity, 1.0);
+
+        final finalRect = tester.getRect(find.byType(BackdropFilter).last);
+        expect(finalRect.top, initialRect.top);
+        expect(finalRect.right, initialRect.right);
+        expect(finalRect.size, initialRect.size);
+      },
+    );
+
+    testWidgets(
+      'Frame-by-frame close: overlay remains mounted during exit and unmounts only when dismissed',
+      (tester) async {
+        final container = ProviderContainer(
+          overrides: [
+            routineNotifierProvider.overrideWith(
+              (ref) => _FilterTestNotifier(ref),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(
+              home: Scaffold(body: RoutineTitleFilterRow()),
+            ),
+          ),
+        );
         await tester.pumpAndSettle();
 
-        // Should settle open with no crash
+        // Open and settle
+        await tester.tap(find.text('Filter'));
+        await tester.pumpAndSettle();
+        expect(find.text('FILTER ROUTINE'), findsOneWidget);
+
+        final initialRect = tester.getRect(find.byType(BackdropFilter).last);
+
+        // Tap scrim outside to close
+        await tester.tapAt(const Offset(10, 10));
+        await tester.pump(); // Start closing
+
+        final opacityFinder = find.descendant(
+          of: find.byType(BackdropFilter).last,
+          matching: find.byType(Opacity),
+        );
+        expect(opacityFinder, findsOneWidget);
+
+        // Midway through exit animation (e.g. 40ms into 120ms exit)
+        await tester.pump(const Duration(milliseconds: 40));
+        // Overlay must still be mounted
+        expect(find.text('FILTER ROUTINE'), findsOneWidget);
+        final opacity40 = tester.widget<Opacity>(opacityFinder).opacity;
+        expect(opacity40, lessThan(1.0));
+        expect(opacity40, greaterThan(0.0));
+
+        // Glass geometry must remain identical
+        final midRect = tester.getRect(find.byType(BackdropFilter).last);
+        expect(midRect.top, initialRect.top);
+        expect(midRect.right, initialRect.right);
+        expect(midRect.size, initialRect.size);
+
+        // Another 40ms
+        await tester.pump(const Duration(milliseconds: 40));
+        expect(find.text('FILTER ROUTINE'), findsOneWidget);
+        final opacity80 = tester.widget<Opacity>(opacityFinder).opacity;
+        expect(opacity80, lessThan(opacity40));
+
+        // Settle to dismissed
+        await tester.pumpAndSettle();
+        // Now overlay is removed
+        expect(find.text('FILTER ROUTINE'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Rapid toggles during in-flight animation reverse smoothly without duplicate OverlayEntry',
+      (tester) async {
+        final container = ProviderContainer(
+          overrides: [
+            routineNotifierProvider.overrideWith(
+              (ref) => _FilterTestNotifier(ref),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(
+              home: Scaffold(body: RoutineTitleFilterRow()),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // 1. Open
+        await tester.tap(find.text('Filter'));
+        await tester.pump(); // Frame 0: Overlay insert & post-frame schedule
+        await tester.pump(); // Frame 1: Ticker start
+        await tester.pump(
+          const Duration(milliseconds: 40),
+        ); // Frame 2: In-flight animation (40ms)
+
+        // Exactly one dropdown content exists
+        expect(find.text('FILTER ROUTINE'), findsOneWidget);
+
+        // 2. Early close while opening
+        await tester.tap(find.text('Filter'), warnIfMissed: false);
+        await tester.pump(const Duration(milliseconds: 20));
+        expect(find.text('FILTER ROUTINE'), findsOneWidget);
+
+        // 3. Re-open while closing
+        await tester.tap(find.text('Filter'), warnIfMissed: false);
+        await tester.pump(const Duration(milliseconds: 20));
+        expect(find.text('FILTER ROUTINE'), findsOneWidget);
+
+        // 4. Settle open
+        await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         expect(find.text('FILTER ROUTINE'), findsOneWidget);
 
-        // Tap to close and settle
+        // 5. Clean close
         await tester.tap(find.text('Filter'), warnIfMissed: false);
         await tester.pumpAndSettle();
+        expect(find.text('FILTER ROUTINE'), findsNothing);
+      },
+    );
 
+    testWidgets(
+      'Reduced motion opens and closes immediately without animation delays',
+      (tester) async {
+        final container = ProviderContainer(
+          overrides: [
+            routineNotifierProvider.overrideWith(
+              (ref) => _FilterTestNotifier(ref),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(
+              home: MediaQuery(
+                data: MediaQueryData(disableAnimations: true),
+                child: Scaffold(body: RoutineTitleFilterRow()),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        // Tap to open
+        await tester.tap(find.text('Filter'));
+        await tester.pump();
+
+        // Immediately open without pumpAndSettle
+        expect(find.text('FILTER ROUTINE'), findsOneWidget);
+
+        // Tap to close
+        await tester.tap(find.text('Filter'), warnIfMissed: false);
+        await tester.pump();
+
+        // Immediately closed without pumpAndSettle
         expect(find.text('FILTER ROUTINE'), findsNothing);
       },
     );
   });
 }
-

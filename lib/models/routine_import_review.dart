@@ -277,6 +277,12 @@ class RoutineImportCandidateBlock {
   final String? classType;
   final String? instructor;
   final String? sectionLabel;
+  final String? workContextType;
+  final String? workRole;
+  final String? workOrganization;
+  final String? workDepartmentOrProject;
+  final String? workMode;
+  final String? workBlockKind;
   final String? mealCategory;
   final String? mealSlot;
   final double? caloriesEstimate;
@@ -284,6 +290,16 @@ class RoutineImportCandidateBlock {
   final List<String> steps;
 
   String? get professor => instructor;
+
+  /// Effective work department or project: prefers [workDepartmentOrProject],
+  /// falling back to [sectionLabel] for read-only legacy compatibility.
+  String? get effectiveWorkDepartmentOrProject {
+    final explicit = workDepartmentOrProject?.trim();
+    if (explicit != null && explicit.isNotEmpty) return explicit;
+    final legacy = sectionLabel?.trim();
+    if (legacy != null && legacy.isNotEmpty) return legacy;
+    return null;
+  }
 
   RoutineImportCandidateBlock({
     required this.id,
@@ -319,6 +335,12 @@ class RoutineImportCandidateBlock {
     this.classType,
     this.instructor,
     this.sectionLabel,
+    this.workContextType,
+    this.workRole,
+    this.workOrganization,
+    this.workDepartmentOrProject,
+    this.workMode,
+    this.workBlockKind,
     this.mealCategory,
     this.mealSlot,
     this.caloriesEstimate,
@@ -376,6 +398,12 @@ class RoutineImportCandidateBlock {
       'classType': classType,
       'instructor': instructor,
       'sectionLabel': sectionLabel,
+      'workContextType': workContextType,
+      'workRole': workRole,
+      'workOrganization': workOrganization,
+      'workDepartmentOrProject': workDepartmentOrProject,
+      'workMode': workMode,
+      'workBlockKind': workBlockKind,
       'mealCategory': mealCategory,
       'mealSlot': mealSlot,
       'caloriesEstimate': caloriesEstimate,
@@ -421,6 +449,12 @@ class RoutineImportCandidateBlock {
       classType: map['classType'] as String?,
       instructor: (map['instructor'] ?? map['professor']) as String?,
       sectionLabel: (map['sectionLabel'] ?? map['classSection']) as String?,
+      workContextType: map['workContextType'] as String?,
+      workRole: map['workRole'] as String?,
+      workOrganization: map['workOrganization'] as String?,
+      workDepartmentOrProject: map['workDepartmentOrProject'] as String?,
+      workMode: map['workMode'] as String?,
+      workBlockKind: map['workBlockKind'] as String?,
       mealCategory: map['mealCategory'] as String?,
       mealSlot: map['mealSlot'] as String?,
       caloriesEstimate: (map['caloriesEstimate'] as num?)?.toDouble(),
@@ -471,6 +505,12 @@ class RoutineImportCandidateBlock {
     String? classType,
     String? instructor,
     String? sectionLabel,
+    String? workContextType,
+    String? workRole,
+    String? workOrganization,
+    String? workDepartmentOrProject,
+    String? workMode,
+    String? workBlockKind,
     String? mealCategory,
     String? mealSlot,
     double? caloriesEstimate,
@@ -495,6 +535,12 @@ class RoutineImportCandidateBlock {
     bool clearClassType = false,
     bool clearInstructor = false,
     bool clearSectionLabel = false,
+    bool clearWorkContextType = false,
+    bool clearWorkRole = false,
+    bool clearWorkOrganization = false,
+    bool clearWorkDepartmentOrProject = false,
+    bool clearWorkMode = false,
+    bool clearWorkBlockKind = false,
     bool clearMealCategory = false,
     bool clearMealSlot = false,
     bool clearCaloriesEstimate = false,
@@ -560,6 +606,20 @@ class RoutineImportCandidateBlock {
       sectionLabel: clearSectionLabel
           ? null
           : (sectionLabel ?? this.sectionLabel),
+      workContextType: clearWorkContextType
+          ? null
+          : (workContextType ?? this.workContextType),
+      workRole: clearWorkRole ? null : (workRole ?? this.workRole),
+      workOrganization: clearWorkOrganization
+          ? null
+          : (workOrganization ?? this.workOrganization),
+      workDepartmentOrProject: clearWorkDepartmentOrProject
+          ? null
+          : (workDepartmentOrProject ?? this.workDepartmentOrProject),
+      workMode: clearWorkMode ? null : (workMode ?? this.workMode),
+      workBlockKind: clearWorkBlockKind
+          ? null
+          : (workBlockKind ?? this.workBlockKind),
       mealCategory: clearMealCategory
           ? null
           : (mealCategory ?? this.mealCategory),

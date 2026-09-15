@@ -18,7 +18,12 @@ import 'package:optivus/features/routine/managers/base_timeline/services/work_se
 import 'package:optivus/features/routine/managers/base_timeline/services/work_timeline_adapter.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/work_detail_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/work_timeline_card.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step4_candidate_mapping.dart';
+import 'package:optivus/repositories/routine_firestore_codec.dart';
+import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -657,7 +662,7 @@ void main() {
     );
 
     testWidgets(
-      'Front card in current setup shows all details inline and does not open sheet',
+      'Front card in current setup shows all details inline and opens WorkDetailSheet on tap',
       (tester) async {
         const block = TimelineBlockDraft(
           id: 'work-detail-1',
@@ -725,21 +730,10 @@ void main() {
         expect(find.text('Sprint 88'), findsOneWidget);
         expect(find.text('Bring sprint checklist'), findsOneWidget);
 
-        // Tapping does NOT open any modal sheet (no bottom sheet / dialog opened)
+        // Tapping opens WorkDetailSheet
         await tester.tap(find.text('Project Deep Work'));
         await tester.pumpAndSettle();
-        expect(find.byType(BottomSheet), findsNothing);
-
-        // Semantics verification: front read-only card has button: false
-        final semanticsWidget = tester.widget<Semantics>(
-          find
-              .descendant(
-                of: find.byType(WorkTimelineCard),
-                matching: find.byType(Semantics),
-              )
-              .first,
-        );
-        expect(semanticsWidget.properties.button, isFalse);
+        expect(find.byType(WorkDetailSheet), findsOneWidget);
       },
     );
 
@@ -2279,5 +2273,341 @@ void main() {
         expect(find.text('Design Review'), findsOneWidget);
       },
     );
+
+    test(
+      'Work domain data round-trip through BaseTimelineTransactionCoordinator and RoutineTemplateFirestoreCodec preserves all 6 fields and legacy fallback',
+      () {
+        final candidate = RoutineImportCandidateBlock(
+          id: 'cand-work-1',
+          title: 'Senior Engineer Focus',
+          category: 'work',
+          hardBlock: true,
+          startMinute: 9 * 60,
+          endMinute: 17 * 60,
+          repeatDays: [1, 2, 3, 4, 5],
+          blockType: TimelineBlockDraft.hardBlockKey,
+          location: 'Building A, Rm 402',
+          workRole: 'Senior Engineer',
+          workOrganization: 'Acme Corp',
+          workDepartmentOrProject: 'Core Infra',
+          workContextType: 'job',
+          workMode: 'hybrid',
+          workBlockKind: 'deep_work',
+          notes: 'Focus on database migration',
+        );
+
+        // 1. Map to TimelineBlockDraft
+        final mappingResult = mapWorkImportCandidates(candidates: [candidate]);
+        expect(mappingResult.blocks.length, equals(1));
+        final block = mappingResult.blocks.first;
+        expect(block.workRole, equals('Senior Engineer'));
+        expect(block.workOrganization, equals('Acme Corp'));
+        expect(block.workDepartmentOrProject, equals('Core Infra'));
+        expect(block.effectiveWorkDepartmentOrProject, equals('Core Infra'));
+        expect(block.workContextType, equals('job'));
+        expect(block.workMode, equals('hybrid'));
+        expect(block.workBlockKind, equals('deep_work'));
+
+        // 2. Convert to RoutineItem via BaseTimelineTransactionCoordinator
+        final now = DateTime.now();
+        final routineItem =
+            BaseTimelineTransactionCoordinator.routineItemForSectionBlock(
+              block: block,
+              section: BaseTimelineSection.work,
+              uid: 'user-roundtrip-1',
+              index: 0,
+              now: now,
+            );
+        expect(routineItem.category, equals(RoutineCategory.job));
+        expect(routineItem.workRole, equals('Senior Engineer'));
+        expect(routineItem.workOrganization, equals('Acme Corp'));
+        expect(routineItem.workDepartmentOrProject, equals('Core Infra'));
+        expect(
+          routineItem.effectiveWorkDepartmentOrProject,
+          equals('Core Infra'),
+        );
+        expect(routineItem.workContextType, equals('job'));
+        expect(routineItem.workMode, equals('hybrid'));
+        expect(routineItem.workBlockKind, equals('deep_work'));
+
+        // 3. Serialize to Firestore map and verify allowed fields check
+        const codec = RoutineTemplateFirestoreCodec();
+        final firestoreMap = codec.toFirestore(
+          ownerUid: 'user-roundtrip-1',
+          item: routineItem,
+        );
+        expect(firestoreMap['workRole'], equals('Senior Engineer'));
+        expect(firestoreMap['workOrganization'], equals('Acme Corp'));
+        expect(firestoreMap['workDepartmentOrProject'], equals('Core Infra'));
+        expect(firestoreMap['workContextType'], equals('job'));
+        expect(firestoreMap['workMode'], equals('hybrid'));
+        expect(firestoreMap['workBlockKind'], equals('deep_work'));
+
+        // 4. Deserialize from Firestore map
+        final restoredItem = codec.fromFirestore(
+          documentId: routineItem.id,
+          data: firestoreMap,
+        );
+        expect(restoredItem.workRole, equals('Senior Engineer'));
+        expect(restoredItem.workOrganization, equals('Acme Corp'));
+        expect(restoredItem.workDepartmentOrProject, equals('Core Infra'));
+        expect(restoredItem.workContextType, equals('job'));
+        expect(restoredItem.workMode, equals('hybrid'));
+        expect(restoredItem.workBlockKind, equals('deep_work'));
+      },
+    );
+
+    test(
+      'Legacy block with only sectionLabel resolves effectiveWorkDepartmentOrProject without writing to sectionLabel',
+      () {
+        const legacyBlock = TimelineBlockDraft(
+          id: 'legacy-work-1',
+          section: 'work',
+          title: 'Consulting Shift',
+          startMinute: 10 * 60,
+          endMinute: 14 * 60,
+          repeatDays: [2, 4],
+          sectionLabel: 'Advisory Services',
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        // Effective getter returns legacy sectionLabel
+        expect(
+          legacyBlock.effectiveWorkDepartmentOrProject,
+          equals('Advisory Services'),
+        );
+        expect(legacyBlock.workDepartmentOrProject, isNull);
+
+        // Converted RoutineItem also preserves fallback
+        final routineItem =
+            BaseTimelineTransactionCoordinator.routineItemForSectionBlock(
+              block: legacyBlock,
+              section: BaseTimelineSection.work,
+              uid: 'legacy-uid',
+              index: 0,
+              now: DateTime.now(),
+            );
+        expect(
+          routineItem.effectiveWorkDepartmentOrProject,
+          equals('Advisory Services'),
+        );
+      },
+    );
+
+    test(
+      'True null clearing in TimelineBlockDraft and RoutineItem copyWith resets fields and never preserves deleted values',
+      () {
+        const block = TimelineBlockDraft(
+          id: 'block-clear-1',
+          section: 'work',
+          title: 'Full Work Block',
+          startMinute: 9 * 60,
+          endMinute: 17 * 60,
+          repeatDays: [1, 2, 3],
+          location: 'Main Campus',
+          workRole: 'Staff Engineer',
+          workOrganization: 'Tech Corp',
+          workDepartmentOrProject: 'Systems',
+          workContextType: 'job',
+          workMode: 'in_person',
+          workBlockKind: 'shift',
+          notes: 'Clear me',
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        // Clear all optional work fields
+        final clearedBlock = block.copyWith(
+          clearLocation: true,
+          clearNotes: true,
+          clearWorkRole: true,
+          clearWorkOrganization: true,
+          clearWorkDepartmentOrProject: true,
+          clearWorkContextType: true,
+          clearWorkMode: true,
+          clearWorkBlockKind: true,
+          clearSectionLabel: true,
+        );
+
+        expect(clearedBlock.location, isNull);
+        expect(clearedBlock.notes, isNull);
+        expect(clearedBlock.workRole, isNull);
+        expect(clearedBlock.workOrganization, isNull);
+        expect(clearedBlock.workDepartmentOrProject, isNull);
+        expect(clearedBlock.workContextType, isNull);
+        expect(clearedBlock.workMode, isNull);
+        expect(clearedBlock.workBlockKind, isNull);
+        expect(clearedBlock.sectionLabel, isNull);
+        expect(clearedBlock.effectiveWorkDepartmentOrProject, isNull);
+
+        // Same check on RoutineItem copyWith
+        final item = RoutineItem(
+          id: 'item-clear-1',
+          title: 'Item Title',
+          blockType: RoutineBlockType.hardBlock,
+          startMinute: 9 * 60,
+          endMinute: 17 * 60,
+          repeatDays: const [1],
+          workRole: 'Founder',
+          workOrganization: 'My Startup',
+          workDepartmentOrProject: 'GTM',
+          workContextType: 'business',
+          workMode: 'remote',
+          workBlockKind: 'deep_work',
+        );
+
+        final clearedItem = item.copyWith(
+          clearWorkRole: true,
+          clearWorkOrganization: true,
+          clearWorkDepartmentOrProject: true,
+          clearWorkContextType: true,
+          clearWorkMode: true,
+          clearWorkBlockKind: true,
+        );
+
+        expect(clearedItem.workRole, isNull);
+        expect(clearedItem.workOrganization, isNull);
+        expect(clearedItem.workDepartmentOrProject, isNull);
+        expect(clearedItem.workContextType, isNull);
+        expect(clearedItem.workMode, isNull);
+        expect(clearedItem.workBlockKind, isNull);
+      },
+    );
+
+    testWidgets(
+      'WorkDetailSheet displays complete work details including role, organization, badges, duration, and repeat days',
+      (tester) async {
+        const block = TimelineBlockDraft(
+          id: 'sheet-test-1',
+          section: 'work',
+          title: 'Lead Architect Focus',
+          startMinute: 10 * 60,
+          endMinute: 12 * 60 + 30, // 2h 30m
+          repeatDays: [1, 3, 5],
+          location: 'Innovation Lab · Rm 204',
+          workRole: 'Lead Architect',
+          workOrganization: 'Nexus Labs',
+          workDepartmentOrProject: 'NextGen Cloud',
+          workContextType: 'business',
+          workMode: 'hybrid',
+          workBlockKind: 'deep_work',
+          notes: 'Prepare system architecture diagrams',
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => Center(
+                  child: ElevatedButton(
+                    onPressed: () => WorkDetailSheet.show(context, block),
+                    child: const Text('Open Sheet'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Open Sheet'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(WorkDetailSheet), findsOneWidget);
+        expect(find.text('Lead Architect Focus'), findsOneWidget);
+        expect(find.text('Nexus Labs'), findsOneWidget);
+        expect(find.text('NextGen Cloud'), findsOneWidget);
+        expect(find.text('Business'), findsOneWidget);
+        expect(find.text('Hybrid'), findsOneWidget);
+        expect(find.text('Deep Work'), findsOneWidget);
+        expect(find.text('Innovation Lab · Rm 204'), findsOneWidget);
+        expect(
+          find.text('Prepare system architecture diagrams'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('2h 30m'), findsOneWidget);
+        expect(find.text('Mon, Wed, Fri'), findsOneWidget);
+      },
+    );
+
+    test(
+      'RoutineCardFactory workDetailsString and layoutFingerprint track work domain fields accurately',
+      () {
+        final item1 = RoutineItem(
+          id: 'routine-work-1',
+          title: 'Morning Operations',
+          blockType: RoutineBlockType.hardBlock,
+          startMinute: 9 * 60,
+          endMinute: 17 * 60,
+          repeatDays: const [1, 2, 3, 4, 5],
+          workRole: 'Ops Manager',
+          workOrganization: 'Starlight Retail',
+          workDepartmentOrProject: 'Inventory',
+          workContextType: 'job',
+          workMode: 'in_person',
+          workBlockKind: 'shift',
+        );
+
+        final details = RoutineCardFactory.workDetailsString(item1);
+        expect(
+          details,
+          equals(
+            'Ops Manager • Starlight Retail • Inventory • in_person • shift',
+          ),
+        );
+
+        final fingerprint1 = RoutineCardFactory.layoutFingerprint(item1);
+
+        // Modifying any work field changes fingerprint
+        final item2 = item1.copyWith(workMode: 'remote');
+        final fingerprint2 = RoutineCardFactory.layoutFingerprint(item2);
+        expect(fingerprint1, isNot(equals(fingerprint2)));
+
+        final item3 = item1.copyWith(workOrganization: 'Different Co');
+        final fingerprint3 = RoutineCardFactory.layoutFingerprint(item3);
+        expect(fingerprint1, isNot(equals(fingerprint3)));
+      },
+    );
+
+    testWidgets('WorkCurrentSetupView adapts copy according to LifeRole', (
+      tester,
+    ) async {
+      const block = TimelineBlockDraft(
+        id: 'role-aware-1',
+        section: 'work',
+        title: 'Client Sprint',
+        startMinute: 9 * 60,
+        endMinute: 17 * 60,
+        repeatDays: [1, 2],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      );
+
+      final setup = BaseTimelineSetup(
+        uid: uid,
+        updatedAt: DateTime.now(),
+        workBlocks: const [block],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark(),
+          home: Scaffold(
+            body: WorkCurrentSetupView(
+              setup: setup,
+              routineBlocks: const [],
+              selectedDay: 1,
+              onDayChanged: (_) {},
+              onBack: () {},
+              onChangeSetup: () {},
+              lifeRole: LifeRoleDraft.businessKey,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      // Title header reflects business role
+      expect(find.text('Business Hours'), findsOneWidget);
+    });
   });
 }

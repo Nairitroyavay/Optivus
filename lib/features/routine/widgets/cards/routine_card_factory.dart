@@ -138,6 +138,12 @@ class RoutineCardFactory {
       item.endsNextDay,
       item.startedAt,
       item.countdownDurationSeconds,
+      item.workContextType,
+      item.workRole,
+      item.workOrganization,
+      item.workDepartmentOrProject,
+      item.workMode,
+      item.workBlockKind,
       Object.hashAll(item.subtasks ?? const <String>[]),
       Object.hashAll(item.subtasksCompleted ?? const <bool>[]),
       Object.hashAll(item.steps ?? const <String>[]),
@@ -177,6 +183,28 @@ class RoutineCardFactory {
         item.classType!.trim(),
       if (item.sectionLabel != null && item.sectionLabel!.trim().isNotEmpty)
         item.sectionLabel!.trim(),
+    ].join(' • ');
+    return parts.isEmpty ? null : parts;
+  }
+
+  /// Work details string (role, organization, department/project, mode, block kind).
+  static String? workDetailsString(RoutineItem item) {
+    final role = item.workRole?.trim();
+    final parts = [
+      if (role != null &&
+          role.isNotEmpty &&
+          role.toLowerCase() != item.title.trim().toLowerCase())
+        role,
+      if (item.workOrganization != null &&
+          item.workOrganization!.trim().isNotEmpty)
+        item.workOrganization!.trim(),
+      if (item.effectiveWorkDepartmentOrProject != null &&
+          item.effectiveWorkDepartmentOrProject!.trim().isNotEmpty)
+        item.effectiveWorkDepartmentOrProject!.trim(),
+      if (item.workMode != null && item.workMode!.trim().isNotEmpty)
+        item.workMode!.trim(),
+      if (item.workBlockKind != null && item.workBlockKind!.trim().isNotEmpty)
+        item.workBlockKind!.trim(),
     ].join(' • ');
     return parts.isEmpty ? null : parts;
   }
@@ -288,6 +316,13 @@ class RoutineCardFactory {
       height +=
           RoutineCardPresentation.classInfoGap +
           measure(classInfo, detailStyle);
+    }
+
+    // Work details
+    final workInfo = workDetailsString(item);
+    if (workInfo != null) {
+      height +=
+          RoutineCardPresentation.classInfoGap + measure(workInfo, detailStyle);
     }
 
     // In-tracker progress badge

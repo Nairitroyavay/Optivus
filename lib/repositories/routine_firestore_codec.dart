@@ -40,6 +40,12 @@ class RoutineTemplateFirestoreCodec {
     'courseCode',
     'classType',
     'sectionLabel',
+    'workContextType',
+    'workRole',
+    'workOrganization',
+    'workDepartmentOrProject',
+    'workMode',
+    'workBlockKind',
     'hardBlock',
     'allowedConflicts',
     'baseTimelineSection',
@@ -106,6 +112,16 @@ class RoutineTemplateFirestoreCodec {
       if (_notBlank(item.classType)) 'classType': item.classType!.trim(),
       if (_notBlank(item.sectionLabel))
         'sectionLabel': item.sectionLabel!.trim(),
+      if (_notBlank(item.workContextType))
+        'workContextType': item.workContextType!.trim(),
+      if (_notBlank(item.workRole)) 'workRole': item.workRole!.trim(),
+      if (_notBlank(item.workOrganization))
+        'workOrganization': item.workOrganization!.trim(),
+      if (_notBlank(item.workDepartmentOrProject))
+        'workDepartmentOrProject': item.workDepartmentOrProject!.trim(),
+      if (_notBlank(item.workMode)) 'workMode': item.workMode!.trim(),
+      if (_notBlank(item.workBlockKind))
+        'workBlockKind': item.workBlockKind!.trim(),
       'hardBlock': item.hardBlock,
       'allowedConflicts': item.allowedConflicts.map((c) => c.toMap()).toList(),
       if (_notBlank(item.onboardingProjectionId))
@@ -251,6 +267,12 @@ class RoutineTemplateFirestoreCodec {
       courseCode: _optionalString(data['courseCode']),
       classType: _optionalString(data['classType']),
       sectionLabel: _optionalString(data['sectionLabel']),
+      workContextType: _optionalString(data['workContextType']),
+      workRole: _optionalString(data['workRole']),
+      workOrganization: _optionalString(data['workOrganization']),
+      workDepartmentOrProject: _optionalString(data['workDepartmentOrProject']),
+      workMode: _optionalString(data['workMode']),
+      workBlockKind: _optionalString(data['workBlockKind']),
       hardBlock:
           data['hardBlock'] as bool? ??
           data['blockType'] == RoutineBlockType.hardBlock.name,

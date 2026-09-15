@@ -10,6 +10,7 @@ import 'package:optivus/features/routine/managers/base_timeline/services/work_ti
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/work_detail_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/work_timeline_card.dart';
 
 /// Read-only Current Setup view for Work / Business Base Timeline.
@@ -24,6 +25,7 @@ class WorkCurrentSetupView extends StatefulWidget {
   final bool routineRefreshPending;
   final String? routineRefreshMessage;
   final VoidCallback? onRetryRefresh;
+  final String? lifeRole;
 
   const WorkCurrentSetupView({
     super.key,
@@ -37,6 +39,7 @@ class WorkCurrentSetupView extends StatefulWidget {
     this.routineRefreshPending = false,
     this.routineRefreshMessage,
     this.onRetryRefresh,
+    this.lifeRole,
   });
 
   @override
@@ -54,6 +57,18 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
   }
 
   Widget _buildEmptyState(BuildContext context) {
+    final isBusiness = widget.lifeRole == LifeRoleDraft.businessKey;
+    final isJob = widget.lifeRole == LifeRoleDraft.workingKey;
+    final emptyTitle = isBusiness
+        ? 'No business hours yet'
+        : 'No work schedule yet';
+    final emptySubtitle = isBusiness
+        ? 'Add business hours, client syncs, or scan an operational schedule to keep your routine aligned.'
+        : 'Add shifts, work hours, or scan a schedule photo to keep your routine aligned.';
+    final buttonLabel = isBusiness
+        ? 'Set up Business'
+        : (isJob ? 'Set up Work Schedule' : 'Set up Work');
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -78,19 +93,19 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
-              'No work schedule yet',
-              style: TextStyle(
+            Text(
+              emptyTitle,
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
                 color: OptivusColors.textPrimary,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Add shifts, work hours, or scan a schedule photo to keep your routine aligned.',
+            Text(
+              emptySubtitle,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 13,
                 color: OptivusColors.textSecondary,
                 height: 1.4,
@@ -99,7 +114,7 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
             const SizedBox(height: 24),
             FilledButton.icon(
               icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('Set up Work'),
+              label: Text(buttonLabel),
               style: FilledButton.styleFrom(
                 backgroundColor: OptivusColors.warning,
                 foregroundColor: Colors.white,
@@ -122,6 +137,16 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
   @override
   Widget build(BuildContext context) {
     final snapshot = widget.setup.snapshotFor(BaseTimelineSection.work);
+    final isBusiness = widget.lifeRole == LifeRoleDraft.businessKey;
+    final isJob = widget.lifeRole == LifeRoleDraft.workingKey;
+    final headerTitle = isBusiness
+        ? 'Business Hours'
+        : (isJob ? 'Work Schedule' : 'Work / Business');
+    final primaryLabel = snapshot.isConfigured
+        ? 'Change setup'
+        : (isBusiness
+              ? 'Set up Business'
+              : (isJob ? 'Set up Work Schedule' : 'Set up Work'));
 
     const adapter = BaseTimelineWorkAdapter(accent: OptivusColors.warning);
     final blockMap = {for (final b in widget.routineBlocks) b.id: b};
@@ -138,13 +163,11 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
         children: [
           // 1. Responsive Top Nav Header
           BaseTimelineCurrentSetupHeader(
-            title: 'Work / Business',
+            title: headerTitle,
             summary: snapshot.summary,
             accent: OptivusColors.warning,
             onBack: widget.onBack,
-            primaryButtonLabel: snapshot.isConfigured
-                ? 'Change setup'
-                : 'Set up Work',
+            primaryButtonLabel: primaryLabel,
             onPrimaryAction: widget.onChangeSetup,
             removeLabel: 'Remove Work Setup',
             onRemove: snapshot.isConfigured ? widget.onRemoveSetup : null,
@@ -217,14 +240,16 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
                             block: block,
                             isEditable: false,
                             accent: OptivusColors.warning,
-                            onTap: canPromote
-                                ? () {
-                                    HapticFeedback.lightImpact();
-                                    setState(
-                                      () => _frontBlockId = positioned.entry.id,
-                                    );
-                                  }
-                                : null,
+                            onTap: () {
+                              if (canPromote) {
+                                HapticFeedback.lightImpact();
+                                setState(
+                                  () => _frontBlockId = positioned.entry.id,
+                                );
+                              } else if (block != null) {
+                                WorkDetailSheet.show(context, block);
+                              }
+                            },
                           );
                         },
                         onEntryTapped: null,

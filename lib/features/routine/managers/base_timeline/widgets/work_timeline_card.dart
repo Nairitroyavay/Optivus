@@ -41,12 +41,14 @@ class WorkTimelineCard extends StatelessWidget {
     bool isEditable = true,
   }) {
     final title = block.title.trim();
+    final organization = block.workOrganization?.trim() ?? '';
+    final dept = block.effectiveWorkDepartmentOrProject?.trim() ?? '';
     final location = block.location?.trim() ?? '';
-    final sectionLabel = block.sectionLabel?.trim() ?? '';
     final notes = block.notes?.trim() ?? '';
+    final mode = block.workMode?.trim() ?? '';
+    final kind = block.workBlockKind?.trim() ?? '';
 
     // Card chrome & padding:
-    // Horizontal padding in rich card: 12 left + 12 right = 24 (or 16 if narrow < 120), plus 2px for border
     final isNarrow = contentWidth < 120.0;
     final horizontalPadding = isNarrow ? 18.0 : 26.0;
     final innerWidth = (contentWidth - horizontalPadding).clamp(
@@ -76,12 +78,28 @@ class WorkTimelineCard extends StatelessWidget {
     );
     totalHeight += titleHeight > 21.0 ? titleHeight : 21.0;
 
-    // 2. Section badge / label
-    if (sectionLabel.isNotEmpty) {
+    // Organization
+    if (organization.isNotEmpty) {
       totalHeight += 3.0;
+      final orgHeight = _measureTextHeight(
+        text: organization,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          height: 1.25,
+        ),
+        maxWidth: innerWidth,
+        textScale: textScale,
+      );
+      totalHeight += orgHeight;
+    }
+
+    // Department / Section badge
+    if (dept.isNotEmpty) {
+      totalHeight += 4.0;
       final badgeInnerWidth = (innerWidth - 12.0).clamp(30.0, double.infinity);
       final badgeTextHeight = _measureTextHeight(
-        text: sectionLabel,
+        text: dept,
         style: const TextStyle(
           fontSize: 9,
           fontWeight: FontWeight.w700,
@@ -94,7 +112,13 @@ class WorkTimelineCard extends StatelessWidget {
       totalHeight += badgeTextHeight + 5.0; // 1.5 top + 1.5 bottom + 2 border
     }
 
-    // 3. Time label
+    // Mode / Kind badges row
+    if (mode.isNotEmpty || kind.isNotEmpty) {
+      totalHeight += 4.0;
+      totalHeight += 18.0 * textScale;
+    }
+
+    // Time label
     totalHeight += 3.0;
     final timeHeight = _measureTextHeight(
       text: TimelineUtils.formatTimeRange(block.startMinute, block.endMinute),
@@ -108,7 +132,7 @@ class WorkTimelineCard extends StatelessWidget {
     );
     totalHeight += timeHeight;
 
-    // 4. Location
+    // Location
     if (location.isNotEmpty) {
       totalHeight += 3.0;
       final locWidth = (innerWidth - 13.0).clamp(30.0, double.infinity);
@@ -125,7 +149,7 @@ class WorkTimelineCard extends StatelessWidget {
       totalHeight += locHeight > 12.5 ? locHeight : 12.5;
     }
 
-    // 5. Notes
+    // Notes
     if (notes.isNotEmpty) {
       totalHeight += 3.0;
       final notesWidth = (innerWidth - 14.0).clamp(30.0, double.infinity);
@@ -181,21 +205,32 @@ class WorkTimelineCard extends StatelessWidget {
     final isRich = height >= 96 && !isNarrow;
 
     final title = block?.title.isNotEmpty == true ? block!.title : entry.title;
+    final role = block?.workRole?.trim() ?? '';
+    final org = block?.workOrganization?.trim() ?? '';
+    final dept = block?.effectiveWorkDepartmentOrProject?.trim() ?? '';
     final location = block?.location?.trim() ?? (entry.subtitle?.trim() ?? '');
-    final sectionLabel = block?.sectionLabel?.trim() ?? '';
     final notes = block?.notes?.trim() ?? '';
+    final mode = block?.workMode?.trim() ?? '';
+    final blockKind = block?.workBlockKind?.trim() ?? '';
 
     final timeLabel = TimelineUtils.formatTimeRange(
       entry.startMinute,
       entry.endMinute,
     );
 
-    final semanticLabel =
-        '$title, $timeLabel'
-        '${location.isNotEmpty ? ", Workplace: $location" : ""}'
-        '${sectionLabel.isNotEmpty ? ", Section: $sectionLabel" : ""}'
-        '${notes.isNotEmpty ? ", Details: $notes" : ""}'
-        '${isEditable ? ", tap to edit" : ""}';
+    final semanticParts = <String>[
+      title,
+      if (role.isNotEmpty && role != title) 'Role: $role',
+      if (org.isNotEmpty) 'Organization: $org',
+      if (dept.isNotEmpty) 'Department: $dept',
+      timeLabel,
+      if (mode.isNotEmpty) 'Mode: ${_formatMode(mode)}',
+      if (blockKind.isNotEmpty) 'Focus: ${_formatBlockKind(blockKind)}',
+      if (location.isNotEmpty) 'Workplace: $location',
+      if (notes.isNotEmpty) 'Details: $notes',
+      if (isEditable) 'tap to edit',
+    ];
+    final semanticLabel = semanticParts.join(', ');
 
     final card = Semantics(
       button: isEditable,
@@ -239,9 +274,13 @@ class WorkTimelineCard extends StatelessWidget {
                 isRich: isRich,
                 isNarrow: isNarrow,
                 title: title,
+                role: role,
+                org: org,
+                dept: dept,
                 location: location,
-                sectionLabel: sectionLabel,
                 notes: notes,
+                mode: mode,
+                blockKind: blockKind,
                 timeLabel: timeLabel,
               ),
             ),
@@ -268,16 +307,23 @@ class WorkTimelineCard extends StatelessWidget {
     required bool isRich,
     required bool isNarrow,
     required String title,
+    required String role,
+    required String org,
+    required String dept,
     required String location,
-    required String sectionLabel,
     required String notes,
+    required String mode,
+    required String blockKind,
     required String timeLabel,
   }) {
     if (isTiny) {
+      final summary = dept.isNotEmpty
+          ? '$dept · $title'
+          : (org.isNotEmpty ? '$org · $title' : title);
       return Align(
         alignment: Alignment.centerLeft,
         child: Text(
-          sectionLabel.isNotEmpty ? '$sectionLabel · $title' : title,
+          summary,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
@@ -292,7 +338,7 @@ class WorkTimelineCard extends StatelessWidget {
     if (isCompact) {
       final secondary = location.isNotEmpty
           ? location
-          : (sectionLabel.isNotEmpty ? sectionLabel : notes);
+          : (dept.isNotEmpty ? dept : (org.isNotEmpty ? org : notes));
       final detailText = secondary.isNotEmpty
           ? '$timeLabel · $secondary'
           : timeLabel;
@@ -360,7 +406,7 @@ class WorkTimelineCard extends StatelessWidget {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  title,
+                  org.isNotEmpty ? '$title · $org' : title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -378,9 +424,9 @@ class WorkTimelineCard extends StatelessWidget {
                 ),
             ],
           ),
-          if (sectionLabel.isNotEmpty) ...[
+          if (dept.isNotEmpty) ...[
             const SizedBox(height: 2),
-            _buildBadge(sectionLabel, accent),
+            _buildBadge(dept, accent),
           ],
           const SizedBox(height: 2),
           Text(
@@ -457,14 +503,33 @@ class WorkTimelineCard extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  height: 1.25,
-                  color: OptivusColors.textPrimary,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      height: 1.25,
+                      color: OptivusColors.textPrimary,
+                    ),
+                  ),
+                  if (org.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 1),
+                      child: Text(
+                        org,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          height: 1.2,
+                          color: accent.withValues(alpha: 0.95),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
             if (isEditable)
@@ -479,8 +544,21 @@ class WorkTimelineCard extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 3),
-        if (sectionLabel.isNotEmpty) ...[
-          _buildBadge(sectionLabel, accent),
+        if (dept.isNotEmpty) ...[
+          _buildBadge(dept, accent),
+          const SizedBox(height: 3),
+        ],
+        if (mode.isNotEmpty || blockKind.isNotEmpty) ...[
+          Wrap(
+            spacing: 4,
+            runSpacing: 3,
+            children: [
+              if (blockKind.isNotEmpty)
+                _buildBadge(_formatBlockKind(blockKind), accent),
+              if (mode.isNotEmpty)
+                _buildBadge(_formatMode(mode), OptivusColors.textSecondary),
+            ],
+          ),
           const SizedBox(height: 3),
         ],
         Text(
@@ -550,6 +628,36 @@ class WorkTimelineCard extends StatelessWidget {
         ],
       ],
     );
+  }
+
+  static String _formatMode(String mode) {
+    switch (mode) {
+      case 'in_person':
+        return 'In-person';
+      case 'remote':
+        return 'Remote';
+      case 'hybrid':
+        return 'Hybrid';
+      default:
+        return mode;
+    }
+  }
+
+  static String _formatBlockKind(String kind) {
+    switch (kind) {
+      case 'deep_work':
+        return 'Deep Work';
+      case 'meeting':
+        return 'Meeting';
+      case 'shift':
+        return 'Shift';
+      case 'admin':
+        return 'Admin';
+      case 'client_call':
+        return 'Client Call';
+      default:
+        return kind;
+    }
   }
 
   Widget _buildBadge(String label, Color color) {

@@ -472,6 +472,7 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
           onManualSetup: () => controller.startManualSetup(setup),
           onEditCurrent: () => controller.editCurrentWorkSchedule(setup),
           onRemoveSetup: () => _handleRemoveWorkSetup(setup, uid),
+          lifeRole: ref.watch(userProfileProvider).lifeRole,
         );
 
       case WorkSetupStage.error:
@@ -529,6 +530,7 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
           routineRefreshPending: state.routineRefreshPending,
           routineRefreshMessage: state.routineRefreshMessage,
           onRetryRefresh: () => controller.retryRoutineRefresh(uid: uid),
+          lifeRole: ref.watch(userProfileProvider).lifeRole,
         );
     }
   }

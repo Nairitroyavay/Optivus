@@ -49,6 +49,7 @@ class RoutineRichTimelineCard extends ConsumerWidget {
     const detailStyle = RoutineCardPresentation.detailStyle;
 
     final classInfo = RoutineCardFactory.classDetailsString(item);
+    final workInfo = RoutineCardFactory.workDetailsString(item);
     final isEating = item.category == RoutineCategory.eating;
     final isSkinCare = item.category == RoutineCategory.skinCare;
     final cleanDishes =
@@ -124,6 +125,12 @@ class RoutineRichTimelineCard extends ConsumerWidget {
           if (classInfo != null) ...[
             const SizedBox(height: RoutineCardPresentation.classInfoGap),
             Text(classInfo, style: detailStyle),
+          ],
+
+          // Work details (role • organization • department/project • mode • focus)
+          if (workInfo != null) ...[
+            const SizedBox(height: RoutineCardPresentation.classInfoGap),
+            Text(workInfo, style: detailStyle),
           ],
 
           // In-tracker progress badge

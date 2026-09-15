@@ -332,3 +332,116 @@ Onboarding4CandidateMappingResult mapOnboarding4Candidates({
     droppedExamples: droppedExamples,
   );
 }
+
+class WorkCandidateMappingResult {
+  final List<TimelineBlockDraft> blocks;
+  final int droppedNoTitle;
+  final int droppedInvalidTime;
+  final int droppedNoRepeatDays;
+  final int droppedNonWork;
+  final List<String> droppedExamples;
+
+  const WorkCandidateMappingResult({
+    required this.blocks,
+    required this.droppedNoTitle,
+    required this.droppedInvalidTime,
+    required this.droppedNoRepeatDays,
+    required this.droppedNonWork,
+    this.droppedExamples = const [],
+  });
+
+  int get droppedTotal =>
+      droppedNoTitle +
+      droppedInvalidTime +
+      droppedNoRepeatDays +
+      droppedNonWork;
+
+  String get filterSummary {
+    if (droppedTotal == 0) return 'none';
+    return 'noTitle=$droppedNoTitle invalidTime=$droppedInvalidTime '
+        'noRepeatDays=$droppedNoRepeatDays nonWork=$droppedNonWork';
+  }
+
+  String get droppedExampleText =>
+      droppedExamples.isEmpty ? 'none' : droppedExamples.join(' || ');
+}
+
+WorkCandidateMappingResult mapWorkImportCandidates({
+  required List<RoutineImportCandidateBlock> candidates,
+  String? assetId,
+}) {
+  final blocks = <TimelineBlockDraft>[];
+  var droppedNoTitle = 0;
+  var droppedInvalidTime = 0;
+  var droppedNoRepeatDays = 0;
+  var droppedNonWork = 0;
+  final droppedExamples = <String>[];
+
+  void addExample(String reason, RoutineImportCandidateBlock candidate) {
+    if (droppedExamples.length >= 5) return;
+    droppedExamples.add('$reason ${candidateDayDebugLabel(candidate)}');
+  }
+
+  for (final candidate in candidates) {
+    final title = candidate.title.trim();
+    if (title.isEmpty) {
+      droppedNoTitle++;
+      addExample('droppedNoTitle', candidate);
+      continue;
+    }
+    if (isDisallowedOnboarding4WorkCandidate(candidate)) {
+      droppedNonWork++;
+      addExample('droppedNonWork', candidate);
+      continue;
+    }
+    if (!candidate.hasFixedTime) {
+      droppedInvalidTime++;
+      addExample('droppedNoFixedTime', candidate);
+      continue;
+    }
+    if (candidate.startMinute >= candidate.endMinute) {
+      droppedInvalidTime++;
+      addExample('droppedInvalidTime', candidate);
+      continue;
+    }
+    final repeatDays = repeatDaysForOnboarding4Candidate(candidate);
+    if (repeatDays.isEmpty) {
+      droppedNoRepeatDays++;
+      addExample('droppedNoRepeatDays', candidate);
+      continue;
+    }
+
+    blocks.add(
+      TimelineBlockDraft(
+        id: candidate.id,
+        section: 'work',
+        title: title,
+        startMinute: candidate.startMinute.clamp(0, 24 * 60 - 1),
+        endMinute: candidate.endMinute.clamp(1, 24 * 60),
+        repeatDays: repeatDays,
+        location: candidate.location ?? '',
+        notes: candidate.notes,
+        workContextType: candidate.workContextType,
+        workRole: candidate.workRole,
+        workOrganization: candidate.workOrganization,
+        workDepartmentOrProject: candidate.effectiveWorkDepartmentOrProject,
+        workMode: candidate.workMode,
+        workBlockKind: candidate.workBlockKind,
+        blockType: TimelineBlockDraft.hardBlockKey,
+        source: candidate.extractionEngine.isNotEmpty
+            ? candidate.extractionEngine
+            : 'ai_import',
+        provenanceSourceIds: assetId != null ? [assetId] : const [],
+      ),
+    );
+  }
+
+  return WorkCandidateMappingResult(
+    blocks: List<TimelineBlockDraft>.unmodifiable(blocks),
+    droppedNoTitle: droppedNoTitle,
+    droppedInvalidTime: droppedInvalidTime,
+    droppedNoRepeatDays: droppedNoRepeatDays,
+    droppedNonWork: droppedNonWork,
+    droppedExamples: droppedExamples,
+  );
+}

@@ -4489,6 +4489,12 @@ class TimelineBlockDraft {
   final String? classType;
   final String? sectionLabel;
   final String? notes;
+  final String? workContextType;
+  final String? workRole;
+  final String? workOrganization;
+  final String? workDepartmentOrProject;
+  final String? workMode;
+  final String? workBlockKind;
 
   const TimelineBlockDraft({
     required this.id,
@@ -4518,6 +4524,12 @@ class TimelineBlockDraft {
     this.classType,
     this.sectionLabel,
     this.notes,
+    this.workContextType,
+    this.workRole,
+    this.workOrganization,
+    this.workDepartmentOrProject,
+    this.workMode,
+    this.workBlockKind,
   });
 
   factory TimelineBlockDraft.fromMap(Map<String, dynamic> map) {
@@ -4549,6 +4561,12 @@ class TimelineBlockDraft {
       classType: map['classType'] as String?,
       sectionLabel: (map['sectionLabel'] ?? map['classSection']) as String?,
       notes: map['notes'] as String?,
+      workContextType: map['workContextType'] as String?,
+      workRole: map['workRole'] as String?,
+      workOrganization: map['workOrganization'] as String?,
+      workDepartmentOrProject: map['workDepartmentOrProject'] as String?,
+      workMode: map['workMode'] as String?,
+      workBlockKind: map['workBlockKind'] as String?,
     );
   }
 
@@ -4580,6 +4598,12 @@ class TimelineBlockDraft {
     'classType': classType,
     'sectionLabel': sectionLabel,
     'notes': notes,
+    'workContextType': workContextType,
+    'workRole': workRole,
+    'workOrganization': workOrganization,
+    'workDepartmentOrProject': workDepartmentOrProject,
+    'workMode': workMode,
+    'workBlockKind': workBlockKind,
   };
 
   TimelineBlockDraft copyWith({
@@ -4590,6 +4614,7 @@ class TimelineBlockDraft {
     int? endMinute,
     List<int>? repeatDays,
     String? location,
+    bool clearLocation = false,
     String? blockType,
     String? source,
     bool? needsTimeConfirmation,
@@ -4606,10 +4631,27 @@ class TimelineBlockDraft {
     String? skincareSlotLabel,
     List<String>? provenanceSourceIds,
     String? professor,
+    bool clearProfessor = false,
     String? courseCode,
+    bool clearCourseCode = false,
     String? classType,
+    bool clearClassType = false,
     String? sectionLabel,
+    bool clearSectionLabel = false,
     String? notes,
+    bool clearNotes = false,
+    String? workContextType,
+    bool clearWorkContextType = false,
+    String? workRole,
+    bool clearWorkRole = false,
+    String? workOrganization,
+    bool clearWorkOrganization = false,
+    String? workDepartmentOrProject,
+    bool clearWorkDepartmentOrProject = false,
+    String? workMode,
+    bool clearWorkMode = false,
+    String? workBlockKind,
+    bool clearWorkBlockKind = false,
   }) {
     return TimelineBlockDraft(
       id: id ?? this.id,
@@ -4618,7 +4660,7 @@ class TimelineBlockDraft {
       startMinute: startMinute ?? this.startMinute,
       endMinute: endMinute ?? this.endMinute,
       repeatDays: repeatDays ?? this.repeatDays,
-      location: location ?? this.location,
+      location: clearLocation ? null : (location ?? this.location),
       blockType: blockType ?? this.blockType,
       source: source ?? this.source,
       needsTimeConfirmation:
@@ -4635,12 +4677,44 @@ class TimelineBlockDraft {
       skincareMissingItems: skincareMissingItems ?? this.skincareMissingItems,
       skincareSlotLabel: skincareSlotLabel ?? this.skincareSlotLabel,
       provenanceSourceIds: provenanceSourceIds ?? this.provenanceSourceIds,
-      professor: professor ?? this.professor,
-      courseCode: courseCode ?? this.courseCode,
-      classType: classType ?? this.classType,
-      sectionLabel: sectionLabel ?? this.sectionLabel,
-      notes: notes ?? this.notes,
+      professor: clearProfessor ? null : (professor ?? this.professor),
+      courseCode: clearCourseCode ? null : (courseCode ?? this.courseCode),
+      classType: clearClassType ? null : (classType ?? this.classType),
+      sectionLabel: clearSectionLabel
+          ? null
+          : (sectionLabel ?? this.sectionLabel),
+      notes: clearNotes ? null : (notes ?? this.notes),
+      workContextType: clearWorkContextType
+          ? null
+          : (workContextType ?? this.workContextType),
+      workRole: clearWorkRole ? null : (workRole ?? this.workRole),
+      workOrganization: clearWorkOrganization
+          ? null
+          : (workOrganization ?? this.workOrganization),
+      workDepartmentOrProject: clearWorkDepartmentOrProject
+          ? null
+          : (workDepartmentOrProject ?? this.workDepartmentOrProject),
+      workMode: clearWorkMode ? null : (workMode ?? this.workMode),
+      workBlockKind: clearWorkBlockKind
+          ? null
+          : (workBlockKind ?? this.workBlockKind),
     );
+  }
+
+  /// Read-only legacy compatibility fallback:
+  /// If [workDepartmentOrProject] is not set but legacy [sectionLabel] exists on a work block,
+  /// returns [sectionLabel] for display.
+  String? get effectiveWorkDepartmentOrProject {
+    if (workDepartmentOrProject != null &&
+        workDepartmentOrProject!.trim().isNotEmpty) {
+      return workDepartmentOrProject!.trim();
+    }
+    if ((section == 'work' || section == 'job_work_business') &&
+        sectionLabel != null &&
+        sectionLabel!.trim().isNotEmpty) {
+      return sectionLabel!.trim();
+    }
+    return null;
   }
 
   int get durationMinutes {

@@ -151,6 +151,14 @@ class RoutineItem {
   final String? classType;
   final String? sectionLabel;
 
+  // Structured Work / Business details
+  final String? workContextType;
+  final String? workRole;
+  final String? workOrganization;
+  final String? workDepartmentOrProject;
+  final String? workMode;
+  final String? workBlockKind;
+
   // Block configuration
   final bool hardBlock;
   final List<String> allowedOverlaps; // Legacy string-based IDs
@@ -214,6 +222,12 @@ class RoutineItem {
     this.courseCode,
     this.classType,
     this.sectionLabel,
+    this.workContextType,
+    this.workRole,
+    this.workOrganization,
+    this.workDepartmentOrProject,
+    this.workMode,
+    this.workBlockKind,
     this.hardBlock = false,
     this.allowedOverlaps = const [],
     this.allowedConflicts = const [],
@@ -264,6 +278,16 @@ class RoutineItem {
 
   /// Get the display steps: prefer steps, fall back to skincareProducts.
   List<String>? get displaySteps => steps ?? skincareProducts;
+
+  /// Effective work department or project: prefers [workDepartmentOrProject],
+  /// falling back to [sectionLabel] for read-only legacy compatibility.
+  String? get effectiveWorkDepartmentOrProject {
+    final explicit = workDepartmentOrProject?.trim();
+    if (explicit != null && explicit.isNotEmpty) return explicit;
+    final legacy = sectionLabel?.trim();
+    if (legacy != null && legacy.isNotEmpty) return legacy;
+    return null;
+  }
 
   /// Short status label for card display.
   String get statusLabel {
@@ -360,6 +384,18 @@ class RoutineItem {
     String? classType,
     String? sectionLabel,
     bool clearSectionLabel = false,
+    String? workContextType,
+    bool clearWorkContextType = false,
+    String? workRole,
+    bool clearWorkRole = false,
+    String? workOrganization,
+    bool clearWorkOrganization = false,
+    String? workDepartmentOrProject,
+    bool clearWorkDepartmentOrProject = false,
+    String? workMode,
+    bool clearWorkMode = false,
+    String? workBlockKind,
+    bool clearWorkBlockKind = false,
     bool? hardBlock,
     List<String>? allowedOverlaps,
     List<RoutineConflictAllowance>? allowedConflicts,
@@ -427,6 +463,20 @@ class RoutineItem {
       sectionLabel: clearSectionLabel
           ? null
           : (sectionLabel ?? this.sectionLabel),
+      workContextType: clearWorkContextType
+          ? null
+          : (workContextType ?? this.workContextType),
+      workRole: clearWorkRole ? null : (workRole ?? this.workRole),
+      workOrganization: clearWorkOrganization
+          ? null
+          : (workOrganization ?? this.workOrganization),
+      workDepartmentOrProject: clearWorkDepartmentOrProject
+          ? null
+          : (workDepartmentOrProject ?? this.workDepartmentOrProject),
+      workMode: clearWorkMode ? null : (workMode ?? this.workMode),
+      workBlockKind: clearWorkBlockKind
+          ? null
+          : (workBlockKind ?? this.workBlockKind),
       hardBlock: hardBlock ?? this.hardBlock,
       allowedOverlaps: allowedOverlaps ?? this.allowedOverlaps,
       allowedConflicts: allowedConflicts ?? this.allowedConflicts,
@@ -493,6 +543,12 @@ class RoutineItem {
       'courseCode': courseCode,
       'classType': classType,
       'sectionLabel': sectionLabel,
+      'workContextType': workContextType,
+      'workRole': workRole,
+      'workOrganization': workOrganization,
+      'workDepartmentOrProject': workDepartmentOrProject,
+      'workMode': workMode,
+      'workBlockKind': workBlockKind,
       'hardBlock': hardBlock,
       'allowedOverlaps': allowedOverlaps,
       'allowedConflicts': allowedConflicts.map((c) => c.toMap()).toList(),
@@ -562,6 +618,19 @@ class RoutineItem {
         'classType': classType!.trim(),
       if (sectionLabel != null && sectionLabel!.trim().isNotEmpty)
         'sectionLabel': sectionLabel!.trim(),
+      if (workContextType != null && workContextType!.trim().isNotEmpty)
+        'workContextType': workContextType!.trim(),
+      if (workRole != null && workRole!.trim().isNotEmpty)
+        'workRole': workRole!.trim(),
+      if (workOrganization != null && workOrganization!.trim().isNotEmpty)
+        'workOrganization': workOrganization!.trim(),
+      if (workDepartmentOrProject != null &&
+          workDepartmentOrProject!.trim().isNotEmpty)
+        'workDepartmentOrProject': workDepartmentOrProject!.trim(),
+      if (workMode != null && workMode!.trim().isNotEmpty)
+        'workMode': workMode!.trim(),
+      if (workBlockKind != null && workBlockKind!.trim().isNotEmpty)
+        'workBlockKind': workBlockKind!.trim(),
       'hardBlock': hardBlock,
       'allowedConflicts': allowedConflicts.map((c) => c.toMap()).toList(),
       if (onboardingProjectionId != null &&
@@ -664,6 +733,12 @@ class RoutineItem {
       courseCode: map['courseCode'] as String?,
       classType: map['classType'] as String?,
       sectionLabel: (map['sectionLabel'] ?? map['classSection']) as String?,
+      workContextType: map['workContextType'] as String?,
+      workRole: map['workRole'] as String?,
+      workOrganization: map['workOrganization'] as String?,
+      workDepartmentOrProject: map['workDepartmentOrProject'] as String?,
+      workMode: map['workMode'] as String?,
+      workBlockKind: map['workBlockKind'] as String?,
       hardBlock: map['hardBlock'] as bool? ?? false,
       allowedOverlaps:
           (map['allowedOverlaps'] as List?)?.cast<String>() ?? const [],

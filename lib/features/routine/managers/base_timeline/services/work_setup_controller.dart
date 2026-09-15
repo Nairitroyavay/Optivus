@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:optivus/core/ai/ai_generation_lifecycle.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step4_candidate_mapping.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
@@ -703,9 +702,9 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       }
 
       if (result.candidates.isNotEmpty) {
-        final mappingResult = mapOnboarding4Candidates(
+        final mappingResult = mapWorkImportCandidates(
           candidates: result.candidates,
-          config: ScheduleSetupConfig.workSetup,
+          assetId: assetId,
         );
 
         if (mappingResult.blocks.isNotEmpty) {
@@ -720,24 +719,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
             );
           }
 
-          final candidatesById = {for (final c in result.candidates) c.id: c};
-          final mappedBlocks = mappingResult.blocks.map((block) {
-            final candidate = candidatesById[block.id];
-            return TimelineBlockDraft(
-              id: block.id,
-              section: 'work',
-              title: block.subject,
-              startMinute: block.startMinute,
-              endMinute: block.endMinute,
-              repeatDays: block.repeatDays,
-              location: block.room,
-              notes: block.notes,
-              sectionLabel: block.section,
-              blockType: TimelineBlockDraft.hardBlockKey,
-              source: candidate?.extractionEngine ?? 'ai_import',
-              provenanceSourceIds: [assetId],
-            );
-          }).toList();
+          final mappedBlocks = mappingResult.blocks;
 
           final normalizedDay = normalizeSelectedWorkDay(
             currentDay: state.selectedDay,
