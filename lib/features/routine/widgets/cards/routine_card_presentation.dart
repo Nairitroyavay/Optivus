@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/models/routine_item.dart';
 
 /// Centralized presentation constants and layout simulation for Routine timeline cards.
 ///
@@ -134,24 +135,25 @@ class RoutineCardPresentation {
 
   /// Deterministic action layout policy shared between rendering and height measurement.
   ///
-  /// Normal width cards (where Start / Done / Move fit in a single row) render
-  /// a single horizontal Row of 3 Expanded buttons.
+  /// Normal width cards (where actions fit in a single row) render
+  /// a single horizontal Row of Expanded buttons.
   /// Narrow overlapping front-cards or large accessibility scales fallback to a
-  /// non-truncating stacked column of 3 full-width 44px+ buttons.
+  /// non-truncating stacked column of full-width 44px+ buttons.
   static RoutineCardActionLayout resolveRoutineCardActionLayout({
     required double availableWidth,
     required TextScaler textScaler,
     required TextDirection textDirection,
+    List<String> labels = const ['00:00:00', 'Done', 'Move'],
+    int actionCount = 3,
   }) {
-    const totalGaps = 2 * actionGap;
-    final buttonWidth = (availableWidth - totalGaps) / 3.0;
-    final maxInnerWidth =
-        buttonWidth -
+    if (actionCount <= 1) return RoutineCardActionLayout.horizontal;
+    final totalGaps = (actionCount - 1) * actionGap;
+    final buttonWidth = (availableWidth - totalGaps) / actionCount.toDouble();
+    final maxInnerWidth = buttonWidth -
         (2 * actionButtonPaddingHorizontal) -
         (2 * actionButtonBorderWidth);
     if (maxInnerWidth <= 0) return RoutineCardActionLayout.stacked;
 
-    const labels = ['00:00:00', 'Done', 'Move'];
     for (final label in labels) {
       final painter = TextPainter(
         text: TextSpan(text: label, style: actionLabelStyle),
@@ -229,3 +231,173 @@ class RoutineCardPresentation {
 
 /// Layout mode for routine card footer primary actions.
 enum RoutineCardActionLayout { horizontal, stacked }
+
+enum RoutineCardActionType {
+  start,
+  openTracker,
+  startTracker,
+  saveMoney,
+  checkIn,
+  done,
+  move,
+  stop,
+  undo,
+  countdown,
+  terminalBadge,
+}
+
+@immutable
+class RoutineCardActionConfig {
+  final String label;
+  final RoutineCardActionType type;
+  final bool isPrimary;
+
+  const RoutineCardActionConfig({
+    required this.label,
+    required this.type,
+    this.isPrimary = false,
+  });
+}
+
+@immutable
+class RoutineCardActionSet {
+  final List<RoutineCardActionConfig> actions;
+
+  const RoutineCardActionSet(this.actions);
+
+  int get count => actions.length;
+  List<String> get labels => actions.map((a) => a.label).toList();
+
+  static RoutineCardActionSet resolve({
+    required RoutineItem item,
+    required RoutineStatus effectiveStatus,
+    required bool isTrackerActive,
+    required bool hasGenericCountdown,
+    required bool canUndo,
+  }) {
+    final isTerminal = effectiveStatus == RoutineStatus.completed ||
+        effectiveStatus == RoutineStatus.skipped ||
+        effectiveStatus == RoutineStatus.missed ||
+        item.isCompleted;
+
+    if (isTerminal) {
+      final terminalLabel = effectiveStatus == RoutineStatus.skipped
+          ? 'Skipped'
+          : (effectiveStatus == RoutineStatus.missed ? 'Missed' : 'Completed');
+      if (canUndo) {
+        return RoutineCardActionSet([
+          RoutineCardActionConfig(
+            label: terminalLabel,
+            type: RoutineCardActionType.terminalBadge,
+            isPrimary: true,
+          ),
+          const RoutineCardActionConfig(
+            label: 'Undo',
+            type: RoutineCardActionType.undo,
+          ),
+        ]);
+      }
+      return RoutineCardActionSet([
+        RoutineCardActionConfig(
+          label: terminalLabel,
+          type: RoutineCardActionType.terminalBadge,
+          isPrimary: true,
+        ),
+      ]);
+    }
+
+    if (hasGenericCountdown) {
+      return const RoutineCardActionSet([
+        RoutineCardActionConfig(
+          label: '00:00:00',
+          type: RoutineCardActionType.countdown,
+        ),
+        RoutineCardActionConfig(
+          label: 'Done',
+          type: RoutineCardActionType.done,
+          isPrimary: true,
+        ),
+        RoutineCardActionConfig(
+          label: 'Stop',
+          type: RoutineCardActionType.stop,
+        ),
+      ]);
+    }
+
+    if (item.blockType == RoutineBlockType.moneyTask) {
+      return const RoutineCardActionSet([
+        RoutineCardActionConfig(
+          label: 'Save money',
+          type: RoutineCardActionType.saveMoney,
+          isPrimary: true,
+        ),
+        RoutineCardActionConfig(
+          label: 'Move',
+          type: RoutineCardActionType.move,
+        ),
+      ]);
+    }
+
+    if (item.blockType == RoutineBlockType.checkIn &&
+        item.category == RoutineCategory.badHabit) {
+      return const RoutineCardActionSet([
+        RoutineCardActionConfig(
+          label: 'Check in',
+          type: RoutineCardActionType.checkIn,
+          isPrimary: true,
+        ),
+        RoutineCardActionConfig(
+          label: 'Move',
+          type: RoutineCardActionType.move,
+        ),
+      ]);
+    }
+
+    if (item.blockType == RoutineBlockType.trackerTask) {
+      if (isTrackerActive) {
+        return const RoutineCardActionSet([
+          RoutineCardActionConfig(
+            label: 'Open Tracker',
+            type: RoutineCardActionType.openTracker,
+            isPrimary: true,
+          ),
+          RoutineCardActionConfig(
+            label: 'Done',
+            type: RoutineCardActionType.done,
+          ),
+        ]);
+      } else {
+        return const RoutineCardActionSet([
+          RoutineCardActionConfig(
+            label: 'Start Tracker',
+            type: RoutineCardActionType.startTracker,
+            isPrimary: true,
+          ),
+          RoutineCardActionConfig(
+            label: 'Move',
+            type: RoutineCardActionType.move,
+          ),
+        ]);
+      }
+    }
+
+    // Standard planned/active routine item
+    final isAlreadyActive = effectiveStatus == RoutineStatus.active;
+    return RoutineCardActionSet([
+      RoutineCardActionConfig(
+        label: isAlreadyActive ? 'Running' : 'Start',
+        type: RoutineCardActionType.start,
+        isPrimary: !isAlreadyActive,
+      ),
+      RoutineCardActionConfig(
+        label: 'Done',
+        type: RoutineCardActionType.done,
+        isPrimary: isAlreadyActive,
+      ),
+      const RoutineCardActionConfig(
+        label: 'Move',
+        type: RoutineCardActionType.move,
+      ),
+    ]);
+  }
+}

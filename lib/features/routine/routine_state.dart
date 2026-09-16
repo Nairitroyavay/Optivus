@@ -36,11 +36,23 @@ import 'package:optivus/features/routine/services/routine_day_availability.dart'
 import 'package:optivus/features/routine/services/routine_entry_filter.dart';
 import 'package:optivus/features/routine/models/routine_filter_definitions.dart';
 import 'package:optivus/features/routine/models/routine_filter_selection.dart';
+import 'package:optivus/features/routine/models/routine_action_context.dart';
 
 export 'package:optivus/features/routine/models/routine_filter_definitions.dart';
 export 'package:optivus/features/routine/models/routine_filter_selection.dart';
 
 enum RoutineWriteAction { create, update, delete, moveTemplate, batchCreate }
+
+@immutable
+class RoutineDiscardResult {
+  final bool wasSaved;
+  final bool discarded;
+
+  const RoutineDiscardResult({
+    required this.wasSaved,
+    required this.discarded,
+  });
+}
 
 enum RoutineOccurrenceAction {
   start,
@@ -1585,19 +1597,6 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       lastMutationOperationId: operationId,
     );
 
-    final existingIndex = state.items.indexWhere((e) => e.id == ownedItem.id);
-    final updatedItems = existingIndex >= 0
-        ? [
-            for (int i = 0; i < state.items.length; i++)
-              if (i == existingIndex) ownedItem else state.items[i],
-          ]
-        : [...state.items, ownedItem];
-
-    state = state.copyWith(
-      pendingItemIds: {...state.pendingItemIds, ownedItem.id},
-      items: updatedItems,
-    );
-
     final event = RoutineEventRecord(
       eventId: _stableEventId(
         operationId: operationId,
@@ -1611,6 +1610,35 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       source: 'app',
       occurredAt: DateTime.now().toUtc(),
       itemSnapshot: _boundedHistorySnapshot(ownedItem, uid),
+    );
+
+    return await _commitCreateWithRecovery(
+      uid: uid,
+      ownedItem: ownedItem,
+      operationId: operationId,
+      event: event,
+    );
+  }
+
+  Future<RoutineWriteResult> _commitCreateWithRecovery({
+    required String uid,
+    required RoutineItem ownedItem,
+    required String operationId,
+    required RoutineEventRecord event,
+    RoutineWriteIntent? existingIntent,
+  }) async {
+    final existingIndex = state.items.indexWhere((e) => e.id == ownedItem.id);
+    final updatedItems = existingIndex >= 0
+        ? [
+            for (int i = 0; i < state.items.length; i++)
+              if (i == existingIndex) ownedItem else state.items[i],
+          ]
+        : [...state.items, ownedItem];
+
+    state = state.copyWith(
+      pendingItemIds: {...state.pendingItemIds, ownedItem.id},
+      items: updatedItems,
+      error: null,
     );
 
     try {
@@ -1668,15 +1696,16 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         );
         return RoutineWriteResult.saved(operationId: operationId);
       } else {
-        final intent = RoutineWriteIntent(
-          action: RoutineWriteAction.create,
-          ownerUid: uid,
-          itemId: ownedItem.id,
-          operationId: operationId,
-          attemptedItem: ownedItem,
-          createdAt: DateTime.now().toUtc(),
-          event: event,
-        );
+        final intent = existingIntent ??
+            RoutineWriteIntent(
+              action: RoutineWriteAction.create,
+              ownerUid: uid,
+              itemId: ownedItem.id,
+              operationId: operationId,
+              attemptedItem: ownedItem,
+              createdAt: DateTime.now().toUtc(),
+              event: event,
+            );
         state = state.copyWith(
           pendingItemIds: state.pendingItemIds
               .where((id) => id != ownedItem.id)
@@ -1685,6 +1714,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             ...state.failedIntentsByItemId,
             ownedItem.id: intent,
           },
+          error: 'Failed to save routine item.',
         );
       }
       return RoutineWriteResult.retryRequired(
@@ -2027,47 +2057,28 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
 
     if (intent.action == RoutineWriteAction.create &&
         intent.attemptedItem != null) {
-      // Re-add to list if missing
-      if (!state.items.any((e) => e.id == itemId)) {
-        state = state.copyWith(items: [...state.items, intent.attemptedItem!]);
-      }
-      state = state.copyWith(pendingItemIds: {...state.pendingItemIds, itemId});
-      try {
-        await _transactionRepository.commitWrite(
-          uid: uid,
-          setItem: intent.attemptedItem!,
-          addEvent: intent.event,
-        );
-        final canonical = intent.attemptedItem!;
-        if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
-        state = state.copyWith(
-          pendingItemIds: state.pendingItemIds
-              .where((id) => id != itemId)
-              .toSet(),
-          failedIntentsByItemId: {...state.failedIntentsByItemId}
-            ..remove(itemId),
-          items: state.items
-              .map((e) => e.id == itemId ? canonical : e)
-              .toList(),
-        );
-        return RoutineWriteResult.saved(operationId: intent.operationId);
-      } catch (error) {
-        if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
-        state = state.copyWith(
-          pendingItemIds: state.pendingItemIds
-              .where((id) => id != itemId)
-              .toSet(),
-          failedIntentsByItemId: {
-            ...state.failedIntentsByItemId,
-            itemId: intent,
-          },
-          error: 'Failed to save routine item.',
-        );
-        return RoutineWriteResult.retryRequired(
-          operationId: intent.operationId,
-          message: 'Failed to save routine item.',
-        );
-      }
+      final event = intent.event ??
+          RoutineEventRecord(
+            eventId: _stableEventId(
+              operationId: intent.operationId,
+              itemId: intent.attemptedItem!.id,
+              eventType: RoutineEventType.created,
+            ),
+            ownerUid: uid,
+            routineItemId: intent.attemptedItem!.id,
+            eventType: RoutineEventType.created,
+            operationKey: intent.operationId,
+            source: 'app',
+            occurredAt: DateTime.now().toUtc(),
+            itemSnapshot: _boundedHistorySnapshot(intent.attemptedItem!, uid),
+          );
+      return await _commitCreateWithRecovery(
+        uid: uid,
+        ownedItem: intent.attemptedItem!,
+        operationId: intent.operationId,
+        event: event,
+        existingIntent: intent,
+      );
     } else if (intent.action == RoutineWriteAction.update &&
         intent.attemptedItem != null) {
       state = state.copyWith(
@@ -2162,13 +2173,46 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
   }
 
-  void discardFailedCreate(String itemId) {
+  Future<RoutineDiscardResult> discardFailedCreate(String itemId) async {
     final intent = state.failedIntentsByItemId[itemId];
-    if (intent == null || intent.action != RoutineWriteAction.create) return;
+    if (intent == null || intent.action != RoutineWriteAction.create) {
+      return const RoutineDiscardResult(wasSaved: false, discarded: false);
+    }
 
     final uid = _ownerUid;
-    if (uid == null || uid != intent.ownerUid) return;
+    if (uid == null || uid != intent.ownerUid) {
+      return const RoutineDiscardResult(wasSaved: false, discarded: false);
+    }
 
+    // Reconcile with authoritative repository before destructive discard
+    bool isCommittedRemotely = false;
+    RoutineItem? remoteItem;
+    try {
+      final items = await _repository.fetchRoutineItems(uid);
+      for (final i in items) {
+        if (i.id == itemId && i.createdByOperationId == intent.operationId) {
+          isCommittedRemotely = true;
+          remoteItem = i;
+          break;
+        }
+      }
+    } catch (_) {}
+
+    if (isCommittedRemotely && remoteItem != null) {
+      // The item committed remotely! Do NOT delete locally.
+      state = state.copyWith(
+        items: state.items
+            .map((e) => e.id == itemId ? remoteItem! : e)
+            .toList(),
+        failedIntentsByItemId: Map.fromEntries(
+          state.failedIntentsByItemId.entries.where((e) => e.key != itemId),
+        ),
+        error: null,
+      );
+      return const RoutineDiscardResult(wasSaved: true, discarded: false);
+    }
+
+    // Truly not committed remotely: safe to discard locally
     state = state.copyWith(
       items: state.items.where((e) => e.id != itemId).toList(),
       failedIntentsByItemId: Map.fromEntries(
@@ -2176,6 +2220,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       ),
       error: null,
     );
+    return const RoutineDiscardResult(wasSaved: false, discarded: true);
   }
 
   void dismissFailedOperation(String itemId) {
@@ -2710,6 +2755,51 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       if (!mounted) return _supersededWriteResult(operationId);
       if (_ownerUid != uid) return _supersededWriteResult(operationId);
 
+      bool isAmbiguitySuccess = false;
+      RoutineOccurrenceRecord? recoveredRecord;
+      try {
+        final history = await _historyRepository.fetchHistory(uid);
+        for (final occ in history) {
+          if (occ.id == id && occ.operationKey == operationId) {
+            isAmbiguitySuccess = true;
+            recoveredRecord = occ;
+            break;
+          }
+        }
+      } catch (_) {}
+
+      if (isAmbiguitySuccess && recoveredRecord != null) {
+        _logRoutineActionWrite(
+          action: action,
+          occurrenceSource: occurrenceSource,
+          actionSource: actionSource,
+          existing: existing != null,
+          result: 'success',
+        );
+        state = state.copyWith(
+          failedOccurrenceIntentsById: {...state.failedOccurrenceIntentsById}
+            ..remove(id),
+          occurrences: [
+            for (final candidate in state.occurrences)
+              if (candidate.id != id) candidate,
+            recoveredRecord,
+          ],
+        );
+        await _processNextQueuedOccurrence(uid, id);
+        if (!completer.isCompleted) {
+          completer.complete(
+            RoutineWriteResult.saved(
+              operationId: operationId,
+              resultingStatus: recoveredRecord.status,
+            ),
+          );
+        }
+        return RoutineWriteResult.saved(
+          operationId: operationId,
+          resultingStatus: recoveredRecord.status,
+        );
+      }
+
       final failureCat = classifyRoutineWriteFailure(error);
 
       _logRoutineActionWrite(
@@ -3108,6 +3198,46 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     } catch (error) {
       if (!mounted) return _supersededWriteResult(intent.operationId);
       if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
+
+      bool isAmbiguitySuccess = false;
+      RoutineOccurrenceRecord? recoveredRecord;
+      try {
+        final history = await _historyRepository.fetchHistory(uid);
+        for (final occ in history) {
+          if (occ.id == occurrenceId && occ.operationKey == intent.operationId) {
+            isAmbiguitySuccess = true;
+            recoveredRecord = occ;
+            break;
+          }
+        }
+      } catch (_) {}
+
+      if (isAmbiguitySuccess && recoveredRecord != null) {
+        _logRoutineActionWrite(
+          action: record.action,
+          occurrenceSource: record.source,
+          actionSource: retryIntent.event?.source ?? record.source,
+          existing: retryIntent.previousRecord != null,
+          result: 'success',
+        );
+        state = state.copyWith(
+          pendingOccurrenceIds: state.pendingOccurrenceIds
+              .where((e) => e != occurrenceId)
+              .toSet(),
+          failedOccurrenceIntentsById: {...state.failedOccurrenceIntentsById}
+            ..remove(occurrenceId),
+          occurrences: [
+            for (final candidate in state.occurrences)
+              if (candidate.id != occurrenceId) candidate,
+            recoveredRecord,
+          ],
+        );
+        return RoutineWriteResult.saved(
+          operationId: intent.operationId,
+          resultingStatus: recoveredRecord.status,
+        );
+      }
+
       _logRoutineActionWrite(
         action: record.action,
         occurrenceSource: record.source,
@@ -3204,9 +3334,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         );
       }
       if (item.blockType == RoutineBlockType.moneyTask) {
-        final fakeAllowed = _ref.read(fakeDataAllowedProvider);
-        if (!fakeAllowed &&
-            !hasConfirmedMoneySaveForRoutine(itemId, date: occurrenceDate)) {
+        if (!hasConfirmedMoneySaveForRoutine(itemId, date: occurrenceDate)) {
           return RoutineWriteResult.validationFailed(
             const RoutineValidationResult.invalid(
               errorType: RoutineValidationErrorType.missingData,
@@ -3221,7 +3349,15 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       }
       if (item.blockType == RoutineBlockType.checkIn &&
           item.category == RoutineCategory.badHabit) {
-        return await checkIn(itemId, 'Avoided', occurrenceDate: occurrenceDate);
+        return RoutineWriteResult.validationFailed(
+          const RoutineValidationResult.invalid(
+            errorType: RoutineValidationErrorType.missingData,
+            userSafeMessage:
+                'Check-in requires selecting a status (Avoided, Craving, or Relapsed).',
+          ),
+          message: 'Generic complete not allowed for bad-habit check-in.',
+          failureCategory: RoutineFailureCategory.validation,
+        );
       }
     }
     return await markCompleted(itemId, occurrenceDate: occurrenceDate);
@@ -3519,21 +3655,35 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   Future<RoutineWriteResult> completeTrackerSession(
     String routineTaskId, {
     DateTime? occurrenceDate,
+    bool allowUntracked = false,
   }) {
     return _completeTrackerSession(
       routineTaskId,
       occurrenceDate: occurrenceDate,
+      allowUntracked: allowUntracked,
+    );
+  }
+
+  Future<RoutineWriteResult> markDoneWithoutTracking(
+    String routineTaskId, {
+    DateTime? occurrenceDate,
+  }) {
+    return _completeTrackerSession(
+      routineTaskId,
+      occurrenceDate: occurrenceDate,
+      allowUntracked: true,
     );
   }
 
   Future<RoutineWriteResult> _completeTrackerSession(
     String routineTaskId, {
     DateTime? occurrenceDate,
+    bool allowUntracked = false,
   }) async {
     final links = _ref.read(trackerSessionLinksProvider);
-    final occurrenceDateKey = occurrenceDate == null
-        ? null
-        : routineLocalDateKey(occurrenceDate);
+    final anchor = occurrenceDate ??
+        _occurrenceAnchorDate(routineTaskId, state.selectedDay);
+    final occurrenceDateKey = routineLocalDateKey(anchor);
     TrackerSessionLink? link;
     for (final candidate in links) {
       if (candidate.routineTaskId == routineTaskId &&
@@ -3542,13 +3692,24 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         break;
       }
     }
+    if (!allowUntracked && (link == null || link.status != 'active')) {
+      return RoutineWriteResult.validationFailed(
+        const RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.missingData,
+          userSafeMessage:
+              'Tracker session has not been started. Start tracker first.',
+        ),
+        message: 'Cannot complete tracker task without active session.',
+        failureCategory: RoutineFailureCategory.validation,
+      );
+    }
     final now = DateTime.now();
     final result = await _writeOccurrence(
       routineTaskId,
       status: RoutineStatus.completed,
       actionSource: 'tracker',
       action: 'complete',
-      occurrenceDate: occurrenceDate,
+      occurrenceDate: anchor,
     );
     if (!result.closesUserFlow) return result;
     if (link != null) {
@@ -3668,8 +3829,6 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       );
     }
 
-    final anchor =
-        occurrenceDate ?? _occurrenceAnchorDate(itemId, state.selectedDay);
     final anchorKey = routineLocalDateKey(anchor);
     final targetKey = routineLocalDateKey(targetDate);
 
@@ -3739,29 +3898,36 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     DateTime? displayDate,
     int? startMinute,
     int? durationMinutes,
+    RoutineActionContext? actionContext,
   }) async {
-    int seedStart = startMinute ?? item.startMinute;
-    int seedDur = durationMinutes ?? item.durationMinutes;
-    if (startMinute == null && item.isContinuation) {
-      final template = state.items.where((i) => i.id == item.id).firstOrNull;
+    final effectiveOccDate = actionContext?.occurrenceDate ?? occurrenceDate;
+    final effectiveDispDate = actionContext?.displayDate ??
+        displayDate ??
+        effectiveOccDate ??
+        state.selectedDay;
+    final targetItem = actionContext?.item ?? item;
+    int seedStart = startMinute ?? targetItem.startMinute;
+    int seedDur = durationMinutes ?? targetItem.durationMinutes;
+    if (startMinute == null && targetItem.isContinuation) {
+      final template =
+          state.items.where((i) => i.id == targetItem.id).firstOrNull;
       if (template != null) {
         seedStart = template.startMinute;
         seedDur = template.durationMinutes;
       }
     }
     final tinyDuration = seedDur.clamp(5, 10);
-    final targetDate = displayDate ?? occurrenceDate ?? state.selectedDay;
 
     return await _executeCanonicalMove(
-      itemId: item.id,
-      targetDate: targetDate,
+      itemId: targetItem.id,
+      targetDate: effectiveDispDate,
       startMinute: seedStart,
       durationMinutes: tinyDuration,
-      occurrenceDate: occurrenceDate,
+      occurrenceDate: effectiveOccDate,
       action: 'makeTiny',
-      displayTitleOverride: item.title.startsWith('[Tiny]')
-          ? item.title
-          : '[Tiny] ${item.title}',
+      displayTitleOverride: targetItem.title.startsWith('[Tiny]')
+          ? targetItem.title
+          : '[Tiny] ${targetItem.title}',
     );
   }
 

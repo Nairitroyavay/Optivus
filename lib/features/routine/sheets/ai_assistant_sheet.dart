@@ -127,9 +127,20 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
           _ActionPill(
             label: 'Accept',
             color: OptivusColors.success,
-            onTap: () {
-              suggestion.accept();
-              Navigator.of(context).pop();
+            onTap: () async {
+              final scaffoldMessenger = ScaffoldMessenger.maybeOf(context);
+              if (suggestion.closesUserFlow) {
+                Navigator.of(context).pop();
+              }
+              final error = await suggestion.accept();
+              if (error != null && scaffoldMessenger != null) {
+                scaffoldMessenger.showSnackBar(
+                  SnackBar(
+                    content: Text(error),
+                    backgroundColor: OptivusColors.danger,
+                  ),
+                );
+              }
             },
           ),
           _ActionPill(
@@ -161,22 +172,28 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
       final actionContext = RoutineActionContext.fromDayEntry(entry);
       suggestions.add(
         _RoutineSuggestion(
-          id: 'tiny-${item.id}',
-          icon: Icons.compress_rounded,
+          id: 'reschedule-${item.id}',
+          icon: Icons.schedule_rounded,
           color: OptivusColors.warning,
-          title: 'Create tiny version',
+          title: 'Reschedule missed routine',
           body:
-              '${item.title} was missed. Suggestion: keep a 5-10 min version today instead of dropping the habit.',
-          accept: () => controller.makeTinyVersion(
-            item,
-            occurrenceDate: actionContext.occurrenceDate,
-          ),
+              '${item.title} was missed. Suggestion: reschedule it to an open slot later or another day.',
+          accept: () async {
+            showRoutineMoveSheet(
+              context,
+              ref,
+              item,
+              actionContext: actionContext,
+            );
+            return null;
+          },
           edit: () => showRoutineMoveSheet(
             context,
             ref,
             item,
             actionContext: actionContext,
           ),
+          closesUserFlow: false,
         ),
       );
     }
@@ -193,8 +210,8 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
           title: 'Fill free time',
           body:
               'AI found ${TimelineUtils.formatDuration(freeGap.duration)} free from ${TimelineUtils.formatMinute(freeGap.start)}. Suggestion: add a short focus or reading task.',
-          accept: () {
-            controller.addItem(
+          accept: () async {
+            final result = await controller.addItem(
               RoutineItem(
                 id: 'ai-fill-${DateTime.now().millisecondsSinceEpoch}',
                 title: 'Short focus block',
@@ -210,6 +227,12 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
                 notes: 'Accepted from local Routine Assistant.',
               ),
             );
+            if (!result.closesUserFlow) {
+              return result.validation?.userSafeMessage ??
+                  result.message ??
+                  'Could not add task.';
+            }
+            return null;
           },
           edit: () => showAddRoutineSheet(context, ref),
         ),
@@ -218,7 +241,14 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
 
     final longEntry = entries
         .where((entry) {
+          final isPlannedOrActive =
+              entry.item.status == RoutineStatus.planned ||
+              entry.item.status == RoutineStatus.active ||
+              (!entry.item.isCompleted &&
+                  !entry.item.isMissed &&
+                  entry.item.status != RoutineStatus.skipped);
           return entry.item.blockType == RoutineBlockType.flexibleTask &&
+              isPlannedOrActive &&
               entry.item.durationMinutes > 45;
         })
         .cast<RoutineDayEntry?>()
@@ -231,13 +261,22 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
           id: 'order-${longTask.id}',
           icon: Icons.swap_vert_rounded,
           color: OptivusColors.blockFlex,
-          title: 'Suggest better task order',
+          title: 'Make tiny version',
           body:
-              '${longTask.title} is long for a crowded day. Suggestion: split it by making a tiny version now and moving the full block later.',
-          accept: () => controller.makeTinyVersion(
-            longTask,
-            occurrenceDate: actionContext.occurrenceDate,
-          ),
+              '${longTask.title} is long for a crowded day (${longTask.durationMinutes} min). Suggestion: keep a 15-min tiny version and reschedule the remaining time.',
+          accept: () async {
+            final result = await controller.makeTinyVersion(
+              longTask,
+              occurrenceDate: actionContext.occurrenceDate,
+              actionContext: actionContext,
+            );
+            if (!result.closesUserFlow) {
+              return result.validation?.userSafeMessage ??
+                  result.message ??
+                  'Could not create tiny version.';
+            }
+            return null;
+          },
           edit: () => showRoutineMoveSheet(
             context,
             ref,
@@ -289,8 +328,9 @@ class _RoutineSuggestion {
   final Color color;
   final String title;
   final String body;
-  final VoidCallback accept;
+  final Future<String?> Function() accept;
   final VoidCallback edit;
+  final bool closesUserFlow;
 
   const _RoutineSuggestion({
     required this.id,
@@ -300,6 +340,7 @@ class _RoutineSuggestion {
     required this.body,
     required this.accept,
     required this.edit,
+    this.closesUserFlow = true,
   });
 }
 

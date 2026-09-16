@@ -511,10 +511,25 @@ class RoutineCardFactory {
           actionBorderTotal,
     );
 
+    final actionSet = RoutineCardActionSet.resolve(
+      item: item,
+      effectiveStatus: item.status,
+      isTrackerActive: item.status == RoutineStatus.inTracker,
+      hasGenericCountdown: item.status == RoutineStatus.active &&
+          item.blockType != RoutineBlockType.trackerTask &&
+          item.blockType != RoutineBlockType.checkIn &&
+          item.blockType != RoutineBlockType.moneyTask &&
+          item.startedAt != null &&
+          item.countdownDurationSeconds != null,
+      canUndo: false,
+    );
+
     final actionLayout = RoutineCardPresentation.resolveRoutineCardActionLayout(
       availableWidth: contentWidth,
       textScaler: scaler,
       textDirection: textDirection,
+      labels: actionSet.labels,
+      actionCount: actionSet.count,
     );
 
     final isTerminal =
@@ -525,6 +540,7 @@ class RoutineCardFactory {
 
     final actionFooter = actionFooterHeight(
       actionLayout,
+      actionCount: actionSet.count,
       isTerminal: isTerminal,
       singleButtonHeight: singleButtonHeight,
     );
@@ -541,15 +557,17 @@ class RoutineCardFactory {
 
   static double actionFooterHeight(
     RoutineCardActionLayout actionLayout, {
+    int actionCount = 3,
     bool isTerminal = false,
     double singleButtonHeight = RoutineCardPresentation.actionButtonMinHeight,
   }) {
-    return isTerminal
-        ? singleButtonHeight
-        : switch (actionLayout) {
-            RoutineCardActionLayout.horizontal => singleButtonHeight,
-            RoutineCardActionLayout.stacked =>
-              (singleButtonHeight * 2) + RoutineCardPresentation.actionGap,
-          };
+    if (actionCount <= 1 || isTerminal) {
+      return singleButtonHeight;
+    }
+    return switch (actionLayout) {
+      RoutineCardActionLayout.horizontal => singleButtonHeight,
+      RoutineCardActionLayout.stacked =>
+        (singleButtonHeight * 2) + RoutineCardPresentation.actionGap,
+    };
   }
 }

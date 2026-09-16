@@ -319,7 +319,7 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
       children: [
         GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: () => setState(() => _typeSelected = false),
+          onTap: _saveFailed ? null : () => setState(() => _typeSelected = false),
           child: const Padding(
             padding: EdgeInsets.symmetric(vertical: 4),
             child: Row(
@@ -343,89 +343,133 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
             ),
           ),
         ),
-        const SizedBox(height: 14),
-        _textField(
-          controller: _titleController,
-          label: 'Title',
-          hint: _hintForType(type),
-          onChanged: (val) => _draft = _draft.copyWith(title: val),
-        ),
-        const SizedBox(height: 12),
-        _buildScheduleModeSelector(),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            if (_draft.scheduleMode == AddRoutineScheduleMode.once) ...[
-              Expanded(child: _dateTile()),
-              const SizedBox(width: 10),
+        AbsorbPointer(
+          absorbing: _saveFailed,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 14),
+              _textField(
+                controller: _titleController,
+                label: 'Title',
+                hint: _hintForType(type),
+                onChanged: (val) => _draft = _draft.copyWith(title: val),
+              ),
+              const SizedBox(height: 12),
+              _buildScheduleModeSelector(),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  if (_draft.scheduleMode == AddRoutineScheduleMode.once) ...[
+                    Expanded(child: _dateTile()),
+                    const SizedBox(width: 10),
+                  ],
+                  Expanded(child: _timeTile()),
+                ],
+              ),
+              if (_draft.scheduleMode == AddRoutineScheduleMode.weekly) ...[
+                const SizedBox(height: 12),
+                _repeatSelector(),
+              ],
+              const SizedBox(height: 10),
+              _durationTile(),
+              const SizedBox(height: 12),
+              if (type == AddRoutineType.fixed) _fixedBlockFields(),
+              if (type == AddRoutineType.tracker) _trackerFields(),
+              if (type == AddRoutineType.checkin) _checkInFields(),
+              if (type == AddRoutineType.money) _moneyFields(),
+              if (type == AddRoutineType.habit) _habitFields(),
+              if (type == AddRoutineType.flexible) _flexibleFields(),
+              const SizedBox(height: 12),
+              _textField(
+                controller: _notesController,
+                label: 'Notes',
+                hint: 'Optional notes',
+                maxLines: 3,
+                onChanged: (val) => _draft = _draft.copyWith(notes: val),
+              ),
+              if (type == AddRoutineType.flexible ||
+                  type == AddRoutineType.tracker ||
+                  type == AddRoutineType.habit) ...[
+                const SizedBox(height: 12),
+                _textField(
+                  controller: _subtasksController,
+                  label: 'Subtasks',
+                  hint: 'One subtask per line',
+                  maxLines: 4,
+                  onChanged: (val) {
+                    final lines = _lines(val);
+                    if (type == AddRoutineType.flexible) {
+                      _draft = _draft.copyWith(
+                        flexibleState:
+                            _draft.flexibleState.copyWith(subtasks: lines),
+                      );
+                    } else if (type == AddRoutineType.habit) {
+                      _draft = _draft.copyWith(
+                        habitState: _draft.habitState.copyWith(subtasks: lines),
+                      );
+                    } else if (type == AddRoutineType.tracker) {
+                      _draft = _draft.copyWith(
+                        trackerState:
+                            _draft.trackerState.copyWith(subtasks: lines),
+                      );
+                    }
+                  },
+                ),
+              ],
+              if (type == AddRoutineType.habit) ...[
+                const SizedBox(height: 12),
+                _textField(
+                  controller: _stepsController,
+                  label: 'Steps',
+                  hint: 'One step per line',
+                  maxLines: 4,
+                  onChanged: (val) {
+                    final lines = _lines(val);
+                    _draft = _draft.copyWith(
+                      habitState: _draft.habitState.copyWith(steps: lines),
+                    );
+                  },
+                ),
+              ],
             ],
-            Expanded(child: _timeTile()),
-          ],
-        ),
-        if (_draft.scheduleMode == AddRoutineScheduleMode.weekly) ...[
-          const SizedBox(height: 12),
-          _repeatSelector(),
-        ],
-        const SizedBox(height: 10),
-        _durationTile(),
-        const SizedBox(height: 12),
-        if (type == AddRoutineType.fixed) _fixedBlockFields(),
-        if (type == AddRoutineType.tracker) _trackerFields(),
-        if (type == AddRoutineType.checkin) _checkInFields(),
-        if (type == AddRoutineType.money) _moneyFields(),
-        if (type == AddRoutineType.habit) _habitFields(),
-        if (type == AddRoutineType.flexible) _flexibleFields(),
-        const SizedBox(height: 12),
-        _textField(
-          controller: _notesController,
-          label: 'Notes',
-          hint: 'Optional notes',
-          maxLines: 3,
-          onChanged: (val) => _draft = _draft.copyWith(notes: val),
-        ),
-        if (type == AddRoutineType.flexible ||
-            type == AddRoutineType.tracker ||
-            type == AddRoutineType.habit) ...[
-          const SizedBox(height: 12),
-          _textField(
-            controller: _subtasksController,
-            label: 'Subtasks',
-            hint: 'One subtask per line',
-            maxLines: 4,
-            onChanged: (val) {
-              final lines = _lines(val);
-              if (type == AddRoutineType.flexible) {
-                _draft = _draft.copyWith(
-                  flexibleState: _draft.flexibleState.copyWith(subtasks: lines),
-                );
-              } else if (type == AddRoutineType.habit) {
-                _draft = _draft.copyWith(
-                  habitState: _draft.habitState.copyWith(subtasks: lines),
-                );
-              } else if (type == AddRoutineType.tracker) {
-                _draft = _draft.copyWith(
-                  trackerState: _draft.trackerState.copyWith(subtasks: lines),
-                );
-              }
-            },
           ),
-        ],
-        if (type == AddRoutineType.habit) ...[
-          const SizedBox(height: 12),
-          _textField(
-            controller: _stepsController,
-            label: 'Steps',
-            hint: 'One step per line',
-            maxLines: 4,
-            onChanged: (val) {
-              final lines = _lines(val);
-              _draft = _draft.copyWith(
-                habitState: _draft.habitState.copyWith(steps: lines),
-              );
-            },
+        ),
+        if (_saveFailed) ...[
+          const SizedBox(height: 10),
+          Container(
+            key: const ValueKey('add-routine-failed-warning'),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: OptivusColors.danger.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: OptivusColors.danger.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  color: OptivusColors.danger,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _error ??
+                        'Save failed. Form fields are read-only to prevent saving stale data. Retry or discard to continue.',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: OptivusColors.danger,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ],
-        if (_error != null) ...[
+        ] else if (_error != null) ...[
           const SizedBox(height: 10),
           Text(
             _error!,
@@ -1344,16 +1388,21 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
     required String hint,
     int maxLines = 1,
     ValueChanged<String>? onChanged,
+    bool readOnly = false,
   }) {
+    final isReadOnly = readOnly || _saveFailed;
     return TextField(
       controller: controller,
+      readOnly: isReadOnly,
       maxLines: maxLines,
-      onChanged: onChanged,
+      onChanged: isReadOnly ? null : onChanged,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
         filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.6),
+        fillColor: isReadOnly
+            ? Colors.black.withValues(alpha: 0.04)
+            : Colors.white.withValues(alpha: 0.6),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -1395,6 +1444,15 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
 
   void _findFreeSlot() {
     if (_saving) return;
+    final isSleep =
+        _draft.type == AddRoutineType.fixed && _draft.fixedState.kind == 'Sleep';
+    if (isSleep) {
+      setState(
+        () => _error =
+            'Sleep blocks are typically scheduled during overnight rest hours outside the daytime planning window. Please choose your sleep hours manually.',
+      );
+      return;
+    }
     final itemCandidate = AddRoutineMapper.toRoutineItem(_draft);
     final slot = _draft.scheduleMode == AddRoutineScheduleMode.weekly &&
             _draft.repeatDays.isNotEmpty
@@ -1426,9 +1484,15 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
     });
   }
 
-  void _discardFailedCreate() {
-    ref.read(routineNotifierProvider.notifier).discardFailedCreate(_draft.id);
+  Future<void> _discardFailedCreate() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    await ref
+        .read(routineNotifierProvider.notifier)
+        .discardFailedCreate(_draft.id);
+    if (!mounted) return;
     setState(() {
+      _saving = false;
       _saveFailed = false;
       _error = null;
     });
@@ -1458,7 +1522,23 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
   }
 
   Future<void> _save() async {
+    // ignore: avoid_print
+    print('DEBUG: _save called! _saving=$_saving');
     if (_saving) return;
+
+    if (_draft.type == AddRoutineType.fixed &&
+        _draft.fixedState.kind == 'Eating') {
+      final calStr = _caloriesController.text.trim();
+      if (calStr.isNotEmpty && double.tryParse(calStr) == null) {
+        setState(() => _error = 'Estimated calories must be a valid number.');
+        return;
+      }
+      final protStr = _proteinController.text.trim();
+      if (protStr.isNotEmpty && double.tryParse(protStr) == null) {
+        setState(() => _error = 'Estimated protein must be a valid number.');
+        return;
+      }
+    }
 
     // Ensure title controller text is current
     final currentDraft = _draft.copyWith(
@@ -1467,16 +1547,22 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
     );
 
     final validationError = AddRoutineValidator.validate(currentDraft);
+    // ignore: avoid_print
+    print('DEBUG _save: validationError=$validationError');
     if (validationError != null) {
       setState(() => _error = validationError);
       return;
     }
 
     if (_saveFailed) {
-      ref.read(routineNotifierProvider.notifier).discardFailedCreate(_draft.id);
+      await ref
+          .read(routineNotifierProvider.notifier)
+          .discardFailedCreate(_draft.id);
     }
 
     final item = AddRoutineMapper.toRoutineItem(currentDraft);
+    // ignore: avoid_print
+    print('DEBUG _save: mapped item title=${item.title}, date=${item.date}, repeatRule=${item.repeatRule}');
     setState(() {
       _saving = true;
       _error = null;
@@ -1485,6 +1571,8 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
     final RoutineWriteResult result = await ref
         .read(routineNotifierProvider.notifier)
         .addItem(item);
+    // ignore: avoid_print
+    print('DEBUG _save: addItem result outcome=${result.outcome}, message=${result.message}, validation=${result.validation?.userSafeMessage}');
 
     if (!mounted) return;
     if (result.outcome == RoutineWriteOutcome.saved ||

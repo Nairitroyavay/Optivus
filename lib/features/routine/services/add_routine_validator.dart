@@ -53,6 +53,28 @@ class AddRoutineValidator {
       }
     }
 
+    if (draft.type == AddRoutineType.fixed &&
+        draft.fixedState.kind == 'Eating') {
+      final calories = draft.fixedState.caloriesEstimate;
+      if (calories != null) {
+        if (calories.isNaN ||
+            calories.isInfinite ||
+            calories < 0 ||
+            calories > 20000) {
+          return 'Calories must be between 0 and 20,000.';
+        }
+      }
+      final protein = draft.fixedState.proteinEstimate;
+      if (protein != null) {
+        if (protein.isNaN ||
+            protein.isInfinite ||
+            protein < 0 ||
+            protein > 1000) {
+          return 'Protein must be between 0 and 1,000g.';
+        }
+      }
+    }
+
     return null;
   }
 }

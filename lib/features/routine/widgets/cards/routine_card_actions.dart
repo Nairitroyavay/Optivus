@@ -112,13 +112,6 @@ class RoutineCardActions extends ConsumerWidget {
         final textDirection = Directionality.of(context);
         final availableWidth = constraints.maxWidth;
 
-        final actionLayout =
-            RoutineCardPresentation.resolveRoutineCardActionLayout(
-              availableWidth: availableWidth,
-              textScaler: textScaler,
-              textDirection: textDirection,
-            );
-
         final existingRecord = hasScope && occurrenceDateKey != null
             ? ref.watch(
                 routineNotifierProvider.select((state) {
@@ -143,6 +136,45 @@ class RoutineCardActions extends ConsumerWidget {
         final startDecision = availability.startDecision;
         final completeDecision = availability.completeDecision;
         final moveDecision = availability.moveDecision;
+
+        final hasGenericCountdown =
+            !isCompleted &&
+            effectiveStatus == RoutineStatus.active &&
+            item.blockType != RoutineBlockType.trackerTask &&
+            item.blockType != RoutineBlockType.checkIn &&
+            item.blockType != RoutineBlockType.moneyTask &&
+            item.startedAt != null &&
+            item.countdownDurationSeconds != null;
+        final isActiveTrackerOccurrence =
+            actionState?.activeTrackerId == item.id &&
+            actionState?.activeTrackerOccurrenceDateKey == occurrenceDateKey;
+        final isTrackerActive =
+            item.blockType == RoutineBlockType.trackerTask &&
+            (effectiveStatus == RoutineStatus.inTracker ||
+                isActiveTrackerOccurrence);
+
+        final isMoney = item.blockType == RoutineBlockType.moneyTask;
+        final isBadHabit = item.blockType == RoutineBlockType.checkIn &&
+            item.category == RoutineCategory.badHabit;
+        final isTrackerPlanned =
+            item.blockType == RoutineBlockType.trackerTask && !isTrackerActive;
+
+        final actionSet = RoutineCardActionSet.resolve(
+          item: item,
+          effectiveStatus: effectiveStatus,
+          isTrackerActive: isTrackerActive,
+          hasGenericCountdown: hasGenericCountdown,
+          canUndo: availability.canUndo,
+        );
+
+        final actionLayout =
+            RoutineCardPresentation.resolveRoutineCardActionLayout(
+              availableWidth: availableWidth,
+              textScaler: textScaler,
+              textDirection: textDirection,
+              labels: actionSet.labels,
+              actionCount: actionSet.count,
+            );
 
         // Contextual terminal states (Part L): show clear state and optional Undo,
         // without wasting card space on dead Start and dead Move controls.
@@ -181,6 +213,17 @@ class RoutineCardActions extends ConsumerWidget {
                 );
               },
             );
+            if (actionLayout == RoutineCardActionLayout.stacked) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  completedBadge,
+                  const SizedBox(height: RoutineCardPresentation.actionGap),
+                  undoAction,
+                ],
+              );
+            }
             return Row(
               children: [
                 Expanded(flex: 3, child: completedBadge),
@@ -232,6 +275,17 @@ class RoutineCardActions extends ConsumerWidget {
                 );
               },
             );
+            if (actionLayout == RoutineCardActionLayout.stacked) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  skippedBadge,
+                  const SizedBox(height: RoutineCardPresentation.actionGap),
+                  undoAction,
+                ],
+              );
+            }
             return Row(
               children: [
                 Expanded(flex: 3, child: skippedBadge),
@@ -283,6 +337,17 @@ class RoutineCardActions extends ConsumerWidget {
                 );
               },
             );
+            if (actionLayout == RoutineCardActionLayout.stacked) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  missedBadge,
+                  const SizedBox(height: RoutineCardPresentation.actionGap),
+                  undoAction,
+                ],
+              );
+            }
             return Row(
               children: [
                 Expanded(flex: 3, child: missedBadge),
@@ -299,33 +364,15 @@ class RoutineCardActions extends ConsumerWidget {
           );
         }
 
-        final hasGenericCountdown =
-            !isCompleted &&
-            effectiveStatus == RoutineStatus.active &&
-            item.blockType != RoutineBlockType.trackerTask &&
-            item.blockType != RoutineBlockType.checkIn &&
-            item.blockType != RoutineBlockType.moneyTask &&
-            item.startedAt != null &&
-            item.countdownDurationSeconds != null;
-        final isActiveTrackerOccurrence =
-            actionState?.activeTrackerId == item.id &&
-            actionState?.activeTrackerOccurrenceDateKey == occurrenceDateKey;
-        final isTrackerActive =
-            item.blockType == RoutineBlockType.trackerTask &&
-            (effectiveStatus == RoutineStatus.inTracker ||
-                isActiveTrackerOccurrence);
-
-        final isMoney = item.blockType == RoutineBlockType.moneyTask;
-        final isBadHabit = item.blockType == RoutineBlockType.checkIn &&
-            item.category == RoutineCategory.badHabit;
-
         final String? startLabel = hasGenericCountdown
             ? null
             : (isMoney
                 ? 'Save money'
                 : (isBadHabit
                     ? 'Check in'
-                    : (isTrackerActive ? 'Open Tracker' : 'Start')));
+                    : (isTrackerActive
+                        ? 'Open Tracker'
+                        : (isTrackerPlanned ? 'Start Tracker' : 'Start'))));
 
         final IconData startIcon = isMoney
             ? Icons.savings_outlined
@@ -587,6 +634,29 @@ class RoutineCardActions extends ConsumerWidget {
               Expanded(flex: 3, child: startAction),
               const SizedBox(width: RoutineCardPresentation.actionGap),
               Expanded(flex: 2, child: doneAction),
+            ],
+          );
+        }
+
+        // 2-Action Cards: Money ('Save money' + 'Move'), Bad Habit ('Check in' + 'Move'), Planned Tracker ('Start Tracker' + 'Move').
+        // Done is NEVER shown.
+        if (isMoney || isBadHabit || isTrackerPlanned) {
+          if (actionLayout == RoutineCardActionLayout.stacked) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                startAction,
+                const SizedBox(height: RoutineCardPresentation.actionGap),
+                moveAction,
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(flex: 3, child: startAction),
+              const SizedBox(width: RoutineCardPresentation.actionGap),
+              Expanded(flex: 2, child: moveAction),
             ],
           );
         }
