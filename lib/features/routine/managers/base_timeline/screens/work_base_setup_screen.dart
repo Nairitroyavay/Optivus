@@ -12,6 +12,7 @@ import 'package:optivus/features/routine/managers/base_timeline/models/base_time
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/work_current_setup_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/work_review_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/work_source_selection_view.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/work_presentation_utils.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_setup_controller.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_setup_error_mapper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_timeline_adapter.dart';
@@ -137,6 +138,12 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
 
   Future<void> _addNewBlock(int selectedDay) async {
     final controller = ref.read(workSetupControllerProvider.notifier);
+    final profile = ref.read(userProfileProvider);
+    final lifeRole = profile.lifeRole;
+    final defaultContext = WorkPresentationUtils.defaultContextForProfile(lifeRole);
+    final defaultMode = WorkPresentationUtils.defaultModeForProfile(profile.workingExtra);
+    final defaultKind = WorkPresentationUtils.defaultBlockKindForProfile(profile.workingExtra);
+
     final newBlock = TimelineBlockDraft(
       id: 'work_${DateTime.now().millisecondsSinceEpoch}',
       section: 'work',
@@ -145,6 +152,9 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
       endMinute: 17 * 60,
       repeatDays: [selectedDay],
       blockType: TimelineBlockDraft.hardBlockKey,
+      workContextType: defaultContext,
+      workMode: defaultMode,
+      workBlockKind: defaultKind,
     );
 
     controller.startEditingBlock();
@@ -152,6 +162,7 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
       context: context,
       block: newBlock,
       accent: OptivusColors.warning,
+      lifeRole: lifeRole,
       onSave: (updated) async {
         controller.addBlock(updated);
         return true;
@@ -164,11 +175,13 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
 
   Future<void> _editBlock(TimelineBlockDraft block) async {
     final controller = ref.read(workSetupControllerProvider.notifier);
+    final profile = ref.read(userProfileProvider);
     controller.startEditingBlock();
     await BaseTimelineWorkAdapter.showEditSheet(
       context: context,
       block: block,
       accent: OptivusColors.warning,
+      lifeRole: profile.lifeRole,
       onSave: (updated) async {
         controller.updateBlock(updated);
         return true;
@@ -185,6 +198,8 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
 
   void _showScanAgainSheet(String uid) {
     final controller = ref.read(workSetupControllerProvider.notifier);
+    final lifeRole = ref.read(userProfileProvider).lifeRole;
+    final sheetTitle = WorkPresentationUtils.scanSheetTitle(lifeRole);
     showModalBottomSheet(
       context: context,
       backgroundColor: OptivusColors.backgroundBottom,
@@ -197,9 +212,9 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'Scan Work Schedule Photo',
-                style: TextStyle(
+              Text(
+                sheetTitle,
+                style: const TextStyle(
                   color: OptivusColors.textPrimary,
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
@@ -251,21 +266,28 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
     BaseTimelineSetup setup,
     String uid,
   ) async {
+    final lifeRole = ref.read(userProfileProvider).lifeRole;
+    final isBusiness = WorkPresentationUtils.isBusinessProfile(lifeRole);
+    final dialogTitle = isBusiness ? 'Remove Business Setup?' : 'Remove Work Setup?';
+    final dialogContent = isBusiness
+        ? 'This will remove all business blocks from your Base Timeline. This action cannot be undone.'
+        : 'This will remove all work and business blocks from your Base Timeline. This action cannot be undone.';
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: OptivusColors.backgroundBottom,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Remove Work Setup?',
-          style: TextStyle(
+        title: Text(
+          dialogTitle,
+          style: const TextStyle(
             color: OptivusColors.textPrimary,
             fontWeight: FontWeight.w700,
           ),
         ),
-        content: const Text(
-          'This will remove all work and business blocks from your Base Timeline. This action cannot be undone.',
-          style: TextStyle(color: OptivusColors.textSecondary),
+        content: Text(
+          dialogContent,
+          style: const TextStyle(color: OptivusColors.textSecondary),
         ),
         actions: [
           TextButton(
@@ -291,13 +313,14 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
 
     if (mounted) {
       if (outcome.isSuccessful) {
+        final successMsg = outcome.status == WorkRemoveOutcomeStatus.refreshPending
+            ? (isBusiness
+                  ? 'Business setup removed. Routine update is pending.'
+                  : 'Work setup removed. Routine update is pending.')
+            : (isBusiness ? 'Business setup removed.' : 'Work setup removed.');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              outcome.status == WorkRemoveOutcomeStatus.refreshPending
-                  ? 'Work setup removed. Routine update is pending.'
-                  : 'Work setup removed.',
-            ),
+            content: Text(successMsg),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -409,6 +432,9 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
     String uid,
   ) {
     final controller = ref.read(workSetupControllerProvider.notifier);
+    final profile = ref.watch(userProfileProvider);
+    final lifeRole = profile.lifeRole;
+    final isBusiness = WorkPresentationUtils.isBusinessProfile(lifeRole);
 
     switch (state.stage) {
       case WorkSetupStage.uploading:
@@ -417,7 +443,9 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
             children: [
               _buildTopCancelBar(
                 onCancel: () => _handleWorkBack(setup, state, uid),
-                title: 'Updating work schedule',
+                title: isBusiness
+                    ? 'Updating business hours'
+                    : 'Updating work schedule',
               ),
               Expanded(
                 child: BaseTimelineUploadView(
@@ -434,18 +462,12 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
             children: [
               _buildTopCancelBar(
                 onCancel: () => _handleWorkBack(setup, state, uid),
-                title: 'Reading work schedule',
+                title: WorkPresentationUtils.extractionTitle(lifeRole),
               ),
               Expanded(
                 child: BaseTimelineAiThinkingView(
-                  initialMessage: 'Reading your work schedule',
-                  progressMessages: const [
-                    'Finding work shifts',
-                    'Reading locations and roles',
-                    'Matching weekdays',
-                    'Checking exact hours',
-                    'Building your new work schedule',
-                  ],
+                  initialMessage: WorkPresentationUtils.extractionInitialMessage(lifeRole),
+                  progressMessages: WorkPresentationUtils.extractionProgressMessages(lifeRole),
                   localPreviewPath: state.workingLocalPreviewPath,
                   assetId: state.candidateAssetId,
                   r2Key: state.candidateR2Key,
@@ -472,7 +494,7 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
           onManualSetup: () => controller.startManualSetup(setup),
           onEditCurrent: () => controller.editCurrentWorkSchedule(setup),
           onRemoveSetup: () => _handleRemoveWorkSetup(setup, uid),
-          lifeRole: ref.watch(userProfileProvider).lifeRole,
+          lifeRole: lifeRole,
         );
 
       case WorkSetupStage.error:
@@ -512,6 +534,7 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
           onReloadLatestSetup: setup == null
               ? null
               : () => controller.reloadFromCanonical(setup),
+          lifeRole: lifeRole,
         );
 
       case WorkSetupStage.currentSetup:

@@ -12,6 +12,7 @@ import 'package:optivus/features/routine/widgets/cards/check_in_card.dart';
 import 'package:optivus/features/routine/widgets/cards/money_task_card.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_presentation.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_visual_identity.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/work_presentation_utils.dart';
 
 /// Factory that builds the correct card widget based on RoutineBlockType.
 class RoutineCardFactory {
@@ -190,6 +191,8 @@ class RoutineCardFactory {
   /// Work details string (role, organization, department/project, mode, block kind).
   static String? workDetailsString(RoutineItem item) {
     final role = item.workRole?.trim();
+    final mode = WorkPresentationUtils.formatMode(item.workMode);
+    final kind = WorkPresentationUtils.formatBlockKind(item.workBlockKind);
     final parts = [
       if (role != null &&
           role.isNotEmpty &&
@@ -201,10 +204,8 @@ class RoutineCardFactory {
       if (item.effectiveWorkDepartmentOrProject != null &&
           item.effectiveWorkDepartmentOrProject!.trim().isNotEmpty)
         item.effectiveWorkDepartmentOrProject!.trim(),
-      if (item.workMode != null && item.workMode!.trim().isNotEmpty)
-        item.workMode!.trim(),
-      if (item.workBlockKind != null && item.workBlockKind!.trim().isNotEmpty)
-        item.workBlockKind!.trim(),
+      if (mode.isNotEmpty) mode,
+      if (kind.isNotEmpty) kind,
     ].join(' • ');
     return parts.isEmpty ? null : parts;
   }

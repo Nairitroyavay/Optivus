@@ -1,17 +1,20 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_motion.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/work_presentation_utils.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 
 /// Responsive card renderer for Work / Business schedule items on the timeline.
 ///
 /// Follows the visual hierarchy of the modern Base Timeline card family:
-/// - Rich / normal (height >= 96): Role/title, time, workplace/location,
-///   business/section badge or label, and notes/details.
-/// - Medium (68 <= height < 96): Role/title, time, workplace, business/notes.
-/// - Compact / narrow: Role/title, time and workplace.
+/// - Rich / normal (height >= 96): Role/title, organization, context/mode/kind badges,
+///   time, workplace/location, department badge, and notes/details.
+/// - Medium (68 <= height < 96): Title, role or organization, time, location/project.
+/// - Compact / narrow: Title, time and primary secondary detail (role, org, or location).
 /// - Tiny: Single-line summary.
 ///
 /// Overlapping back card: compact exposed banner (icon, title, time).
@@ -41,10 +44,12 @@ class WorkTimelineCard extends StatelessWidget {
     bool isEditable = true,
   }) {
     final title = block.title.trim();
+    final role = block.workRole?.trim() ?? '';
     final organization = block.workOrganization?.trim() ?? '';
     final dept = block.effectiveWorkDepartmentOrProject?.trim() ?? '';
     final location = block.location?.trim() ?? '';
     final notes = block.notes?.trim() ?? '';
+    final contextType = block.workContextType?.trim() ?? '';
     final mode = block.workMode?.trim() ?? '';
     final kind = block.workBlockKind?.trim() ?? '';
 
@@ -76,27 +81,32 @@ class WorkTimelineCard extends StatelessWidget {
       maxWidth: titleWidth,
       textScale: textScale,
     );
-    totalHeight += titleHeight > 21.0 ? titleHeight : 21.0;
 
-    // Organization
-    if (organization.isNotEmpty) {
-      totalHeight += 3.0;
-      final orgHeight = _measureTextHeight(
-        text: organization,
+    final roleOrgLine = WorkPresentationUtils.formatRoleOrgLine(
+      role: role,
+      org: organization,
+      title: title,
+    );
+
+    if (roleOrgLine.isNotEmpty) {
+      final roleOrgHeight = _measureTextHeight(
+        text: roleOrgLine,
         style: const TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          height: 1.25,
+          height: 1.2,
         ),
-        maxWidth: innerWidth,
+        maxWidth: titleWidth,
         textScale: textScale,
       );
-      totalHeight += orgHeight;
+      totalHeight += math.max(20.0, titleHeight + 1.0 + roleOrgHeight);
+    } else {
+      totalHeight += math.max(20.0, titleHeight);
     }
 
-    // Department / Section badge
+    // 2. Department / Section badge
     if (dept.isNotEmpty) {
-      totalHeight += 4.0;
+      totalHeight += 3.0;
       final badgeInnerWidth = (innerWidth - 12.0).clamp(30.0, double.infinity);
       final badgeTextHeight = _measureTextHeight(
         text: dept,
@@ -112,13 +122,71 @@ class WorkTimelineCard extends StatelessWidget {
       totalHeight += badgeTextHeight + 5.0; // 1.5 top + 1.5 bottom + 2 border
     }
 
-    // Mode / Kind badges row
-    if (mode.isNotEmpty || kind.isNotEmpty) {
-      totalHeight += 4.0;
-      totalHeight += 18.0 * textScale;
+    // 3. Badges row (Context, Kind, Mode)
+    final contextLabel = WorkPresentationUtils.shouldShowContext(
+      title: title,
+      context: contextType,
+    )
+        ? WorkPresentationUtils.formatContext(contextType)
+        : '';
+    final kindLabel = WorkPresentationUtils.shouldShowKind(
+      title: title,
+      kind: kind,
+    )
+        ? WorkPresentationUtils.formatBlockKind(kind)
+        : '';
+    final modeLabel = WorkPresentationUtils.formatMode(mode);
+
+    final badgeLabels = [
+      if (contextLabel.isNotEmpty) contextLabel,
+      if (kindLabel.isNotEmpty) kindLabel,
+      if (modeLabel.isNotEmpty) modeLabel,
+    ];
+
+    if (badgeLabels.isNotEmpty) {
+      totalHeight += 3.0;
+      double currentLineWidth = 0;
+      int badgeLines = 1;
+      const badgeStyle = TextStyle(
+        fontSize: 9,
+        fontWeight: FontWeight.w700,
+        height: 1.2,
+        letterSpacing: 0.2,
+      );
+
+      for (var i = 0; i < badgeLabels.length; i++) {
+        final label = badgeLabels[i];
+        final badgeWidth =
+            _measureTextWidth(
+              text: label,
+              style: badgeStyle,
+              textScale: textScale,
+            ) +
+            12.0; // 5 horizontal padding * 2 + 2 border
+        if (i == 0) {
+          currentLineWidth = badgeWidth;
+        } else {
+          if (currentLineWidth + 4.0 + badgeWidth <= innerWidth) {
+            currentLineWidth += 4.0 + badgeWidth;
+          } else {
+            badgeLines++;
+            currentLineWidth = badgeWidth;
+          }
+        }
+      }
+
+      final singleBadgeHeight =
+          _measureTextHeight(
+            text: 'Badge',
+            style: badgeStyle,
+            maxWidth: innerWidth,
+            textScale: textScale,
+          ) +
+          5.0; // 1.5 vertical padding * 2 + 2 border
+      totalHeight += badgeLines * singleBadgeHeight + (badgeLines - 1) * 3.0;
     }
 
-    // Time label
+    // 4. Time label
     totalHeight += 3.0;
     final timeHeight = _measureTextHeight(
       text: TimelineUtils.formatTimeRange(block.startMinute, block.endMinute),
@@ -132,7 +200,7 @@ class WorkTimelineCard extends StatelessWidget {
     );
     totalHeight += timeHeight;
 
-    // Location
+    // 5. Location
     if (location.isNotEmpty) {
       totalHeight += 3.0;
       final locWidth = (innerWidth - 13.0).clamp(30.0, double.infinity);
@@ -149,7 +217,7 @@ class WorkTimelineCard extends StatelessWidget {
       totalHeight += locHeight > 12.5 ? locHeight : 12.5;
     }
 
-    // Notes
+    // 6. Notes
     if (notes.isNotEmpty) {
       totalHeight += 3.0;
       final notesWidth = (innerWidth - 14.0).clamp(30.0, double.infinity);
@@ -166,7 +234,7 @@ class WorkTimelineCard extends StatelessWidget {
       totalHeight += notesHeight > 12.5 ? notesHeight : 12.5;
     }
 
-    // Bottom safety buffer scaled with text scaling
+    // 7. Bottom safety buffer scaled with text scaling
     totalHeight += (14.0 * textScale).clamp(14.0, 32.0);
 
     return totalHeight < 96.0 ? 96.0 : totalHeight.ceilToDouble();
@@ -186,6 +254,21 @@ class WorkTimelineCard extends StatelessWidget {
     final h = painter.size.height;
     painter.dispose();
     return h;
+  }
+
+  static double _measureTextWidth({
+    required String text,
+    required TextStyle style,
+    double textScale = 1.0,
+  }) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: TextScaler.linear(textScale),
+    )..layout();
+    final w = painter.size.width;
+    painter.dispose();
+    return w;
   }
 
   @override
@@ -210,6 +293,7 @@ class WorkTimelineCard extends StatelessWidget {
     final dept = block?.effectiveWorkDepartmentOrProject?.trim() ?? '';
     final location = block?.location?.trim() ?? (entry.subtitle?.trim() ?? '');
     final notes = block?.notes?.trim() ?? '';
+    final contextType = block?.workContextType?.trim() ?? '';
     final mode = block?.workMode?.trim() ?? '';
     final blockKind = block?.workBlockKind?.trim() ?? '';
 
@@ -218,14 +302,28 @@ class WorkTimelineCard extends StatelessWidget {
       entry.endMinute,
     );
 
+    final showRole = WorkPresentationUtils.shouldShowRole(
+      title: title,
+      role: role,
+    );
+    final roleOrgLine = WorkPresentationUtils.formatRoleOrgLine(
+      role: role,
+      org: org,
+      title: title,
+    );
+
     final semanticParts = <String>[
       title,
-      if (role.isNotEmpty && role != title) 'Role: $role',
+      if (showRole) 'Role: $role',
       if (org.isNotEmpty) 'Organization: $org',
+      if (contextType.isNotEmpty)
+        'Context: ${WorkPresentationUtils.formatContext(contextType)}',
       if (dept.isNotEmpty) 'Department: $dept',
       timeLabel,
-      if (mode.isNotEmpty) 'Mode: ${_formatMode(mode)}',
-      if (blockKind.isNotEmpty) 'Focus: ${_formatBlockKind(blockKind)}',
+      if (mode.isNotEmpty)
+        'Mode: ${WorkPresentationUtils.formatMode(mode)}',
+      if (blockKind.isNotEmpty)
+        'Focus: ${WorkPresentationUtils.formatBlockKind(blockKind)}',
       if (location.isNotEmpty) 'Workplace: $location',
       if (notes.isNotEmpty) 'Details: $notes',
       if (isEditable) 'tap to edit',
@@ -279,9 +377,12 @@ class WorkTimelineCard extends StatelessWidget {
                 dept: dept,
                 location: location,
                 notes: notes,
+                contextType: contextType,
                 mode: mode,
                 blockKind: blockKind,
                 timeLabel: timeLabel,
+                roleOrgLine: roleOrgLine,
+                showRole: showRole,
               ),
             ),
           ),
@@ -312,14 +413,19 @@ class WorkTimelineCard extends StatelessWidget {
     required String dept,
     required String location,
     required String notes,
+    required String contextType,
     required String mode,
     required String blockKind,
     required String timeLabel,
+    required String roleOrgLine,
+    required bool showRole,
   }) {
     if (isTiny) {
       final summary = dept.isNotEmpty
           ? '$dept · $title'
-          : (org.isNotEmpty ? '$org · $title' : title);
+          : (org.isNotEmpty
+                ? '$org · $title'
+                : (showRole ? '$role · $title' : title));
       return Align(
         alignment: Alignment.centerLeft,
         child: Text(
@@ -336,9 +442,11 @@ class WorkTimelineCard extends StatelessWidget {
     }
 
     if (isCompact) {
-      final secondary = location.isNotEmpty
-          ? location
-          : (dept.isNotEmpty ? dept : (org.isNotEmpty ? org : notes));
+      final secondary = showRole
+          ? (org.isNotEmpty ? '$role · $org' : role)
+          : (org.isNotEmpty
+                ? org
+                : (location.isNotEmpty ? location : dept));
       final detailText = secondary.isNotEmpty
           ? '$timeLabel · $secondary'
           : timeLabel;
@@ -386,6 +494,10 @@ class WorkTimelineCard extends StatelessWidget {
     }
 
     if (isMedium) {
+      final headerSubtitle = roleOrgLine.isNotEmpty
+          ? '$title · $roleOrgLine'
+          : title;
+
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
@@ -406,7 +518,7 @@ class WorkTimelineCard extends StatelessWidget {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  org.isNotEmpty ? '$title · $org' : title,
+                  headerSubtitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -481,6 +593,28 @@ class WorkTimelineCard extends StatelessWidget {
     }
 
     // Rich card (height >= 96)
+    final contextBadgeText = WorkPresentationUtils.shouldShowContext(
+      title: title,
+      context: contextType,
+    )
+        ? WorkPresentationUtils.formatContext(contextType)
+        : '';
+    final kindBadgeText = WorkPresentationUtils.shouldShowKind(
+      title: title,
+      kind: blockKind,
+    )
+        ? WorkPresentationUtils.formatBlockKind(blockKind)
+        : '';
+    final modeBadgeText = WorkPresentationUtils.formatMode(mode);
+
+    final badges = <Widget>[
+      if (contextBadgeText.isNotEmpty)
+        _buildBadge(contextBadgeText, OptivusColors.routineAccent),
+      if (kindBadgeText.isNotEmpty) _buildBadge(kindBadgeText, accent),
+      if (modeBadgeText.isNotEmpty)
+        _buildBadge(modeBadgeText, OptivusColors.textSecondary),
+    ];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -516,11 +650,11 @@ class WorkTimelineCard extends StatelessWidget {
                       color: OptivusColors.textPrimary,
                     ),
                   ),
-                  if (org.isNotEmpty)
+                  if (roleOrgLine.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 1),
                       child: Text(
-                        org,
+                        roleOrgLine,
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -548,16 +682,11 @@ class WorkTimelineCard extends StatelessWidget {
           _buildBadge(dept, accent),
           const SizedBox(height: 3),
         ],
-        if (mode.isNotEmpty || blockKind.isNotEmpty) ...[
+        if (badges.isNotEmpty) ...[
           Wrap(
             spacing: 4,
             runSpacing: 3,
-            children: [
-              if (blockKind.isNotEmpty)
-                _buildBadge(_formatBlockKind(blockKind), accent),
-              if (mode.isNotEmpty)
-                _buildBadge(_formatMode(mode), OptivusColors.textSecondary),
-            ],
+            children: badges,
           ),
           const SizedBox(height: 3),
         ],
@@ -630,36 +759,6 @@ class WorkTimelineCard extends StatelessWidget {
     );
   }
 
-  static String _formatMode(String mode) {
-    switch (mode) {
-      case 'in_person':
-        return 'In-person';
-      case 'remote':
-        return 'Remote';
-      case 'hybrid':
-        return 'Hybrid';
-      default:
-        return mode;
-    }
-  }
-
-  static String _formatBlockKind(String kind) {
-    switch (kind) {
-      case 'deep_work':
-        return 'Deep Work';
-      case 'meeting':
-        return 'Meeting';
-      case 'shift':
-        return 'Shift';
-      case 'admin':
-        return 'Admin';
-      case 'client_call':
-        return 'Client Call';
-      default:
-        return kind;
-    }
-  }
-
   Widget _buildBadge(String label, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
@@ -670,6 +769,8 @@ class WorkTimelineCard extends StatelessWidget {
       ),
       child: Text(
         label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: 9,
           fontWeight: FontWeight.w700,

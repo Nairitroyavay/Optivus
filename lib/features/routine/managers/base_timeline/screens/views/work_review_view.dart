@@ -7,6 +7,7 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/work_presentation_utils.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_setup_error_mapper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_timeline_adapter.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
@@ -34,6 +35,7 @@ class WorkReviewView extends StatefulWidget {
   final ValueChanged<String>? onFrontSelected;
   final bool isConcurrencyConflict;
   final VoidCallback? onReloadLatestSetup;
+  final String? lifeRole;
 
   const WorkReviewView({
     super.key,
@@ -57,6 +59,7 @@ class WorkReviewView extends StatefulWidget {
     this.onFrontSelected,
     this.isConcurrencyConflict = false,
     this.onReloadLatestSetup,
+    this.lifeRole,
   });
 
   @override
@@ -122,7 +125,7 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Review Work Schedule',
+                        WorkPresentationUtils.reviewTitle(widget.lifeRole),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -134,8 +137,8 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                       const SizedBox(height: 2),
                       Text(
                         widget.droppedCount > 0
-                            ? '${widget.workingBlocks.length} blocks scheduled · ${widget.droppedCount} ${widget.droppedCount == 1 ? 'entry was skipped' : 'entries were skipped'}'
-                            : '${widget.workingBlocks.length} blocks scheduled',
+                            ? '${widget.workingBlocks.length} ${widget.workingBlocks.length == 1 ? 'block' : 'blocks'} scheduled · ${widget.droppedCount} ${widget.droppedCount == 1 ? 'entry was skipped' : 'entries were skipped'}'
+                            : '${widget.workingBlocks.length} ${widget.workingBlocks.length == 1 ? 'block' : 'blocks'} scheduled',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -212,11 +215,13 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                       size: 18,
                       color: OptivusColors.textPrimary,
                     ),
-                    label: const Text(
-                      'Add Work',
+                    label: Text(
+                      WorkPresentationUtils.addBlockButtonLabel(
+                        widget.lifeRole,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         color: OptivusColors.textPrimary,
                       ),
@@ -337,19 +342,23 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          const Text(
-                            'No work blocks scheduled',
-                            style: TextStyle(
+                          Text(
+                            WorkPresentationUtils.noBlocksScheduledTitle(
+                              widget.lifeRole,
+                            ),
+                            style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
                               color: OptivusColors.textPrimary,
                             ),
                           ),
                           const SizedBox(height: 6),
-                          const Text(
-                            'Tap "Add Work" or scan another photo to get started.',
+                          Text(
+                            WorkPresentationUtils.emptyReviewPrompt(
+                              widget.lifeRole,
+                            ),
                             textAlign: TextAlign.center,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 13,
                               color: OptivusColors.textSecondary,
                             ),
@@ -418,7 +427,9 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                         visibleRangePolicy:
                             TimelineVisibleRangePolicy.contentAdaptive,
                         stretchPolicy: TimelineStretchPolicy.constraintBased,
-                        emptyDayMessage: 'No work scheduled on this day.',
+                        emptyDayMessage: WorkPresentationUtils.emptyDayMessage(
+                          widget.lifeRole,
+                        ),
                       );
                     },
                   ),
@@ -434,7 +445,11 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                 assetId: widget.workingAssetId,
                 title: 'Scanned schedule',
                 subtitle: widget.workingBlocks.isNotEmpty
-                    ? '${widget.workingBlocks.length} weekly blocks'
+                    ? (widget.workingBlocks.length == 1
+                          ? (widget.lifeRole == LifeRoleDraft.businessKey
+                                ? '1 weekly business block'
+                                : '1 weekly work block')
+                          : '${widget.workingBlocks.length} weekly ${widget.lifeRole == LifeRoleDraft.businessKey ? 'business blocks' : 'work blocks'}')
                     : null,
                 isCompactRow: true,
                 height: 68,
@@ -489,9 +504,11 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                           ),
                         ],
                       )
-                    : const Text(
-                        'Use this work schedule',
-                        style: TextStyle(
+                    : Text(
+                        WorkPresentationUtils.useScheduleCtaLabel(
+                          widget.lifeRole,
+                        ),
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                           color: Colors.white,

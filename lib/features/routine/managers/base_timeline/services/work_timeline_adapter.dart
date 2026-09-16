@@ -3,6 +3,7 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_entry.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_style.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/timeline_edit_sheet_shell.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/work_presentation_utils.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/work_timeline_card.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/onboarding_draft.dart';
@@ -118,6 +119,7 @@ class BaseTimelineWorkAdapter {
     required Future<bool> Function(TimelineBlockDraft updated) onSave,
     Future<bool> Function(TimelineBlockDraft toDelete)? onDelete,
     Color accent = OptivusColors.warning,
+    String? lifeRole,
   }) {
     final title = TextEditingController(text: block.title);
     final workRole = TextEditingController(text: block.workRole ?? '');
@@ -138,10 +140,19 @@ class BaseTimelineWorkAdapter {
     var selectedMode = block.workMode;
     var selectedBlockKind = block.workBlockKind;
 
+    final sheetTitle = WorkPresentationUtils.editorTitle(
+      isNew: block.title.trim().isEmpty && (block.workRole?.trim().isEmpty ?? true),
+      contextType: selectedContextType,
+      lifeRole: lifeRole,
+    );
+    final sheetSubtitle = selectedContextType == 'business'
+        ? 'Role, business name, time and operating days'
+        : 'Role, workplace, time and working days';
+
     return TimelineEditSheetShell.show<bool>(
       context: context,
-      title: block.title.trim().isEmpty ? 'Add Work Block' : 'Edit Work Block',
-      subtitle: 'Role, workplace, time and working days',
+      title: sheetTitle,
+      subtitle: sheetSubtitle,
       accent: accent,
       onSave: () async {
         final titleText = title.text.trim();
@@ -158,7 +169,7 @@ class BaseTimelineWorkAdapter {
                   : (orgText.isNotEmpty ? orgText : ''));
 
         if (effectiveTitle.isEmpty) {
-          throw Exception('Role or title is required.');
+          throw Exception('Activity, role, or title is required.');
         }
         if (endMinute <= startMinute) {
           throw Exception('End time must be after start time.');
@@ -232,7 +243,7 @@ class BaseTimelineWorkAdapter {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'ROLE / TITLE',
+                'ACTIVITY',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w900,
@@ -245,7 +256,7 @@ class BaseTimelineWorkAdapter {
                 key: const ValueKey('base-work-title-field'),
                 controller: title,
                 decoration: InputDecoration(
-                  hintText: 'e.g. Software Engineer, Shift Lead, Operations',
+                  hintText: 'e.g. Sprint Planning, Office Work, Client Review',
                   filled: true,
                   fillColor: Colors.white.withValues(alpha: 0.6),
                   border: OutlineInputBorder(
@@ -257,9 +268,39 @@ class BaseTimelineWorkAdapter {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
-                'COMPANY / ORGANIZATION',
-                style: TextStyle(
+              Text(
+                WorkPresentationUtils.roleEditorLabel(selectedContextType),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  color: OptivusColors.textSecondary,
+                  letterSpacing: .8,
+                ),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                key: const ValueKey('base-work-role-field'),
+                controller: workRole,
+                decoration: InputDecoration(
+                  hintText: WorkPresentationUtils.roleEditorHint(
+                    selectedContextType,
+                  ),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.6),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: accent.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                WorkPresentationUtils.organizationEditorLabel(
+                  selectedContextType,
+                ),
+                style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w900,
                   color: OptivusColors.textSecondary,
@@ -271,7 +312,9 @@ class BaseTimelineWorkAdapter {
                 key: const ValueKey('base-work-organization-field'),
                 controller: workOrganization,
                 decoration: InputDecoration(
-                  hintText: 'e.g. Acme Corp, Studio X, Freelance',
+                  hintText: WorkPresentationUtils.organizationEditorHint(
+                    selectedContextType,
+                  ),
                   filled: true,
                   fillColor: Colors.white.withValues(alpha: 0.6),
                   border: OutlineInputBorder(
@@ -283,9 +326,11 @@ class BaseTimelineWorkAdapter {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
-                'DEPARTMENT / PROJECT (OPTIONAL)',
-                style: TextStyle(
+              Text(
+                WorkPresentationUtils.departmentEditorLabel(
+                  selectedContextType,
+                ),
+                style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w900,
                   color: OptivusColors.textSecondary,
@@ -297,7 +342,9 @@ class BaseTimelineWorkAdapter {
                 key: const ValueKey('base-work-section-field'),
                 controller: workDepartmentOrProject,
                 decoration: InputDecoration(
-                  hintText: 'e.g. Engineering, Client Consulting, Q3 Launch',
+                  hintText: WorkPresentationUtils.departmentEditorHint(
+                    selectedContextType,
+                  ),
                   filled: true,
                   fillColor: Colors.white.withValues(alpha: 0.6),
                   border: OutlineInputBorder(
@@ -323,33 +370,22 @@ class BaseTimelineWorkAdapter {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  buildChoiceChip(
-                    label: 'Job',
-                    selected: selectedContextType == 'job',
-                    onSelected: () => setSheetState(() {
-                      selectedContextType = selectedContextType == 'job'
-                          ? null
-                          : 'job';
-                    }),
-                  ),
-                  buildChoiceChip(
-                    label: 'Business',
-                    selected: selectedContextType == 'business',
-                    onSelected: () => setSheetState(() {
-                      selectedContextType = selectedContextType == 'business'
-                          ? null
-                          : 'business';
-                    }),
-                  ),
-                  buildChoiceChip(
-                    label: 'Freelance',
-                    selected: selectedContextType == 'freelance',
-                    onSelected: () => setSheetState(() {
-                      selectedContextType = selectedContextType == 'freelance'
-                          ? null
-                          : 'freelance';
-                    }),
-                  ),
+                  for (final ctx in [
+                    'job',
+                    'business',
+                    'startup',
+                    'freelance',
+                    'other',
+                  ])
+                    buildChoiceChip(
+                      label: WorkPresentationUtils.formatContext(ctx),
+                      selected: selectedContextType == ctx,
+                      onSelected: () => setSheetState(() {
+                        selectedContextType = selectedContextType == ctx
+                            ? null
+                            : ctx;
+                      }),
+                    ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -367,29 +403,20 @@ class BaseTimelineWorkAdapter {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  buildChoiceChip(
-                    label: 'In-person',
-                    selected: selectedMode == 'in_person',
-                    onSelected: () => setSheetState(() {
-                      selectedMode = selectedMode == 'in_person'
-                          ? null
-                          : 'in_person';
-                    }),
-                  ),
-                  buildChoiceChip(
-                    label: 'Remote',
-                    selected: selectedMode == 'remote',
-                    onSelected: () => setSheetState(() {
-                      selectedMode = selectedMode == 'remote' ? null : 'remote';
-                    }),
-                  ),
-                  buildChoiceChip(
-                    label: 'Hybrid',
-                    selected: selectedMode == 'hybrid',
-                    onSelected: () => setSheetState(() {
-                      selectedMode = selectedMode == 'hybrid' ? null : 'hybrid';
-                    }),
-                  ),
+                  for (final m in [
+                    'in_person',
+                    'remote',
+                    'hybrid',
+                    'field',
+                    'mixed',
+                  ])
+                    buildChoiceChip(
+                      label: WorkPresentationUtils.formatMode(m),
+                      selected: selectedMode == m,
+                      onSelected: () => setSheetState(() {
+                        selectedMode = selectedMode == m ? null : m;
+                      }),
+                    ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -407,51 +434,28 @@ class BaseTimelineWorkAdapter {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  buildChoiceChip(
-                    label: 'Deep Work',
-                    selected: selectedBlockKind == 'deep_work',
-                    onSelected: () => setSheetState(() {
-                      selectedBlockKind = selectedBlockKind == 'deep_work'
-                          ? null
-                          : 'deep_work';
-                    }),
-                  ),
-                  buildChoiceChip(
-                    label: 'Meeting',
-                    selected: selectedBlockKind == 'meeting',
-                    onSelected: () => setSheetState(() {
-                      selectedBlockKind = selectedBlockKind == 'meeting'
-                          ? null
-                          : 'meeting';
-                    }),
-                  ),
-                  buildChoiceChip(
-                    label: 'Shift',
-                    selected: selectedBlockKind == 'shift',
-                    onSelected: () => setSheetState(() {
-                      selectedBlockKind = selectedBlockKind == 'shift'
-                          ? null
-                          : 'shift';
-                    }),
-                  ),
-                  buildChoiceChip(
-                    label: 'Admin',
-                    selected: selectedBlockKind == 'admin',
-                    onSelected: () => setSheetState(() {
-                      selectedBlockKind = selectedBlockKind == 'admin'
-                          ? null
-                          : 'admin';
-                    }),
-                  ),
-                  buildChoiceChip(
-                    label: 'Client Call',
-                    selected: selectedBlockKind == 'client_call',
-                    onSelected: () => setSheetState(() {
-                      selectedBlockKind = selectedBlockKind == 'client_call'
-                          ? null
-                          : 'client_call';
-                    }),
-                  ),
+                  for (final k in [
+                    'work_hours',
+                    'deep_work',
+                    'shift',
+                    'meeting',
+                    'client_call',
+                    'project_work',
+                    'team_sync',
+                    'training',
+                    'commute',
+                    'break',
+                    'business_hours',
+                    'admin',
+                    'other',
+                  ])
+                    buildChoiceChip(
+                      label: WorkPresentationUtils.formatBlockKind(k),
+                      selected: selectedBlockKind == k,
+                      onSelected: () => setSheetState(() {
+                        selectedBlockKind = selectedBlockKind == k ? null : k;
+                      }),
+                    ),
                 ],
               ),
               const SizedBox(height: 16),

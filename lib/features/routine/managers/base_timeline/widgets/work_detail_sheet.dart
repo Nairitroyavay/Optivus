@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/work_presentation_utils.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/models/onboarding_draft.dart';
 
 /// Modal bottom sheet displaying all stored details for a Work / Business block.
 class WorkDetailSheet extends StatelessWidget {
@@ -40,24 +41,18 @@ class WorkDetailSheet extends StatelessWidget {
         .join(', ');
   }
 
-  static String _formatLabel(String? value) {
-    if (value == null || value.trim().isEmpty) return '';
-    final trimmed = value.trim();
-    return trimmed
-        .split(RegExp(r'[_\s]+'))
-        .where((word) => word.isNotEmpty)
-        .map((word) => word[0].toUpperCase() + word.substring(1).toLowerCase())
-        .join(' ');
-  }
-
   @override
   Widget build(BuildContext context) {
     final maxHeight = MediaQuery.sizeOf(context).height * 0.85;
     final effectiveDept = block.effectiveWorkDepartmentOrProject;
 
-    final contextLabel = _formatLabel(block.workContextType);
-    final modeLabel = _formatLabel(block.workMode);
-    final blockKindLabel = _formatLabel(block.workBlockKind);
+    final contextLabel = WorkPresentationUtils.formatContext(
+      block.workContextType,
+    );
+    final modeLabel = WorkPresentationUtils.formatMode(block.workMode);
+    final blockKindLabel = WorkPresentationUtils.formatBlockKind(
+      block.workBlockKind,
+    );
 
     final durationMin = block.endMinute - block.startMinute;
     final durationStr = durationMin > 0
@@ -65,6 +60,16 @@ class WorkDetailSheet extends StatelessWidget {
               ? '${durationMin ~/ 60}h${durationMin % 60 > 0 ? ' ${durationMin % 60}m' : ''}'
               : '${durationMin}m')
         : '';
+
+    final orgLabel = WorkPresentationUtils.organizationDetailLabel(
+      block.workContextType,
+    );
+    final deptLabel = WorkPresentationUtils.departmentDetailLabel(
+      block.workContextType,
+    );
+    final roleLabel = WorkPresentationUtils.roleDetailLabel(
+      block.workContextType,
+    );
 
     return SafeArea(
       bottom: true,
@@ -185,7 +190,7 @@ class WorkDetailSheet extends StatelessWidget {
                 const SizedBox(height: 12),
                 _buildDetailRow(
                   icon: Icons.badge_outlined,
-                  label: 'Role',
+                  label: roleLabel,
                   value: block.workRole!.trim(),
                 ),
               ],
@@ -194,7 +199,7 @@ class WorkDetailSheet extends StatelessWidget {
                 const SizedBox(height: 12),
                 _buildDetailRow(
                   icon: Icons.business_rounded,
-                  label: 'Company',
+                  label: orgLabel,
                   value: block.workOrganization!.trim(),
                 ),
               ],
@@ -202,7 +207,7 @@ class WorkDetailSheet extends StatelessWidget {
                 const SizedBox(height: 12),
                 _buildDetailRow(
                   icon: Icons.account_tree_outlined,
-                  label: 'Department',
+                  label: deptLabel,
                   value: effectiveDept.trim(),
                 ),
               ],

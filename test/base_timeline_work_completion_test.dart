@@ -492,7 +492,7 @@ void main() {
 
         // 3. Reaches WorkReviewView with 1 block scheduled
         expect(find.byType(WorkReviewView), findsOneWidget);
-        expect(find.text('1 blocks scheduled'), findsOneWidget);
+        expect(find.text('1 block scheduled'), findsOneWidget);
         expect(find.text('Store Shift'), findsOneWidget);
 
         // 4. Cancel via close icon
@@ -860,12 +860,12 @@ void main() {
 
         expect(find.byType(WorkReviewView), findsOneWidget);
 
-        // 2. Tap Add Work
-        await tester.tap(find.text('Add Work'));
+        // 2. Tap Add Work Block
+        await tester.tap(find.text('Add Work Block'));
         await tester.pumpAndSettle();
 
-        // Edit sheet is shown
-        expect(find.text('Add Work Block'), findsOneWidget);
+        // Edit sheet is shown (both the background review action button and the sheet title match)
+        expect(find.text('Add Work Block'), findsNWidgets(2));
 
         // Enter title
         final titleField = find.byKey(const ValueKey('base-work-title-field'));
@@ -879,7 +879,7 @@ void main() {
         // 3. Back in ReviewView with 1 block scheduled
         expect(find.byType(WorkReviewView), findsOneWidget);
         expect(find.text('Focus Time'), findsOneWidget);
-        expect(find.text('1 blocks scheduled'), findsOneWidget);
+        expect(find.text('1 block scheduled'), findsOneWidget);
 
         // Save button is now enabled
         final saveButton = find.widgetWithText(
@@ -2552,7 +2552,7 @@ void main() {
         expect(
           details,
           equals(
-            'Ops Manager • Starlight Retail • Inventory • in_person • shift',
+            'Ops Manager • Starlight Retail • Inventory • In-person • Shift',
           ),
         );
 
