@@ -523,14 +523,12 @@ class RoutineCardFactory {
         item.status == RoutineStatus.skipped ||
         item.status == RoutineStatus.missed;
 
-    final actionFooterHeight = isTerminal
-        ? singleButtonHeight
-        : switch (actionLayout) {
-            RoutineCardActionLayout.horizontal => singleButtonHeight,
-            RoutineCardActionLayout.stacked =>
-              (singleButtonHeight * 3) + (2 * RoutineCardPresentation.actionGap),
-          };
-    height += RoutineCardPresentation.actionsFooterGap + actionFooterHeight;
+    final actionFooter = actionFooterHeight(
+      actionLayout,
+      isTerminal: isTerminal,
+      singleButtonHeight: singleButtonHeight,
+    );
+    height += RoutineCardPresentation.actionsFooterGap + actionFooter;
 
     // Card padding (12 top + 12 bottom = 24) + subpixel rounding tolerance (1.0)
     return math.max(
@@ -539,5 +537,19 @@ class RoutineCardFactory {
           RoutineCardPresentation.cardVerticalPaddingTotal +
           RoutineCardPresentation.cardSubpixelTolerance,
     );
+  }
+
+  static double actionFooterHeight(
+    RoutineCardActionLayout actionLayout, {
+    bool isTerminal = false,
+    double singleButtonHeight = RoutineCardPresentation.actionButtonMinHeight,
+  }) {
+    return isTerminal
+        ? singleButtonHeight
+        : switch (actionLayout) {
+            RoutineCardActionLayout.horizontal => singleButtonHeight,
+            RoutineCardActionLayout.stacked =>
+              (singleButtonHeight * 2) + RoutineCardPresentation.actionGap,
+          };
   }
 }

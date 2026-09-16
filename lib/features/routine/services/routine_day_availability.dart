@@ -276,4 +276,13 @@ class RoutineDayAvailability {
     }
     return null;
   }
+
+  /// Evaluates whether the range [startMinute, endMinute] falls entirely within
+  /// any single contiguous free interval.
+  bool isRangeFree(int startMinute, int endMinute) {
+    if (endMinute <= startMinute) return true;
+    return freeIntervals.any(
+      (free) => startMinute >= free.startMinute && endMinute <= free.endMinute,
+    );
+  }
 }

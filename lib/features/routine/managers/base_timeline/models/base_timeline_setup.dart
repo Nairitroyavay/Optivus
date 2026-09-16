@@ -57,6 +57,9 @@ class BaseTimelineSetup {
   final int? targetProtein;
   final String? eatingPhotoAssetId;
   final String? eatingPhotoR2Key;
+  final int? eatingGeneratedPlanVersion;
+  final String? eatingGeneratedInputFingerprint;
+  final bool eatingCustomized;
 
   // ── Fixed ────────────────────────────────────────────────────
   final List<TimelineBlockDraft> fixedBlocks;
@@ -119,6 +122,9 @@ class BaseTimelineSetup {
     this.targetProtein,
     this.eatingPhotoAssetId,
     this.eatingPhotoR2Key,
+    this.eatingGeneratedPlanVersion,
+    this.eatingGeneratedInputFingerprint,
+    this.eatingCustomized = false,
     this.fixedBlocks = const [],
     this.skinCareSetupPath,
     this.skinCareSkipped = false,
@@ -162,6 +168,8 @@ class BaseTimelineSetup {
       dinnerMinute: dinnerMinute,
       snackMinute: snackMinute,
       extraSnackMinute: extraSnackMinute,
+      eatingGeneratedPlanVersion: eatingGeneratedPlanVersion,
+      eatingGeneratedInputFingerprint: eatingGeneratedInputFingerprint,
       skinCareSetupPath: skinCareSetupPath,
       skinCareSkipped: skinCareSkipped,
       skinCareProductNames: skinCareProductNames,
@@ -236,16 +244,30 @@ class BaseTimelineSetup {
     final configured = eatingBlocks.isNotEmpty;
     final isPhoto =
         eatingSetupPath == 'has_routine' || eatingPhotoAssetId != null;
+    final isManual = eatingSetupPath == 'manual';
     final origin = !configured
         ? BaseSetupOrigin.notConfigured
         : (isPhoto
               ? BaseSetupOrigin.photo
-              : BaseSetupOrigin.generatedFromAnswers);
-    final summary = configured
-        ? (origin == BaseSetupOrigin.photo
-              ? 'Imported from meal plan · ${mealsPerDay ?? _distinctMealCount(eatingBlocks)} meals/day'
-              : 'Built for me · ${mealsPerDay ?? _distinctMealCount(eatingBlocks)} meals/day')
-        : 'Not set up';
+              : (isManual
+                    ? BaseSetupOrigin.manual
+                    : BaseSetupOrigin.generatedFromAnswers));
+    final actualScheduleSummary = _calculateActualScheduleSummary(eatingBlocks);
+    final String summary;
+    if (!configured) {
+      summary = 'Not set up';
+    } else if (origin == BaseSetupOrigin.photo) {
+      summary = 'Imported from meal plan · $actualScheduleSummary';
+    } else if (origin == BaseSetupOrigin.manual) {
+      summary = 'Manual plan · $actualScheduleSummary';
+    } else {
+      final prefix =
+          eatingCustomized ? 'Built for me · Customized' : 'Built for me';
+      final countSummary =
+          mealsPerDay != null ? '$mealsPerDay meals/day' : actualScheduleSummary;
+      summary = '$prefix · $countSummary';
+    }
+
     return BaseTimelineSectionSnapshot(
       section: BaseTimelineSection.eating,
       origin: origin,
@@ -267,17 +289,31 @@ class BaseTimelineSetup {
         if (extraSnackMinute != null) 'extraSnackMinute': extraSnackMinute,
         if (targetCalories != null) 'targetCalories': targetCalories,
         if (targetProtein != null) 'targetProtein': targetProtein,
+        if (eatingGeneratedPlanVersion != null)
+          'planVersion': eatingGeneratedPlanVersion,
+        if (eatingGeneratedInputFingerprint != null)
+          'inputFingerprint': eatingGeneratedInputFingerprint,
+        'customized': eatingCustomized,
       },
       summary: summary,
     );
   }
 
-  int _distinctMealCount(List<TimelineBlockDraft> blocks) {
-    final categories = blocks
-        .map((b) => b.mealCategory ?? b.title)
-        .where((s) => s.isNotEmpty)
-        .toSet();
-    return categories.isEmpty ? 3 : categories.length;
+  static String _calculateActualScheduleSummary(
+    List<TimelineBlockDraft> blocks,
+  ) {
+    if (blocks.isEmpty) return 'No meals';
+    final dailyCounts = <int>[];
+    for (int day = 1; day <= 7; day++) {
+      final count = blocks.where((b) => b.repeatDays.contains(day)).length;
+      dailyCounts.add(count);
+    }
+    final minCount = dailyCounts.reduce((a, b) => a < b ? a : b);
+    final maxCount = dailyCounts.reduce((a, b) => a > b ? a : b);
+    if (minCount == maxCount) {
+      return '$minCount meals/day';
+    }
+    return 'Varies by day · $minCount–$maxCount meals';
   }
 
   BaseTimelineSectionSnapshot _fixedSnapshot() {
@@ -575,6 +611,9 @@ class BaseTimelineSetup {
     int? extraSnack,
     int? calories,
     int? protein,
+    int? planVersion,
+    String? inputFingerprint,
+    bool customized = false,
   }) {
     return copyWith(
       eatingSetupPath: 'create',
@@ -595,6 +634,10 @@ class BaseTimelineSetup {
       extraSnackMinute: extraSnack ?? extraSnackMinute,
       targetCalories: calories ?? targetCalories,
       targetProtein: protein ?? targetProtein,
+      eatingGeneratedPlanVersion: planVersion ?? eatingGeneratedPlanVersion,
+      eatingGeneratedInputFingerprint:
+          inputFingerprint ?? eatingGeneratedInputFingerprint,
+      eatingCustomized: customized,
     );
   }
 
@@ -625,6 +668,31 @@ class BaseTimelineSetup {
       clearExtraSnackMinute: true,
       clearTargetCalories: true,
       clearTargetProtein: true,
+      clearEatingGeneratedPlanVersion: true,
+      clearEatingGeneratedInputFingerprint: true,
+      eatingCustomized: false,
+    );
+  }
+
+  /// Transitions Eating to manual schedule.
+  BaseTimelineSetup asEatingManual({
+    List<TimelineBlockDraft>? blocks,
+    int? meals,
+    int? targetCalories,
+    int? targetProtein,
+  }) {
+    return copyWith(
+      eatingSetupPath: 'manual',
+      eatingBlocks: blocks ?? eatingBlocks,
+      mealsPerDay: meals ?? mealsPerDay,
+      clearMealsPerDay: meals == null,
+      clearEatingPhotoAssetId: true,
+      clearEatingPhotoR2Key: true,
+      clearEatingGeneratedPlanVersion: true,
+      clearEatingGeneratedInputFingerprint: true,
+      targetCalories: targetCalories ?? this.targetCalories,
+      targetProtein: targetProtein ?? this.targetProtein,
+      eatingCustomized: false,
     );
   }
 
@@ -650,6 +718,9 @@ class BaseTimelineSetup {
       clearTargetProtein: true,
       clearEatingPhotoAssetId: true,
       clearEatingPhotoR2Key: true,
+      clearEatingGeneratedPlanVersion: true,
+      clearEatingGeneratedInputFingerprint: true,
+      eatingCustomized: false,
     );
   }
 
@@ -713,6 +784,11 @@ class BaseTimelineSetup {
     bool clearEatingPhotoAssetId = false,
     String? eatingPhotoR2Key,
     bool clearEatingPhotoR2Key = false,
+    int? eatingGeneratedPlanVersion,
+    bool clearEatingGeneratedPlanVersion = false,
+    String? eatingGeneratedInputFingerprint,
+    bool clearEatingGeneratedInputFingerprint = false,
+    bool? eatingCustomized,
     List<TimelineBlockDraft>? fixedBlocks,
     String? skinCareSetupPath,
     bool clearSkinCareSetupPath = false,
@@ -811,6 +887,14 @@ class BaseTimelineSetup {
       eatingPhotoR2Key: clearEatingPhotoR2Key
           ? null
           : (eatingPhotoR2Key ?? this.eatingPhotoR2Key),
+      eatingGeneratedPlanVersion: clearEatingGeneratedPlanVersion
+          ? null
+          : (eatingGeneratedPlanVersion ?? this.eatingGeneratedPlanVersion),
+      eatingGeneratedInputFingerprint: clearEatingGeneratedInputFingerprint
+          ? null
+          : (eatingGeneratedInputFingerprint ??
+              this.eatingGeneratedInputFingerprint),
+      eatingCustomized: eatingCustomized ?? this.eatingCustomized,
       fixedBlocks: fixedBlocks ?? this.fixedBlocks,
       skinCareSetupPath: clearSkinCareSetupPath
           ? null
@@ -969,7 +1053,8 @@ class BaseTimelineSetup {
     }
     if (eatingSetupPath != null &&
         eatingSetupPath != 'has_routine' &&
-        eatingSetupPath != 'create') {
+        eatingSetupPath != 'create' &&
+        eatingSetupPath != 'manual') {
       throw ArgumentError('Base Timeline eating setup path is invalid.');
     }
     if (skinCareSetupPath != null &&
@@ -1025,6 +1110,9 @@ class BaseTimelineSetup {
       'targetProtein': targetProtein,
       'eatingPhotoAssetId': eatingPhotoAssetId,
       'eatingPhotoR2Key': eatingPhotoR2Key,
+      'eatingGeneratedPlanVersion': eatingGeneratedPlanVersion,
+      'eatingGeneratedInputFingerprint': eatingGeneratedInputFingerprint,
+      'eatingCustomized': eatingCustomized,
       'fixedBlocks': fixedBlocks.map((b) => b.toMap()).toList(),
       'skinCareSetupPath': skinCareSetupPath,
       'skinCareSkipped': skinCareSkipped,
@@ -1154,6 +1242,11 @@ class BaseTimelineSetup {
       targetProtein: (map['targetProtein'] as num?)?.toInt(),
       eatingPhotoAssetId: map['eatingPhotoAssetId'] as String?,
       eatingPhotoR2Key: map['eatingPhotoR2Key'] as String?,
+      eatingGeneratedPlanVersion:
+          (map['eatingGeneratedPlanVersion'] as num?)?.toInt(),
+      eatingGeneratedInputFingerprint:
+          map['eatingGeneratedInputFingerprint'] as String?,
+      eatingCustomized: map['eatingCustomized'] as bool? ?? false,
       fixedBlocks: parseBlocks(map['fixedBlocks']),
       skinCareSetupPath: normalizeSkinCareSetupPath(
         map['skinCareSetupPath'] as String?,
@@ -1301,6 +1394,9 @@ class BaseTimelineSetup {
       targetProtein: targets.proteinTarget?.round(),
       eatingPhotoAssetId: eatingAssetId,
       eatingPhotoR2Key: eatingR2Key,
+      eatingGeneratedPlanVersion: base.eatingGeneratedPlanVersion,
+      eatingGeneratedInputFingerprint: base.eatingGeneratedInputFingerprint,
+      eatingCustomized: false,
       fixedBlocks: fixedBlocks,
       skinCareSetupPath: normalizeSkinCareSetupPath(base.skinCareSetupPath),
       skinCareSkipped: base.skinCareSkipped,
@@ -1494,6 +1590,9 @@ class BaseTimelineSetup {
       targetProtein: targets.proteinTarget?.round(),
       eatingPhotoAssetId: eatingAssetId,
       eatingPhotoR2Key: eatingR2Key,
+      eatingGeneratedPlanVersion: base.eatingGeneratedPlanVersion,
+      eatingGeneratedInputFingerprint: base.eatingGeneratedInputFingerprint,
+      eatingCustomized: false,
       fixedBlocks: fixedBlocks,
       skinCareSetupPath: normalizeSkinCareSetupPath(base.skinCareSetupPath),
       skinCareSkipped: base.skinCareSkipped,

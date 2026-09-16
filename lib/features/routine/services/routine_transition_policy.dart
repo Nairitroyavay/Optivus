@@ -94,6 +94,21 @@ class RoutineTransitionPolicy {
       case RoutineOccurrenceAction.move:
       case RoutineOccurrenceAction.reschedule:
       case RoutineOccurrenceAction.makeTiny:
+        final isActiveTask = status == RoutineStatus.active &&
+            (existingRecord == null ||
+                existingRecord.action != 'project' ||
+                existingRecord.startedAt != null);
+        if (isActiveTask) {
+          return const RoutineTransitionDecision.reject(
+            message: 'Active routine cannot be moved. Stop or undo start first.',
+          );
+        }
+        if (status == RoutineStatus.inTracker) {
+          return const RoutineTransitionDecision.reject(
+            message:
+                'Routine running in tracker cannot be moved. Complete or stop tracker session first.',
+          );
+        }
         if (status == RoutineStatus.completed) {
           return const RoutineTransitionDecision.reject(
             message: 'Completed routine cannot be moved.',

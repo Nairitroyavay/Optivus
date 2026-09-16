@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_timeline_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/work_timeline_card.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/onboarding_draft.dart';
@@ -78,23 +79,24 @@ class BaseTimelineDomainCard extends StatelessWidget {
 
   static double minimumHeight(
     TimelineBlockDraft block,
-    BaseTimelineCardDomain domain,
-  ) {
+    BaseTimelineCardDomain domain, {
+    double contentWidth = 220.0,
+    double textScale = 1.0,
+    bool isEditable = true,
+  }) {
     return switch (domain) {
-      BaseTimelineCardDomain.work => WorkTimelineCard.minimumHeight(block),
-      BaseTimelineCardDomain.eating => () {
-        final validDishes = block.dishes
-            .where((e) => e.trim().isNotEmpty)
-            .length;
-        final hasLabels =
-            (block.mealSlot?.trim().isNotEmpty == true) ||
-            (block.mealCategory?.trim().isNotEmpty == true);
-        final hasMacros = block.calories != null || block.protein != null;
-        return 90.0 +
-            (hasLabels ? 20.0 : 0.0) +
-            (hasMacros ? 20.0 : 0.0) +
-            (validDishes > 0 ? 18.0 + validDishes * 22.0 : 0.0);
-      }(),
+      BaseTimelineCardDomain.work => WorkTimelineCard.minimumHeight(
+        block,
+        contentWidth: contentWidth,
+        textScale: textScale,
+        isEditable: isEditable,
+      ),
+      BaseTimelineCardDomain.eating => EatingTimelineCard.minimumHeight(
+        block,
+        contentWidth: contentWidth,
+        textScale: textScale,
+        isEditable: isEditable,
+      ),
       BaseTimelineCardDomain.fixed => () {
         final isOvernight = block.crossesMidnight || block.endsNextDay;
         final hasLoc = block.location?.trim().isNotEmpty == true;
@@ -123,6 +125,17 @@ class BaseTimelineDomainCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (domain == BaseTimelineCardDomain.eating) {
+      return EatingTimelineCard(
+        positioned: positioned,
+        block: block,
+        isEditable: isEditable,
+        accent: accent,
+        onTap: onTap,
+        onDelete: onDelete,
+      );
+    }
+
     if (positioned.hasOverlap && !positioned.isFront) {
       return _shell(
         child: Padding(

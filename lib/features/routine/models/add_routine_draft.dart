@@ -59,20 +59,195 @@ enum AddRoutineScheduleMode {
   };
 }
 
+const Object _draftSentinel = Object();
+
+/// Isolated structured details for Class blocks.
+@immutable
+class ClassDetailsDraft {
+  final String? professor;
+  final String? courseCode;
+  final String? classType;
+  final String? sectionLabel;
+  final String? location;
+
+  const ClassDetailsDraft({
+    this.professor,
+    this.courseCode,
+    this.classType,
+    this.sectionLabel,
+    this.location,
+  });
+
+  ClassDetailsDraft copyWith({
+    Object? professor = _draftSentinel,
+    Object? courseCode = _draftSentinel,
+    Object? classType = _draftSentinel,
+    Object? sectionLabel = _draftSentinel,
+    Object? location = _draftSentinel,
+  }) {
+    return ClassDetailsDraft(
+      professor: identical(professor, _draftSentinel)
+          ? this.professor
+          : professor as String?,
+      courseCode: identical(courseCode, _draftSentinel)
+          ? this.courseCode
+          : courseCode as String?,
+      classType: identical(classType, _draftSentinel)
+          ? this.classType
+          : classType as String?,
+      sectionLabel: identical(sectionLabel, _draftSentinel)
+          ? this.sectionLabel
+          : sectionLabel as String?,
+      location: identical(location, _draftSentinel)
+          ? this.location
+          : location as String?,
+    );
+  }
+}
+
+/// Isolated structured details for Work / Job blocks.
+@immutable
+class WorkDetailsDraft {
+  final String? workContextType;
+  final String? workRole;
+  final String? workOrganization;
+  final String? workDepartmentOrProject;
+  final String? workMode;
+  final String? workBlockKind;
+  final String? location;
+
+  const WorkDetailsDraft({
+    this.workContextType,
+    this.workRole,
+    this.workOrganization,
+    this.workDepartmentOrProject,
+    this.workMode,
+    this.workBlockKind,
+    this.location,
+  });
+
+  WorkDetailsDraft copyWith({
+    Object? workContextType = _draftSentinel,
+    Object? workRole = _draftSentinel,
+    Object? workOrganization = _draftSentinel,
+    Object? workDepartmentOrProject = _draftSentinel,
+    Object? workMode = _draftSentinel,
+    Object? workBlockKind = _draftSentinel,
+    Object? location = _draftSentinel,
+  }) {
+    return WorkDetailsDraft(
+      workContextType: identical(workContextType, _draftSentinel)
+          ? this.workContextType
+          : workContextType as String?,
+      workRole: identical(workRole, _draftSentinel)
+          ? this.workRole
+          : workRole as String?,
+      workOrganization: identical(workOrganization, _draftSentinel)
+          ? this.workOrganization
+          : workOrganization as String?,
+      workDepartmentOrProject: identical(workDepartmentOrProject, _draftSentinel)
+          ? this.workDepartmentOrProject
+          : workDepartmentOrProject as String?,
+      workMode: identical(workMode, _draftSentinel)
+          ? this.workMode
+          : workMode as String?,
+      workBlockKind: identical(workBlockKind, _draftSentinel)
+          ? this.workBlockKind
+          : workBlockKind as String?,
+      location: identical(location, _draftSentinel)
+          ? this.location
+          : location as String?,
+    );
+  }
+}
+
+/// Isolated structured details for Eating blocks.
+@immutable
+class EatingDetailsDraft {
+  final String? mealCategory;
+  final String? mealSlot;
+  final List<String> dishes;
+  final double? caloriesEstimate;
+  final double? proteinEstimate;
+
+  const EatingDetailsDraft({
+    this.mealCategory,
+    this.mealSlot,
+    this.dishes = const [],
+    this.caloriesEstimate,
+    this.proteinEstimate,
+  });
+
+  EatingDetailsDraft copyWith({
+    Object? mealCategory = _draftSentinel,
+    Object? mealSlot = _draftSentinel,
+    List<String>? dishes,
+    Object? caloriesEstimate = _draftSentinel,
+    Object? proteinEstimate = _draftSentinel,
+  }) {
+    return EatingDetailsDraft(
+      mealCategory: identical(mealCategory, _draftSentinel)
+          ? this.mealCategory
+          : mealCategory as String?,
+      mealSlot: identical(mealSlot, _draftSentinel)
+          ? this.mealSlot
+          : mealSlot as String?,
+      dishes: dishes ?? this.dishes,
+      caloriesEstimate: identical(caloriesEstimate, _draftSentinel)
+          ? this.caloriesEstimate
+          : caloriesEstimate as double?,
+      proteinEstimate: identical(proteinEstimate, _draftSentinel)
+          ? this.proteinEstimate
+          : proteinEstimate as double?,
+    );
+  }
+}
+
+/// Isolated structured details for Skin Care blocks.
+@immutable
+class SkinDetailsDraft {
+  final String? skincareSlotLabel;
+  final List<String> steps;
+  final List<String> skincareProducts;
+  final List<String> skincareMissingItems;
+
+  const SkinDetailsDraft({
+    this.skincareSlotLabel,
+    this.steps = const [],
+    this.skincareProducts = const [],
+    this.skincareMissingItems = const [],
+  });
+
+  SkinDetailsDraft copyWith({
+    Object? skincareSlotLabel = _draftSentinel,
+    List<String>? steps,
+    List<String>? skincareProducts,
+    List<String>? skincareMissingItems,
+  }) {
+    return SkinDetailsDraft(
+      skincareSlotLabel: identical(skincareSlotLabel, _draftSentinel)
+          ? this.skincareSlotLabel
+          : skincareSlotLabel as String?,
+      steps: steps ?? this.steps,
+      skincareProducts: skincareProducts ?? this.skincareProducts,
+      skincareMissingItems: skincareMissingItems ?? this.skincareMissingItems,
+    );
+  }
+}
+
 /// Type-specific sub-state for Fixed Blocks.
+///
+/// Ensures strict isolation between Class, Work, Eating, and Skin Care subtypes,
+/// eliminating state leakage between different fixed kinds.
 @immutable
 class AddRoutineFixedState {
   final String kind;
   final bool hardBlock;
-
-  // Rich structured Class fields
   final String? professor;
   final String? courseCode;
   final String? classType;
   final String? sectionLabel;
   final String? classLocation;
-
-  // Rich structured Work fields
   final String? workContextType;
   final String? workRole;
   final String? workOrganization;
@@ -80,15 +255,11 @@ class AddRoutineFixedState {
   final String? workMode;
   final String? workBlockKind;
   final String? workLocation;
-
-  // Rich structured Eating fields
   final String? mealCategory;
   final String? mealSlot;
   final List<String> dishes;
   final double? caloriesEstimate;
   final double? proteinEstimate;
-
-  // Rich structured Skin Care fields
   final List<String> steps;
   final List<String> skincareProducts;
   final List<String> skincareMissingItems;
@@ -120,56 +291,226 @@ class AddRoutineFixedState {
     this.skincareSlotLabel,
   });
 
+  ClassDetailsDraft get classDetails => ClassDetailsDraft(
+        professor: professor,
+        courseCode: courseCode,
+        classType: classType,
+        sectionLabel: sectionLabel,
+        location: classLocation,
+      );
+
+  WorkDetailsDraft get workDetails => WorkDetailsDraft(
+        workContextType: workContextType,
+        workRole: workRole,
+        workOrganization: workOrganization,
+        workDepartmentOrProject: workDepartmentOrProject,
+        workMode: workMode,
+        workBlockKind: workBlockKind,
+        location: workLocation,
+      );
+
+  EatingDetailsDraft get eatingDetails => EatingDetailsDraft(
+        mealCategory: mealCategory,
+        mealSlot: mealSlot,
+        dishes: dishes,
+        caloriesEstimate: caloriesEstimate,
+        proteinEstimate: proteinEstimate,
+      );
+
+  SkinDetailsDraft get skinDetails => SkinDetailsDraft(
+        steps: steps,
+        skincareProducts: skincareProducts,
+        skincareMissingItems: skincareMissingItems,
+        skincareSlotLabel: skincareSlotLabel,
+      );
+
   AddRoutineFixedState copyWith({
     String? kind,
     bool? hardBlock,
-    String? professor,
-    String? courseCode,
-    String? classType,
-    String? sectionLabel,
-    String? classLocation,
-    String? workContextType,
-    String? workRole,
-    String? workOrganization,
-    String? workDepartmentOrProject,
-    String? workMode,
-    String? workBlockKind,
-    String? workLocation,
-    String? mealCategory,
-    String? mealSlot,
+    ClassDetailsDraft? classDetails,
+    WorkDetailsDraft? workDetails,
+    EatingDetailsDraft? eatingDetails,
+    SkinDetailsDraft? skinDetails,
+    Object? professor = _draftSentinel,
+    Object? courseCode = _draftSentinel,
+    Object? classType = _draftSentinel,
+    Object? sectionLabel = _draftSentinel,
+    Object? classLocation = _draftSentinel,
+    Object? workContextType = _draftSentinel,
+    Object? workRole = _draftSentinel,
+    Object? workOrganization = _draftSentinel,
+    Object? workDepartmentOrProject = _draftSentinel,
+    Object? workMode = _draftSentinel,
+    Object? workBlockKind = _draftSentinel,
+    Object? workLocation = _draftSentinel,
+    Object? mealCategory = _draftSentinel,
+    Object? mealSlot = _draftSentinel,
     List<String>? dishes,
-    double? caloriesEstimate,
-    double? proteinEstimate,
+    Object? caloriesEstimate = _draftSentinel,
+    Object? proteinEstimate = _draftSentinel,
     List<String>? steps,
     List<String>? skincareProducts,
     List<String>? skincareMissingItems,
-    String? skincareSlotLabel,
+    Object? skincareSlotLabel = _draftSentinel,
   }) {
+    final targetKind = kind ?? this.kind;
+    final isKindChange = kind != null && kind != this.kind;
+
+    final isClassTarget = targetKind == 'Class';
+    final isWorkTarget = targetKind == 'Job' || targetKind == 'Work';
+    final isEatingTarget = targetKind == 'Eating' || targetKind == 'Meal';
+    final isSkinTarget = targetKind == 'Skin Care' || targetKind == 'Skincare';
+
     return AddRoutineFixedState(
-      kind: kind ?? this.kind,
+      kind: targetKind,
       hardBlock: hardBlock ?? this.hardBlock,
-      professor: professor ?? this.professor,
-      courseCode: courseCode ?? this.courseCode,
-      classType: classType ?? this.classType,
-      sectionLabel: sectionLabel ?? this.sectionLabel,
-      classLocation: classLocation ?? this.classLocation,
-      workContextType: workContextType ?? this.workContextType,
-      workRole: workRole ?? this.workRole,
-      workOrganization: workOrganization ?? this.workOrganization,
-      workDepartmentOrProject:
-          workDepartmentOrProject ?? this.workDepartmentOrProject,
-      workMode: workMode ?? this.workMode,
-      workBlockKind: workBlockKind ?? this.workBlockKind,
-      workLocation: workLocation ?? this.workLocation,
-      mealCategory: mealCategory ?? this.mealCategory,
-      mealSlot: mealSlot ?? this.mealSlot,
-      dishes: dishes ?? this.dishes,
-      caloriesEstimate: caloriesEstimate ?? this.caloriesEstimate,
-      proteinEstimate: proteinEstimate ?? this.proteinEstimate,
-      steps: steps ?? this.steps,
-      skincareProducts: skincareProducts ?? this.skincareProducts,
-      skincareMissingItems: skincareMissingItems ?? this.skincareMissingItems,
-      skincareSlotLabel: skincareSlotLabel ?? this.skincareSlotLabel,
+
+      // Class metadata (cleared if kind changes to non-class)
+      professor: isKindChange && !isClassTarget
+          ? null
+          : (classDetails != null
+              ? classDetails.professor
+              : (identical(professor, _draftSentinel)
+                  ? this.professor
+                  : professor as String?)),
+      courseCode: isKindChange && !isClassTarget
+          ? null
+          : (classDetails != null
+              ? classDetails.courseCode
+              : (identical(courseCode, _draftSentinel)
+                  ? this.courseCode
+                  : courseCode as String?)),
+      classType: isKindChange && !isClassTarget
+          ? null
+          : (classDetails != null
+              ? classDetails.classType
+              : (identical(classType, _draftSentinel)
+                  ? this.classType
+                  : classType as String?)),
+      sectionLabel: isKindChange && !isClassTarget
+          ? null
+          : (classDetails != null
+              ? classDetails.sectionLabel
+              : (identical(sectionLabel, _draftSentinel)
+                  ? this.sectionLabel
+                  : sectionLabel as String?)),
+      classLocation: isKindChange && !isClassTarget
+          ? null
+          : (classDetails != null
+              ? classDetails.location
+              : (identical(classLocation, _draftSentinel)
+                  ? this.classLocation
+                  : classLocation as String?)),
+
+      // Work metadata (cleared if kind changes to non-work)
+      workContextType: isKindChange && !isWorkTarget
+          ? null
+          : (workDetails != null
+              ? workDetails.workContextType
+              : (identical(workContextType, _draftSentinel)
+                  ? this.workContextType
+                  : workContextType as String?)),
+      workRole: isKindChange && !isWorkTarget
+          ? null
+          : (workDetails != null
+              ? workDetails.workRole
+              : (identical(workRole, _draftSentinel)
+                  ? this.workRole
+                  : workRole as String?)),
+      workOrganization: isKindChange && !isWorkTarget
+          ? null
+          : (workDetails != null
+              ? workDetails.workOrganization
+              : (identical(workOrganization, _draftSentinel)
+                  ? this.workOrganization
+                  : workOrganization as String?)),
+      workDepartmentOrProject: isKindChange && !isWorkTarget
+          ? null
+          : (workDetails != null
+              ? workDetails.workDepartmentOrProject
+              : (identical(workDepartmentOrProject, _draftSentinel)
+                  ? this.workDepartmentOrProject
+                  : workDepartmentOrProject as String?)),
+      workMode: isKindChange && !isWorkTarget
+          ? null
+          : (workDetails != null
+              ? workDetails.workMode
+              : (identical(workMode, _draftSentinel)
+                  ? this.workMode
+                  : workMode as String?)),
+      workBlockKind: isKindChange && !isWorkTarget
+          ? null
+          : (workDetails != null
+              ? workDetails.workBlockKind
+              : (identical(workBlockKind, _draftSentinel)
+                  ? this.workBlockKind
+                  : workBlockKind as String?)),
+      workLocation: isKindChange && !isWorkTarget
+          ? null
+          : (workDetails != null
+              ? workDetails.location
+              : (identical(workLocation, _draftSentinel)
+                  ? this.workLocation
+                  : workLocation as String?)),
+
+      // Eating metadata (cleared if kind changes to non-eating)
+      mealCategory: isKindChange && !isEatingTarget
+          ? null
+          : (eatingDetails != null
+              ? eatingDetails.mealCategory
+              : (identical(mealCategory, _draftSentinel)
+                  ? this.mealCategory
+                  : mealCategory as String?)),
+      mealSlot: isKindChange && !isEatingTarget
+          ? null
+          : (eatingDetails != null
+              ? eatingDetails.mealSlot
+              : (identical(mealSlot, _draftSentinel)
+                  ? this.mealSlot
+                  : mealSlot as String?)),
+      dishes: isKindChange && !isEatingTarget
+          ? const []
+          : (eatingDetails != null
+              ? eatingDetails.dishes
+              : (dishes ?? this.dishes)),
+      caloriesEstimate: isKindChange && !isEatingTarget
+          ? null
+          : (eatingDetails != null
+              ? eatingDetails.caloriesEstimate
+              : (identical(caloriesEstimate, _draftSentinel)
+                  ? this.caloriesEstimate
+                  : (caloriesEstimate as num?)?.toDouble())),
+      proteinEstimate: isKindChange && !isEatingTarget
+          ? null
+          : (eatingDetails != null
+              ? eatingDetails.proteinEstimate
+              : (identical(proteinEstimate, _draftSentinel)
+                  ? this.proteinEstimate
+                  : (proteinEstimate as num?)?.toDouble())),
+
+      // Skin Care metadata (cleared if kind changes to non-skin)
+      steps: isKindChange && !isSkinTarget
+          ? const []
+          : (skinDetails != null
+              ? skinDetails.steps
+              : (steps ?? this.steps)),
+      skincareProducts: isKindChange && !isSkinTarget
+          ? const []
+          : (skinDetails != null
+              ? skinDetails.skincareProducts
+              : (skincareProducts ?? this.skincareProducts)),
+      skincareMissingItems: isKindChange && !isSkinTarget
+          ? const []
+          : (skinDetails != null
+              ? skinDetails.skincareMissingItems
+              : (skincareMissingItems ?? this.skincareMissingItems)),
+      skincareSlotLabel: isKindChange && !isSkinTarget
+          ? null
+          : (skinDetails != null
+              ? skinDetails.skincareSlotLabel
+              : (identical(skincareSlotLabel, _draftSentinel)
+                  ? this.skincareSlotLabel
+                  : skincareSlotLabel as String?)),
     );
   }
 }
@@ -317,8 +658,8 @@ class AddRoutineDraft {
   /// Priority.
   final RoutinePriority priority;
 
-  /// Best time of day preference.
-  final String bestTime;
+  /// Best time of day preference (only for flexible and habit).
+  final String? bestTime;
 
   /// Optional notes.
   final String notes;
@@ -363,6 +704,11 @@ class AddRoutineDraft {
     final now = DateTime.now();
     final effectiveId = id ?? 'routine-${now.millisecondsSinceEpoch}';
     final effectiveDate = initialDate ?? DateTime(now.year, now.month, now.day);
+    final initialBestTime =
+        (initialType == AddRoutineType.flexible ||
+         initialType == AddRoutineType.habit)
+            ? 'Morning'
+            : null;
 
     return AddRoutineDraft(
       id: effectiveId,
@@ -373,7 +719,7 @@ class AddRoutineDraft {
       startTime: const TimeOfDay(hour: 8, minute: 0),
       durationMinutes: _defaultDurationFor(initialType),
       priority: RoutinePriority.goodToDo,
-      bestTime: 'Morning',
+      bestTime: initialBestTime,
       notes: '',
       repeatDays: const [],
       fixedState: const AddRoutineFixedState(),
@@ -404,7 +750,7 @@ class AddRoutineDraft {
     TimeOfDay? startTime,
     int? durationMinutes,
     RoutinePriority? priority,
-    String? bestTime,
+    Object? bestTime = _draftSentinel,
     String? notes,
     List<int>? repeatDays,
     AddRoutineFixedState? fixedState,
@@ -423,7 +769,9 @@ class AddRoutineDraft {
       startTime: startTime ?? this.startTime,
       durationMinutes: durationMinutes ?? this.durationMinutes,
       priority: priority ?? this.priority,
-      bestTime: bestTime ?? this.bestTime,
+      bestTime: identical(bestTime, _draftSentinel)
+          ? this.bestTime
+          : bestTime as String?,
       notes: notes ?? this.notes,
       repeatDays: repeatDays ?? this.repeatDays,
       fixedState: fixedState ?? this.fixedState,
@@ -461,6 +809,11 @@ class AddRoutineDraft {
       }
     }
 
+    final updatedBestTime =
+        (newType == AddRoutineType.flexible || newType == AddRoutineType.habit)
+            ? (bestTime ?? 'Morning')
+            : null;
+
     return AddRoutineDraft(
       id: id, // Stable identity preserved!
       type: newType,
@@ -470,7 +823,7 @@ class AddRoutineDraft {
       startTime: startTime,
       durationMinutes: _defaultDurationFor(newType),
       priority: priority,
-      bestTime: bestTime,
+      bestTime: updatedBestTime,
       notes: notes,
       repeatDays: repeatDays,
       // Completely clean type states for the new type

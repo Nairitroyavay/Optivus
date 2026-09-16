@@ -2296,6 +2296,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return const RoutineWriteResult.noOp(message: 'Item not found.');
   }
 
+  RoutineItem? _itemFor(String id) =>
+      state.items.where((e) => e.id == id).firstOrNull;
+
   RoutineOccurrenceRecord? _occurrenceFor(String itemId, DateTime date) {
     final dateKey = routineLocalDateKey(date);
     for (final occurrence in state.occurrences) {
@@ -2474,6 +2477,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     final decision = RoutineTransitionPolicy.evaluate(
       existingRecord: existing,
       requestedAction: occAction,
+      projectedStatus: existing?.status ?? _itemFor(itemId)?.status ?? RoutineStatus.planned,
     );
     if (!decision.isAllowed) {
       if (decision.isNoOp) {
@@ -2854,9 +2858,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   }
 
   Future<RoutineWriteResult> undoOccurrenceAction(
-    String itemId, [
+    String itemId, {
     DateTime? occurrenceDate,
-  ]) async {
+  }) async {
     final uid = _requireOwnerUid();
     final date =
         occurrenceDate ?? _occurrenceAnchorDate(itemId, state.selectedDay);
@@ -3200,6 +3204,19 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         );
       }
       if (item.blockType == RoutineBlockType.moneyTask) {
+        final fakeAllowed = _ref.read(fakeDataAllowedProvider);
+        if (!fakeAllowed &&
+            !hasConfirmedMoneySaveForRoutine(itemId, date: occurrenceDate)) {
+          return RoutineWriteResult.validationFailed(
+            const RoutineValidationResult.invalid(
+              errorType: RoutineValidationErrorType.missingData,
+              userSafeMessage:
+                  'Please save money via UPI or Tracker to complete this task.',
+            ),
+            message: 'Money task requires a confirmed save.',
+            failureCategory: RoutineFailureCategory.validation,
+          );
+        }
         return await _alreadySaved(itemId, occurrenceDate: occurrenceDate);
       }
       if (item.blockType == RoutineBlockType.checkIn &&
@@ -3338,6 +3355,30 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
   }
 
+  bool hasConfirmedMoneySaveForRoutine(String routineTaskId, {DateTime? date}) {
+    final tracker = _ref.read(mockTrackerProvider);
+    final targetDateKey =
+        routineLocalDateKey(date ?? _occurrenceAnchorDate(routineTaskId, state.selectedDay));
+    return tracker.savingsEntries.any(
+      (entry) =>
+          entry.routineTaskId == routineTaskId &&
+          entry.isConfirmed &&
+          entry.dateKey == targetDateKey,
+    );
+  }
+
+  Future<RoutineWriteResult> recordMoneySavedAndComplete(
+    String itemId, {
+    double? amount,
+    DateTime? occurrenceDate,
+  }) async {
+    return _alreadySaved(
+      itemId,
+      amount: amount,
+      occurrenceDate: occurrenceDate,
+    );
+  }
+
   Future<RoutineWriteResult> alreadySaved(
     String itemId, {
     double? amount,
@@ -3355,17 +3396,37 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     double? amount,
     DateTime? occurrenceDate,
   }) async {
-    if (_ref.read(fakeDataAllowedProvider)) {
+    final fakeAllowed = _ref.read(fakeDataAllowedProvider);
+    if (fakeAllowed) {
       final moneyGoal = _ref.read(mockTrackerProvider).moneyGoal;
-      _ref
-          .read(mockTrackerProvider.notifier)
-          .saveMoneyToday(
-            amount: amount ?? moneyGoal.dailyTarget,
-            method: moneyGoal.defaultMethod,
-            source: MoneyEntrySource.routineTask,
-            description: 'Routine Money System task',
-            routineTaskId: itemId,
-          );
+      final alreadyConfirmed =
+          hasConfirmedMoneySaveForRoutine(itemId, date: occurrenceDate);
+      if (!alreadyConfirmed) {
+        final targetAmount = (amount != null && amount > 0)
+            ? amount
+            : (moneyGoal.dailyTarget > 0 ? moneyGoal.dailyTarget : 10.0);
+        _ref
+            .read(mockTrackerProvider.notifier)
+            .saveMoneyToday(
+              amount: targetAmount,
+              method: moneyGoal.defaultMethod,
+              source: MoneyEntrySource.routineTask,
+              description: 'Routine Money System task',
+              routineTaskId: itemId,
+            );
+      }
+    } else {
+      if (!hasConfirmedMoneySaveForRoutine(itemId, date: occurrenceDate)) {
+        return RoutineWriteResult.validationFailed(
+          const RoutineValidationResult.invalid(
+            errorType: RoutineValidationErrorType.missingData,
+            userSafeMessage:
+                'Please save money via UPI or Tracker to complete this task.',
+          ),
+          message: 'Money task requires a confirmed save.',
+          failureCategory: RoutineFailureCategory.validation,
+        );
+      }
     }
     return await _writeOccurrence(
       itemId,
@@ -3512,12 +3573,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return result;
   }
 
-  Future<RoutineWriteResult> moveItem({
+  Future<RoutineWriteResult> _executeCanonicalMove({
     required String itemId,
-    required DateTime date,
+    required DateTime targetDate,
     required int startMinute,
     required int durationMinutes,
     DateTime? occurrenceDate,
+    String action = 'move',
+    String? displayTitleOverride,
   }) async {
     _requireOwnerUid();
     final targetIndex = state.items.indexWhere((e) => e.id == itemId);
@@ -3531,8 +3594,37 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     }
     final item = state.items[targetIndex];
 
+    final anchor =
+        occurrenceDate ?? _occurrenceAnchorDate(itemId, state.selectedDay);
+    final existingOcc = _occurrenceFor(itemId, anchor);
+    final effectiveStatus = existingOcc?.status ?? item.status;
+
+    final reqAction = action == 'makeTiny'
+        ? RoutineOccurrenceAction.makeTiny
+        : (action == 'reschedule'
+            ? RoutineOccurrenceAction.reschedule
+            : RoutineOccurrenceAction.move);
+    final policyDecision = RoutineTransitionPolicy.evaluate(
+      existingRecord: existingOcc,
+      requestedAction: reqAction,
+      projectedStatus: effectiveStatus,
+    );
+    if (!policyDecision.isAllowed) {
+      return RoutineWriteResult.validationFailed(
+        RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.invalidTime,
+          userSafeMessage:
+              policyDecision.message ?? 'This routine cannot be moved.',
+        ),
+        message: policyDecision.message,
+        failureCategory: policyDecision.failureCategory,
+        resultingStatus: effectiveStatus,
+      );
+    }
+
     final rawEndMinute = startMinute + durationMinutes;
-    final endMinute = rawEndMinute <= 1440 ? rawEndMinute : rawEndMinute % 1440;
+    final endMinute =
+        rawEndMinute <= 1440 ? rawEndMinute : rawEndMinute % 1440;
     if (endMinute == startMinute) {
       return RoutineWriteResult.validationFailed(
         const RoutineValidationResult.invalid(
@@ -3553,14 +3645,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       endMinute: endMinute,
       crossesMidnight: endMinute <= startMinute,
       endsNextDay: endMinute <= startMinute,
-      date: TimelineUtils.dateOnly(date),
+      date: TimelineUtils.dateOnly(targetDate),
       repeatDays: const [],
       clearConflict: true,
     );
 
     final validation = _validate(
       dummyItem,
-      date,
+      targetDate,
       operation: RoutineValidationOperation.move,
     );
     if (!validation.isValid) {
@@ -3578,29 +3670,46 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
 
     final anchor =
         occurrenceDate ?? _occurrenceAnchorDate(itemId, state.selectedDay);
-    if (routineLocalDateKey(date) == routineLocalDateKey(anchor)) {
-      return await _writeOccurrence(
-        itemId,
-        status: RoutineStatus.moved,
-        actionSource: 'routine',
-        action: 'move',
-        occurrenceDate: anchor,
-        movedToDateKey: routineLocalDateKey(anchor),
-        movedStartMinute: startMinute,
-        movedEndMinute: endMinute,
-      );
+    final anchorKey = routineLocalDateKey(anchor);
+    final targetKey = routineLocalDateKey(targetDate);
+
+    final String effectiveAction;
+    if (action == 'makeTiny') {
+      effectiveAction = 'makeTiny';
+    } else if (targetKey == anchorKey) {
+      effectiveAction = 'move';
     } else {
-      return await _writeOccurrence(
-        itemId,
-        status: RoutineStatus.moved,
-        actionSource: 'routine',
-        action: 'reschedule',
-        occurrenceDate: anchor, // source date
-        movedToDateKey: routineLocalDateKey(date),
-        movedStartMinute: startMinute,
-        movedEndMinute: endMinute,
-      );
+      effectiveAction = 'reschedule';
     }
+
+    return await _writeOccurrence(
+      itemId,
+      status: RoutineStatus.moved,
+      actionSource: 'routine',
+      action: effectiveAction,
+      occurrenceDate: anchor,
+      movedToDateKey: targetKey,
+      movedStartMinute: startMinute,
+      movedEndMinute: endMinute,
+      displayTitleOverride: displayTitleOverride,
+    );
+  }
+
+  Future<RoutineWriteResult> moveItem({
+    required String itemId,
+    required DateTime date,
+    required int startMinute,
+    required int durationMinutes,
+    DateTime? occurrenceDate,
+  }) async {
+    return _executeCanonicalMove(
+      itemId: itemId,
+      targetDate: date,
+      startMinute: startMinute,
+      durationMinutes: durationMinutes,
+      occurrenceDate: occurrenceDate,
+      action: 'move',
+    );
   }
 
   Future<RoutineWriteResult> moveToTomorrow(
@@ -3614,18 +3723,20 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     final tomorrow = TimelineUtils.dateOnly(
       baseDate,
     ).add(const Duration(days: 1));
-    return await moveItem(
+    return await _executeCanonicalMove(
       itemId: item.id,
-      date: tomorrow,
+      targetDate: tomorrow,
       startMinute: startMinute ?? item.startMinute,
       durationMinutes: durationMinutes ?? item.durationMinutes,
       occurrenceDate: occurrenceDate,
+      action: 'reschedule',
     );
   }
 
   Future<RoutineWriteResult> makeTinyVersion(
     RoutineItem item, {
     DateTime? occurrenceDate,
+    DateTime? displayDate,
     int? startMinute,
     int? durationMinutes,
   }) async {
@@ -3639,23 +3750,68 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       }
     }
     final tinyDuration = seedDur.clamp(5, 10);
-    final rawEnd = seedStart + tinyDuration;
-    final endMinute = rawEnd > 1440
-        ? rawEnd - 1440
-        : (rawEnd == 0 ? 1440 : rawEnd);
-    return await _writeOccurrence(
-      item.id,
-      status: RoutineStatus.moved,
-      actionSource: 'routine',
-      action: 'makeTiny',
+    final targetDate = displayDate ?? occurrenceDate ?? state.selectedDay;
+
+    return await _executeCanonicalMove(
+      itemId: item.id,
+      targetDate: targetDate,
+      startMinute: seedStart,
+      durationMinutes: tinyDuration,
       occurrenceDate: occurrenceDate,
-      movedToDateKey: routineLocalDateKey(occurrenceDate ?? state.selectedDay),
-      movedStartMinute: seedStart,
-      movedEndMinute: endMinute,
+      action: 'makeTiny',
       displayTitleOverride: item.title.startsWith('[Tiny]')
           ? item.title
           : '[Tiny] ${item.title}',
     );
+  }
+
+  int? findWeeklyFreeSlot({
+    required RoutineItem item,
+    required List<int> repeatDays,
+    required DateTime baseDate,
+    int? durationMinutes,
+  }) {
+    if (repeatDays.isEmpty) {
+      return findFreeSlot(
+        item: item,
+        date: baseDate,
+        durationMinutes: durationMinutes,
+      );
+    }
+    final duration = durationMinutes ?? item.durationMinutes;
+    final snap = state.precisionMode ? 1 : 5;
+
+    final testDates = <DateTime>[];
+    for (final dayNum in repeatDays) {
+      final normalizedDay = ((dayNum - 1) % 7) + 1;
+      var testDate = DateTime(baseDate.year, baseDate.month, baseDate.day);
+      while (testDate.weekday != normalizedDay) {
+        testDate = testDate.add(const Duration(days: 1));
+      }
+      testDates.add(testDate);
+    }
+
+    final availabilities = testDates.map((d) {
+      final dayEntries = RoutineOccurrenceProjector.entriesForDay(
+        state.items,
+        state.occurrences,
+        d,
+      ).where((c) => c.templateId != item.id).toList(growable: false);
+      return RoutineDayAvailability.computeFromEntries(dayEntries);
+    }).toList(growable: false);
+
+    const windowStart = kRoutinePlanningWindowStartMinute;
+    const windowEnd = kRoutinePlanningWindowEndMinute;
+    for (int minute = windowStart; minute + duration <= windowEnd; minute += snap) {
+      final end = minute + duration;
+      final fitsAll = availabilities.every(
+        (avail) => avail.isRangeFree(minute, end),
+      );
+      if (fitsAll) {
+        return minute;
+      }
+    }
+    return null;
   }
 
   int? findFreeSlot({

@@ -104,6 +104,7 @@ void main() {
     required String uid,
     required String itemId,
     required DateTime date,
+    RoutineStatus status = RoutineStatus.active,
   }) {
     final dateKey = routineLocalDateKey(date);
     return RoutineOccurrenceRecord(
@@ -115,7 +116,7 @@ void main() {
       ownerUid: uid,
       routineItemId: itemId,
       occurrenceDateKey: dateKey,
-      status: RoutineStatus.active,
+      status: status,
       source: 'onboarding',
       action: 'project',
       operationKey: 'onboarding_project_$itemId',
@@ -245,7 +246,11 @@ void main() {
         await repo.createRoutineItem(uid, entry.value);
         await historyRepo.appendHistory(
           uid,
-          onboardingOccurrence(uid: uid, itemId: entry.key, date: date),
+          onboardingOccurrence(
+            uid: uid,
+            itemId: entry.key,
+            date: date,
+          ),
         );
       }
       await notifier.loadForOwner(uid);
@@ -1465,29 +1470,15 @@ void main() {
         ),
       );
 
-      expect(find.text('Done'), findsOneWidget);
-      expect(find.text('Start'), findsOneWidget);
+      expect(find.text('Completed'), findsOneWidget);
+      expect(find.text('Start'), findsNothing);
       final done = find.byKey(
         const ValueKey('routine-action-done-t_completed'),
-      );
-      final start = find.byKey(
-        const ValueKey('routine-action-start-t_completed'),
       );
       expect(
         tester
             .widget<GestureDetector>(
               find.descendant(of: done, matching: find.byType(GestureDetector)),
-            )
-            .onTap,
-        isNull,
-      );
-      expect(
-        tester
-            .widget<GestureDetector>(
-              find.descendant(
-                of: start,
-                matching: find.byType(GestureDetector),
-              ),
             )
             .onTap,
         isNull,

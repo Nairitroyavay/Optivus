@@ -241,6 +241,7 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                                 .makeTinyVersion(
                                   widget.item,
                                   occurrenceDate: _sourceOccurrenceDate,
+                                  displayDate: widget.displayDate,
                                   startMinute: _seedStartMinute,
                                   durationMinutes: _seedDuration,
                                 ),

@@ -119,7 +119,7 @@ void main() {
           requestedAction: RoutineOccurrenceAction.move,
           projectedStatus: RoutineStatus.active,
         ).isAllowed,
-        true,
+        false,
       );
       expect(
         RoutineTransitionPolicy.evaluate(
@@ -407,8 +407,8 @@ void main() {
 
       // Can complete
       expect(availability.canComplete, true);
-      // Can move
-      expect(availability.canMove, true);
+      // Cannot move while active (Gate G)
+      expect(availability.canMove, false);
       // Cannot start again
       expect(availability.canStart, false);
       expect(availability.startDecision.isNoOp, true);

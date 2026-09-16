@@ -517,6 +517,10 @@ BaseTimelineSetup migrateBaseTimelineSetupIfNeeded({
         targetProtein: onboardingSource.targetProtein,
         eatingPhotoAssetId: onboardingSource.eatingPhotoAssetId,
         eatingPhotoR2Key: onboardingSource.eatingPhotoR2Key,
+        eatingGeneratedPlanVersion: onboardingSource.eatingGeneratedPlanVersion,
+        eatingGeneratedInputFingerprint:
+            onboardingSource.eatingGeneratedInputFingerprint,
+        eatingCustomized: onboardingSource.eatingCustomized,
       );
     }
 

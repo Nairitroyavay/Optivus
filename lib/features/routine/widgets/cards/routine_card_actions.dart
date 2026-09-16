@@ -315,95 +315,139 @@ class RoutineCardActions extends ConsumerWidget {
             (effectiveStatus == RoutineStatus.inTracker ||
                 isActiveTrackerOccurrence);
 
+        final isMoney = item.blockType == RoutineBlockType.moneyTask;
+        final isBadHabit = item.blockType == RoutineBlockType.checkIn &&
+            item.category == RoutineCategory.badHabit;
+
+        final String? startLabel = hasGenericCountdown
+            ? null
+            : (isMoney
+                ? 'Save money'
+                : (isBadHabit
+                    ? 'Check in'
+                    : (isTrackerActive ? 'Open Tracker' : 'Start')));
+
+        final IconData startIcon = isMoney
+            ? Icons.savings_outlined
+            : (isBadHabit
+                ? Icons.fact_check_outlined
+                : (isTrackerActive
+                    ? Icons.open_in_new_rounded
+                    : Icons.play_arrow_rounded));
+
         final startAction = _ActionButton(
           key: ValueKey('routine-action-start-${item.id}'),
-          label: hasGenericCountdown
-              ? null
-              : (isTrackerActive ? 'Open Tracker' : 'Start'),
+          label: startLabel,
           countdownStartedAt: hasGenericCountdown ? item.startedAt : null,
           countdownDurationSeconds: hasGenericCountdown
               ? item.countdownDurationSeconds
               : null,
           color: OptivusColors.routineAccent,
-          icon: isTrackerActive
-              ? Icons.open_in_new_rounded
-              : Icons.play_arrow_rounded,
+          icon: startIcon,
           isPrimary: !hasGenericCountdown &&
               (effectiveStatus == RoutineStatus.planned || isTrackerActive),
           isDisabled:
               isPending ||
               (!startDecision.isAllowed &&
-                  effectiveStatus != RoutineStatus.inTracker),
+                  effectiveStatus != RoutineStatus.inTracker &&
+                  !hasGenericCountdown),
+          onTap: hasGenericCountdown
+              ? null
+              : () {
+                  if (!hasScope) return;
+                  if (isCompleted) {
+                    _executeRoutineAction(
+                      context,
+                      ref,
+                      action: RoutineOccurrenceAction.start,
+                      perform: () => Future.value(
+                        RoutineWriteResult.validationFailed(
+                          RoutineValidationResult.invalid(
+                            errorType: RoutineValidationErrorType.invalidTime,
+                            userSafeMessage:
+                                'Completed routine cannot be restarted.',
+                          ),
+                          message: 'Completed routine cannot be restarted.',
+                          failureCategory:
+                              RoutineFailureCategory.invalidTransition,
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                  if (item.blockType == RoutineBlockType.moneyTask) {
+                    showSaveViaUpiFlow(
+                      context,
+                      ref,
+                      source: MoneyEntrySource.routineTask,
+                      routineTaskId: item.id,
+                      onSaved: () => _executeRoutineAction(
+                        context,
+                        ref,
+                        action: RoutineOccurrenceAction.complete,
+                        perform: () => ref
+                            .read(routineNotifierProvider.notifier)
+                            .recordMoneySavedAndComplete(
+                              item.id,
+                              occurrenceDate: effectiveOccurrenceDate,
+                            ),
+                      ),
+                    );
+                  } else if (item.blockType == RoutineBlockType.checkIn &&
+                      item.category == RoutineCategory.badHabit) {
+                    _showBadHabitCheckInSheet(context, ref, item);
+                  } else if (item.blockType == RoutineBlockType.trackerTask &&
+                      (effectiveStatus == RoutineStatus.inTracker ||
+                          isActiveTrackerOccurrence)) {
+                    ref.read(appNavigationProvider.notifier).goToTracker();
+                  } else if (item.blockType == RoutineBlockType.trackerTask) {
+                    _executeRoutineAction(
+                      context,
+                      ref,
+                      action: RoutineOccurrenceAction.startTracker,
+                      perform: () => ref
+                          .read(routineNotifierProvider.notifier)
+                          .startRoutineItem(
+                            item.id,
+                            occurrenceDate: effectiveOccurrenceDate,
+                          ),
+                    );
+                  } else {
+                    _executeRoutineAction(
+                      context,
+                      ref,
+                      action: RoutineOccurrenceAction.start,
+                      perform: () => ref
+                          .read(routineNotifierProvider.notifier)
+                          .startRoutineItem(
+                            item.id,
+                            occurrenceDate: effectiveOccurrenceDate,
+                          ),
+                    );
+                  }
+                },
+        );
+
+        final stopAction = _ActionButton(
+          key: ValueKey('routine-action-stop-${item.id}'),
+          label: 'Stop',
+          color: OptivusColors.danger,
+          icon: Icons.stop_rounded,
+          isPrimary: false,
+          isDisabled: isPending,
           onTap: () {
             if (!hasScope) return;
-            if (isCompleted) {
-              _executeRoutineAction(
-                context,
-                ref,
-                action: RoutineOccurrenceAction.start,
-                perform: () => Future.value(
-                  RoutineWriteResult.validationFailed(
-                    RoutineValidationResult.invalid(
-                      errorType: RoutineValidationErrorType.invalidTime,
-                      userSafeMessage: 'Completed routine cannot be restarted.',
-                    ),
-                    message: 'Completed routine cannot be restarted.',
-                    failureCategory: RoutineFailureCategory.invalidTransition,
+            _executeRoutineAction(
+              context,
+              ref,
+              action: RoutineOccurrenceAction.undo,
+              perform: () => ref
+                  .read(routineNotifierProvider.notifier)
+                  .undoOccurrenceAction(
+                    item.id,
+                    occurrenceDate: effectiveOccurrenceDate,
                   ),
-                ),
-              );
-              return;
-            }
-            if (item.blockType == RoutineBlockType.moneyTask) {
-              showSaveViaUpiFlow(
-                context,
-                ref,
-                source: MoneyEntrySource.routineTask,
-                routineTaskId: item.id,
-                onSaved: () => _executeRoutineAction(
-                  context,
-                  ref,
-                  action: RoutineOccurrenceAction.complete,
-                  perform: () => ref
-                      .read(routineNotifierProvider.notifier)
-                      .completeRoutineItem(
-                        item.id,
-                        occurrenceDate: effectiveOccurrenceDate,
-                      ),
-                ),
-              );
-            } else if (item.blockType == RoutineBlockType.checkIn &&
-                item.category == RoutineCategory.badHabit) {
-              _showBadHabitCheckInSheet(context, ref, item);
-            } else if (item.blockType == RoutineBlockType.trackerTask &&
-                (effectiveStatus == RoutineStatus.inTracker ||
-                    isActiveTrackerOccurrence)) {
-              ref.read(appNavigationProvider.notifier).goToTracker();
-            } else if (item.blockType == RoutineBlockType.trackerTask) {
-              _executeRoutineAction(
-                context,
-                ref,
-                action: RoutineOccurrenceAction.startTracker,
-                perform: () => ref
-                    .read(routineNotifierProvider.notifier)
-                    .startRoutineItem(
-                      item.id,
-                      occurrenceDate: effectiveOccurrenceDate,
-                    ),
-              );
-            } else {
-              _executeRoutineAction(
-                context,
-                ref,
-                action: RoutineOccurrenceAction.start,
-                perform: () => ref
-                    .read(routineNotifierProvider.notifier)
-                    .startRoutineItem(
-                      item.id,
-                      occurrenceDate: effectiveOccurrenceDate,
-                    ),
-              );
-            }
+            );
           },
         );
 
@@ -495,6 +539,58 @@ class RoutineCardActions extends ConsumerWidget {
           },
         );
 
+        // Active generic task layout: Countdown + Done (primary) + Stop (secondary), Move hidden.
+        if (hasGenericCountdown) {
+          if (actionLayout == RoutineCardActionLayout.stacked) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                startAction,
+                const SizedBox(height: RoutineCardPresentation.actionGap),
+                Row(
+                  children: [
+                    Expanded(child: doneAction),
+                    const SizedBox(width: RoutineCardPresentation.actionGap),
+                    Expanded(child: stopAction),
+                  ],
+                ),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(flex: 3, child: startAction),
+              const SizedBox(width: RoutineCardPresentation.actionGap),
+              Expanded(flex: 2, child: doneAction),
+              const SizedBox(width: RoutineCardPresentation.actionGap),
+              Expanded(flex: 2, child: stopAction),
+            ],
+          );
+        }
+
+        // Active tracker layout: Open Tracker (primary) + Done (secondary), Move hidden.
+        if (isTrackerActive) {
+          if (actionLayout == RoutineCardActionLayout.stacked) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                startAction,
+                const SizedBox(height: RoutineCardPresentation.actionGap),
+                doneAction,
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(flex: 3, child: startAction),
+              const SizedBox(width: RoutineCardPresentation.actionGap),
+              Expanded(flex: 2, child: doneAction),
+            ],
+          );
+        }
+
         if (actionLayout == RoutineCardActionLayout.stacked) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -502,9 +598,13 @@ class RoutineCardActions extends ConsumerWidget {
             children: [
               startAction,
               const SizedBox(height: RoutineCardPresentation.actionGap),
-              doneAction,
-              const SizedBox(height: RoutineCardPresentation.actionGap),
-              moveAction,
+              Row(
+                children: [
+                  Expanded(child: doneAction),
+                  const SizedBox(width: RoutineCardPresentation.actionGap),
+                  Expanded(child: moveAction),
+                ],
+              ),
             ],
           );
         }

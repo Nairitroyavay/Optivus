@@ -32,14 +32,11 @@ class AddRoutineMapper {
     final repeatRule = isOneTime ? 'once' : 'weekly';
 
     final effectiveTitle = draft.title.trim();
-    final effectiveNotes =
-        draft.notes.trim().isEmpty ? null : draft.notes.trim();
+    final effectiveNotes = _clean(draft.notes);
 
     switch (draft.type) {
       case AddRoutineType.flexible:
-        final subtasks = draft.flexibleState.subtasks.isEmpty
-            ? null
-            : List<String>.unmodifiable(draft.flexibleState.subtasks);
+        final subtasks = _cleanList(draft.flexibleState.subtasks);
         return RoutineItem(
           id: draft.id,
           title: effectiveTitle,
@@ -56,7 +53,7 @@ class AddRoutineMapper {
           source: RoutineSource.manual,
           status: RoutineStatus.planned,
           priority: draft.priority,
-          bestTime: draft.bestTime,
+          bestTime: _clean(draft.bestTime),
           isTrackerLinked: false,
           trackerType: TrackerType.none,
           hardBlock: false,
@@ -70,20 +67,61 @@ class AddRoutineMapper {
       case AddRoutineType.fixed:
         final fixedState = draft.fixedState;
         final category = categoryForFixedKind(fixedState.kind);
-        final steps = fixedState.steps.isEmpty
-            ? null
-            : List<String>.unmodifiable(fixedState.steps);
-        final dishes = fixedState.dishes.isEmpty
-            ? null
-            : List<String>.unmodifiable(fixedState.dishes);
-        final products = fixedState.skincareProducts.isEmpty
-            ? null
-            : List<String>.unmodifiable(fixedState.skincareProducts);
-        final missing = fixedState.skincareMissingItems.isEmpty
-            ? null
-            : List<String>.unmodifiable(fixedState.skincareMissingItems);
 
-        final location = fixedState.classLocation ?? fixedState.workLocation;
+        // Subtype discrimination: strictly extract ONLY metadata belonging to fixedState.kind!
+        String? location;
+        String? professor;
+        String? courseCode;
+        String? classType;
+        String? sectionLabel;
+
+        String? workContextType;
+        String? workRole;
+        String? workOrganization;
+        String? workDepartmentOrProject;
+        String? workMode;
+        String? workBlockKind;
+
+        String? mealCategory;
+        String? mealSlot;
+        List<String>? dishes;
+        double? caloriesEstimate;
+        double? proteinEstimate;
+
+        List<String>? steps;
+        List<String>? products;
+        List<String>? missing;
+        String? skincareSlotLabel;
+
+        if (fixedState.kind == 'Class') {
+          location = _clean(fixedState.classDetails.location);
+          professor = _clean(fixedState.classDetails.professor);
+          courseCode = _clean(fixedState.classDetails.courseCode);
+          classType = _clean(fixedState.classDetails.classType);
+          sectionLabel = _clean(fixedState.classDetails.sectionLabel);
+        } else if (fixedState.kind == 'Job' || fixedState.kind == 'Work') {
+          location = _clean(fixedState.workDetails.location);
+          workContextType = _clean(fixedState.workDetails.workContextType);
+          workRole = _clean(fixedState.workDetails.workRole);
+          workOrganization = _clean(fixedState.workDetails.workOrganization);
+          workDepartmentOrProject =
+              _clean(fixedState.workDetails.workDepartmentOrProject);
+          workMode = _clean(fixedState.workDetails.workMode);
+          workBlockKind = _clean(fixedState.workDetails.workBlockKind);
+        } else if (fixedState.kind == 'Eating' || fixedState.kind == 'Meal') {
+          mealCategory = _clean(fixedState.eatingDetails.mealCategory);
+          mealSlot = _clean(fixedState.eatingDetails.mealSlot);
+          dishes = _cleanList(fixedState.eatingDetails.dishes);
+          caloriesEstimate = fixedState.eatingDetails.caloriesEstimate;
+          proteinEstimate = fixedState.eatingDetails.proteinEstimate;
+        } else if (fixedState.kind == 'Skin Care' ||
+            fixedState.kind == 'Skincare') {
+          skincareSlotLabel = _clean(fixedState.skinDetails.skincareSlotLabel);
+          steps = _cleanList(fixedState.skinDetails.steps);
+          products = _cleanList(fixedState.skinDetails.skincareProducts);
+          missing = _cleanList(fixedState.skinDetails.skincareMissingItems);
+        }
+        // Sleep/Bath/Travel/Prayer/Tuition/Other do not inherit any structured metadata.
 
         return RoutineItem(
           id: draft.id,
@@ -103,46 +141,42 @@ class AddRoutineMapper {
           source: RoutineSource.manual,
           status: RoutineStatus.planned,
           priority: draft.priority,
-          bestTime: draft.bestTime,
+          bestTime: null, // Gate D: fixed blocks do not choose or persist bestTime
           isTrackerLinked: false,
           trackerType: TrackerType.none,
           hardBlock: fixedState.hardBlock,
           notes: effectiveNotes,
           location: location,
           // Class fields
-          professor: fixedState.professor,
-          courseCode: fixedState.courseCode,
-          classType: fixedState.classType,
-          sectionLabel: fixedState.sectionLabel,
+          professor: professor,
+          courseCode: courseCode,
+          classType: classType,
+          sectionLabel: sectionLabel,
           // Work fields
-          workContextType: fixedState.workContextType,
-          workRole: fixedState.workRole,
-          workOrganization: fixedState.workOrganization,
-          workDepartmentOrProject: fixedState.workDepartmentOrProject,
-          workMode: fixedState.workMode,
-          workBlockKind: fixedState.workBlockKind,
+          workContextType: workContextType,
+          workRole: workRole,
+          workOrganization: workOrganization,
+          workDepartmentOrProject: workDepartmentOrProject,
+          workMode: workMode,
+          workBlockKind: workBlockKind,
           // Eating fields
-          mealCategory: fixedState.mealCategory,
-          mealSlot: fixedState.mealSlot,
+          mealCategory: mealCategory,
+          mealSlot: mealSlot,
           dishes: dishes,
-          caloriesEstimate: fixedState.caloriesEstimate,
-          proteinEstimate: fixedState.proteinEstimate,
+          caloriesEstimate: caloriesEstimate,
+          proteinEstimate: proteinEstimate,
           // Skincare fields
           steps: steps,
           skincareProducts: products,
           skincareMissingItems: missing,
-          skincareSlotLabel: fixedState.skincareSlotLabel,
+          skincareSlotLabel: skincareSlotLabel,
         );
 
       case AddRoutineType.habit:
         final habitState = draft.habitState;
         final isLinked = habitState.trackerType != TrackerType.none;
-        final subtasks = habitState.subtasks.isEmpty
-            ? null
-            : List<String>.unmodifiable(habitState.subtasks);
-        final steps = habitState.steps.isEmpty
-            ? null
-            : List<String>.unmodifiable(habitState.steps);
+        final subtasks = _cleanList(habitState.subtasks);
+        final steps = _cleanList(habitState.steps);
 
         return RoutineItem(
           id: draft.id,
@@ -162,7 +196,7 @@ class AddRoutineMapper {
           source: RoutineSource.manual,
           status: RoutineStatus.planned,
           priority: draft.priority,
-          bestTime: draft.bestTime,
+          bestTime: _clean(draft.bestTime),
           isTrackerLinked: isLinked,
           trackerType: habitState.trackerType,
           hardBlock: false,
@@ -176,9 +210,7 @@ class AddRoutineMapper {
 
       case AddRoutineType.tracker:
         final trackerState = draft.trackerState;
-        final subtasks = trackerState.subtasks.isEmpty
-            ? null
-            : List<String>.unmodifiable(trackerState.subtasks);
+        final subtasks = _cleanList(trackerState.subtasks);
         final category = categoryForTrackerType(trackerState.trackerType);
 
         return RoutineItem(
@@ -197,7 +229,7 @@ class AddRoutineMapper {
           source: RoutineSource.manual,
           status: RoutineStatus.planned,
           priority: draft.priority,
-          bestTime: draft.bestTime,
+          bestTime: null, // Gate D: tracker task does not expose bestTime
           isTrackerLinked: true,
           trackerType: trackerState.trackerType,
           hardBlock: false,
@@ -225,7 +257,7 @@ class AddRoutineMapper {
           source: RoutineSource.manual,
           status: RoutineStatus.planned,
           priority: draft.priority,
-          bestTime: draft.bestTime,
+          bestTime: null, // Gate D: checkin does not expose bestTime
           isTrackerLinked: false,
           trackerType: TrackerType.none,
           hardBlock: false,
@@ -251,7 +283,7 @@ class AddRoutineMapper {
           source: RoutineSource.manual,
           status: RoutineStatus.planned,
           priority: draft.priority,
-          bestTime: draft.bestTime,
+          bestTime: null, // Gate D: money does not expose bestTime
           isTrackerLinked: true,
           trackerType: TrackerType.money,
           hardBlock: false,
@@ -260,13 +292,28 @@ class AddRoutineMapper {
     }
   }
 
+  static String? _clean(String? val) {
+    if (val == null) return null;
+    final trimmed = val.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  static List<String>? _cleanList(List<String>? list) {
+    if (list == null) return null;
+    final cleaned = list
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList(growable: false);
+    return cleaned.isEmpty ? null : List.unmodifiable(cleaned);
+  }
+
   static RoutineCategory categoryForFixedKind(String kind) {
     return switch (kind) {
       'Class' || 'Tuition' => RoutineCategory.classBlock,
-      'Job' => RoutineCategory.job,
-      'Eating' => RoutineCategory.eating,
+      'Job' || 'Work' => RoutineCategory.job,
+      'Eating' || 'Meal' => RoutineCategory.eating,
       'Sleep' => RoutineCategory.sleep,
-      'Skin Care' => RoutineCategory.skinCare,
+      'Skin Care' || 'Skincare' => RoutineCategory.skinCare,
       'Bath' || 'Travel' || 'Prayer' => RoutineCategory.fixed,
       _ => RoutineCategory.fixed,
     };

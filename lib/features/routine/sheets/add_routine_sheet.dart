@@ -41,15 +41,30 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
   late final TextEditingController _courseCodeController;
   late final TextEditingController _classTypeController;
   late final TextEditingController _sectionController;
-  late final TextEditingController _locationController;
+  late final TextEditingController _classLocationController;
 
   late final TextEditingController _workRoleController;
   late final TextEditingController _workOrgController;
   late final TextEditingController _workDeptController;
+  late final TextEditingController _workContextTypeController;
+  late final TextEditingController _workModeController;
+  late final TextEditingController _workBlockKindController;
+  late final TextEditingController _workLocationController;
 
   bool _showMoreDetails = false;
   String? _error;
   bool _saving = false;
+  bool _saveFailed = false;
+
+  late final TextEditingController _mealSlotController;
+  late final TextEditingController _mealCategoryController;
+  late final TextEditingController _caloriesController;
+  late final TextEditingController _proteinController;
+
+  late final TextEditingController _skinSlotController;
+  late final TextEditingController _skinStepsController;
+  late final TextEditingController _skinProductsController;
+  late final TextEditingController _skinMissingController;
 
   @override
   void initState() {
@@ -67,11 +82,25 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
     _courseCodeController = TextEditingController();
     _classTypeController = TextEditingController();
     _sectionController = TextEditingController();
-    _locationController = TextEditingController();
+    _classLocationController = TextEditingController();
 
     _workRoleController = TextEditingController();
     _workOrgController = TextEditingController();
     _workDeptController = TextEditingController();
+    _workContextTypeController = TextEditingController();
+    _workModeController = TextEditingController();
+    _workBlockKindController = TextEditingController();
+    _workLocationController = TextEditingController();
+
+    _mealSlotController = TextEditingController();
+    _mealCategoryController = TextEditingController();
+    _caloriesController = TextEditingController();
+    _proteinController = TextEditingController();
+
+    _skinSlotController = TextEditingController();
+    _skinStepsController = TextEditingController();
+    _skinProductsController = TextEditingController();
+    _skinMissingController = TextEditingController();
   }
 
   @override
@@ -86,11 +115,25 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
     _courseCodeController.dispose();
     _classTypeController.dispose();
     _sectionController.dispose();
-    _locationController.dispose();
+    _classLocationController.dispose();
 
     _workRoleController.dispose();
     _workOrgController.dispose();
     _workDeptController.dispose();
+    _workContextTypeController.dispose();
+    _workModeController.dispose();
+    _workBlockKindController.dispose();
+    _workLocationController.dispose();
+
+    _mealSlotController.dispose();
+    _mealCategoryController.dispose();
+    _caloriesController.dispose();
+    _proteinController.dispose();
+
+    _skinSlotController.dispose();
+    _skinStepsController.dispose();
+    _skinProductsController.dispose();
+    _skinMissingController.dispose();
 
     super.dispose();
   }
@@ -117,14 +160,33 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
         _courseCodeController.text = _draft.fixedState.courseCode ?? '';
         _classTypeController.text = _draft.fixedState.classType ?? '';
         _sectionController.text = _draft.fixedState.sectionLabel ?? '';
-        _locationController.text =
-            _draft.fixedState.classLocation ??
-            _draft.fixedState.workLocation ??
-            '';
+        _classLocationController.text = _draft.fixedState.classLocation ?? '';
+
         _workRoleController.text = _draft.fixedState.workRole ?? '';
         _workOrgController.text = _draft.fixedState.workOrganization ?? '';
         _workDeptController.text =
             _draft.fixedState.workDepartmentOrProject ?? '';
+        _workContextTypeController.text =
+            _draft.fixedState.workContextType ?? '';
+        _workModeController.text = _draft.fixedState.workMode ?? '';
+        _workBlockKindController.text = _draft.fixedState.workBlockKind ?? '';
+        _workLocationController.text = _draft.fixedState.workLocation ?? '';
+
+        _mealSlotController.text = _draft.fixedState.mealSlot ?? '';
+        _mealCategoryController.text = _draft.fixedState.mealCategory ?? '';
+        _caloriesController.text = _draft.fixedState.caloriesEstimate != null
+            ? _draft.fixedState.caloriesEstimate!.toStringAsFixed(0)
+            : '';
+        _proteinController.text = _draft.fixedState.proteinEstimate != null
+            ? _draft.fixedState.proteinEstimate!.toStringAsFixed(0)
+            : '';
+
+        _skinSlotController.text = _draft.fixedState.skincareSlotLabel ?? '';
+        _skinStepsController.text = _draft.fixedState.steps.join('\n');
+        _skinProductsController.text =
+            _draft.fixedState.skincareProducts.join('\n');
+        _skinMissingController.text =
+            _draft.fixedState.skincareMissingItems.join('\n');
         break;
       case AddRoutineType.checkin:
       case AddRoutineType.money:
@@ -348,9 +410,7 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
             },
           ),
         ],
-        if (type == AddRoutineType.fixed &&
-                _draft.fixedState.kind == 'Skin Care' ||
-            type == AddRoutineType.habit) ...[
+        if (type == AddRoutineType.habit) ...[
           const SizedBox(height: 12),
           _textField(
             controller: _stepsController,
@@ -359,29 +419,8 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
             maxLines: 4,
             onChanged: (val) {
               final lines = _lines(val);
-              if (type == AddRoutineType.fixed) {
-                _draft = _draft.copyWith(
-                  fixedState: _draft.fixedState.copyWith(steps: lines),
-                );
-              } else if (type == AddRoutineType.habit) {
-                _draft = _draft.copyWith(
-                  habitState: _draft.habitState.copyWith(steps: lines),
-                );
-              }
-            },
-          ),
-        ],
-        if (type == AddRoutineType.fixed &&
-            _draft.fixedState.kind == 'Eating') ...[
-          const SizedBox(height: 12),
-          _textField(
-            controller: _dishesController,
-            label: 'Dishes',
-            hint: 'One dish per line',
-            maxLines: 4,
-            onChanged: (val) {
               _draft = _draft.copyWith(
-                fixedState: _draft.fixedState.copyWith(dishes: _lines(val)),
+                habitState: _draft.habitState.copyWith(steps: lines),
               );
             },
           ),
@@ -398,61 +437,121 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
           ),
         ],
         const SizedBox(height: 18),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: _saving ? null : _findFreeSlot,
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: OptivusColors.routineAccent),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+        if (_saveFailed) ...[
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  key: const ValueKey('add-routine-discard-button'),
+                  onPressed: _saving ? null : _discardFailedCreate,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: OptivusColors.danger),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                child: const Text(
-                  'Find free slot',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                    color: OptivusColors.routineAccent,
+                  child: const Text(
+                    'Discard',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.danger,
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: _saving ? null : _save,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: OptivusColors.routineAccent,
-                  disabledBackgroundColor: OptivusColors.disabled,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  key: const ValueKey('add-routine-retry-button'),
+                  onPressed: _saving ? null : _retryFailedOperation,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: OptivusColors.routineAccent,
+                    disabledBackgroundColor: OptivusColors.disabled,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  child: _saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          'Retry',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
                 ),
-                child: _saving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text(
-                        'Save at this time',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
+        ] else ...[
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _saving ? null : _findFreeSlot,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: OptivusColors.routineAccent),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: const Text(
+                    'Find free slot',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.routineAccent,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _saving ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: OptivusColors.routineAccent,
+                    disabledBackgroundColor: OptivusColors.disabled,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: _saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          'Save at this time',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -530,7 +629,7 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
             Expanded(
               child: _stringTile(
                 label: 'Best time',
-                value: _draft.bestTime,
+                value: _draft.bestTime ?? 'Morning',
                 values: const [
                   'Morning',
                   'Afternoon',
@@ -609,7 +708,7 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
             Expanded(
               child: _stringTile(
                 label: 'Best time',
-                value: _draft.bestTime,
+                value: _draft.bestTime ?? 'Morning',
                 values: const [
                   'Morning',
                   'Afternoon',
@@ -675,6 +774,7 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
               _draft = _draft.copyWith(
                 fixedState: fixed.copyWith(kind: value, hardBlock: isHard),
               );
+              _syncControllersForFixedKind(value);
             });
           },
         ),
@@ -703,6 +803,38 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
         ],
       ],
     );
+  }
+
+  void _syncControllersForFixedKind(String newKind) {
+    if (newKind != 'Class') {
+      _courseCodeController.clear();
+      _professorController.clear();
+      _classTypeController.clear();
+      _sectionController.clear();
+      _classLocationController.clear();
+    }
+    if (newKind != 'Job' && newKind != 'Work') {
+      _workRoleController.clear();
+      _workOrgController.clear();
+      _workDeptController.clear();
+      _workContextTypeController.clear();
+      _workModeController.clear();
+      _workBlockKindController.clear();
+      _workLocationController.clear();
+    }
+    if (newKind != 'Eating' && newKind != 'Meal') {
+      _mealSlotController.clear();
+      _mealCategoryController.clear();
+      _caloriesController.clear();
+      _proteinController.clear();
+      _dishesController.clear();
+    }
+    if (newKind != 'Skin Care' && newKind != 'Skincare') {
+      _skinSlotController.clear();
+      _skinStepsController.clear();
+      _skinProductsController.clear();
+      _skinMissingController.clear();
+    }
   }
 
   Widget _buildMoreDetailsSection(String kind) {
@@ -760,6 +892,15 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
             ),
             const SizedBox(height: 8),
             _textField(
+              controller: _classTypeController,
+              label: 'Class type',
+              hint: 'e.g. Lecture, Lab, Seminar',
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(classType: val),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _textField(
               controller: _sectionController,
               label: 'Section',
               hint: 'e.g. Sec 01',
@@ -769,7 +910,7 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
             ),
             const SizedBox(height: 8),
             _textField(
-              controller: _locationController,
+              controller: _classLocationController,
               label: 'Class location',
               hint: 'e.g. Hall B / Zoom link',
               onChanged: (val) => _draft = _draft.copyWith(
@@ -796,11 +937,140 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
             ),
             const SizedBox(height: 8),
             _textField(
-              controller: _locationController,
+              controller: _workDeptController,
+              label: 'Department / Project',
+              hint: 'e.g. Core Infrastructure',
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState:
+                    _draft.fixedState.copyWith(workDepartmentOrProject: val),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _textField(
+              controller: _workContextTypeController,
+              label: 'Context type',
+              hint: 'e.g. Deep work, Meeting, Admin',
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(workContextType: val),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _textField(
+              controller: _workModeController,
+              label: 'Work mode',
+              hint: 'e.g. Remote, On-site, Hybrid',
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(workMode: val),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _textField(
+              controller: _workBlockKindController,
+              label: 'Work block kind',
+              hint: 'e.g. Focus time, Sync',
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(workBlockKind: val),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _textField(
+              controller: _workLocationController,
               label: 'Work location',
               hint: 'e.g. Office 4F / Remote',
               onChanged: (val) => _draft = _draft.copyWith(
                 fixedState: _draft.fixedState.copyWith(workLocation: val),
+              ),
+            ),
+          ] else if (kind == 'Eating') ...[
+            _textField(
+              controller: _mealSlotController,
+              label: 'Meal slot',
+              hint: 'e.g. Breakfast, Lunch, Dinner',
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(mealSlot: val),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _textField(
+              controller: _mealCategoryController,
+              label: 'Category',
+              hint: 'e.g. Home cooked, Restaurant',
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(mealCategory: val),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _textField(
+              controller: _caloriesController,
+              label: 'Estimated calories (kcal)',
+              hint: 'e.g. 600',
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(
+                  caloriesEstimate: double.tryParse(val.trim()),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _textField(
+              controller: _proteinController,
+              label: 'Estimated protein (g)',
+              hint: 'e.g. 35',
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(
+                  proteinEstimate: double.tryParse(val.trim()),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _textField(
+              controller: _dishesController,
+              label: 'Dishes / Foods (one per line)',
+              hint: 'e.g. Oatmeal\nBanana\nWhey protein',
+              maxLines: 3,
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(dishes: _lines(val)),
+              ),
+            ),
+          ] else if (kind == 'Skin Care') ...[
+            _textField(
+              controller: _skinSlotController,
+              label: 'Slot label',
+              hint: 'e.g. Morning Routine, Night Routine',
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(skincareSlotLabel: val),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _textField(
+              controller: _skinStepsController,
+              label: 'Steps (one per line)',
+              hint: 'e.g. Cleanser\nToner\nMoisturizer',
+              maxLines: 3,
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(steps: _lines(val)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _textField(
+              controller: _skinProductsController,
+              label: 'Products (one per line)',
+              hint: 'e.g. CeraVe Cleanser\nSunscreen SPF 50',
+              maxLines: 3,
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState:
+                    _draft.fixedState.copyWith(skincareProducts: _lines(val)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _textField(
+              controller: _skinMissingController,
+              label: 'Missing items (one per line)',
+              hint: 'e.g. Retinol serum',
+              maxLines: 2,
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(
+                  skincareMissingItems: _lines(val),
+                ),
               ),
             ),
           ],
@@ -1126,17 +1396,25 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
   void _findFreeSlot() {
     if (_saving) return;
     final itemCandidate = AddRoutineMapper.toRoutineItem(_draft);
-    final slot = ref
-        .read(routineNotifierProvider.notifier)
-        .findFreeSlot(
-          item: itemCandidate,
-          date: _draft.date,
-          durationMinutes: _draft.durationMinutes,
-        );
+    final slot = _draft.scheduleMode == AddRoutineScheduleMode.weekly &&
+            _draft.repeatDays.isNotEmpty
+        ? ref.read(routineNotifierProvider.notifier).findWeeklyFreeSlot(
+              item: itemCandidate,
+              repeatDays: _draft.repeatDays,
+              baseDate: _draft.date,
+              durationMinutes: _draft.durationMinutes,
+            )
+        : ref.read(routineNotifierProvider.notifier).findFreeSlot(
+              item: itemCandidate,
+              date: _draft.date,
+              durationMinutes: _draft.durationMinutes,
+            );
     if (slot == null) {
       setState(
-        () => _error =
-            'No open slot found. You can still choose any time manually.',
+        () => _error = _draft.scheduleMode == AddRoutineScheduleMode.weekly &&
+                _draft.repeatDays.isNotEmpty
+            ? 'No common free slot was found across your selected weekdays. You can still choose a time manually.'
+            : 'No open slot found. You can still choose any time manually.',
       );
       return;
     }
@@ -1145,6 +1423,37 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
         startTime: TimeOfDay(hour: slot ~/ 60, minute: slot % 60),
       );
       _error = null;
+    });
+  }
+
+  void _discardFailedCreate() {
+    ref.read(routineNotifierProvider.notifier).discardFailedCreate(_draft.id);
+    setState(() {
+      _saveFailed = false;
+      _error = null;
+    });
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _retryFailedOperation() async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final result = await ref
+        .read(routineNotifierProvider.notifier)
+        .retryFailedOperation(_draft.id);
+    if (!mounted) return;
+    if (result.outcome == RoutineWriteOutcome.saved ||
+        result.outcome == RoutineWriteOutcome.noOp) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() {
+      _saving = false;
+      _saveFailed = true;
+      _error = result.message ?? 'Retry failed. Please adjust the form or discard.';
     });
   }
 
@@ -1161,6 +1470,10 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
     if (validationError != null) {
       setState(() => _error = validationError);
       return;
+    }
+
+    if (_saveFailed) {
+      ref.read(routineNotifierProvider.notifier).discardFailedCreate(_draft.id);
     }
 
     final item = AddRoutineMapper.toRoutineItem(currentDraft);
@@ -1182,6 +1495,7 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
 
     setState(() {
       _saving = false;
+      _saveFailed = true;
       _error =
           result.validation?.userSafeMessage ??
           result.message ??
