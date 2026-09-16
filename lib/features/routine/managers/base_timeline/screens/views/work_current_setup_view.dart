@@ -6,6 +6,7 @@ import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.da
 import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/work_presentation_utils.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_timeline_adapter.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
@@ -57,17 +58,16 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
   }
 
   Widget _buildEmptyState(BuildContext context) {
-    final isBusiness = widget.lifeRole == LifeRoleDraft.businessKey;
-    final isJob = widget.lifeRole == LifeRoleDraft.workingKey;
-    final emptyTitle = isBusiness
-        ? 'No business hours yet'
-        : 'No work schedule yet';
-    final emptySubtitle = isBusiness
-        ? 'Add business hours, client syncs, or scan an operational schedule to keep your routine aligned.'
-        : 'Add shifts, work hours, or scan a schedule photo to keep your routine aligned.';
-    final buttonLabel = isBusiness
-        ? 'Set up Business'
-        : (isJob ? 'Set up Work Schedule' : 'Set up Work');
+    final emptyTitle = WorkPresentationUtils.currentSetupEmptyTitle(
+      widget.lifeRole,
+    );
+    final emptySubtitle = WorkPresentationUtils.currentSetupEmptySubtitle(
+      widget.lifeRole,
+    );
+    final buttonLabel = WorkPresentationUtils.currentSetupPrimaryButtonLabel(
+      isConfigured: false,
+      lifeRole: widget.lifeRole,
+    );
 
     return Center(
       child: Padding(
@@ -137,16 +137,18 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
   @override
   Widget build(BuildContext context) {
     final snapshot = widget.setup.snapshotFor(BaseTimelineSection.work);
-    final isBusiness = widget.lifeRole == LifeRoleDraft.businessKey;
-    final isJob = widget.lifeRole == LifeRoleDraft.workingKey;
-    final headerTitle = isBusiness
-        ? 'Business Hours'
-        : (isJob ? 'Work Schedule' : 'Work / Business');
-    final primaryLabel = snapshot.isConfigured
-        ? 'Change setup'
-        : (isBusiness
-              ? 'Set up Business'
-              : (isJob ? 'Set up Work Schedule' : 'Set up Work'));
+    final headerTitle = WorkPresentationUtils.currentSetupHeaderTitle(
+      widget.lifeRole,
+    );
+    final primaryLabel = WorkPresentationUtils.currentSetupPrimaryButtonLabel(
+      isConfigured: snapshot.isConfigured,
+      lifeRole: widget.lifeRole,
+    );
+    final summary = WorkPresentationUtils.setupSummary(
+      snapshot: snapshot,
+      blocks: widget.routineBlocks,
+      lifeRole: widget.lifeRole,
+    );
 
     const adapter = BaseTimelineWorkAdapter(accent: OptivusColors.warning);
     final blockMap = {for (final b in widget.routineBlocks) b.id: b};
@@ -164,12 +166,14 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
           // 1. Responsive Top Nav Header
           BaseTimelineCurrentSetupHeader(
             title: headerTitle,
-            summary: snapshot.summary,
+            summary: summary,
             accent: OptivusColors.warning,
             onBack: widget.onBack,
             primaryButtonLabel: primaryLabel,
             onPrimaryAction: widget.onChangeSetup,
-            removeLabel: 'Remove Work Setup',
+            removeLabel: WorkPresentationUtils.removeSetupLabel(
+              widget.lifeRole,
+            ),
             onRemove: snapshot.isConfigured ? widget.onRemoveSetup : null,
           ),
 
@@ -187,7 +191,7 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
               child: BaseTimelinePhotoPreviewCard(
                 r2Key: snapshot.sourceR2Key,
                 assetId: snapshot.sourceAssetId,
-                title: 'Work Schedule Photo',
+                title: WorkPresentationUtils.photoCardTitle(widget.lifeRole),
                 height: 140,
               ),
             ),
@@ -262,7 +266,9 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
                             TimelineVisibleRangePolicy.contentAdaptive,
                         autoScrollToFirstEntry: false,
                         stretchPolicy: TimelineStretchPolicy.constraintBased,
-                        emptyDayMessage: 'No work scheduled on this day.',
+                        emptyDayMessage: WorkPresentationUtils.emptyDayMessage(
+                          widget.lifeRole,
+                        ),
                       );
                     },
                   ),

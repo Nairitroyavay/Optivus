@@ -552,6 +552,7 @@ void main() {
           home: Scaffold(
             body: WorkSourceSelectionView(
               setup: setup,
+              lifeRole: LifeRoleDraft.workingKey,
               onCancel: () {},
               onPickPhoto: (_) {},
               onManualSetup: () {},
@@ -581,6 +582,7 @@ void main() {
             theme: ThemeData.dark(),
             home: Scaffold(
               body: WorkReviewView(
+                lifeRole: LifeRoleDraft.workingKey,
                 workingBlocks: const [],
                 workingAssetId: null,
                 workingR2Key: null,

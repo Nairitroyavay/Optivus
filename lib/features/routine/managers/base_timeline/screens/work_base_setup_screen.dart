@@ -69,9 +69,11 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
             fontWeight: FontWeight.w700,
           ),
         ),
-        content: const Text(
-          "Your current Work setup won't be affected.",
-          style: TextStyle(color: OptivusColors.textSecondary),
+        content: Text(
+          WorkPresentationUtils.discardDialogContent(
+            ref.read(userProfileProvider).lifeRole,
+          ),
+          style: const TextStyle(color: OptivusColors.textSecondary),
         ),
         actions: [
           TextButton(
@@ -140,9 +142,15 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
     final controller = ref.read(workSetupControllerProvider.notifier);
     final profile = ref.read(userProfileProvider);
     final lifeRole = profile.lifeRole;
-    final defaultContext = WorkPresentationUtils.defaultContextForProfile(lifeRole);
-    final defaultMode = WorkPresentationUtils.defaultModeForProfile(profile.workingExtra);
-    final defaultKind = WorkPresentationUtils.defaultBlockKindForProfile(profile.workingExtra);
+    final defaultContext = WorkPresentationUtils.defaultContextForProfile(
+      lifeRole,
+    );
+    final defaultMode = WorkPresentationUtils.defaultModeForProfile(
+      profile.workingExtra,
+    );
+    final defaultKind = WorkPresentationUtils.defaultBlockKindForProfile(
+      profile.workingExtra,
+    );
 
     final newBlock = TimelineBlockDraft(
       id: 'work_${DateTime.now().millisecondsSinceEpoch}',
@@ -163,6 +171,7 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
       block: newBlock,
       accent: OptivusColors.warning,
       lifeRole: lifeRole,
+      isNew: true,
       onSave: (updated) async {
         controller.addBlock(updated);
         return true;
@@ -182,6 +191,7 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
       block: block,
       accent: OptivusColors.warning,
       lifeRole: profile.lifeRole,
+      isNew: false,
       onSave: (updated) async {
         controller.updateBlock(updated);
         return true;
@@ -267,11 +277,10 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
     String uid,
   ) async {
     final lifeRole = ref.read(userProfileProvider).lifeRole;
-    final isBusiness = WorkPresentationUtils.isBusinessProfile(lifeRole);
-    final dialogTitle = isBusiness ? 'Remove Business Setup?' : 'Remove Work Setup?';
-    final dialogContent = isBusiness
-        ? 'This will remove all business blocks from your Base Timeline. This action cannot be undone.'
-        : 'This will remove all work and business blocks from your Base Timeline. This action cannot be undone.';
+    final dialogTitle = WorkPresentationUtils.removeSetupConfirmTitle(lifeRole);
+    final dialogContent = WorkPresentationUtils.removeSetupConfirmContent(
+      lifeRole,
+    );
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -313,11 +322,11 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
 
     if (mounted) {
       if (outcome.isSuccessful) {
-        final successMsg = outcome.status == WorkRemoveOutcomeStatus.refreshPending
-            ? (isBusiness
-                  ? 'Business setup removed. Routine update is pending.'
-                  : 'Work setup removed. Routine update is pending.')
-            : (isBusiness ? 'Business setup removed.' : 'Work setup removed.');
+        final successMsg = WorkPresentationUtils.removeSuccessMessage(
+          refreshPending:
+              outcome.status == WorkRemoveOutcomeStatus.refreshPending,
+          lifeRole: lifeRole,
+        );
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(successMsg),
@@ -329,7 +338,7 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
           SnackBar(
             content: Text(
               outcome.message ??
-                  'Failed to remove work setup. Please try again.',
+                  WorkPresentationUtils.removeFailureMessage(lifeRole),
             ),
             backgroundColor: OptivusColors.danger,
             duration: const Duration(seconds: 4),
@@ -434,7 +443,6 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
     final controller = ref.read(workSetupControllerProvider.notifier);
     final profile = ref.watch(userProfileProvider);
     final lifeRole = profile.lifeRole;
-    final isBusiness = WorkPresentationUtils.isBusinessProfile(lifeRole);
 
     switch (state.stage) {
       case WorkSetupStage.uploading:
@@ -443,9 +451,7 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
             children: [
               _buildTopCancelBar(
                 onCancel: () => _handleWorkBack(setup, state, uid),
-                title: isBusiness
-                    ? 'Updating business hours'
-                    : 'Updating work schedule',
+                title: WorkPresentationUtils.uploadingTitle(lifeRole),
               ),
               Expanded(
                 child: BaseTimelineUploadView(
@@ -466,8 +472,12 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
               ),
               Expanded(
                 child: BaseTimelineAiThinkingView(
-                  initialMessage: WorkPresentationUtils.extractionInitialMessage(lifeRole),
-                  progressMessages: WorkPresentationUtils.extractionProgressMessages(lifeRole),
+                  initialMessage:
+                      WorkPresentationUtils.extractionInitialMessage(lifeRole),
+                  progressMessages:
+                      WorkPresentationUtils.extractionProgressMessages(
+                        lifeRole,
+                      ),
                   localPreviewPath: state.workingLocalPreviewPath,
                   assetId: state.candidateAssetId,
                   r2Key: state.candidateR2Key,
@@ -495,6 +505,7 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
           onEditCurrent: () => controller.editCurrentWorkSchedule(setup),
           onRemoveSetup: () => _handleRemoveWorkSetup(setup, uid),
           lifeRole: lifeRole,
+          businessMode: profile.businessMode,
         );
 
       case WorkSetupStage.error:
@@ -502,6 +513,7 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
 
       case WorkSetupStage.saveSuccess:
         return _WorkSaveSuccessView(
+          lifeRole: lifeRole,
           onComplete: () {
             if (!mounted) return;
             controller.dismissSuccess();
@@ -595,6 +607,10 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
   }
 
   Widget _buildCurrentSetupSkeletonView() {
+    final lifeRole = ref.watch(userProfileProvider).lifeRole;
+    final headerTitle = WorkPresentationUtils.currentSetupHeaderTitle(lifeRole);
+    final loadingMsg = WorkPresentationUtils.loadingScheduleMessage(lifeRole);
+
     return SafeArea(
       bottom: false,
       child: Column(
@@ -615,22 +631,22 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Work / Business',
-                        style: TextStyle(
+                        headerTitle,
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
                           color: OptivusColors.textPrimary,
                         ),
                       ),
-                      SizedBox(height: 2),
+                      const SizedBox(height: 2),
                       Text(
-                        'Loading work schedule...',
-                        style: TextStyle(
+                        loadingMsg,
+                        style: const TextStyle(
                           fontSize: 12,
                           color: OptivusColors.textSecondary,
                         ),
@@ -693,6 +709,9 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
   }
 
   Widget _buildCurrentSetupLoadErrorView(Object? error) {
+    final lifeRole = ref.watch(userProfileProvider).lifeRole;
+    final errorTitle = WorkPresentationUtils.failedToLoadTitle(lifeRole);
+
     return SafeArea(
       child: Center(
         child: Padding(
@@ -721,9 +740,9 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'Failed to load Work schedule',
-                  style: TextStyle(
+                Text(
+                  errorTitle,
+                  style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
                     color: OptivusColors.textPrimary,
@@ -783,6 +802,9 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
   }
 
   Widget _buildCanonicalUnavailableView({required VoidCallback onBack}) {
+    final lifeRole = ref.watch(userProfileProvider).lifeRole;
+    final title = WorkPresentationUtils.temporarilyUnavailableTitle(lifeRole);
+
     return SafeArea(
       child: Center(
         child: SingleChildScrollView(
@@ -815,10 +837,10 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Work setup temporarily unavailable',
+                  Text(
+                    title,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: OptivusColors.textPrimary,
                       fontSize: 17,
                       fontWeight: FontWeight.w800,
@@ -883,28 +905,11 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
   ) {
     final controller = ref.read(workSetupControllerProvider.notifier);
 
-    final String errorTitle;
-    switch (state.errorKind) {
-      case WorkSetupErrorKind.upload:
-        errorTitle = 'Photo Upload Issue';
-        break;
-      case WorkSetupErrorKind.extraction:
-        errorTitle = 'Schedule Analysis Issue';
-        break;
-      case WorkSetupErrorKind.concurrency:
-        errorTitle = 'Schedule Conflict';
-        break;
-      case WorkSetupErrorKind.save:
-        errorTitle = 'Failed to Save Work Schedule';
-        break;
-      case WorkSetupErrorKind.remove:
-        errorTitle = 'Failed to Remove Work Setup';
-        break;
-      case WorkSetupErrorKind.load:
-      case null:
-        errorTitle = 'Work Schedule Processing Issue';
-        break;
-    }
+    final lifeRole = ref.watch(userProfileProvider).lifeRole;
+    final errorTitle = WorkPresentationUtils.errorTitle(
+      errorKindString: state.errorKind?.name,
+      lifeRole: lifeRole,
+    );
 
     return SafeArea(
       child: Center(
@@ -1148,8 +1153,9 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
 
 class _WorkSaveSuccessView extends StatefulWidget {
   final VoidCallback onComplete;
+  final String? lifeRole;
 
-  const _WorkSaveSuccessView({required this.onComplete});
+  const _WorkSaveSuccessView({required this.onComplete, this.lifeRole});
 
   @override
   State<_WorkSaveSuccessView> createState() => _WorkSaveSuccessViewState();
@@ -1253,9 +1259,9 @@ class _WorkSaveSuccessViewState extends State<_WorkSaveSuccessView>
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Work schedule saved!',
-            style: TextStyle(
+          Text(
+            WorkPresentationUtils.saveSuccessTitle(widget.lifeRole),
+            style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w800,
               color: OptivusColors.textPrimary,

@@ -137,8 +137,11 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                       const SizedBox(height: 2),
                       Text(
                         widget.droppedCount > 0
-                            ? '${widget.workingBlocks.length} ${widget.workingBlocks.length == 1 ? 'block' : 'blocks'} scheduled · ${widget.droppedCount} ${widget.droppedCount == 1 ? 'entry was skipped' : 'entries were skipped'}'
-                            : '${widget.workingBlocks.length} ${widget.workingBlocks.length == 1 ? 'block' : 'blocks'} scheduled',
+                            ? '${WorkPresentationUtils.scheduledCount(widget.workingBlocks.length, widget.lifeRole)} · ${widget.droppedCount} ${widget.droppedCount == 1 ? 'entry was skipped' : 'entries were skipped'}'
+                            : WorkPresentationUtils.scheduledCount(
+                                widget.workingBlocks.length,
+                                widget.lifeRole,
+                              ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -445,11 +448,10 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                 assetId: widget.workingAssetId,
                 title: 'Scanned schedule',
                 subtitle: widget.workingBlocks.isNotEmpty
-                    ? (widget.workingBlocks.length == 1
-                          ? (widget.lifeRole == LifeRoleDraft.businessKey
-                                ? '1 weekly business block'
-                                : '1 weekly work block')
-                          : '${widget.workingBlocks.length} weekly ${widget.lifeRole == LifeRoleDraft.businessKey ? 'business blocks' : 'work blocks'}')
+                    ? WorkPresentationUtils.weeklyBlockCount(
+                        widget.workingBlocks.length,
+                        widget.lifeRole,
+                      )
                     : null,
                 isCompactRow: true,
                 height: 68,

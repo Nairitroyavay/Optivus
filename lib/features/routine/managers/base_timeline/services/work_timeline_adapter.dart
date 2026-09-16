@@ -120,6 +120,7 @@ class BaseTimelineWorkAdapter {
     Future<bool> Function(TimelineBlockDraft toDelete)? onDelete,
     Color accent = OptivusColors.warning,
     String? lifeRole,
+    bool? isNew,
   }) {
     final title = TextEditingController(text: block.title);
     final workRole = TextEditingController(text: block.workRole ?? '');
@@ -140,8 +141,13 @@ class BaseTimelineWorkAdapter {
     var selectedMode = block.workMode;
     var selectedBlockKind = block.workBlockKind;
 
+    final effectiveIsNew =
+        isNew ??
+        (block.title.trim().isEmpty &&
+            (block.workRole?.trim().isEmpty ?? true));
+
     final sheetTitle = WorkPresentationUtils.editorTitle(
-      isNew: block.title.trim().isEmpty && (block.workRole?.trim().isEmpty ?? true),
+      isNew: effectiveIsNew,
       contextType: selectedContextType,
       lifeRole: lifeRole,
     );
@@ -162,14 +168,8 @@ class BaseTimelineWorkAdapter {
         final locText = location.text.trim();
         final notesText = notes.text.trim();
 
-        final effectiveTitle = titleText.isNotEmpty
-            ? titleText
-            : (roleText.isNotEmpty
-                  ? roleText
-                  : (orgText.isNotEmpty ? orgText : ''));
-
-        if (effectiveTitle.isEmpty) {
-          throw Exception('Activity, role, or title is required.');
+        if (titleText.isEmpty) {
+          throw Exception('Activity is required.');
         }
         if (endMinute <= startMinute) {
           throw Exception('End time must be after start time.');
@@ -178,7 +178,7 @@ class BaseTimelineWorkAdapter {
 
         return onSave(
           block.copyWith(
-            title: effectiveTitle,
+            title: titleText,
             location: locText.isNotEmpty ? locText : null,
             clearLocation: locText.isEmpty,
             sectionLabel: null,
@@ -690,9 +690,9 @@ class BaseTimelineWorkAdapter {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                    label: const Text(
-                      'Remove work block',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                    label: Text(
+                      WorkPresentationUtils.removeBlockLabel(lifeRole),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     onPressed: () async {
                       final confirmed = await showDialog<bool>(
@@ -702,9 +702,11 @@ class BaseTimelineWorkAdapter {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          title: const Text(
-                            'Remove this work block?',
-                            style: TextStyle(
+                          title: Text(
+                            WorkPresentationUtils.removeBlockConfirmTitle(
+                              lifeRole,
+                            ),
+                            style: const TextStyle(
                               color: OptivusColors.textPrimary,
                               fontWeight: FontWeight.w700,
                             ),

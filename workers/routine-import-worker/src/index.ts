@@ -717,7 +717,7 @@ function buildRoutineImportPrompt(
     classes:
       "Extract subjects/classes/labs/tutorials from weekly timetable tables. If days/times are visible in headers, extract class cells even if subjects are short abbreviations. Short subject abbreviations such as DSD, AFL, DS, PS, STW, IND4 are valid class titles and must not be discarded as unclear by themselves. If a cell has a subject and nearby room/location, create a hard_block and preserve the room/location if visible, such as C25-B-301. Extract these structured fields only when clearly visible in the timetable cell, nearby labels, or an unambiguous timetable legend: courseCode (e.g. CS101, MATH201), classType (e.g. Lecture, Lab, Tutorial, Seminar, Practical), instructor (e.g. Prof. Sharma, Dr. Lee, faculty name), sectionLabel (e.g. Sec A, Batch 2), location (room/building/hall), and notes (only when source provides useful notes). Never infer a professor, course code, section, or class type that is not clearly supported by the image. If timetable colors map to faculty through an explicit visible legend, preserve that relationship when readable. Rows or columns may contain day labels like MON, MON(1), TUE(1), WED(0), THU(0), FRI(1), Monday, Friday, Mon-Fri, or weekdays; parse those labels into repeatDays. Times may be column or row headers like 9-10, 10-11, 3.15-4.15, 4.15-5.15; convert clear ranges to startMinute/endMinute. Use hard_block and category classBlock for clear timed class cells. Do not require the category to be named class if the source is classes and the title/time/day are clear. Do not return empty if there are clearly visible timed class cells. If only period numbers exist and exact times are missing, create flexible/unplaced low-confidence candidates.",
     work:
-      "Extract only clearly timed work/business responsibility blocks from the image. If days are columns and times are rows, extract visible work/business cells. Valid work/business titles include Office Work, Work, Shift, Meeting, Client Calls, Project Work, Team Sync, Team Review, Weekly Review, Training Session, Commute, Lunch Break / Break, Freelance Project, freelance/side-work, and Business Hours. Preserve the visible title and time. Use hard_block for fixed timed blocks. Use category job. Do not ignore blocks just because they are not named exactly Work. Do not import personal habit blocks like Gym/Exercise, Study/Reading, Online Course, Reading, Rest Day/No Work, or personal habits as job candidates. For weekly grid images, days are columns and times are rows. Convert each visible timed cell into one candidate with repeatDays matching the day column. Treat all clearly timed work schedule items as fixed work/business blocks unless source text clearly says rest day/no work. Extract structured work fields ONLY when clearly visible or directly evidenced: workRole (job title or role), workOrganization (company, firm, client, or workplace), workDepartmentOrProject (department, team, or project), workMode (remote, in_person, or hybrid), workBlockKind (deep_work, meeting, shift, admin, client_call), and workContextType (job, business, or freelance). Never invent or hallucinate organization, role, department, mode, or block kind if not present or clearly supported by the text or schedule header. Do not return empty if there are clearly visible timed work cells. Use flexible tasks only for to-dos without a visible time.",
+      "Extract only clearly timed work/business responsibility blocks from the image. If days are columns and times are rows, extract visible work/business cells. Valid work/business titles include Office Work, Work, Shift, Meeting, Client Calls, Project Work, Team Sync, Team Review, Weekly Review, Training Session, Commute, Lunch Break / Break, Freelance Project, freelance/side-work, and Business Hours. Preserve the visible title and time. Use hard_block for fixed timed blocks. Use category job. Do not ignore blocks just because they are not named exactly Work. Do not import personal habit blocks like Gym/Exercise, Study/Reading, Online Course, Reading, Rest Day/No Work, or personal habits as job candidates. For weekly grid images, days are columns and times are rows. Convert each visible timed cell into one candidate with repeatDays matching the day column. Treat all clearly timed work schedule items as fixed work/business blocks unless source text clearly says rest day/no work. Extract structured work fields ONLY when clearly visible or directly evidenced: workRole (job title or role), workOrganization (company, firm, client, or workplace), workDepartmentOrProject (department, team, or project), workMode (in_person, remote, hybrid, field, or mixed), workBlockKind (work_hours, deep_work, shift, meeting, client_call, project_work, team_sync, training, commute, break, business_hours, admin, or other), and workContextType (job, business, startup, freelance, or other). Never invent or hallucinate organization, role, department, mode, or block kind if not present or clearly supported by the text or schedule header. Do not return empty if there are clearly visible timed work cells. Use flexible tasks only for to-dos without a visible time.",
     eating:
       "Extract meal windows as eating blocks. Understand hostel/mess weekly menu tables where rows are Monday to Sunday and columns are Breakfast, Lunch, Snacks, Dinner. Column headers may include times such as Breakfast 7:30 AM - 10:00 AM, Lunch 1:00 PM - 3:00 PM, Snacks 6:00 PM - 7:00 PM, Dinner 8:00 PM - 10:00 PM. Cells contain dish names. For each visible day row and meal column, return one candidate with title Breakfast, Lunch, Snack, or Dinner; mealCategory breakfast, lunch, snack, or dinner; startMinute/endMinute from the column header or default breakfast 450-600, lunch 780-900, snack 1080-1140, dinner 1200-1320; repeatDays from the row day; steps as the dish list from the cell; sourceRowLabel as the visible day row; sourceColumnLabel as the visible meal column; sourceTextSnippet as the visible cell text. Preserve dishes in steps, not separate timeline blocks. Do not return empty if a mess/menu table is visible. If blurry, return partial medium/low confidence candidates with warnings instead of dropping the table.",
     skinCare:
@@ -802,12 +802,13 @@ function buildRoutineImportPrompt(
           classType: "Lecture/Lab/Tutorial if visible",
           instructor: "instructor/professor/faculty if visible",
           sectionLabel: "section/batch if visible",
-          workContextType: "job|business|freelance if visible",
+          workContextType: "job|business|startup|freelance|other if visible",
           workRole: "role/title if visible",
           workOrganization: "company/workplace if visible",
           workDepartmentOrProject: "department/project if visible",
-          workMode: "remote|in_person|hybrid if visible",
-          workBlockKind: "deep_work|meeting|shift|admin if visible",
+          workMode: "in_person|remote|hybrid|field|mixed if visible",
+          workBlockKind:
+            "work_hours|deep_work|shift|meeting|client_call|project_work|team_sync|training|commute|break|business_hours|admin|other if visible",
         },
       ],
       warnings: ["warning"],
@@ -1103,12 +1104,12 @@ function sanitizeCandidate(
     classType: optionalText(candidate.classType, 64),
     instructor: optionalText(candidate.instructor, 120),
     sectionLabel: optionalText(candidate.sectionLabel, 64),
-    workContextType: optionalText(candidate.workContextType, 32),
+    workContextType: safeWorkContextType(candidate.workContextType),
     workRole: optionalText(candidate.workRole, 80),
     workOrganization: optionalText(candidate.workOrganization, 80),
     workDepartmentOrProject: optionalText(candidate.workDepartmentOrProject, 80),
-    workMode: optionalText(candidate.workMode, 32),
-    workBlockKind: optionalText(candidate.workBlockKind, 40),
+    workMode: safeWorkMode(candidate.workMode),
+    workBlockKind: safeWorkBlockKind(candidate.workBlockKind),
   };
 }
 
@@ -1176,10 +1177,15 @@ function coerceCandidate(value: unknown): RoutineImportCandidate {
     instructor: textValue(body.instructor) ?? textValue(body.professor),
     sectionLabel: textValue(body.sectionLabel) ?? textValue(body.section),
     workContextType: textValue(body.workContextType),
-    workRole: textValue(body.workRole),
-    workOrganization: textValue(body.workOrganization),
+    workRole: textValue(body.workRole) ?? textValue(body.role),
+    workOrganization:
+      textValue(body.workOrganization) ??
+      textValue(body.organization) ??
+      textValue(body.company),
     workDepartmentOrProject:
-      textValue(body.workDepartmentOrProject) ?? textValue(body.department),
+      textValue(body.workDepartmentOrProject) ??
+      textValue(body.department) ??
+      textValue(body.project),
     workMode: textValue(body.workMode),
     workBlockKind: textValue(body.workBlockKind),
   };
@@ -1955,6 +1961,120 @@ function safeCategory(value: unknown, source: RoutineImportReviewSource): string
     return value;
   }
   return sourceCategory[source];
+}
+
+function safeWorkContextType(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (normalized === "") return undefined;
+  switch (normalized) {
+    case "job":
+    case "employment":
+    case "work":
+      return "job";
+    case "business":
+    case "business_hours":
+    case "own_business":
+      return "business";
+    case "startup":
+      return "startup";
+    case "freelance":
+    case "consulting":
+    case "contract":
+    case "client":
+      return "freelance";
+    case "other":
+      return "other";
+    default:
+      return undefined;
+  }
+}
+
+function safeWorkMode(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (normalized === "") return undefined;
+  switch (normalized) {
+    case "in_person":
+    case "inperson":
+    case "onsite":
+    case "on_site":
+    case "office":
+    case "in_office":
+    case "workplace":
+      return "in_person";
+    case "remote":
+    case "wfh":
+    case "home":
+    case "work_from_home":
+      return "remote";
+    case "hybrid":
+      return "hybrid";
+    case "field":
+    case "on_field":
+      return "field";
+    case "mixed":
+      return "mixed";
+    default:
+      return undefined;
+  }
+}
+
+function safeWorkBlockKind(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (normalized === "") return undefined;
+  switch (normalized) {
+    case "work_hours":
+    case "work":
+    case "office_work":
+    case "regular_hours":
+      return "work_hours";
+    case "deep_work":
+    case "focus":
+    case "focus_time":
+      return "deep_work";
+    case "project_work":
+    case "project":
+      return "project_work";
+    case "shift":
+    case "roster":
+    case "rota":
+      return "shift";
+    case "meeting":
+    case "sync":
+      return "meeting";
+    case "team_sync":
+      return "team_sync";
+    case "client_call":
+    case "client_meeting":
+    case "client_calls":
+    case "client":
+      return "client_call";
+    case "training":
+    case "training_session":
+    case "workshop":
+      return "training";
+    case "commute":
+    case "travel":
+      return "commute";
+    case "break":
+    case "lunch":
+    case "lunch_break":
+      return "break";
+    case "business_hours":
+    case "store_hours":
+    case "operating_hours":
+      return "business_hours";
+    case "admin":
+    case "admin_work":
+    case "paperwork":
+      return "admin";
+    case "other":
+      return "other";
+    default:
+      return undefined;
+  }
 }
 
 function safeRepeatDays(value: unknown): number[] {

@@ -508,4 +508,123 @@ describe("Routine Import Worker request boundary", () => {
       "not_found",
     );
   });
+
+  test("accepts routine_base_timeline work photo and extracts candidates with normalized work metadata", async () => {
+    const btWorkObjectKey = "users/uid-1/routine_base_timeline/work_schedule/asset-work-1.jpg";
+    stubGemini(200, {
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                text: JSON.stringify({
+                  id: "ext-work-1",
+                  uid: "uid-1",
+                  source: "work",
+                  engine: "gemini",
+                  engineVersion: "phase2d",
+                  sourceAssetId: "asset-work-1",
+                  sourceR2Key: btWorkObjectKey,
+                  candidates: [
+                    {
+                      id: "w1",
+                      title: "Product Engineering",
+                      candidateType: "block",
+                      startMinute: 540,
+                      endMinute: 1020,
+                      hasFixedTime: true,
+                      repeatDays: [1, 2, 3, 4, 5],
+                      blockType: "hard_block",
+                      category: "workBlock",
+                      hardBlock: true,
+                      selected: true,
+                      needsManualReview: false,
+                      confidenceScore: 0.95,
+                      confidenceLabel: "high",
+                      validationIssues: [],
+                      organization: "Acme Corp",
+                      role: "Staff Engineer",
+                      workContextType: "employment",
+                      workMode: "in-person",
+                      workBlockKind: "team sync",
+                      department: "Core Platform",
+                      location: "Floor 4, Pod B",
+                      steps: [],
+                    },
+                    {
+                      id: "w2",
+                      title: "Consulting Session",
+                      candidateType: "block",
+                      startMinute: 1080,
+                      endMinute: 1140,
+                      hasFixedTime: true,
+                      repeatDays: [2, 4],
+                      blockType: "hard_block",
+                      category: "workBlock",
+                      hardBlock: true,
+                      selected: true,
+                      needsManualReview: false,
+                      confidenceScore: 0.85,
+                      confidenceLabel: "medium",
+                      validationIssues: [],
+                      organization: "Self",
+                      role: "Advisor",
+                      workContextType: "unsupported_context_garbage",
+                      workMode: "invalid_alien_mode",
+                      workBlockKind: "lunch break",
+                      steps: [],
+                    },
+                  ],
+                  warnings: [],
+                  createdAt: new Date().toISOString(),
+                }),
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    const env = makeEnv();
+    const response = await worker.fetch(
+      request({
+        reviewId: "review-bt-work-1",
+        source: "work",
+        uploadedAssetId: "asset-work-1",
+        uploadedAssetR2Key: btWorkObjectKey,
+        sourceLabel: "Work Schedule",
+      }),
+      env as never,
+    );
+
+    expect(response.status).toBe(200);
+    expect(env.UPLOAD_BUCKET.get).toHaveBeenCalledWith(btWorkObjectKey);
+    const json = await response.json() as {
+      candidates: Array<Record<string, unknown>>;
+      source: string;
+      sourceR2Key: string;
+    };
+    expect(json.source).toBe("work");
+    expect(json.sourceR2Key).toBe(btWorkObjectKey);
+    expect(json.candidates.length).toBe(2);
+
+    const c1 = json.candidates[0];
+    expect(c1.title).toBe("Product Engineering");
+    expect(c1.workOrganization).toBe("Acme Corp");
+    expect(c1.workRole).toBe("Staff Engineer");
+    // Aliases normalized properly
+    expect(c1.workContextType).toBe("job");
+    expect(c1.workMode).toBe("in_person");
+    expect(c1.workBlockKind).toBe("team_sync");
+    expect(c1.workDepartmentOrProject).toBe("Core Platform");
+    expect(c1.location).toBe("Floor 4, Pod B");
+
+    const c2 = json.candidates[1];
+    expect(c2.title).toBe("Consulting Session");
+    // Unsupported enums dropped to undefined (not retained as garbage)
+    expect(c2.workContextType).toBeUndefined();
+    expect(c2.workMode).toBeUndefined();
+    // Normalization of 'lunch break' to 'break'
+    expect(c2.workBlockKind).toBe("break");
+  });
 });

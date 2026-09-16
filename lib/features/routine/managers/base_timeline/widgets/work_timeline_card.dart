@@ -123,16 +123,15 @@ class WorkTimelineCard extends StatelessWidget {
     }
 
     // 3. Badges row (Context, Kind, Mode)
-    final contextLabel = WorkPresentationUtils.shouldShowContext(
-      title: title,
-      context: contextType,
-    )
+    final contextLabel =
+        WorkPresentationUtils.shouldShowContext(
+          title: title,
+          context: contextType,
+        )
         ? WorkPresentationUtils.formatContext(contextType)
         : '';
-    final kindLabel = WorkPresentationUtils.shouldShowKind(
-      title: title,
-      kind: kind,
-    )
+    final kindLabel =
+        WorkPresentationUtils.shouldShowKind(title: title, kind: kind)
         ? WorkPresentationUtils.formatBlockKind(kind)
         : '';
     final modeLabel = WorkPresentationUtils.formatMode(mode);
@@ -210,6 +209,7 @@ class WorkTimelineCard extends StatelessWidget {
           fontSize: 10,
           fontWeight: FontWeight.w500,
           height: 1.25,
+          letterSpacing: 0.0,
         ),
         maxWidth: locWidth,
         textScale: textScale,
@@ -227,6 +227,7 @@ class WorkTimelineCard extends StatelessWidget {
           fontSize: 9.5,
           height: 1.25,
           fontStyle: FontStyle.italic,
+          letterSpacing: 0.0,
         ),
         maxWidth: notesWidth,
         textScale: textScale,
@@ -320,8 +321,7 @@ class WorkTimelineCard extends StatelessWidget {
         'Context: ${WorkPresentationUtils.formatContext(contextType)}',
       if (dept.isNotEmpty) 'Department: $dept',
       timeLabel,
-      if (mode.isNotEmpty)
-        'Mode: ${WorkPresentationUtils.formatMode(mode)}',
+      if (mode.isNotEmpty) 'Mode: ${WorkPresentationUtils.formatMode(mode)}',
       if (blockKind.isNotEmpty)
         'Focus: ${WorkPresentationUtils.formatBlockKind(blockKind)}',
       if (location.isNotEmpty) 'Workplace: $location',
@@ -363,27 +363,24 @@ class WorkTimelineCard extends StatelessWidget {
               horizontal: isNarrow ? 8 : 12,
               vertical: isTiny ? 2 : (isCompact ? 4 : 6),
             ),
-            child: SingleChildScrollView(
-              physics: const NeverScrollableScrollPhysics(),
-              child: _buildBody(
-                isTiny: isTiny,
-                isCompact: isCompact,
-                isMedium: isMedium,
-                isRich: isRich,
-                isNarrow: isNarrow,
-                title: title,
-                role: role,
-                org: org,
-                dept: dept,
-                location: location,
-                notes: notes,
-                contextType: contextType,
-                mode: mode,
-                blockKind: blockKind,
-                timeLabel: timeLabel,
-                roleOrgLine: roleOrgLine,
-                showRole: showRole,
-              ),
+            child: _buildBody(
+              isTiny: isTiny,
+              isCompact: isCompact,
+              isMedium: isMedium,
+              isRich: isRich,
+              isNarrow: isNarrow,
+              title: title,
+              role: role,
+              org: org,
+              dept: dept,
+              location: location,
+              notes: notes,
+              contextType: contextType,
+              mode: mode,
+              blockKind: blockKind,
+              timeLabel: timeLabel,
+              roleOrgLine: roleOrgLine,
+              showRole: showRole,
             ),
           ),
         ),
@@ -444,9 +441,7 @@ class WorkTimelineCard extends StatelessWidget {
     if (isCompact) {
       final secondary = showRole
           ? (org.isNotEmpty ? '$role · $org' : role)
-          : (org.isNotEmpty
-                ? org
-                : (location.isNotEmpty ? location : dept));
+          : (org.isNotEmpty ? org : (location.isNotEmpty ? location : dept));
       final detailText = secondary.isNotEmpty
           ? '$timeLabel · $secondary'
           : timeLabel;
@@ -593,16 +588,15 @@ class WorkTimelineCard extends StatelessWidget {
     }
 
     // Rich card (height >= 96)
-    final contextBadgeText = WorkPresentationUtils.shouldShowContext(
-      title: title,
-      context: contextType,
-    )
+    final contextBadgeText =
+        WorkPresentationUtils.shouldShowContext(
+          title: title,
+          context: contextType,
+        )
         ? WorkPresentationUtils.formatContext(contextType)
         : '';
-    final kindBadgeText = WorkPresentationUtils.shouldShowKind(
-      title: title,
-      kind: blockKind,
-    )
+    final kindBadgeText =
+        WorkPresentationUtils.shouldShowKind(title: title, kind: blockKind)
         ? WorkPresentationUtils.formatBlockKind(blockKind)
         : '';
     final modeBadgeText = WorkPresentationUtils.formatMode(mode);
@@ -679,15 +673,11 @@ class WorkTimelineCard extends StatelessWidget {
         ),
         const SizedBox(height: 3),
         if (dept.isNotEmpty) ...[
-          _buildBadge(dept, accent),
+          _buildBadge(dept, accent, allowWrap: true),
           const SizedBox(height: 3),
         ],
         if (badges.isNotEmpty) ...[
-          Wrap(
-            spacing: 4,
-            runSpacing: 3,
-            children: badges,
-          ),
+          Wrap(spacing: 4, runSpacing: 3, children: badges),
           const SizedBox(height: 3),
         ],
         Text(
@@ -748,6 +738,7 @@ class WorkTimelineCard extends StatelessWidget {
                     fontSize: 9.5,
                     height: 1.25,
                     fontStyle: FontStyle.italic,
+                    letterSpacing: 0.0,
                     color: OptivusColors.textSecondary,
                   ),
                 ),
@@ -759,7 +750,7 @@ class WorkTimelineCard extends StatelessWidget {
     );
   }
 
-  Widget _buildBadge(String label, Color color) {
+  Widget _buildBadge(String label, Color color, {bool allowWrap = false}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
       decoration: BoxDecoration(
@@ -769,8 +760,9 @@ class WorkTimelineCard extends StatelessWidget {
       ),
       child: Text(
         label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+        maxLines: allowWrap ? null : 1,
+        overflow: allowWrap ? null : TextOverflow.ellipsis,
+        softWrap: true,
         style: TextStyle(
           fontSize: 9,
           fontWeight: FontWeight.w700,

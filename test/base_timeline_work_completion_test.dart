@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_theme.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_entry.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/work_presentation_utils.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/models/routine_item.dart';
@@ -295,6 +297,7 @@ void main() {
                       uid: uid,
                       email: 'work@optivus.local',
                       displayName: 'Work Test User',
+                      lifeRole: LifeRoleDraft.workingKey,
                     ),
                   ),
               ),
@@ -423,6 +426,7 @@ void main() {
                       uid: uid,
                       email: 'work@optivus.local',
                       displayName: 'Work Test User',
+                      lifeRole: LifeRoleDraft.workingKey,
                     ),
                   ),
               ),
@@ -767,6 +771,7 @@ void main() {
                     uid: uid,
                     email: 'work@optivus.local',
                     displayName: 'Work Test User',
+                    lifeRole: LifeRoleDraft.workingKey,
                   ),
                 ),
             ),
@@ -832,6 +837,7 @@ void main() {
                       uid: uid,
                       email: 'work@optivus.local',
                       displayName: 'Work Test User',
+                      lifeRole: LifeRoleDraft.workingKey,
                     ),
                   ),
               ),
@@ -943,6 +949,7 @@ void main() {
                       uid: uid,
                       email: 'work@optivus.local',
                       displayName: 'Work Test User',
+                      lifeRole: LifeRoleDraft.workingKey,
                     ),
                   ),
               ),
@@ -1144,6 +1151,7 @@ void main() {
                       uid: uid,
                       email: 'work@optivus.local',
                       displayName: 'Work Test User',
+                      lifeRole: LifeRoleDraft.workingKey,
                     ),
                   ),
               ),
@@ -1337,6 +1345,7 @@ void main() {
               home: Scaffold(
                 body: WorkSourceSelectionView(
                   setup: photoSetup,
+                  lifeRole: LifeRoleDraft.workingKey,
                   onCancel: () {},
                   onPickPhoto: (_) {},
                   onManualSetup: () {},
@@ -1383,6 +1392,7 @@ void main() {
               home: Scaffold(
                 body: WorkSourceSelectionView(
                   setup: manualSetup,
+                  lifeRole: LifeRoleDraft.workingKey,
                   onCancel: () {},
                   onPickPhoto: (_) {},
                   onManualSetup: () {},
@@ -1419,6 +1429,7 @@ void main() {
               home: Scaffold(
                 body: WorkSourceSelectionView(
                   setup: unconfiguredSetup,
+                  lifeRole: LifeRoleDraft.workingKey,
                   onCancel: () {},
                   onPickPhoto: (_) {},
                   onManualSetup: () {},
@@ -1564,6 +1575,7 @@ void main() {
                         context: context,
                         block: block,
                         onSave: (_) async => true,
+                        lifeRole: LifeRoleDraft.workingKey,
                       );
                     },
                     child: const Text('Open Edit Sheet'),
@@ -2172,6 +2184,7 @@ void main() {
               home: Scaffold(
                 body: WorkSourceSelectionView(
                   setup: setup,
+                  lifeRole: LifeRoleDraft.workingKey,
                   onCancel: () {},
                   onPickPhoto: (_) {},
                   onManualSetup: () {},
@@ -2192,6 +2205,7 @@ void main() {
               theme: OptivusTheme.lightTheme,
               home: Scaffold(
                 body: WorkReviewView(
+                  lifeRole: LifeRoleDraft.workingKey,
                   workingBlocks: setup.workBlocks,
                   workingAssetId: null,
                   workingR2Key:
@@ -2609,5 +2623,666 @@ void main() {
       // Title header reflects business role
       expect(find.text('Business Hours'), findsOneWidget);
     });
+
+    testWidgets(
+      'BaseTimelineWorkAdapter edit sheet requires Activity title on save and does not substitute Role or Organization',
+      (tester) async {
+        const block = TimelineBlockDraft(
+          id: 'validation-test-block',
+          section: 'work',
+          title: '',
+          startMinute: 9 * 60,
+          endMinute: 17 * 60,
+          repeatDays: [1],
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        TimelineBlockDraft? savedBlock;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) {
+                  return ElevatedButton(
+                    onPressed: () {
+                      BaseTimelineWorkAdapter.showEditSheet(
+                        context: context,
+                        block: block,
+                        onSave: (b) async {
+                          savedBlock = b;
+                          return true;
+                        },
+                        lifeRole: LifeRoleDraft.workingKey,
+                        isNew: false,
+                      );
+                    },
+                    child: const Text('Open Sheet'),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Open Sheet'));
+        await tester.pumpAndSettle();
+
+        // Sheet is open
+        expect(find.text('Edit Work Block'), findsOneWidget);
+
+        // Enter Role and Organization, but leave Activity empty
+        final roleField = find.byKey(const ValueKey('base-work-role-field'));
+        final orgField = find.byKey(
+          const ValueKey('base-work-organization-field'),
+        );
+        await tester.enterText(roleField, 'Lead Systems Architect');
+        await tester.enterText(orgField, 'Optivus Technologies');
+        await tester.pumpAndSettle();
+
+        // Tap Save
+        await tester.tap(find.text('Save'));
+        await tester.pumpAndSettle();
+
+        // Activity is required SnackBar is shown and save was prevented
+        expect(find.text('Activity is required.'), findsOneWidget);
+        expect(savedBlock, isNull);
+        // Sheet remains open
+        expect(find.text('Edit Work Block'), findsOneWidget);
+
+        // Now enter Activity title
+        final titleField = find.byKey(const ValueKey('base-work-title-field'));
+        await tester.enterText(titleField, 'Quarterly Planning');
+        await tester.pumpAndSettle();
+
+        // Tap Save again
+        await tester.tap(find.text('Save'));
+        await tester.pumpAndSettle();
+
+        // Saved block has distinct title, role, and organization
+        expect(savedBlock, isNotNull);
+        expect(savedBlock!.title, equals('Quarterly Planning'));
+        expect(savedBlock!.workRole, equals('Lead Systems Architect'));
+        expect(savedBlock!.workOrganization, equals('Optivus Technologies'));
+        // Sheet dismissed
+        expect(find.text('Edit Work Block'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Activity and Role fields remain strictly independent in edit sheet',
+      (tester) async {
+        const block = TimelineBlockDraft(
+          id: 'independent-test-block',
+          section: 'work',
+          title: 'Infrastructure Refactor',
+          startMinute: 10 * 60,
+          endMinute: 12 * 60,
+          repeatDays: [1, 2],
+          workRole: 'DevOps Engineer',
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) {
+                  return ElevatedButton(
+                    onPressed: () {
+                      BaseTimelineWorkAdapter.showEditSheet(
+                        context: context,
+                        block: block,
+                        onSave: (_) async => true,
+                        lifeRole: LifeRoleDraft.workingKey,
+                      );
+                    },
+                    child: const Text('Open Sheet'),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Open Sheet'));
+        await tester.pumpAndSettle();
+
+        final titleField = find.byKey(const ValueKey('base-work-title-field'));
+        final roleField = find.byKey(const ValueKey('base-work-role-field'));
+
+        // Initially matches block
+        expect(
+          tester.widget<TextField>(titleField).controller?.text,
+          equals('Infrastructure Refactor'),
+        );
+        expect(
+          tester.widget<TextField>(roleField).controller?.text,
+          equals('DevOps Engineer'),
+        );
+
+        // Modifying Role does not alter Activity
+        await tester.enterText(roleField, 'Site Reliability Director');
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(titleField).controller?.text,
+          equals('Infrastructure Refactor'),
+        );
+        expect(
+          tester.widget<TextField>(roleField).controller?.text,
+          equals('Site Reliability Director'),
+        );
+
+        // Clearing Role does not alter Activity
+        await tester.enterText(roleField, '');
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(titleField).controller?.text,
+          equals('Infrastructure Refactor'),
+        );
+        expect(tester.widget<TextField>(roleField).controller?.text, isEmpty);
+
+        // Modifying Activity does not alter Role
+        await tester.enterText(titleField, 'Database Migration');
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(titleField).controller?.text,
+          equals('Database Migration'),
+        );
+        expect(tester.widget<TextField>(roleField).controller?.text, isEmpty);
+      },
+    );
+
+    test(
+      'WorkPresentationUtils 3-mode profile resolution and labels across business, work, and neutral',
+      () {
+        // 1. Profile mode checks
+        expect(
+          WorkPresentationUtils.isBusinessProfile(LifeRoleDraft.businessKey),
+          isTrue,
+        );
+        expect(
+          WorkPresentationUtils.isBusinessProfile(LifeRoleDraft.workingKey),
+          isFalse,
+        );
+        expect(
+          WorkPresentationUtils.isBusinessProfile('student_working'),
+          isFalse,
+        );
+        expect(WorkPresentationUtils.isBusinessProfile(null), isFalse);
+        expect(
+          WorkPresentationUtils.isBusinessProfile('unknown_role'),
+          isFalse,
+        );
+
+        expect(
+          WorkPresentationUtils.isWorkProfile(LifeRoleDraft.workingKey),
+          isTrue,
+        );
+        expect(WorkPresentationUtils.isWorkProfile('student_working'), isTrue);
+        expect(
+          WorkPresentationUtils.isWorkProfile(LifeRoleDraft.businessKey),
+          isFalse,
+        );
+        expect(WorkPresentationUtils.isWorkProfile(null), isFalse);
+        expect(WorkPresentationUtils.isWorkProfile('unknown_role'), isFalse);
+
+        // 2. Business profile strings
+        const bRole = LifeRoleDraft.businessKey;
+        expect(
+          WorkPresentationUtils.currentSetupHeaderTitle(bRole),
+          equals('Business Hours'),
+        );
+        expect(
+          WorkPresentationUtils.currentSetupEmptyTitle(bRole),
+          equals('No business hours yet'),
+        );
+        expect(
+          WorkPresentationUtils.currentSetupEmptySubtitle(bRole),
+          contains('business hours'),
+        );
+        expect(
+          WorkPresentationUtils.currentSetupPrimaryButtonLabel(
+            isConfigured: false,
+            lifeRole: bRole,
+          ),
+          equals('Set up Business'),
+        );
+        expect(
+          WorkPresentationUtils.currentSetupPrimaryButtonLabel(
+            isConfigured: true,
+            lifeRole: bRole,
+          ),
+          equals('Change setup'),
+        );
+        expect(
+          WorkPresentationUtils.sourceSelectionTitle(bRole),
+          equals('Update Business Hours'),
+        );
+        expect(
+          WorkPresentationUtils.sourceSelectionSubtitle(bRole),
+          contains('business hours'),
+        );
+        expect(
+          WorkPresentationUtils.sourceManualTitle(bRole),
+          equals('Set up business hours manually'),
+        );
+        expect(
+          WorkPresentationUtils.sourceEditCurrentTitle(bRole),
+          equals('Edit current business hours'),
+        );
+        expect(
+          WorkPresentationUtils.reviewTitle(bRole),
+          equals('Review Business Schedule'),
+        );
+        expect(
+          WorkPresentationUtils.addBlockButtonLabel(bRole),
+          equals('Add Business Block'),
+        );
+        expect(
+          WorkPresentationUtils.useScheduleCtaLabel(bRole),
+          equals('Use this business schedule'),
+        );
+        expect(
+          WorkPresentationUtils.editorTitle(isNew: false, lifeRole: bRole),
+          equals('Edit Business Block'),
+        );
+        expect(
+          WorkPresentationUtils.editorTitle(isNew: true, lifeRole: bRole),
+          equals('Add Business Block'),
+        );
+        expect(
+          WorkPresentationUtils.removeBlockLabel(bRole),
+          equals('Remove business block'),
+        );
+        expect(
+          WorkPresentationUtils.removeBlockConfirmTitle(bRole),
+          equals('Remove this business block?'),
+        );
+        expect(
+          WorkPresentationUtils.removeSetupLabel(bRole),
+          equals('Remove Business Setup'),
+        );
+        expect(
+          WorkPresentationUtils.removeSetupConfirmTitle(bRole),
+          equals('Remove Business Setup?'),
+        );
+        expect(
+          WorkPresentationUtils.removeSetupConfirmContent(bRole),
+          contains('business blocks'),
+        );
+        expect(
+          WorkPresentationUtils.weeklyBlockCount(1, bRole),
+          equals('1 weekly business block'),
+        );
+        expect(
+          WorkPresentationUtils.weeklyBlockCount(3, bRole),
+          equals('3 weekly business blocks'),
+        );
+
+        // 3. Work profile strings (both working and student_working)
+        for (final wRole in [LifeRoleDraft.workingKey, 'student_working']) {
+          expect(
+            WorkPresentationUtils.currentSetupHeaderTitle(wRole),
+            equals('Work Schedule'),
+          );
+          expect(
+            WorkPresentationUtils.currentSetupEmptyTitle(wRole),
+            equals('No work schedule yet'),
+          );
+          expect(
+            WorkPresentationUtils.currentSetupEmptySubtitle(wRole),
+            contains('shifts'),
+          );
+          expect(
+            WorkPresentationUtils.currentSetupPrimaryButtonLabel(
+              isConfigured: false,
+              lifeRole: wRole,
+            ),
+            equals('Set up Work'),
+          );
+          expect(
+            WorkPresentationUtils.currentSetupPrimaryButtonLabel(
+              isConfigured: true,
+              lifeRole: wRole,
+            ),
+            equals('Change setup'),
+          );
+          expect(
+            WorkPresentationUtils.sourceSelectionTitle(wRole),
+            equals('Update Work Schedule'),
+          );
+          expect(
+            WorkPresentationUtils.sourceManualTitle(wRole),
+            equals('Set up manually'),
+          );
+          expect(
+            WorkPresentationUtils.sourceEditCurrentTitle(wRole),
+            equals('Edit current work schedule'),
+          );
+          expect(
+            WorkPresentationUtils.reviewTitle(wRole),
+            equals('Review Work Schedule'),
+          );
+          expect(
+            WorkPresentationUtils.addBlockButtonLabel(wRole),
+            equals('Add Work Block'),
+          );
+          expect(
+            WorkPresentationUtils.useScheduleCtaLabel(wRole),
+            equals('Use this work schedule'),
+          );
+          expect(
+            WorkPresentationUtils.editorTitle(isNew: false, lifeRole: wRole),
+            equals('Edit Work Block'),
+          );
+          expect(
+            WorkPresentationUtils.editorTitle(isNew: true, lifeRole: wRole),
+            equals('Add Work Block'),
+          );
+          expect(
+            WorkPresentationUtils.removeBlockLabel(wRole),
+            equals('Remove work block'),
+          );
+          expect(
+            WorkPresentationUtils.removeBlockConfirmTitle(wRole),
+            equals('Remove this work block?'),
+          );
+          expect(
+            WorkPresentationUtils.removeSetupLabel(wRole),
+            equals('Remove Work Setup'),
+          );
+          expect(
+            WorkPresentationUtils.removeSetupConfirmTitle(wRole),
+            equals('Remove Work Setup?'),
+          );
+          expect(
+            WorkPresentationUtils.weeklyBlockCount(1, wRole),
+            equals('1 weekly work block'),
+          );
+          expect(
+            WorkPresentationUtils.weeklyBlockCount(3, wRole),
+            equals('3 weekly work blocks'),
+          );
+        }
+
+        // 4. Neutral profile strings (null, empty, unknown)
+        for (final nRole in [null, '', 'student', 'retired', 'unknown']) {
+          expect(
+            WorkPresentationUtils.currentSetupHeaderTitle(nRole),
+            equals('Work / Business'),
+          );
+          expect(
+            WorkPresentationUtils.currentSetupEmptyTitle(nRole),
+            equals('No Work / Business schedule yet'),
+          );
+          expect(
+            WorkPresentationUtils.currentSetupEmptySubtitle(nRole),
+            contains('work or business hours'),
+          );
+          expect(
+            WorkPresentationUtils.currentSetupPrimaryButtonLabel(
+              isConfigured: false,
+              lifeRole: nRole,
+            ),
+            equals('Set up Work / Business'),
+          );
+          expect(
+            WorkPresentationUtils.currentSetupPrimaryButtonLabel(
+              isConfigured: true,
+              lifeRole: nRole,
+            ),
+            equals('Change setup'),
+          );
+          expect(
+            WorkPresentationUtils.sourceSelectionTitle(nRole),
+            equals('Update Work / Business'),
+          );
+          expect(
+            WorkPresentationUtils.sourceManualTitle(nRole),
+            equals('Set up manually'),
+          );
+          expect(
+            WorkPresentationUtils.sourceEditCurrentTitle(nRole),
+            equals('Edit current schedule'),
+          );
+          expect(
+            WorkPresentationUtils.reviewTitle(nRole),
+            equals('Review Work / Business'),
+          );
+          expect(
+            WorkPresentationUtils.addBlockButtonLabel(nRole),
+            equals('Add Work / Business Block'),
+          );
+          expect(
+            WorkPresentationUtils.useScheduleCtaLabel(nRole),
+            equals('Use this schedule'),
+          );
+          expect(
+            WorkPresentationUtils.editorTitle(isNew: false, lifeRole: nRole),
+            equals('Edit Work / Business Block'),
+          );
+          expect(
+            WorkPresentationUtils.editorTitle(isNew: true, lifeRole: nRole),
+            equals('Add Work / Business Block'),
+          );
+          expect(
+            WorkPresentationUtils.removeBlockLabel(nRole),
+            equals('Remove block'),
+          );
+          expect(
+            WorkPresentationUtils.removeBlockConfirmTitle(nRole),
+            equals('Remove this block?'),
+          );
+          expect(
+            WorkPresentationUtils.removeSetupLabel(nRole),
+            equals('Remove Work / Business Setup'),
+          );
+          expect(
+            WorkPresentationUtils.removeSetupConfirmTitle(nRole),
+            equals('Remove Setup?'),
+          );
+          expect(
+            WorkPresentationUtils.weeklyBlockCount(1, nRole),
+            equals('1 weekly block'),
+          );
+          expect(
+            WorkPresentationUtils.weeklyBlockCount(3, nRole),
+            equals('3 weekly blocks'),
+          );
+        }
+      },
+    );
+
+    test(
+      'WorkPresentationUtils sourceManualSubtitle dynamic businessMode resolution',
+      () {
+        // Fixed business mode
+        expect(
+          WorkPresentationUtils.sourceManualSubtitle(
+            lifeRole: LifeRoleDraft.businessKey,
+            businessMode: 'fixed_business',
+          ),
+          equals('Add your regular business hours and recurring operations.'),
+        );
+
+        // Flexible business mode
+        expect(
+          WorkPresentationUtils.sourceManualSubtitle(
+            lifeRole: LifeRoleDraft.businessKey,
+            businessMode: 'flexible_business',
+          ),
+          equals(
+            'Add the business blocks you want anchored to specific times.',
+          ),
+        );
+
+        // Mixed business mode
+        expect(
+          WorkPresentationUtils.sourceManualSubtitle(
+            lifeRole: LifeRoleDraft.businessKey,
+            businessMode: 'mixed_business',
+          ),
+          equals(
+            'Add your fixed business hours and scheduled client or operating blocks.',
+          ),
+        );
+
+        // Default business (no businessMode or unrecognized)
+        expect(
+          WorkPresentationUtils.sourceManualSubtitle(
+            lifeRole: LifeRoleDraft.businessKey,
+            businessMode: null,
+          ),
+          equals('Add your business and client blocks day by day'),
+        );
+
+        // Work profile
+        expect(
+          WorkPresentationUtils.sourceManualSubtitle(
+            lifeRole: LifeRoleDraft.workingKey,
+          ),
+          equals('Add your work blocks day by day'),
+        );
+
+        // Neutral profile
+        expect(
+          WorkPresentationUtils.sourceManualSubtitle(lifeRole: null),
+          equals('Add your schedule blocks day by day'),
+        );
+      },
+    );
+
+    test(
+      'WorkPresentationUtils scheduledCount formats block counts accurately',
+      () {
+        expect(
+          WorkPresentationUtils.scheduledCount(0),
+          equals('0 blocks scheduled'),
+        );
+        expect(
+          WorkPresentationUtils.scheduledCount(1),
+          equals('1 block scheduled'),
+        );
+        expect(
+          WorkPresentationUtils.scheduledCount(5),
+          equals('5 blocks scheduled'),
+        );
+      },
+    );
+
+    testWidgets(
+      'Rich WorkTimelineCard wraps department and project text and calculates minimumHeight matching rendered layout without overflow',
+      (tester) async {
+        const richBlock = TimelineBlockDraft(
+          id: 'rich-work-block-1',
+          section: 'work',
+          title: 'Strategic Architecture Review',
+          startMinute: 9 * 60,
+          endMinute: 11 * 60,
+          repeatDays: [1],
+          workRole: 'Principal Cloud Platform Architect',
+          workOrganization:
+              'Global Enterprise Solutions & Distributed Systems Infrastructure Corp.',
+          workDepartmentOrProject:
+              'Cloud Architecture & Reliability Engineering Group',
+          location: 'Executive Briefing Center Tower B, 14th Floor Room 1402',
+          notes:
+              'Detailed architecture sign-off requirements, multi-region failover strategy, and zero-downtime database deployment checkpoints.',
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        const positionedEntry = PositionedTimelineEntry(
+          entry: TimelineEntry(
+            id: 'rich-entry-1',
+            sourceId: 'rich-work-block-1',
+            title: 'Strategic Architecture Review',
+            startMinute: 9 * 60,
+            endMinute: 11 * 60,
+            repeatDays: [1],
+            category: TimelineCategory.work,
+          ),
+          left: 0,
+          top: 0,
+          width: 320,
+          height: 480,
+          column: 0,
+          columnCount: 1,
+          isFront: true,
+          hasOverlap: false,
+        );
+
+        for (final width in [320.0, 360.0]) {
+          for (final scale in [1.0, 1.4, 2.0]) {
+            tester.view.physicalSize = Size(width * scale, 1200 * scale);
+            tester.view.devicePixelRatio = scale;
+            addTearDown(tester.view.resetPhysicalSize);
+
+            final minHeight = WorkTimelineCard.minimumHeight(
+              richBlock,
+              textScale: scale,
+              contentWidth: width,
+            );
+            expect(minHeight, isPositive);
+
+            await tester.pumpWidget(
+              MaterialApp(
+                theme: ThemeData.dark(),
+                home: Scaffold(
+                  body: MediaQuery(
+                    data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+                    child: SizedBox(
+                      width: width,
+                      height: minHeight + 50,
+                      child: WorkTimelineCard(
+                        positioned: positionedEntry,
+                        block: richBlock,
+                        isEditable: true,
+                        accent: OptivusColors.routineAccent,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+
+            await tester.pumpAndSettle();
+
+            expect(tester.takeException(), isNull);
+            expect(find.text('Strategic Architecture Review'), findsOneWidget);
+            expect(
+              find.textContaining('Principal Cloud Platform Architect'),
+              findsOneWidget,
+            );
+            expect(
+              find.textContaining(
+                'Global Enterprise Solutions & Distributed Systems Infrastructure Corp.',
+              ),
+              findsOneWidget,
+            );
+            expect(
+              find.text('Cloud Architecture & Reliability Engineering Group'),
+              findsOneWidget,
+            );
+            expect(
+              find.text(
+                'Executive Briefing Center Tower B, 14th Floor Room 1402',
+              ),
+              findsOneWidget,
+            );
+            expect(
+              find.text(
+                'Detailed architecture sign-off requirements, multi-region failover strategy, and zero-downtime database deployment checkpoints.',
+              ),
+              findsOneWidget,
+            );
+          }
+        }
+      },
+    );
   });
 }

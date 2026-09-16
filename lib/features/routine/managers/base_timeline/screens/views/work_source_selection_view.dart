@@ -3,10 +3,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_radii.dart';
 import 'package:optivus/core/widgets/liquid_section_header.dart';
-import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/work_presentation_utils.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
 
 /// Source selection stage for Work / Business Base Timeline setup.
@@ -18,6 +18,7 @@ class WorkSourceSelectionView extends StatelessWidget {
   final VoidCallback? onEditCurrent;
   final VoidCallback? onRemoveSetup;
   final String? lifeRole;
+  final String? businessMode;
 
   const WorkSourceSelectionView({
     super.key,
@@ -28,19 +29,16 @@ class WorkSourceSelectionView extends StatelessWidget {
     this.onEditCurrent,
     this.onRemoveSetup,
     this.lifeRole,
+    this.businessMode,
   });
 
   @override
   Widget build(BuildContext context) {
     final snapshot = setup.snapshotFor(BaseTimelineSection.work);
-    final isBusiness = lifeRole == LifeRoleDraft.businessKey;
-    final isJob = lifeRole == LifeRoleDraft.workingKey;
-    final viewTitle = isBusiness
-        ? 'Update Business Hours'
-        : (isJob ? 'Update Work Schedule' : 'Update Work Schedule');
-    final viewSubtitle = isBusiness
-        ? 'Your current business hours stay active until you save new ones.'
-        : 'Your current setup stays active until you save a new one.';
+    final viewTitle = WorkPresentationUtils.sourceSelectionTitle(lifeRole);
+    final viewSubtitle = WorkPresentationUtils.sourceSelectionSubtitle(
+      lifeRole,
+    );
 
     return SafeArea(
       child: Column(
@@ -109,20 +107,20 @@ class WorkSourceSelectionView extends StatelessWidget {
                       }
                     },
                     itemBuilder: (ctx) => [
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'remove',
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.delete_outline_rounded,
                               color: OptivusColors.danger,
                               size: 18,
                             ),
-                            SizedBox(width: 8),
+                            const SizedBox(width: 8),
                             Text(
-                              'Remove setup',
-                              style: TextStyle(
+                              WorkPresentationUtils.removeSetupLabel(lifeRole),
+                              style: const TextStyle(
                                 color: OptivusColors.danger,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -147,7 +145,7 @@ class WorkSourceSelectionView extends StatelessWidget {
                     BaseTimelinePhotoPreviewCard(
                       r2Key: snapshot.sourceR2Key,
                       assetId: snapshot.sourceAssetId,
-                      title: 'Current Work Schedule Photo',
+                      title: WorkPresentationUtils.photoCardTitle(lifeRole),
                       isCompactRow: true,
                       height: 68,
                     ),
@@ -163,11 +161,9 @@ class WorkSourceSelectionView extends StatelessWidget {
                   _buildSourceActionCard(
                     icon: Icons.camera_alt_rounded,
                     title: 'Take a Photo',
-                    subtitle: isBusiness
-                        ? 'Capture store hours, operational plan, or screen'
-                        : (isJob
-                              ? 'Capture a printed shift roster, rota, or screen'
-                              : 'Capture a printed schedule, contract, or screen'),
+                    subtitle: WorkPresentationUtils.sourceCameraSubtitle(
+                      lifeRole,
+                    ),
                     accent: OptivusColors.warning,
                     onTap: () => onPickPhoto(ImageSource.camera),
                   ),
@@ -184,28 +180,26 @@ class WorkSourceSelectionView extends StatelessWidget {
                   if (snapshot.isConfigured || setup.workBlocks.isNotEmpty)
                     _buildSourceActionCard(
                       icon: Icons.edit_calendar_rounded,
-                      title: isBusiness
-                          ? 'Edit current business hours'
-                          : 'Edit current work schedule',
-                      subtitle:
-                          (snapshot.sourceR2Key != null ||
-                              snapshot.sourceAssetId != null)
-                          ? 'Keep schedule photo and adjust blocks'
-                          : (isBusiness
-                                ? 'Keep your current business blocks and adjust them manually'
-                                : 'Keep your current blocks and adjust them manually'),
+                      title: WorkPresentationUtils.sourceEditCurrentTitle(
+                        lifeRole,
+                      ),
+                      subtitle: WorkPresentationUtils.sourceEditCurrentSubtitle(
+                        hasSourcePhoto:
+                            snapshot.sourceR2Key != null ||
+                            snapshot.sourceAssetId != null,
+                        lifeRole: lifeRole,
+                      ),
                       accent: OptivusColors.routineAccent,
                       onTap: onEditCurrent ?? onManualSetup,
                     )
                   else
                     _buildSourceActionCard(
                       icon: Icons.edit_calendar_rounded,
-                      title: isBusiness
-                          ? 'Set up business hours manually'
-                          : 'Set up manually',
-                      subtitle: isBusiness
-                          ? 'Add your business and client blocks day by day'
-                          : 'Add your work blocks day by day',
+                      title: WorkPresentationUtils.sourceManualTitle(lifeRole),
+                      subtitle: WorkPresentationUtils.sourceManualSubtitle(
+                        lifeRole: lifeRole,
+                        businessMode: businessMode,
+                      ),
                       accent: OptivusColors.routineAccent,
                       onTap: onManualSetup,
                     ),
