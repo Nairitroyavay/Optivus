@@ -190,10 +190,17 @@ class RoutineCardFactory {
 
   /// Work details string (role, organization, department/project, mode, block kind).
   static String? workDetailsString(RoutineItem item) {
+    final contextStr = WorkPresentationUtils.formatContext(
+      item.workContextType,
+    );
     final role = item.workRole?.trim();
     final mode = WorkPresentationUtils.formatMode(item.workMode);
     final kind = WorkPresentationUtils.formatBlockKind(item.workBlockKind);
     final parts = [
+      if (contextStr.isNotEmpty &&
+          item.workContextType != 'job' &&
+          contextStr.toLowerCase() != item.title.trim().toLowerCase())
+        contextStr,
       if (role != null &&
           role.isNotEmpty &&
           role.toLowerCase() != item.title.trim().toLowerCase())
@@ -510,11 +517,19 @@ class RoutineCardFactory {
       textDirection: textDirection,
     );
 
-    final actionFooterHeight = switch (actionLayout) {
-      RoutineCardActionLayout.horizontal => singleButtonHeight,
-      RoutineCardActionLayout.stacked =>
-        (singleButtonHeight * 3) + (2 * RoutineCardPresentation.actionGap),
-    };
+    final isTerminal =
+        item.isCompleted ||
+        item.status == RoutineStatus.completed ||
+        item.status == RoutineStatus.skipped ||
+        item.status == RoutineStatus.missed;
+
+    final actionFooterHeight = isTerminal
+        ? singleButtonHeight
+        : switch (actionLayout) {
+            RoutineCardActionLayout.horizontal => singleButtonHeight,
+            RoutineCardActionLayout.stacked =>
+              (singleButtonHeight * 3) + (2 * RoutineCardPresentation.actionGap),
+          };
     height += RoutineCardPresentation.actionsFooterGap + actionFooterHeight;
 
     // Card padding (12 top + 12 bottom = 24) + subpixel rounding tolerance (1.0)

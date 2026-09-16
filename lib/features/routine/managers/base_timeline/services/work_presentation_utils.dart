@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 
@@ -11,6 +12,7 @@ class WorkPresentationUtils {
   static bool isWorkProfile(String? lifeRole) {
     final role = lifeRole?.trim().toLowerCase();
     return role == LifeRoleDraft.workingKey ||
+        role == 'work' ||
         role == LifeRoleDraft.studentWorkingKey;
   }
 
@@ -130,9 +132,10 @@ class WorkPresentationUtils {
       case 'job':
         return 'ROLE / POSITION';
       case 'business':
-      case 'startup':
       case 'freelance':
         return 'YOUR ROLE';
+      case 'startup':
+        return 'FOUNDER / ROLE';
       default:
         return 'ROLE';
     }
@@ -157,7 +160,17 @@ class WorkPresentationUtils {
 
   /// Label for role in read-only sheets (e.g. WorkDetailSheet).
   static String roleDetailLabel(String? contextType) {
-    return 'Role';
+    final normalized = contextType?.trim().toLowerCase();
+    switch (normalized) {
+      case 'business':
+        return 'Your Role';
+      case 'startup':
+        return 'Founder / Role';
+      case 'freelance':
+      case 'job':
+      default:
+        return 'Role';
+    }
   }
 
   /// Field label for company / business / client in the editor.
@@ -169,7 +182,7 @@ class WorkPresentationUtils {
       case 'business':
         return 'BUSINESS NAME';
       case 'startup':
-        return 'STARTUP / ORGANIZATION';
+        return 'STARTUP';
       case 'freelance':
         return 'CLIENT / ORGANIZATION';
       default:
@@ -309,7 +322,16 @@ class WorkPresentationUtils {
   // ---------------------------------------------------------------------------
 
   /// Header title for the Review view.
-  static String reviewTitle(String? lifeRole) {
+  static String reviewTitle(String? lifeRole, {bool isEditing = false}) {
+    if (isEditing) {
+      if (isBusinessProfile(lifeRole)) {
+        return 'Edit Business Schedule';
+      }
+      if (isWorkProfile(lifeRole)) {
+        return 'Edit Work Schedule';
+      }
+      return 'Edit Work / Business Schedule';
+    }
     if (isBusinessProfile(lifeRole)) {
       return 'Review Business Schedule';
     }
@@ -331,7 +353,10 @@ class WorkPresentationUtils {
   }
 
   /// Bottom CTA label in Review view.
-  static String useScheduleCtaLabel(String? lifeRole) {
+  static String useScheduleCtaLabel(String? lifeRole, {bool isEditing = false}) {
+    if (isEditing) {
+      return 'Save changes';
+    }
     if (isBusinessProfile(lifeRole)) {
       return 'Use this business schedule';
     }
@@ -361,6 +386,26 @@ class WorkPresentationUtils {
       return 'No work scheduled on this day.';
     }
     return 'No scheduled Work / Business blocks on this day.';
+  }
+
+  /// Empty day message with weekday context.
+  static String emptyWeekdayMessage(int selectedDay, [String? lifeRole]) {
+    const dayNames = {
+      1: 'Monday',
+      2: 'Tuesday',
+      3: 'Wednesday',
+      4: 'Thursday',
+      5: 'Friday',
+      6: 'Saturday',
+      7: 'Sunday',
+    };
+    final dayName = dayNames[selectedDay] ?? 'this day';
+    return 'Nothing scheduled for $dayName.\nChoose another day or edit your schedule.';
+  }
+
+  /// Notice shown during source selection when a configured schedule already exists.
+  static String sourceDraftNotice(String? lifeRole) {
+    return 'Optivus will create a new draft from your selection. Your live schedule will not change until you review and save it.';
   }
 
   /// Header title for Current Setup view.
@@ -616,10 +661,26 @@ class WorkPresentationUtils {
     required bool isConfigured,
     String? lifeRole,
   }) {
-    if (isConfigured) return 'Change setup';
+    if (isConfigured) return 'Edit schedule';
     if (isBusinessProfile(lifeRole)) return 'Set up Business';
     if (isWorkProfile(lifeRole)) return 'Set up Work';
     return 'Set up Work / Business';
+  }
+
+  /// Change source action label for Current Setup view.
+  static String currentSetupSourceButtonLabel({
+    bool isConfigured = true,
+    String? lifeRole,
+  }) {
+    return 'Change source';
+  }
+
+  /// Explanatory prompt when editing draft becomes empty.
+  static String emptyDraftExplanation(String? lifeRole) {
+    final isBusiness = isBusinessProfile(lifeRole);
+    final blockWord = isBusiness ? 'business block' : 'work block';
+    final setupName = isBusiness ? 'Remove Business Setup' : 'Remove Work Setup';
+    return 'No blocks in this draft. Add a $blockWord, or cancel and use "$setupName" from the current schedule.';
   }
 
   /// Empty state title in Current Setup view.
@@ -869,6 +930,152 @@ class WorkPresentationUtils {
     return cleanOrg;
   }
 
+  /// Resolves an intelligent, de-duplicated [WorkProfileSummary] from [blocks].
+  static WorkProfileSummary resolveProfileSummary({
+    required List<TimelineBlockDraft> blocks,
+    String? lifeRole,
+    required bool hasSourcePhoto,
+  }) {
+    final isBusiness = isBusinessProfile(lifeRole);
+    final sourceLabel =
+        hasSourcePhoto ? photoCardTitle(lifeRole) : 'Manual setup';
+
+    if (blocks.isEmpty) {
+      return WorkProfileSummary(
+        headerTitle: isBusiness ? 'Business Profile' : 'Work Profile',
+        headline: isBusiness ? 'Business & Operations' : 'Work Schedule',
+        subline: null,
+        badges: const [],
+        scheduleSummary: 'No blocks scheduled',
+        sourceLabel: sourceLabel,
+        hasSourcePhoto: hasSourcePhoto,
+        isMixed: false,
+      );
+    }
+
+    final contexts = blocks
+        .map((b) => b.workContextType?.trim())
+        .where((c) => c != null && c.isNotEmpty)
+        .toSet();
+    final roles = blocks
+        .map((b) => b.workRole?.trim())
+        .where((r) => r != null && r.isNotEmpty)
+        .toSet();
+    final orgs = blocks
+        .map((b) => b.workOrganization?.trim())
+        .where((o) => o != null && o.isNotEmpty)
+        .toSet();
+    final depts = blocks
+        .map((b) => b.effectiveWorkDepartmentOrProject?.trim())
+        .where((d) => d != null && d.isNotEmpty)
+        .toSet();
+    final modes = blocks
+        .map((b) => b.workMode?.trim())
+        .where((m) => m != null && m.isNotEmpty)
+        .toSet();
+
+    // 1. Header Title
+    final String headerTitle;
+    if (contexts.length == 1) {
+      headerTitle = '${formatContext(contexts.first!)} Profile';
+    } else if (isBusiness) {
+      headerTitle = 'Business Profile';
+    } else if (isWorkProfile(lifeRole)) {
+      headerTitle = 'Work Profile';
+    } else {
+      headerTitle = 'Work & Business Profile';
+    }
+
+    // 2. Headline & Mixed flag
+    String headline;
+    bool isMixed = false;
+    if (roles.length == 1 && orgs.length == 1) {
+      headline = '${roles.first!} at ${orgs.first!}';
+    } else if (roles.length == 1 && orgs.isEmpty) {
+      headline = roles.first!;
+    } else if (orgs.length == 1 && roles.isEmpty) {
+      headline = orgs.first!;
+    } else if (roles.length > 1) {
+      isMixed = true;
+      headline = orgs.length > 1
+          ? 'Multiple roles & organizations'
+          : 'Multiple roles';
+    } else if (orgs.length > 1) {
+      isMixed = true;
+      headline = 'Multiple organizations';
+    } else {
+      if (contexts.length == 1) {
+        headline = '${formatContext(contexts.first!)} Schedule';
+      } else if (isBusiness) {
+        headline = 'Business Operations';
+      } else {
+        headline = 'Work Schedule';
+      }
+    }
+
+    // 3. Subline
+    final sublineParts = <String>[];
+    if (roles.length == 1 && orgs.length == 1) {
+      if (depts.length == 1) {
+        sublineParts.add(depts.first!);
+      }
+    } else if (roles.length == 1 && orgs.isEmpty) {
+      if (depts.length == 1) {
+        sublineParts.add(depts.first!);
+      }
+    } else if (orgs.length == 1 && roles.isEmpty) {
+      if (depts.length == 1) {
+        sublineParts.add(depts.first!);
+      }
+    } else {
+      if (roles.length > 1 && orgs.length == 1) {
+        sublineParts.add('${roles.length} roles at ${orgs.first!}');
+      } else if (orgs.length > 1) {
+        sublineParts.add('${orgs.length} clients / organizations');
+      }
+      if (depts.length == 1) {
+        sublineParts.add(depts.first!);
+      }
+    }
+    final subline = sublineParts.isNotEmpty ? sublineParts.join(' · ') : null;
+
+    // 4. Badges
+    final badges = <String>[];
+    if (contexts.length == 1) {
+      badges.add(formatContext(contexts.first!));
+    } else if (contexts.length > 1) {
+      badges.add('Mixed context');
+    }
+    if (modes.length == 1) {
+      badges.add(formatMode(modes.first!));
+    } else if (modes.length > 1) {
+      badges.add('Mixed modes');
+    }
+
+    // 5. Schedule summary
+    final uniqueDays = <int>{};
+    for (final b in blocks) {
+      uniqueDays.addAll(b.repeatDays);
+    }
+    final daysCount = uniqueDays.length;
+    final daysText = daysCount == 1 ? '1 day / week' : '$daysCount days / week';
+    final blocksNoun = isBusiness
+        ? (blocks.length == 1 ? 'business block' : 'business blocks')
+        : (blocks.length == 1 ? 'block' : 'blocks');
+    final scheduleSummary = '$daysText · ${blocks.length} $blocksNoun';
+
+    return WorkProfileSummary(
+      headerTitle: headerTitle,
+      headline: headline,
+      subline: subline,
+      badges: badges,
+      scheduleSummary: scheduleSummary,
+      sourceLabel: sourceLabel,
+      hasSourcePhoto: hasSourcePhoto,
+      isMixed: isMixed,
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Internal helpers
   // ---------------------------------------------------------------------------
@@ -880,4 +1087,43 @@ class WorkPresentationUtils {
         .map((word) => word[0].toUpperCase() + word.substring(1).toLowerCase())
         .join(' ');
   }
+}
+
+/// Resolved summary model for Work / Business current setup.
+@immutable
+class WorkProfileSummary {
+  const WorkProfileSummary({
+    required this.headerTitle,
+    required this.headline,
+    this.subline,
+    required this.badges,
+    required this.scheduleSummary,
+    required this.sourceLabel,
+    required this.hasSourcePhoto,
+    this.isMixed = false,
+  });
+
+  /// Section or context header (e.g. 'Work Profile', 'Business Profile', 'Freelance Profile').
+  final String headerTitle;
+
+  /// Primary headline (e.g. 'Software Engineer at Optivus', or 'Multiple roles').
+  final String headline;
+
+  /// Optional secondary subline (e.g. 'Mobile Team · Engineering' or '3 clients').
+  final String? subline;
+
+  /// Compact metadata badges (e.g. ['Job', 'Hybrid']).
+  final List<String> badges;
+
+  /// Weekly schedule summary (e.g. '5 days / week · 6 blocks').
+  final String scheduleSummary;
+
+  /// Source label (e.g. 'Schedule photo' or 'Manual setup').
+  final String sourceLabel;
+
+  /// Whether a source photo is attached.
+  final bool hasSourcePhoto;
+
+  /// Whether roles or organizations are mixed across blocks.
+  final bool isMixed;
 }

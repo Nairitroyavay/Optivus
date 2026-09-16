@@ -5,9 +5,9 @@ import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/features/routine/models/routine_action_context.dart';
+import 'package:optivus/features/routine/models/routine_action_availability.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/services/routine_action_executor.dart';
-import 'package:optivus/features/routine/services/routine_transition_policy.dart';
 import 'package:optivus/features/routine/services/routine_validation_service.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_presentation.dart';
 import 'package:optivus/features/routine/sheets/routine_move_sheet.dart';
@@ -119,23 +119,189 @@ class RoutineCardActions extends ConsumerWidget {
               textDirection: textDirection,
             );
 
+        final existingRecord = hasScope && occurrenceDateKey != null
+            ? ref.watch(
+                routineNotifierProvider.select((state) {
+                  for (final occ in state.occurrences) {
+                    if (occ.routineItemId == templateId &&
+                        occ.occurrenceDateKey == occurrenceDateKey) {
+                      return occ;
+                    }
+                  }
+                  return null;
+                }),
+              )
+            : null;
+        final effectiveStatus = existingRecord?.status ?? item.status;
         final isCompleted =
-            item.isCompleted || item.status == RoutineStatus.completed;
-        final startDecision = RoutineTransitionPolicy.evaluate(
-          existingRecord: null,
-          requestedAction: item.blockType == RoutineBlockType.trackerTask
-              ? RoutineOccurrenceAction.startTracker
-              : RoutineOccurrenceAction.start,
-          projectedStatus: item.status,
+            item.isCompleted || effectiveStatus == RoutineStatus.completed;
+        final availability = RoutineActionAvailability.forOccurrence(
+          existingRecord: existingRecord,
+          status: effectiveStatus,
+          blockType: item.blockType,
         );
-        final moveDecision = RoutineTransitionPolicy.evaluate(
-          existingRecord: null,
-          requestedAction: RoutineOccurrenceAction.move,
-          projectedStatus: item.status,
-        );
+        final startDecision = availability.startDecision;
+        final completeDecision = availability.completeDecision;
+        final moveDecision = availability.moveDecision;
+
+        // Contextual terminal states (Part L): show clear state and optional Undo,
+        // without wasting card space on dead Start and dead Move controls.
+        if (isCompleted || effectiveStatus == RoutineStatus.completed) {
+          final completedBadge = _ActionButton(
+            key: ValueKey('routine-action-done-${item.id}'),
+            label: 'Completed',
+            color: OptivusColors.success,
+            icon: Icons.check_circle_rounded,
+            isSelected: true,
+            isPrimary: true,
+            isDisabled: true,
+            onTap: null,
+          );
+
+          if (availability.canUndo) {
+            final undoAction = _ActionButton(
+              key: ValueKey('routine-action-undo-${item.id}'),
+              label: 'Undo',
+              color: OptivusColors.textSecondary,
+              icon: Icons.undo_rounded,
+              isPrimary: false,
+              isDisabled: isPending,
+              onTap: () {
+                if (!hasScope) return;
+                _executeRoutineAction(
+                  context,
+                  ref,
+                  action: RoutineOccurrenceAction.undo,
+                  perform: () => ref
+                      .read(routineNotifierProvider.notifier)
+                      .undoOccurrenceAction(
+                        item.id,
+                        occurrenceDate: effectiveOccurrenceDate,
+                      ),
+                );
+              },
+            );
+            return Row(
+              children: [
+                Expanded(flex: 3, child: completedBadge),
+                const SizedBox(width: RoutineCardPresentation.actionGap),
+                Expanded(flex: 2, child: undoAction),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: completedBadge),
+            ],
+          );
+        }
+
+        if (effectiveStatus == RoutineStatus.skipped) {
+          final skippedBadge = _ActionButton(
+            key: ValueKey('routine-action-skip-${item.id}'),
+            label: 'Skipped',
+            color: OptivusColors.warning,
+            icon: Icons.skip_next_rounded,
+            isSelected: true,
+            isPrimary: false,
+            isDisabled: true,
+            onTap: null,
+          );
+
+          if (availability.canUndo) {
+            final undoAction = _ActionButton(
+              key: ValueKey('routine-action-undo-${item.id}'),
+              label: 'Undo',
+              color: OptivusColors.textSecondary,
+              icon: Icons.undo_rounded,
+              isPrimary: false,
+              isDisabled: isPending,
+              onTap: () {
+                if (!hasScope) return;
+                _executeRoutineAction(
+                  context,
+                  ref,
+                  action: RoutineOccurrenceAction.undo,
+                  perform: () => ref
+                      .read(routineNotifierProvider.notifier)
+                      .undoOccurrenceAction(
+                        item.id,
+                        occurrenceDate: effectiveOccurrenceDate,
+                      ),
+                );
+              },
+            );
+            return Row(
+              children: [
+                Expanded(flex: 3, child: skippedBadge),
+                const SizedBox(width: RoutineCardPresentation.actionGap),
+                Expanded(flex: 2, child: undoAction),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: skippedBadge),
+            ],
+          );
+        }
+
+        if (effectiveStatus == RoutineStatus.missed) {
+          final missedBadge = _ActionButton(
+            key: ValueKey('routine-action-miss-${item.id}'),
+            label: 'Missed',
+            color: OptivusColors.danger,
+            icon: Icons.cancel_outlined,
+            isSelected: true,
+            isPrimary: false,
+            isDisabled: true,
+            onTap: null,
+          );
+
+          if (availability.canUndo) {
+            final undoAction = _ActionButton(
+              key: ValueKey('routine-action-undo-${item.id}'),
+              label: 'Undo',
+              color: OptivusColors.textSecondary,
+              icon: Icons.undo_rounded,
+              isPrimary: false,
+              isDisabled: isPending,
+              onTap: () {
+                if (!hasScope) return;
+                _executeRoutineAction(
+                  context,
+                  ref,
+                  action: RoutineOccurrenceAction.undo,
+                  perform: () => ref
+                      .read(routineNotifierProvider.notifier)
+                      .undoOccurrenceAction(
+                        item.id,
+                        occurrenceDate: effectiveOccurrenceDate,
+                      ),
+                );
+              },
+            );
+            return Row(
+              children: [
+                Expanded(flex: 3, child: missedBadge),
+                const SizedBox(width: RoutineCardPresentation.actionGap),
+                Expanded(flex: 2, child: undoAction),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: missedBadge),
+            ],
+          );
+        }
 
         final hasGenericCountdown =
-            item.status == RoutineStatus.active &&
+            !isCompleted &&
+            effectiveStatus == RoutineStatus.active &&
             item.blockType != RoutineBlockType.trackerTask &&
             item.blockType != RoutineBlockType.checkIn &&
             item.blockType != RoutineBlockType.moneyTask &&
@@ -144,19 +310,30 @@ class RoutineCardActions extends ConsumerWidget {
         final isActiveTrackerOccurrence =
             actionState?.activeTrackerId == item.id &&
             actionState?.activeTrackerOccurrenceDateKey == occurrenceDateKey;
+        final isTrackerActive =
+            item.blockType == RoutineBlockType.trackerTask &&
+            (effectiveStatus == RoutineStatus.inTracker ||
+                isActiveTrackerOccurrence);
+
         final startAction = _ActionButton(
           key: ValueKey('routine-action-start-${item.id}'),
-          label: hasGenericCountdown ? null : 'Start',
+          label: hasGenericCountdown
+              ? null
+              : (isTrackerActive ? 'Open Tracker' : 'Start'),
           countdownStartedAt: hasGenericCountdown ? item.startedAt : null,
           countdownDurationSeconds: hasGenericCountdown
               ? item.countdownDurationSeconds
               : null,
           color: OptivusColors.routineAccent,
-          icon: Icons.play_arrow_rounded,
+          icon: isTrackerActive
+              ? Icons.open_in_new_rounded
+              : Icons.play_arrow_rounded,
+          isPrimary: !hasGenericCountdown &&
+              (effectiveStatus == RoutineStatus.planned || isTrackerActive),
           isDisabled:
               isPending ||
               (!startDecision.isAllowed &&
-                  item.status != RoutineStatus.inTracker),
+                  effectiveStatus != RoutineStatus.inTracker),
           onTap: () {
             if (!hasScope) return;
             if (isCompleted) {
@@ -199,7 +376,7 @@ class RoutineCardActions extends ConsumerWidget {
                 item.category == RoutineCategory.badHabit) {
               _showBadHabitCheckInSheet(context, ref, item);
             } else if (item.blockType == RoutineBlockType.trackerTask &&
-                (item.status == RoutineStatus.inTracker ||
+                (effectiveStatus == RoutineStatus.inTracker ||
                     isActiveTrackerOccurrence)) {
               ref.read(appNavigationProvider.notifier).goToTracker();
             } else if (item.blockType == RoutineBlockType.trackerTask) {
@@ -235,20 +412,32 @@ class RoutineCardActions extends ConsumerWidget {
           label: 'Done',
           color: OptivusColors.success,
           icon: Icons.check_rounded,
-          isSelected: isCompleted,
-          isDisabled: isPending || !moveDecision.isAllowed,
+          isSelected: false,
+          isPrimary: effectiveStatus == RoutineStatus.active,
+          isDisabled: isPending || !completeDecision.isAllowed,
           onTap: () {
             if (!hasScope) return;
-            if (isCompleted) {
+            if (!completeDecision.isAllowed) {
               _executeRoutineAction(
                 context,
                 ref,
                 action: RoutineOccurrenceAction.complete,
                 perform: () => Future.value(
-                  const RoutineWriteResult.noOp(
-                    message: 'Already completed.',
-                    failureCategory: RoutineFailureCategory.alreadyCompleted,
-                  ),
+                  completeDecision.isNoOp
+                      ? RoutineWriteResult.noOp(
+                          message: completeDecision.message ??
+                              'Already completed.',
+                          failureCategory: completeDecision.failureCategory,
+                        )
+                      : RoutineWriteResult.validationFailed(
+                          RoutineValidationResult.invalid(
+                            errorType: RoutineValidationErrorType.invalidTime,
+                            userSafeMessage: completeDecision.message ??
+                                'Cannot complete routine.',
+                          ),
+                          message: completeDecision.message,
+                          failureCategory: completeDecision.failureCategory,
+                        ),
                 ),
               );
               return;
@@ -272,10 +461,11 @@ class RoutineCardActions extends ConsumerWidget {
           label: 'Move',
           color: OptivusColors.textSecondary,
           icon: Icons.schedule_rounded,
-          isDisabled: isPending || isCompleted,
+          isPrimary: false,
+          isDisabled: isPending || !moveDecision.isAllowed,
           onTap: () {
             if (!hasScope) return;
-            if (isCompleted) {
+            if (!moveDecision.isAllowed) {
               _executeRoutineAction(
                 context,
                 ref,
@@ -284,10 +474,11 @@ class RoutineCardActions extends ConsumerWidget {
                   RoutineWriteResult.validationFailed(
                     RoutineValidationResult.invalid(
                       errorType: RoutineValidationErrorType.invalidTime,
-                      userSafeMessage: 'Completed routine cannot be moved.',
+                      userSafeMessage: moveDecision.message ??
+                          'Completed routine cannot be moved.',
                     ),
-                    message: 'Completed routine cannot be moved.',
-                    failureCategory: RoutineFailureCategory.invalidTransition,
+                    message: moveDecision.message,
+                    failureCategory: moveDecision.failureCategory,
                   ),
                 ),
               );
@@ -493,6 +684,7 @@ class _ActionButton extends StatelessWidget {
   final VoidCallback? onTap;
   final bool isSelected;
   final bool isDisabled;
+  final bool isPrimary;
 
   const _ActionButton({
     super.key,
@@ -504,17 +696,22 @@ class _ActionButton extends StatelessWidget {
     required this.onTap,
     this.isSelected = false,
     this.isDisabled = false,
+    this.isPrimary = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final effectiveLabel = label ?? '00:00:00';
     final effectiveBgColor = isSelected
-        ? color.withValues(alpha: 0.24)
-        : color.withValues(alpha: 0.10);
+        ? color.withValues(alpha: 0.28)
+        : isPrimary
+            ? color.withValues(alpha: 0.22)
+            : color.withValues(alpha: 0.08);
     final effectiveBorderColor = isSelected
-        ? color.withValues(alpha: 0.50)
-        : color.withValues(alpha: 0.20);
+        ? color.withValues(alpha: 0.55)
+        : isPrimary
+            ? color.withValues(alpha: 0.50)
+            : color.withValues(alpha: 0.20);
     final effectiveTextColor = color;
 
     final scaler = MediaQuery.textScalerOf(context);
@@ -543,7 +740,7 @@ class _ActionButton extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
                 color: effectiveBorderColor,
-                width: isSelected ? 1.4 : 0.8,
+                width: isSelected || isPrimary ? 1.4 : 0.8,
               ),
             ),
             child: LayoutBuilder(
@@ -555,7 +752,7 @@ class _ActionButton extends StatelessWidget {
                       fontSize: 12,
                       fontWeight: isSelected
                           ? FontWeight.w800
-                          : FontWeight.w700,
+                          : (isPrimary ? FontWeight.w900 : FontWeight.w700),
                     ),
                   ),
                   textDirection: Directionality.of(context),
@@ -650,7 +847,19 @@ class _CountdownLabelState extends State<_CountdownLabel> {
         .toUtc()
         .difference(widget.startedAt.toUtc())
         .inSeconds;
-    final remaining = (widget.durationSeconds - elapsed).clamp(0, 999 * 3600);
+    final remaining = widget.durationSeconds - elapsed;
+    if (remaining <= 0) {
+      return Text(
+        "Time's up",
+        maxLines: 1,
+        softWrap: false,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+          color: widget.color,
+        ),
+      );
+    }
     final hours = remaining ~/ 3600;
     final minutes = (remaining % 3600) ~/ 60;
     final seconds = remaining % 60;

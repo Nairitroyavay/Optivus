@@ -16,6 +16,8 @@ class BaseTimelineCurrentSetupHeader extends StatelessWidget {
   final VoidCallback? onRemove;
   final String? resetLabel;
   final VoidCallback? onReset;
+  final String? changeSourceLabel;
+  final VoidCallback? onChangeSource;
   final Key? primaryButtonKey;
   final Key? backButtonKey;
   final Key? menuButtonKey;
@@ -33,6 +35,8 @@ class BaseTimelineCurrentSetupHeader extends StatelessWidget {
     this.onRemove,
     this.resetLabel,
     this.onReset,
+    this.changeSourceLabel,
+    this.onChangeSource,
     this.primaryButtonKey,
     this.backButtonKey,
     this.menuButtonKey,
@@ -40,7 +44,8 @@ class BaseTimelineCurrentSetupHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasMenu = onRemove != null || onReset != null;
+    final hasMenu =
+        onRemove != null || onReset != null || onChangeSource != null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -86,9 +91,36 @@ class BaseTimelineCurrentSetupHeader extends StatelessWidget {
                   onRemove?.call();
                 } else if (val == 'reset') {
                   onReset?.call();
+                } else if (val == 'change_source') {
+                  onChangeSource?.call();
                 }
               },
               itemBuilder: (ctx) => [
+                if (onChangeSource != null)
+                  PopupMenuItem(
+                    key: const Key('base-timeline-header-menu-change-source'),
+                    value: 'change_source',
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.image_search_rounded,
+                          color: OptivusColors.warning,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            changeSourceLabel ?? 'Change source',
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: OptivusColors.textPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 if (onReset != null)
                   PopupMenuItem(
                     key: const Key('base-timeline-header-menu-reset'),

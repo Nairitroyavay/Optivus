@@ -1585,9 +1585,17 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       lastMutationOperationId: operationId,
     );
 
+    final existingIndex = state.items.indexWhere((e) => e.id == ownedItem.id);
+    final updatedItems = existingIndex >= 0
+        ? [
+            for (int i = 0; i < state.items.length; i++)
+              if (i == existingIndex) ownedItem else state.items[i],
+          ]
+        : [...state.items, ownedItem];
+
     state = state.copyWith(
       pendingItemIds: {...state.pendingItemIds, ownedItem.id},
-      items: [...state.items, ownedItem],
+      items: updatedItems,
     );
 
     final event = RoutineEventRecord(
@@ -1614,10 +1622,15 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       final canonical = ownedItem;
       if (_ownerUid != uid) return _supersededWriteResult(operationId);
 
+      final remainingFailedIntents = Map<String, RoutineWriteIntent>.from(
+        state.failedIntentsByItemId,
+      )..remove(ownedItem.id);
+
       state = state.copyWith(
         pendingItemIds: state.pendingItemIds
             .where((id) => id != ownedItem.id)
             .toSet(),
+        failedIntentsByItemId: remainingFailedIntents,
         items: state.items
             .map((e) => e.id == ownedItem.id ? canonical : e)
             .toList(),
@@ -1640,10 +1653,15 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       } catch (_) {}
 
       if (isSuccess && recoveredItem != null) {
+        final remainingFailedIntents = Map<String, RoutineWriteIntent>.from(
+          state.failedIntentsByItemId,
+        )..remove(ownedItem.id);
+
         state = state.copyWith(
           pendingItemIds: state.pendingItemIds
               .where((id) => id != ownedItem.id)
               .toSet(),
+          failedIntentsByItemId: remainingFailedIntents,
           items: state.items
               .map((e) => e.id == ownedItem.id ? recoveredItem! : e)
               .toList(),
@@ -3608,8 +3626,23 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   Future<RoutineWriteResult> makeTinyVersion(
     RoutineItem item, {
     DateTime? occurrenceDate,
+    int? startMinute,
+    int? durationMinutes,
   }) async {
-    final tinyDuration = item.durationMinutes.clamp(5, 10);
+    int seedStart = startMinute ?? item.startMinute;
+    int seedDur = durationMinutes ?? item.durationMinutes;
+    if (startMinute == null && item.isContinuation) {
+      final template = state.items.where((i) => i.id == item.id).firstOrNull;
+      if (template != null) {
+        seedStart = template.startMinute;
+        seedDur = template.durationMinutes;
+      }
+    }
+    final tinyDuration = seedDur.clamp(5, 10);
+    final rawEnd = seedStart + tinyDuration;
+    final endMinute = rawEnd > 1440
+        ? rawEnd - 1440
+        : (rawEnd == 0 ? 1440 : rawEnd);
     return await _writeOccurrence(
       item.id,
       status: RoutineStatus.moved,
@@ -3617,8 +3650,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       action: 'makeTiny',
       occurrenceDate: occurrenceDate,
       movedToDateKey: routineLocalDateKey(occurrenceDate ?? state.selectedDay),
-      movedStartMinute: item.startMinute,
-      movedEndMinute: (item.startMinute + tinyDuration).clamp(1, 1440),
+      movedStartMinute: seedStart,
+      movedEndMinute: endMinute,
       displayTitleOverride: item.title.startsWith('[Tiny]')
           ? item.title
           : '[Tiny] ${item.title}',

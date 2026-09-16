@@ -119,7 +119,8 @@ void main() {
       expect(history, isNotEmpty);
       expect(history.first.status, RoutineStatus.completed);
 
-      // 2. Mark skipped
+      // 2. Mark skipped after explicit undo
+      await notifier.undoOccurrenceAction('routine_item_occ');
       final skipResult = await notifier.markSkipped('routine_item_occ');
       expect(skipResult.outcome, RoutineWriteOutcome.saved);
 
@@ -128,7 +129,8 @@ void main() {
           .occurrences;
       expect(occurrencesAfterSkip.first.status, RoutineStatus.skipped);
 
-      // 3. Mark missed
+      // 3. Mark missed after explicit undo
+      await notifier.undoOccurrenceAction('routine_item_occ');
       final missResult = await notifier.markMissed('routine_item_occ');
       expect(missResult.outcome, RoutineWriteOutcome.saved);
 
@@ -210,7 +212,8 @@ void main() {
           RoutineStatus.completed,
         );
 
-        // Execute markSkipped on money task in Firebase mode
+        // Execute markSkipped on money task in Firebase mode after undo
+        await notifier.undoOccurrenceAction('money_task_1');
         final skipResult = await notifier.markSkipped('money_task_1');
         expect(skipResult.outcome, RoutineWriteOutcome.saved);
         expect(

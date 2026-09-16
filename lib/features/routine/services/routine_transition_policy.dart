@@ -29,6 +29,8 @@ class RoutineTransitionDecision {
     this.failureCategory = RoutineFailureCategory.invalidTransition,
   }) : isAllowed = false,
        isNoOp = false;
+
+  bool get isRejected => !isAllowed && !isNoOp;
 }
 
 /// Pure, deterministic transition policy for Routine occurrences.
@@ -124,18 +126,33 @@ class RoutineTransitionPolicy {
 
       case RoutineOccurrenceAction.skip:
         if (status == RoutineStatus.completed) {
-          // Allow skip on completed for legacy compatibility if existing tests require it,
-          // but if already skipped, it is a no-op.
-          return const RoutineTransitionDecision.allow();
+          return const RoutineTransitionDecision.reject(
+            message: 'Completed routine cannot be skipped.',
+          );
         }
         if (status == RoutineStatus.skipped) {
           return const RoutineTransitionDecision.noOp(
             message: 'Already skipped.',
           );
         }
+        if (status == RoutineStatus.missed) {
+          return const RoutineTransitionDecision.reject(
+            message: 'Missed routine cannot be skipped.',
+          );
+        }
         return const RoutineTransitionDecision.allow();
 
       case RoutineOccurrenceAction.miss:
+        if (status == RoutineStatus.completed) {
+          return const RoutineTransitionDecision.reject(
+            message: 'Completed routine cannot be marked missed.',
+          );
+        }
+        if (status == RoutineStatus.skipped) {
+          return const RoutineTransitionDecision.reject(
+            message: 'Skipped routine cannot be marked missed.',
+          );
+        }
         if (status == RoutineStatus.missed) {
           return const RoutineTransitionDecision.noOp(
             message: 'Already marked missed.',
@@ -148,6 +165,16 @@ class RoutineTransitionPolicy {
           return const RoutineTransitionDecision.noOp(
             message: 'Already completed.',
             failureCategory: RoutineFailureCategory.alreadyCompleted,
+          );
+        }
+        if (status == RoutineStatus.skipped) {
+          return const RoutineTransitionDecision.reject(
+            message: 'Skipped routine cannot be checked in.',
+          );
+        }
+        if (status == RoutineStatus.missed) {
+          return const RoutineTransitionDecision.reject(
+            message: 'Missed routine cannot be checked in.',
           );
         }
         return const RoutineTransitionDecision.allow();

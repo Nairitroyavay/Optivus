@@ -8,6 +8,7 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_radii.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
+import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/work_current_setup_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/work_review_view.dart';
@@ -203,6 +204,101 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
     );
     if (mounted) {
       controller.stopEditingBlock();
+    }
+  }
+
+  Future<void> _editBlockFromCurrentSetup(
+    BaseTimelineSetup setup,
+    TimelineBlockDraft block,
+    String uid,
+  ) async {
+    final controller = ref.read(workSetupControllerProvider.notifier);
+    final profile = ref.read(userProfileProvider);
+    controller.editCurrentWorkSchedule(setup);
+    controller.startEditingBlock();
+    var didSave = false;
+    try {
+      await BaseTimelineWorkAdapter.showEditSheet(
+        context: context,
+        block: block,
+        accent: OptivusColors.warning,
+        lifeRole: profile.lifeRole,
+        isNew: false,
+        onSave: (updated) async {
+          controller.updateBlock(updated);
+          didSave = true;
+          return true;
+        },
+        onDelete: (toDelete) async {
+          controller.deleteBlock(toDelete.id);
+          didSave = true;
+          return true;
+        },
+      );
+    } finally {
+      if (mounted) {
+        controller.stopEditingBlock();
+        if (!didSave && !ref.read(workSetupControllerProvider).isDirty) {
+          await controller.resetWorkingDraft(setup, uid: uid);
+        }
+      }
+    }
+  }
+
+  Future<void> _addBlockFromCurrentSetup(
+    BaseTimelineSetup setup,
+    int selectedDay,
+    String uid,
+  ) async {
+    final controller = ref.read(workSetupControllerProvider.notifier);
+    final profile = ref.read(userProfileProvider);
+    final lifeRole = profile.lifeRole;
+    final defaultContext = WorkPresentationUtils.defaultContextForProfile(
+      lifeRole,
+    );
+    final defaultMode = WorkPresentationUtils.defaultModeForProfile(
+      profile.workingExtra,
+    );
+    final defaultKind = WorkPresentationUtils.defaultBlockKindForProfile(
+      profile.workingExtra,
+    );
+
+    final newBlock = TimelineBlockDraft(
+      id: 'work_${DateTime.now().millisecondsSinceEpoch}',
+      section: 'work',
+      title: '',
+      startMinute: 9 * 60,
+      endMinute: 17 * 60,
+      repeatDays: [selectedDay],
+      blockType: TimelineBlockDraft.hardBlockKey,
+      workContextType: defaultContext,
+      workMode: defaultMode,
+      workBlockKind: defaultKind,
+    );
+
+    controller.editCurrentWorkSchedule(setup);
+    controller.startEditingBlock();
+    var didSave = false;
+    try {
+      await BaseTimelineWorkAdapter.showEditSheet(
+        context: context,
+        block: newBlock,
+        accent: OptivusColors.warning,
+        lifeRole: lifeRole,
+        isNew: true,
+        onSave: (updated) async {
+          controller.addBlock(updated);
+          didSave = true;
+          return true;
+        },
+      );
+    } finally {
+      if (mounted) {
+        controller.stopEditingBlock();
+        if (!didSave && !ref.read(workSetupControllerProvider).isDirty) {
+          await controller.resetWorkingDraft(setup, uid: uid);
+        }
+      }
     }
   }
 
@@ -551,6 +647,9 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
               ? null
               : () => controller.reloadFromCanonical(setup),
           lifeRole: lifeRole,
+          isEditing:
+              setup?.snapshotFor(BaseTimelineSection.work).isConfigured ??
+              false,
         );
 
       case WorkSetupStage.currentSetup:
@@ -565,6 +664,11 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
           onDayChanged: (d) => controller.selectDay(d),
           onBack: () => _handleWorkBack(setup, state, uid),
           onChangeSetup: () => controller.chooseSource(setup, uid: uid),
+          onEditSchedule: () => controller.editCurrentWorkSchedule(setup),
+          onChangeSource: () => controller.chooseSource(setup, uid: uid),
+          onEditBlock: (block) => _editBlockFromCurrentSetup(setup, block, uid),
+          onAddBlock: () =>
+              _addBlockFromCurrentSetup(setup, state.selectedDay, uid),
           onRemoveSetup: () => _handleRemoveWorkSetup(setup, uid),
           routineRefreshPending: state.routineRefreshPending,
           routineRefreshMessage: state.routineRefreshMessage,

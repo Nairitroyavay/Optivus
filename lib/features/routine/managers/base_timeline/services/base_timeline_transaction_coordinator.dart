@@ -340,7 +340,7 @@ class BaseTimelineTransactionCoordinator {
       workContextType: block.workContextType,
       workRole: block.workRole,
       workOrganization: block.workOrganization,
-      workDepartmentOrProject: block.workDepartmentOrProject,
+      workDepartmentOrProject: block.effectiveWorkDepartmentOrProject,
       workMode: block.workMode,
       workBlockKind: block.workBlockKind,
       mealCategory: block.mealCategory,

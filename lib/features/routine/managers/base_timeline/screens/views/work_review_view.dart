@@ -36,6 +36,7 @@ class WorkReviewView extends StatefulWidget {
   final bool isConcurrencyConflict;
   final VoidCallback? onReloadLatestSetup;
   final String? lifeRole;
+  final bool isEditing;
 
   const WorkReviewView({
     super.key,
@@ -60,6 +61,7 @@ class WorkReviewView extends StatefulWidget {
     this.isConcurrencyConflict = false,
     this.onReloadLatestSetup,
     this.lifeRole,
+    this.isEditing = false,
   });
 
   @override
@@ -125,7 +127,10 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        WorkPresentationUtils.reviewTitle(widget.lifeRole),
+                        WorkPresentationUtils.reviewTitle(
+                          widget.lifeRole,
+                          isEditing: widget.isEditing,
+                        ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -357,9 +362,13 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            WorkPresentationUtils.emptyReviewPrompt(
-                              widget.lifeRole,
-                            ),
+                            widget.isEditing
+                                ? WorkPresentationUtils.emptyDraftExplanation(
+                                    widget.lifeRole,
+                                  )
+                                : WorkPresentationUtils.emptyReviewPrompt(
+                                    widget.lifeRole,
+                                  ),
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontSize: 13,
@@ -509,6 +518,7 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                     : Text(
                         WorkPresentationUtils.useScheduleCtaLabel(
                           widget.lifeRole,
+                          isEditing: widget.isEditing,
                         ),
                         style: const TextStyle(
                           fontSize: 16,

@@ -138,13 +138,22 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                 ),
               ),
               const SizedBox(height: 6),
-              Text(
-                'Current: ${TimelineUtils.formatTimeRange(widget.item.startMinute, widget.item.endMinute)}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: OptivusColors.textSecondary,
-                ),
+              Builder(
+                builder: (context) {
+                  final currentEnd = (_seedStartMinute + _seedDuration) > 1440
+                      ? (_seedStartMinute + _seedDuration - 1440)
+                      : (_seedStartMinute + _seedDuration);
+                  final currentRange =
+                      TimelineUtils.formatTimeRange(_seedStartMinute, currentEnd);
+                  return Text(
+                    'Current: $currentRange',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: OptivusColors.textSecondary,
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 16),
               Row(
@@ -232,6 +241,8 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                                 .makeTinyVersion(
                                   widget.item,
                                   occurrenceDate: _sourceOccurrenceDate,
+                                  startMinute: _seedStartMinute,
+                                  durationMinutes: _seedDuration,
                                 ),
                           ),
                   ),

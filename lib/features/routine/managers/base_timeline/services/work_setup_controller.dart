@@ -446,9 +446,10 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
 
   void cancelChooseSource() {
     state = state.copyWith(
-      stage: state.workingBlocks.isNotEmpty
+      stage: (state.isDirty && state.workingBlocks.isNotEmpty)
           ? WorkSetupStage.review
           : WorkSetupStage.currentSetup,
+      workingBlocks: state.isDirty ? state.workingBlocks : const [],
       clearErrorMessage: true,
       clearErrorKind: true,
     );

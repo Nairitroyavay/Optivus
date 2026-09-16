@@ -24,6 +24,7 @@ import 'package:optivus/features/routine/managers/base_timeline/services/work_ti
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/work_detail_sheet.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/work_setup_profile_summary_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/work_timeline_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step4_candidate_mapping.dart';
@@ -243,8 +244,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byType(BaseTimelineCurrentSetupHeader), findsOneWidget);
-        expect(find.text('Work / Business'), findsWidgets);
-        expect(find.text('Change setup'), findsOneWidget);
+        expect(find.text('Edit schedule'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );
@@ -636,8 +636,10 @@ void main() {
 
         expect(find.text('Morning Shift'), findsOneWidget);
 
-        // Tap Change setup -> Source Selection
-        await tester.tap(find.text('Change setup'));
+        // Tap Change source -> Source Selection
+        await tester.tap(
+          find.byKey(const Key('work-setup-profile-change-source-button')),
+        );
         await tester.pumpAndSettle();
 
         // Tap Choose from Gallery
@@ -734,7 +736,13 @@ void main() {
         // Details are displayed directly on the front card inline
         expect(find.text('Project Deep Work'), findsOneWidget);
         expect(find.text('HQ Floor 4'), findsOneWidget);
-        expect(find.text('Sprint 88'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(WorkTimelineCard),
+            matching: find.text('Sprint 88'),
+          ),
+          findsOneWidget,
+        );
         expect(find.text('Bring sprint checklist'), findsOneWidget);
 
         // Tapping opens WorkDetailSheet
@@ -973,12 +981,8 @@ void main() {
 
         await tester.pumpAndSettle();
 
-        // Enter Source Selection
-        await tester.tap(find.text('Change setup'));
-        await tester.pumpAndSettle();
-
-        // Tap Edit current work schedule
-        await tester.tap(find.text('Edit current work schedule'));
+        // Tap Edit schedule directly opens WorkReviewView
+        await tester.tap(find.text('Edit schedule'));
         await tester.pumpAndSettle();
 
         expect(find.byType(WorkReviewView), findsOneWidget);
@@ -1834,6 +1838,14 @@ void main() {
           );
           await tester.pumpAndSettle();
           final err = tester.takeException();
+          if (err != null) {
+            debugPrint('ERROR ON SCALE $scale: $err');
+            if (err is FlutterError) {
+              for (final d in err.diagnostics) {
+                debugPrint('DIAG: ${d.name} -> ${d.toString()}');
+              }
+            }
+          }
           expect(err, isNull);
           expect(
             find.text('Emergency Executive Sync & Architecture Review'),
@@ -2860,7 +2872,13 @@ void main() {
             isConfigured: true,
             lifeRole: bRole,
           ),
-          equals('Change setup'),
+          equals('Edit schedule'),
+        );
+        expect(
+          WorkPresentationUtils.currentSetupSourceButtonLabel(
+            lifeRole: bRole,
+          ),
+          equals('Change source'),
         );
         expect(
           WorkPresentationUtils.sourceSelectionTitle(bRole),
@@ -2953,7 +2971,13 @@ void main() {
               isConfigured: true,
               lifeRole: wRole,
             ),
-            equals('Change setup'),
+            equals('Edit schedule'),
+          );
+          expect(
+            WorkPresentationUtils.currentSetupSourceButtonLabel(
+              lifeRole: wRole,
+            ),
+            equals('Change source'),
           );
           expect(
             WorkPresentationUtils.sourceSelectionTitle(wRole),
@@ -3039,7 +3063,13 @@ void main() {
               isConfigured: true,
               lifeRole: nRole,
             ),
-            equals('Change setup'),
+            equals('Edit schedule'),
+          );
+          expect(
+            WorkPresentationUtils.currentSetupSourceButtonLabel(
+              lifeRole: nRole,
+            ),
+            equals('Change source'),
           );
           expect(
             WorkPresentationUtils.sourceSelectionTitle(nRole),
@@ -3855,6 +3885,444 @@ void main() {
         expect(notAuthSaveMsg, isNot(contains('session expired')));
         expect(notAuthSaveMsg, isNot(contains('Sign in again')));
         expect(notAuthSaveMsg, contains("wasn't permitted"));
+      },
+    );
+
+    testWidgets(
+      'WorkSetupProfileSummaryCard renders consistent role, organization, department, badges, block count, and compact source row',
+      (tester) async {
+        const summary = WorkProfileSummary(
+          headerTitle: 'Work Profile',
+          headline: 'Staff Software Engineer',
+          subline: 'Google · Cloud Infrastructure',
+          badges: ['Job', 'Hybrid'],
+          scheduleSummary: '2 work blocks scheduled each weekday (8h)',
+          sourceLabel: 'Schedule Photo',
+          hasSourcePhoto: true,
+        );
+
+        bool viewCalled = false;
+        bool changeCalled = false;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: Scaffold(
+              body: Padding(
+                padding: const EdgeInsets.all(16),
+                child: WorkSetupProfileSummaryCard(
+                  summary: summary,
+                  onViewPhoto: () => viewCalled = true,
+                  onChangeSource: () => changeCalled = true,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('work-setup-profile-summary-card')), findsOneWidget);
+        expect(find.text('WORK PROFILE'), findsOneWidget);
+        expect(find.text('Staff Software Engineer'), findsOneWidget);
+        expect(find.text('Google · Cloud Infrastructure'), findsOneWidget);
+        expect(find.text('Job'), findsOneWidget);
+        expect(find.text('Hybrid'), findsOneWidget);
+        expect(find.text('2 work blocks scheduled each weekday (8h)'), findsOneWidget);
+        expect(find.text('Schedule Photo'), findsOneWidget);
+
+        // Tap View photo
+        await tester.tap(find.byKey(const Key('work-setup-profile-view-photo-button')));
+        await tester.pumpAndSettle();
+        expect(viewCalled, isTrue);
+
+        // Tap Change source
+        await tester.tap(find.byKey(const Key('work-setup-profile-change-source-button')));
+        await tester.pumpAndSettle();
+        expect(changeCalled, isTrue);
+      },
+    );
+
+    testWidgets(
+      'WorkSetupProfileSummaryCard renders aggregate summary without fabricating single profile when blocks differ',
+      (tester) async {
+        const blocks = <TimelineBlockDraft>[
+          TimelineBlockDraft(
+            id: 'b1',
+            section: 'work',
+            title: 'Consulting Session',
+            startMinute: 9 * 60,
+            endMinute: 11 * 60,
+            repeatDays: [1],
+            workRole: 'Adviser',
+            workOrganization: 'Acme Corp',
+            workContextType: 'freelance',
+            workMode: 'remote',
+            blockType: TimelineBlockDraft.hardBlockKey,
+          ),
+          TimelineBlockDraft(
+            id: 'b2',
+            section: 'work',
+            title: 'Internal Ops',
+            startMinute: 13 * 60,
+            endMinute: 15 * 60,
+            repeatDays: [2],
+            workRole: 'Founder',
+            workOrganization: 'Optivus LLC',
+            workContextType: 'business_owner',
+            workMode: 'office',
+            blockType: TimelineBlockDraft.hardBlockKey,
+          ),
+        ];
+
+        final summary = WorkPresentationUtils.resolveProfileSummary(
+          blocks: blocks,
+          lifeRole: 'business',
+          hasSourcePhoto: false,
+        );
+
+        expect(summary.headerTitle, equals('Business Profile'));
+        expect(summary.headline, equals('Multiple roles & organizations'));
+        expect(summary.subline, equals('2 clients / organizations'));
+        expect(summary.badges, contains('Mixed context'));
+        expect(summary.badges, contains('Mixed modes'));
+        expect(summary.hasSourcePhoto, isFalse);
+        expect(summary.sourceLabel, equals('Manual setup'));
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: Scaffold(
+              body: Padding(
+                padding: const EdgeInsets.all(16),
+                child: WorkSetupProfileSummaryCard(summary: summary),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('BUSINESS PROFILE'), findsOneWidget);
+        expect(find.text('Multiple roles & organizations'), findsOneWidget);
+        expect(find.text('2 clients / organizations'), findsOneWidget);
+        expect(find.text('Manual setup'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'WorkDetailSheet displays complete work details and [ Edit this block ] action triggers onEdit callback',
+      (tester) async {
+        const block = TimelineBlockDraft(
+          id: 'b-detail-test',
+          section: 'work',
+          title: 'Quarterly Executive Review',
+          startMinute: 10 * 60,
+          endMinute: 12 * 60,
+          repeatDays: [1, 3],
+          workRole: 'VP of Engineering',
+          workOrganization: 'Optivus Enterprise',
+          workDepartmentOrProject: 'Core Architecture',
+          workContextType: 'job',
+          workMode: 'hybrid',
+          location: 'Executive Boardroom 401',
+          notes: 'Prepare FY27 strategy decks',
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        bool editTapped = false;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: Builder(
+              builder: (ctx) => Scaffold(
+                body: Center(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      WorkDetailSheet.show(
+                        ctx,
+                        block,
+                        onEdit: () => editTapped = true,
+                      );
+                    },
+                    child: const Text('Open Sheet'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Open Sheet'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(WorkDetailSheet), findsOneWidget);
+        expect(find.text('Quarterly Executive Review'), findsOneWidget);
+        expect(find.text('VP of Engineering'), findsOneWidget);
+        expect(find.text('Optivus Enterprise'), findsOneWidget);
+        expect(find.text('Core Architecture'), findsOneWidget);
+        expect(find.text('Executive Boardroom 401'), findsOneWidget);
+        expect(find.text('Prepare FY27 strategy decks'), findsOneWidget);
+
+        // Verify Edit this block button
+        expect(find.text('Edit this block'), findsOneWidget);
+        await tester.tap(find.text('Edit this block'));
+        await tester.pumpAndSettle();
+
+        expect(editTapped, isTrue);
+        expect(find.byType(WorkDetailSheet), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Direct block addition via + Add Work Block bottom action enters draft review/edit without starting setup from scratch',
+      (tester) async {
+        final now = DateTime.now();
+        const block = TimelineBlockDraft(
+          id: 'work-1',
+          section: 'work',
+          title: 'Existing Shift',
+          startMinute: 9 * 60,
+          endMinute: 17 * 60,
+          repeatDays: [1, 2, 3, 4, 5],
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        final setup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: now,
+          workBlocks: const [block],
+          workLogicalAssetId: 'asset-work-test',
+        );
+
+        final fakeOnboardingRepo = FakeOnboardingRepository();
+        final fakeSetupRepo = FakeBaseTimelineSetupRepository(
+          onboardingRepo: fakeOnboardingRepo,
+        );
+        await fakeSetupRepo.saveSetup(uid, setup);
+        final fakeRoutineRepo = FakeRoutineRepository();
+        final fakeTxRepo = FakeRoutineTransactionRepository(
+          routineRepository: fakeRoutineRepo,
+          setupRepository: fakeSetupRepo,
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              userProfileProvider.overrideWith(
+                (ref) => UserProfileNotifier()
+                  ..loadSeedData(
+                    UserProfile(
+                      uid: uid,
+                      email: 'work@optivus.local',
+                      displayName: 'Work Test User',
+                      lifeRole: 'work',
+                    ),
+                  ),
+              ),
+              baseTimelineSetupRepositoryProvider.overrideWithValue(fakeSetupRepo),
+              routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
+              routineTransactionRepositoryProvider.overrideWithValue(fakeTxRepo),
+            ],
+            child: MaterialApp(
+              theme: ThemeData.dark(),
+              home: WorkBaseSetupScreen(onBack: () {}),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Existing Shift'), findsOneWidget);
+        expect(find.byKey(const Key('work-current-setup-add-block-button')), findsOneWidget);
+
+        // Tap Add Work Block
+        await tester.tap(find.byKey(const Key('work-current-setup-add-block-button')));
+        await tester.pumpAndSettle();
+
+        // Directly opens edit sheet for the new draft block without going to source selection!
+        expect(find.text('Add Work Block'), findsNWidgets(2));
+        expect(find.text('ACTIVITY'), findsOneWidget);
+        expect(find.text('PROFESSIONAL CONTEXT'), findsOneWidget);
+        expect(find.text('SCHEDULE'), findsOneWidget);
+        expect(find.text('PLACE & DETAILS'), findsOneWidget);
+
+        // Canceling leaves canonical setup untouched
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Existing Shift'), findsOneWidget);
+        final saved = await fakeSetupRepo.fetchSetup(uid);
+        expect(saved.workBlocks.length, equals(1));
+      },
+    );
+
+    testWidgets(
+      'BaseTimelineWorkAdapter showEditSheet organizes sections: Activity -> Professional Context -> Schedule -> Place & Details, dynamically updating labels based on context chips',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: Builder(
+              builder: (ctx) => Scaffold(
+                body: Center(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      BaseTimelineWorkAdapter.showEditSheet(
+                        context: ctx,
+                        block: const TimelineBlockDraft(
+                          id: 'b-new',
+                          section: 'work',
+                          title: 'New Work Shift',
+                          startMinute: 540,
+                          endMinute: 600,
+                          repeatDays: [1],
+                          blockType: TimelineBlockDraft.hardBlockKey,
+                        ),
+                        onSave: (b) async => true,
+                        lifeRole: 'work',
+                      );
+                    },
+                    child: const Text('Open Editor'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Open Editor'));
+        await tester.pumpAndSettle();
+
+        // 1. Verify section hierarchy
+        final activityFinder = find.text('ACTIVITY');
+        final contextFinder = find.text('PROFESSIONAL CONTEXT');
+        final scheduleFinder = find.text('SCHEDULE');
+        final placeFinder = find.text('PLACE & DETAILS');
+
+        expect(activityFinder, findsOneWidget);
+        expect(contextFinder, findsOneWidget);
+        expect(scheduleFinder, findsOneWidget);
+        expect(placeFinder, findsOneWidget);
+
+        // Verify vertical order
+        final activityY = tester.getTopLeft(activityFinder).dy;
+        final contextY = tester.getTopLeft(contextFinder).dy;
+        final scheduleY = tester.getTopLeft(scheduleFinder).dy;
+        final placeY = tester.getTopLeft(placeFinder).dy;
+
+        expect(activityY, lessThan(contextY));
+        expect(contextY, lessThan(scheduleY));
+        expect(scheduleY, lessThan(placeY));
+
+        // 2. Test dynamic label updates:
+        // Default without context selected -> ROLE, ORGANIZATION, TEAM / PROJECT (OPTIONAL)
+        expect(find.text('ROLE'), findsOneWidget);
+        expect(find.text('ORGANIZATION'), findsOneWidget);
+        expect(find.text('TEAM / PROJECT (OPTIONAL)'), findsOneWidget);
+
+        // Tap Freelance chip -> CLIENT / ORGANIZATION, PROJECT (OPTIONAL)
+        await tester.tap(find.text('Freelance'));
+        await tester.pumpAndSettle();
+        expect(find.text('YOUR ROLE'), findsOneWidget);
+        expect(find.text('CLIENT / ORGANIZATION'), findsOneWidget);
+        expect(find.text('PROJECT (OPTIONAL)'), findsOneWidget);
+
+        // Tap Business chip -> BUSINESS NAME, BUSINESS AREA / PROJECT (OPTIONAL)
+        await tester.tap(find.text('Business'));
+        await tester.pumpAndSettle();
+        expect(find.text('YOUR ROLE'), findsOneWidget);
+        expect(find.text('BUSINESS NAME'), findsOneWidget);
+        expect(find.text('BUSINESS AREA / PROJECT (OPTIONAL)'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'WorkReviewView renders dynamic title, compact source row, empty draft explanation, and Save changes CTA',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: Scaffold(
+              body: WorkReviewView(
+                workingBlocks: const [],
+                workingAssetId: null,
+                workingR2Key: null,
+                workingLocalPreviewPath: null,
+                selectedDay: 1,
+                onDayChanged: (_) {},
+                droppedCount: 0,
+                droppedExamples: const [],
+                errorMessage: null,
+                onClearError: () {},
+                isSaving: false,
+                onCancel: () {},
+                onScanAgain: () {},
+                onEditBlock: (_) {},
+                onAddBlock: () {},
+                onSave: () {},
+                lifeRole: 'work',
+                isEditing: true,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // 1. Dynamic editing title
+        expect(find.text('Edit Work Schedule'), findsOneWidget);
+
+        // 2. Empty draft explanation
+        expect(
+          find.text(WorkPresentationUtils.emptyDraftExplanation('work')),
+          findsOneWidget,
+        );
+
+        // 3. CTA says "Save changes" when isEditing: true
+        expect(find.text('Save changes'), findsOneWidget);
+        final saveBtn = tester.widget<FilledButton>(
+          find.widgetWithText(FilledButton, 'Save changes'),
+        );
+        expect(saveBtn.onPressed, isNull);
+      },
+    );
+
+    test(
+      'RoutineCardFactory workDetailsString includes non-job workContextType and preserves effectiveWorkDepartmentOrProject',
+      () {
+        final freelanceItem = RoutineItem(
+          id: 'r-1',
+          blockType: RoutineBlockType.hardBlock,
+          title: 'Client Delivery',
+          startMinute: 600,
+          endMinute: 720,
+          repeatDays: const [1],
+          workRole: 'UX Consultant',
+          workOrganization: 'Acme Studio',
+          workDepartmentOrProject: 'Mobile Redesign',
+          workContextType: 'freelance',
+          workMode: 'remote',
+        );
+
+        final details = RoutineCardFactory.workDetailsString(freelanceItem);
+        expect(details, contains('UX Consultant'));
+        expect(details, contains('Acme Studio'));
+        expect(details, contains('Mobile Redesign'));
+        expect(details, contains('Freelance'));
+        expect(details, contains('Remote'));
+
+        const legacyBlock = TimelineBlockDraft(
+          id: 'b-leg',
+          section: 'work',
+          title: 'Legacy Shift',
+          startMinute: 540,
+          endMinute: 1020,
+          repeatDays: [1, 2, 3, 4, 5],
+          sectionLabel: 'Engineering Platform Services',
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        expect(legacyBlock.effectiveWorkDepartmentOrProject, equals('Engineering Platform Services'));
       },
     );
   });

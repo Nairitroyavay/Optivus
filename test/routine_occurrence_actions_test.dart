@@ -141,6 +141,8 @@ void main() {
     final notifier = container.read(routineNotifierProvider.notifier);
     const uid = 'user_1';
     await repo.createRoutineItem(uid, createTemplate(uid, 't1'));
+    await repo.createRoutineItem(uid, createTemplate(uid, 't2'));
+    await repo.createRoutineItem(uid, createTemplate(uid, 't3'));
     await notifier.loadForOwner(uid);
 
     notifier.startFlexibleTask('t1');
@@ -153,19 +155,19 @@ void main() {
     occurrences = container.read(routineNotifierProvider).occurrences;
     expect(occurrences.where((o) => o.action == 'complete').length, 1);
 
-    notifier.markSkipped('t1');
+    notifier.markSkipped('t2');
     await Future.delayed(const Duration(milliseconds: 50));
     occurrences = container.read(routineNotifierProvider).occurrences;
     expect(occurrences.where((o) => o.action == 'skip').length, 1);
 
-    notifier.markMissed('t1');
+    notifier.markMissed('t3');
     await Future.delayed(const Duration(milliseconds: 50));
     occurrences = container.read(routineNotifierProvider).occurrences;
     expect(occurrences.where((o) => o.action == 'miss').length, 1);
 
     final state = container.read(routineNotifierProvider);
-    expect(state.items.length, 1);
-    expect(state.items.first.id, 't1');
+    expect(state.items.length, 3);
+    expect(state.items.map((i) => i.id), containsAll(['t1', 't2', 't3']));
   });
 
   test('generic Start is idempotent after save', () async {
@@ -662,7 +664,7 @@ void main() {
     await repo.createRoutineItem(uid, createTemplate(uid, 't1'));
     await notifier.loadForOwner(uid);
 
-    notifier.markCompleted('t1');
+    notifier.startFlexibleTask('t1');
     await Future.delayed(const Duration(milliseconds: 50));
     expect(
       container
@@ -673,7 +675,7 @@ void main() {
       true,
     );
 
-    notifier.markSkipped('t1');
+    notifier.markCompleted('t1');
     await Future.delayed(const Duration(milliseconds: 50));
     expect(
       container
@@ -685,7 +687,7 @@ void main() {
     );
     expect(
       container.read(routineNotifierProvider).occurrences.last.action,
-      'skip',
+      'complete',
     );
 
     await notifier.undoOccurrenceAction('t1');
@@ -693,7 +695,7 @@ void main() {
 
     expect(
       container.read(routineNotifierProvider).occurrences.last.action,
-      'skip',
+      'complete',
     );
   });
 

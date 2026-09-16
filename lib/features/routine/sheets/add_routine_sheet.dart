@@ -1,67 +1,77 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/routine/models/add_routine_draft.dart';
+import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/services/add_routine_mapper.dart';
+import 'package:optivus/features/routine/services/add_routine_validator.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
-import 'package:optivus/features/routine/models/routine_write_result.dart';
 
+/// Shows the production Add Routine bottom sheet.
 void showAddRoutineSheet(BuildContext context, WidgetRef ref) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (ctx) => const _AddRoutineSheetBody(),
+    builder: (ctx) => const AddRoutineSheet(),
   );
 }
 
-class _AddRoutineSheetBody extends ConsumerStatefulWidget {
-  const _AddRoutineSheetBody();
+class AddRoutineSheet extends ConsumerStatefulWidget {
+  const AddRoutineSheet({super.key});
 
   @override
-  ConsumerState<_AddRoutineSheetBody> createState() =>
-      _AddRoutineSheetBodyState();
+  ConsumerState<AddRoutineSheet> createState() => _AddRoutineSheetState();
 }
 
-class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
-  String? _mode;
+class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
+  bool _typeSelected = false;
+  late AddRoutineDraft _draft;
+
   late final TextEditingController _titleController;
   late final TextEditingController _notesController;
   late final TextEditingController _subtasksController;
   late final TextEditingController _stepsController;
   late final TextEditingController _dishesController;
-  late DateTime _date;
-  late TimeOfDay _startTime;
-  late int _durationMinutes;
-  late RoutinePriority _priority;
-  late RoutineCategory _category;
-  late TrackerType _trackerType;
-  late bool _hard;
 
-  late List<int> _repeatDays;
-  late String _bestTime;
-  String _fixedKind = 'Class';
+  // Rich structured controllers
+  late final TextEditingController _professorController;
+  late final TextEditingController _courseCodeController;
+  late final TextEditingController _classTypeController;
+  late final TextEditingController _sectionController;
+  late final TextEditingController _locationController;
+
+  late final TextEditingController _workRoleController;
+  late final TextEditingController _workOrgController;
+  late final TextEditingController _workDeptController;
+
+  bool _showMoreDetails = false;
   String? _error;
   bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    _mode = null;
-    _titleController = TextEditingController();
-    _notesController = TextEditingController();
+    final selectedDay = ref.read(routineNotifierProvider).selectedDay;
+    _draft = AddRoutineDraft.initial(initialDate: selectedDay);
+
+    _titleController = TextEditingController(text: _draft.title);
+    _notesController = TextEditingController(text: _draft.notes);
     _subtasksController = TextEditingController();
     _stepsController = TextEditingController();
     _dishesController = TextEditingController();
-    _date = ref.read(routineNotifierProvider).selectedDay;
-    _startTime = const TimeOfDay(hour: 8, minute: 0);
-    _durationMinutes = 30;
-    _priority = RoutinePriority.goodToDo;
-    _category = RoutineCategory.habit;
-    _trackerType = TrackerType.none;
-    _hard = false;
-    _repeatDays = [];
-    _bestTime = 'Morning';
+
+    _professorController = TextEditingController();
+    _courseCodeController = TextEditingController();
+    _classTypeController = TextEditingController();
+    _sectionController = TextEditingController();
+    _locationController = TextEditingController();
+
+    _workRoleController = TextEditingController();
+    _workOrgController = TextEditingController();
+    _workDeptController = TextEditingController();
   }
 
   @override
@@ -71,7 +81,64 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     _subtasksController.dispose();
     _stepsController.dispose();
     _dishesController.dispose();
+
+    _professorController.dispose();
+    _courseCodeController.dispose();
+    _classTypeController.dispose();
+    _sectionController.dispose();
+    _locationController.dispose();
+
+    _workRoleController.dispose();
+    _workOrgController.dispose();
+    _workDeptController.dispose();
+
     super.dispose();
+  }
+
+  void _syncControllersFromDraft() {
+    _titleController.text = _draft.title;
+    _notesController.text = _draft.notes;
+
+    switch (_draft.type) {
+      case AddRoutineType.flexible:
+        _subtasksController.text = _draft.flexibleState.subtasks.join('\n');
+        break;
+      case AddRoutineType.habit:
+        _subtasksController.text = _draft.habitState.subtasks.join('\n');
+        _stepsController.text = _draft.habitState.steps.join('\n');
+        break;
+      case AddRoutineType.tracker:
+        _subtasksController.text = _draft.trackerState.subtasks.join('\n');
+        break;
+      case AddRoutineType.fixed:
+        _stepsController.text = _draft.fixedState.steps.join('\n');
+        _dishesController.text = _draft.fixedState.dishes.join('\n');
+        _professorController.text = _draft.fixedState.professor ?? '';
+        _courseCodeController.text = _draft.fixedState.courseCode ?? '';
+        _classTypeController.text = _draft.fixedState.classType ?? '';
+        _sectionController.text = _draft.fixedState.sectionLabel ?? '';
+        _locationController.text =
+            _draft.fixedState.classLocation ??
+            _draft.fixedState.workLocation ??
+            '';
+        _workRoleController.text = _draft.fixedState.workRole ?? '';
+        _workOrgController.text = _draft.fixedState.workOrganization ?? '';
+        _workDeptController.text =
+            _draft.fixedState.workDepartmentOrProject ?? '';
+        break;
+      case AddRoutineType.checkin:
+      case AddRoutineType.money:
+        break;
+    }
+  }
+
+  void _selectType(AddRoutineType type) {
+    setState(() {
+      _typeSelected = true;
+      _draft = _draft.switchType(type);
+      _syncControllersFromDraft();
+      _error = null;
+    });
   }
 
   @override
@@ -116,18 +183,20 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
                     color: OptivusColors.routineAccent,
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    'Add to Routine',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: OptivusColors.textPrimary,
+                  const Expanded(
+                    child: Text(
+                      'Add to Routine',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: OptivusColors.textPrimary,
+                      ),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 18),
-              if (_mode == null) _buildTypeGrid() else _buildForm(),
+              if (!_typeSelected) _buildTypeGrid() else _buildForm(),
             ],
           ),
         );
@@ -136,153 +205,185 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
   }
 
   Widget _buildTypeGrid() {
-    final categories = [
-      _Cat(
-        'Flexible Task',
-        Icons.task_alt,
-        OptivusColors.blockFlex,
-        'flexible',
-      ),
-      _Cat('Fixed Block', Icons.lock_outline, OptivusColors.blockHard, 'fixed'),
-      _Cat('Habit', Icons.repeat_rounded, OptivusColors.blockSoft, 'habit'),
-      _Cat('Tracker Task', Icons.timer, OptivusColors.blockTracker, 'tracker'),
-      _Cat(
-        'Check-in',
-        Icons.check_circle_outline,
-        OptivusColors.blockCheckIn,
-        'checkin',
-      ),
-      _Cat(
-        'Money Saving Task',
-        Icons.savings,
-        OptivusColors.blockMoney,
-        'money',
-      ),
-    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth;
+        final itemWidth = (availableWidth - 12) / 2;
 
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      children: categories.map((cat) {
-        return GestureDetector(
-          onTap: () => setState(() {
-            _mode = cat.key;
-            _applyModeDefaults(cat.key);
-          }),
-          child: Container(
-            width: (MediaQuery.of(context).size.width - 52) / 2,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: cat.color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: cat.color.withValues(alpha: 0.22)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(cat.icon, size: 26, color: cat.color),
-                const SizedBox(height: 8),
-                Text(
-                  cat.label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: cat.color,
-                  ),
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: AddRoutineType.values.map((type) {
+            return GestureDetector(
+              onTap: () => _selectType(type),
+              child: Container(
+                width: itemWidth.clamp(130.0, 400.0),
+                constraints: const BoxConstraints(minHeight: 88),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: type.color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: type.color.withValues(alpha: 0.22)),
                 ),
-              ],
-            ),
-          ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(type.icon, size: 26, color: type.color),
+                    const SizedBox(height: 8),
+                    Text(
+                      type.label,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: type.color,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
         );
-      }).toList(),
+      },
     );
   }
 
   Widget _buildForm() {
-    final mode = _mode!;
+    final type = _draft.type;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         GestureDetector(
-          onTap: () => setState(() => _mode = null),
-          child: const Row(
-            children: [
-              Icon(
-                Icons.arrow_back,
-                size: 18,
-                color: OptivusColors.textSecondary,
-              ),
-              SizedBox(width: 4),
-              Text(
-                'Back',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => _typeSelected = false),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.arrow_back,
+                  size: 18,
                   color: OptivusColors.textSecondary,
                 ),
-              ),
-            ],
+                SizedBox(width: 4),
+                Text(
+                  'Back',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: OptivusColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 14),
         _textField(
           controller: _titleController,
           label: 'Title',
-          hint: _hintForMode(mode),
+          hint: _hintForType(type),
+          onChanged: (val) => _draft = _draft.copyWith(title: val),
         ),
+        const SizedBox(height: 12),
+        _buildScheduleModeSelector(),
         const SizedBox(height: 12),
         Row(
           children: [
-            Expanded(child: _dateTile()),
-            const SizedBox(width: 10),
+            if (_draft.scheduleMode == AddRoutineScheduleMode.once) ...[
+              Expanded(child: _dateTile()),
+              const SizedBox(width: 10),
+            ],
             Expanded(child: _timeTile()),
           ],
         ),
+        if (_draft.scheduleMode == AddRoutineScheduleMode.weekly) ...[
+          const SizedBox(height: 12),
+          _repeatSelector(),
+        ],
         const SizedBox(height: 10),
         _durationTile(),
         const SizedBox(height: 12),
-        if (mode == 'fixed') _fixedBlockFields(),
-        if (mode == 'tracker') _trackerFields(),
-        if (mode == 'checkin') _checkInFields(),
-        if (mode == 'money') _moneyFields(),
-        if (mode == 'habit') _habitFields(),
-        if (mode == 'flexible') _flexibleFields(),
-        const SizedBox(height: 12),
-        _repeatSelector(),
+        if (type == AddRoutineType.fixed) _fixedBlockFields(),
+        if (type == AddRoutineType.tracker) _trackerFields(),
+        if (type == AddRoutineType.checkin) _checkInFields(),
+        if (type == AddRoutineType.money) _moneyFields(),
+        if (type == AddRoutineType.habit) _habitFields(),
+        if (type == AddRoutineType.flexible) _flexibleFields(),
         const SizedBox(height: 12),
         _textField(
           controller: _notesController,
           label: 'Notes',
           hint: 'Optional notes',
           maxLines: 3,
+          onChanged: (val) => _draft = _draft.copyWith(notes: val),
         ),
-        if (mode == 'flexible' || mode == 'tracker' || mode == 'habit') ...[
+        if (type == AddRoutineType.flexible ||
+            type == AddRoutineType.tracker ||
+            type == AddRoutineType.habit) ...[
           const SizedBox(height: 12),
           _textField(
             controller: _subtasksController,
             label: 'Subtasks',
             hint: 'One subtask per line',
             maxLines: 4,
+            onChanged: (val) {
+              final lines = _lines(val);
+              if (type == AddRoutineType.flexible) {
+                _draft = _draft.copyWith(
+                  flexibleState: _draft.flexibleState.copyWith(subtasks: lines),
+                );
+              } else if (type == AddRoutineType.habit) {
+                _draft = _draft.copyWith(
+                  habitState: _draft.habitState.copyWith(subtasks: lines),
+                );
+              } else if (type == AddRoutineType.tracker) {
+                _draft = _draft.copyWith(
+                  trackerState: _draft.trackerState.copyWith(subtasks: lines),
+                );
+              }
+            },
           ),
         ],
-        if (mode == 'fixed' && _category == RoutineCategory.skinCare ||
-            mode == 'habit') ...[
+        if (type == AddRoutineType.fixed &&
+                _draft.fixedState.kind == 'Skin Care' ||
+            type == AddRoutineType.habit) ...[
           const SizedBox(height: 12),
           _textField(
             controller: _stepsController,
             label: 'Steps',
             hint: 'One step per line',
             maxLines: 4,
+            onChanged: (val) {
+              final lines = _lines(val);
+              if (type == AddRoutineType.fixed) {
+                _draft = _draft.copyWith(
+                  fixedState: _draft.fixedState.copyWith(steps: lines),
+                );
+              } else if (type == AddRoutineType.habit) {
+                _draft = _draft.copyWith(
+                  habitState: _draft.habitState.copyWith(steps: lines),
+                );
+              }
+            },
           ),
         ],
-        if (_category == RoutineCategory.eating) ...[
+        if (type == AddRoutineType.fixed &&
+            _draft.fixedState.kind == 'Eating') ...[
           const SizedBox(height: 12),
           _textField(
             controller: _dishesController,
             label: 'Dishes',
             hint: 'One dish per line',
             maxLines: 4,
+            onChanged: (val) {
+              _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(dishes: _lines(val)),
+              );
+            },
           ),
         ],
         if (_error != null) ...[
@@ -301,7 +402,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
           children: [
             Expanded(
               child: OutlinedButton(
-                onPressed: _saving ? null : _letAiPlace,
+                onPressed: _saving ? null : _findFreeSlot,
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: OptivusColors.routineAccent),
                   shape: RoundedRectangleBorder(
@@ -310,7 +411,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
                 child: const Text(
-                  'Let AI place it',
+                  'Find free slot',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w900,
@@ -341,9 +442,9 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
                           color: Colors.white,
                         ),
                       )
-                    : Text(
+                    : const Text(
                         'Save at this time',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w900,
                         ),
@@ -356,6 +457,58 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     );
   }
 
+  Widget _buildScheduleModeSelector() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _ScheduleModeButton(
+              label: 'One time',
+              isSelected:
+                  _draft.scheduleMode == AddRoutineScheduleMode.once,
+              onTap: () {
+                setState(() {
+                  _draft = _draft.copyWith(
+                    scheduleMode: AddRoutineScheduleMode.once,
+                    repeatDays: const [],
+                  );
+                  _error = null;
+                });
+              },
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _ScheduleModeButton(
+              label: 'Weekly',
+              isSelected:
+                  _draft.scheduleMode == AddRoutineScheduleMode.weekly,
+              onTap: () {
+                setState(() {
+                  // Default to today's weekday if empty
+                  final defaultDay = _draft.date.weekday;
+                  _draft = _draft.copyWith(
+                    scheduleMode: AddRoutineScheduleMode.weekly,
+                    repeatDays: _draft.repeatDays.isEmpty
+                        ? [defaultDay]
+                        : _draft.repeatDays,
+                  );
+                  _error = null;
+                });
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _flexibleFields() {
     return Column(
       children: [
@@ -364,18 +517,20 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
             Expanded(
               child: _enumTile<RoutinePriority>(
                 label: 'Priority',
-                value: _priority,
+                value: _draft.priority,
                 values: RoutinePriority.values,
                 labelFor: (value) =>
                     value == RoutinePriority.mustDo ? 'Must do' : 'Good to do',
-                onChanged: (value) => setState(() => _priority = value),
+                onChanged: (value) => setState(
+                  () => _draft = _draft.copyWith(priority: value),
+                ),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: _stringTile(
                 label: 'Best time',
-                value: _bestTime,
+                value: _draft.bestTime,
                 values: const [
                   'Morning',
                   'Afternoon',
@@ -383,39 +538,78 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
                   'Night',
                   'Anytime',
                 ],
-                onChanged: (value) => setState(() => _bestTime = value),
+                onChanged: (value) => setState(
+                  () => _draft = _draft.copyWith(bestTime: value),
+                ),
               ),
             ),
           ],
         ),
         const SizedBox(height: 10),
-        _categoryTile(),
+        _enumTile<RoutineCategory>(
+          label: 'Category',
+          value: _draft.flexibleState.category,
+          values: const [
+            RoutineCategory.habit,
+            RoutineCategory.identity,
+            RoutineCategory.health,
+            RoutineCategory.focus,
+            RoutineCategory.meditation,
+            RoutineCategory.hydration,
+          ],
+          labelFor: (value) => value.name,
+          onChanged: (value) => setState(
+            () => _draft = _draft.copyWith(
+              flexibleState: _draft.flexibleState.copyWith(category: value),
+            ),
+          ),
+        ),
       ],
     );
   }
 
   Widget _habitFields() {
+    final habitState = _draft.habitState;
     return Column(
       children: [
-        _categoryTile(),
+        _enumTile<RoutineCategory>(
+          label: 'Category',
+          value: habitState.category,
+          values: const [
+            RoutineCategory.habit,
+            RoutineCategory.identity,
+            RoutineCategory.health,
+            RoutineCategory.focus,
+            RoutineCategory.meditation,
+            RoutineCategory.hydration,
+          ],
+          labelFor: (value) => value.name,
+          onChanged: (value) => setState(
+            () => _draft = _draft.copyWith(
+              habitState: habitState.copyWith(category: value),
+            ),
+          ),
+        ),
         const SizedBox(height: 10),
         Row(
           children: [
             Expanded(
               child: _enumTile<RoutinePriority>(
                 label: 'Priority',
-                value: _priority,
+                value: _draft.priority,
                 values: RoutinePriority.values,
                 labelFor: (value) =>
                     value == RoutinePriority.mustDo ? 'Must do' : 'Good to do',
-                onChanged: (value) => setState(() => _priority = value),
+                onChanged: (value) => setState(
+                  () => _draft = _draft.copyWith(priority: value),
+                ),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: _stringTile(
                 label: 'Best time',
-                value: _bestTime,
+                value: _draft.bestTime,
                 values: const [
                   'Morning',
                   'Afternoon',
@@ -423,7 +617,9 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
                   'Night',
                   'Anytime',
                 ],
-                onChanged: (value) => setState(() => _bestTime = value),
+                onChanged: (value) => setState(
+                  () => _draft = _draft.copyWith(bestTime: value),
+                ),
               ),
             ),
           ],
@@ -431,7 +627,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
         const SizedBox(height: 10),
         _enumTile<TrackerType>(
           label: 'Tracker linked',
-          value: _trackerType,
+          value: habitState.trackerType,
           values: const [
             TrackerType.none,
             TrackerType.meditation,
@@ -440,18 +636,23 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
             TrackerType.hydration,
           ],
           labelFor: (value) => value == TrackerType.none ? 'No' : value.name,
-          onChanged: (value) => setState(() => _trackerType = value),
+          onChanged: (value) => setState(
+            () => _draft = _draft.copyWith(
+              habitState: habitState.copyWith(trackerType: value),
+            ),
+          ),
         ),
       ],
     );
   }
 
   Widget _fixedBlockFields() {
+    final fixed = _draft.fixedState;
     return Column(
       children: [
         _stringTile(
           label: 'Type',
-          value: _fixedKind,
+          value: fixed.kind,
           values: const [
             'Class',
             'Job',
@@ -465,21 +666,26 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
             'Other',
           ],
           onChanged: (value) {
+            final isHard =
+                value == 'Class' ||
+                value == 'Job' ||
+                value == 'Sleep' ||
+                value == 'Travel';
             setState(() {
-              _fixedKind = value;
-              _category = _categoryForFixedKind(value);
-              _hard =
-                  value == 'Class' ||
-                  value == 'Job' ||
-                  value == 'Sleep' ||
-                  value == 'Travel';
+              _draft = _draft.copyWith(
+                fixedState: fixed.copyWith(kind: value, hardBlock: isHard),
+              );
             });
           },
         ),
         const SizedBox(height: 10),
         SwitchListTile.adaptive(
-          value: _hard,
-          onChanged: (value) => setState(() => _hard = value),
+          value: fixed.hardBlock,
+          onChanged: (value) => setState(
+            () => _draft = _draft.copyWith(
+              fixedState: fixed.copyWith(hardBlock: value),
+            ),
+          ),
           dense: true,
           contentPadding: EdgeInsets.zero,
           activeTrackColor: OptivusColors.blockHard,
@@ -488,6 +694,117 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
           ),
         ),
+        if (fixed.kind == 'Class' ||
+            fixed.kind == 'Job' ||
+            fixed.kind == 'Eating' ||
+            fixed.kind == 'Skin Care') ...[
+          const SizedBox(height: 6),
+          _buildMoreDetailsSection(fixed.kind),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildMoreDetailsSection(String kind) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => _showMoreDetails = !_showMoreDetails),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                Icon(
+                  _showMoreDetails
+                      ? Icons.keyboard_arrow_down
+                      : Icons.keyboard_arrow_right,
+                  size: 18,
+                  color: OptivusColors.routineAccent,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _showMoreDetails
+                      ? 'Hide $kind details'
+                      : 'More $kind details (optional)',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: OptivusColors.routineAccent,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_showMoreDetails) ...[
+          const SizedBox(height: 8),
+          if (kind == 'Class') ...[
+            _textField(
+              controller: _courseCodeController,
+              label: 'Course code',
+              hint: 'e.g. CS101',
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(courseCode: val),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _textField(
+              controller: _professorController,
+              label: 'Professor / Instructor',
+              hint: 'e.g. Dr. Alan Turing',
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(professor: val),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _textField(
+              controller: _sectionController,
+              label: 'Section',
+              hint: 'e.g. Sec 01',
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(sectionLabel: val),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _textField(
+              controller: _locationController,
+              label: 'Class location',
+              hint: 'e.g. Hall B / Zoom link',
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(classLocation: val),
+              ),
+            ),
+          ] else if (kind == 'Job') ...[
+            _textField(
+              controller: _workRoleController,
+              label: 'Role',
+              hint: 'e.g. Software Engineer',
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(workRole: val),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _textField(
+              controller: _workOrgController,
+              label: 'Organization / Company',
+              hint: 'e.g. Acme Corp',
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(workOrganization: val),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _textField(
+              controller: _locationController,
+              label: 'Work location',
+              hint: 'e.g. Office 4F / Remote',
+              onChanged: (val) => _draft = _draft.copyWith(
+                fixedState: _draft.fixedState.copyWith(workLocation: val),
+              ),
+            ),
+          ],
+        ],
       ],
     );
   }
@@ -495,59 +812,41 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
   Widget _trackerFields() {
     return _enumTile<TrackerType>(
       label: 'Tracker task',
-      value: _trackerType == TrackerType.none
-          ? TrackerType.meditation
-          : _trackerType,
+      value: _draft.trackerState.trackerType,
       values: const [
         TrackerType.meditation,
         TrackerType.focus,
         TrackerType.workout,
         TrackerType.hydration,
-        TrackerType.money,
-        TrackerType.smoking,
       ],
       labelFor: (value) => value.name,
       onChanged: (value) {
         setState(() {
-          _trackerType = value;
-          _category = switch (value) {
-            TrackerType.meditation => RoutineCategory.meditation,
-            TrackerType.hydration => RoutineCategory.hydration,
-            TrackerType.money => RoutineCategory.finance,
-            TrackerType.focus => RoutineCategory.focus,
-            TrackerType.smoking => RoutineCategory.badHabit,
-            TrackerType.workout => RoutineCategory.health,
-            TrackerType.none => RoutineCategory.health,
-          };
+          _draft = _draft.copyWith(
+            trackerState: _draft.trackerState.copyWith(trackerType: value),
+          );
         });
       },
     );
   }
 
   Widget _checkInFields() {
-    final options = const [
-      'Smoking',
-      'Alcohol',
-      'Junk food',
-      'Water',
-      'Sleep quality',
-      'Stress',
-      'Manual saving',
-    ];
+    const options = ['Smoking', 'Alcohol', 'Junk food'];
+    final currentChoice = options.contains(_draft.checkInState.checkInType)
+        ? _draft.checkInState.checkInType
+        : options.first;
+
     return _stringTile(
-      label: 'Check-in type',
-      value: options.contains(_titleController.text)
-          ? _titleController.text
-          : options.first,
+      label: 'Bad habit check-in',
+      value: currentChoice,
       values: options,
       onChanged: (value) {
         setState(() {
+          _draft = _draft.copyWith(
+            title: value,
+            checkInState: _draft.checkInState.copyWith(checkInType: value),
+          );
           _titleController.text = value;
-          _category = value == 'Water'
-              ? RoutineCategory.hydration
-              : value == 'Manual saving'
-              ? RoutineCategory.finance
-              : RoutineCategory.badHabit;
         });
       },
     );
@@ -556,30 +855,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
   Widget _moneyFields() {
     return const _InfoBox(
       text:
-          'This creates a Routine money task. Start opens Tracker Money System.',
-    );
-  }
-
-  Widget _categoryTile() {
-    return _enumTile<RoutineCategory>(
-      label: 'Category',
-      value: _category,
-      values: const [
-        RoutineCategory.classBlock,
-        RoutineCategory.job,
-        RoutineCategory.eating,
-        RoutineCategory.fixed,
-        RoutineCategory.skinCare,
-        RoutineCategory.habit,
-        RoutineCategory.identity,
-        RoutineCategory.finance,
-        RoutineCategory.health,
-        RoutineCategory.focus,
-        RoutineCategory.meditation,
-        RoutineCategory.hydration,
-      ],
-      labelFor: (value) => value.name,
-      onChanged: (value) => setState(() => _category = value),
+          'This creates a Routine money task. Start opens the authorized Tracker Money System.',
     );
   }
 
@@ -589,7 +865,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'Repeat',
+          'Repeat weekdays',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w800,
@@ -601,15 +877,24 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
           spacing: 7,
           children: List.generate(7, (index) {
             final day = index + 1;
-            final selected = _repeatDays.contains(day);
+            final selected = _draft.repeatDays.contains(day);
             return GestureDetector(
-              onTap: () => setState(() {
-                selected ? _repeatDays.remove(day) : _repeatDays.add(day);
-                _repeatDays.sort();
-              }),
+              onTap: () {
+                setState(() {
+                  final updatedDays = List<int>.from(_draft.repeatDays);
+                  if (selected) {
+                    updatedDays.remove(day);
+                  } else {
+                    updatedDays.add(day);
+                  }
+                  updatedDays.sort();
+                  _draft = _draft.copyWith(repeatDays: updatedDays);
+                  _error = null;
+                });
+              },
               child: Container(
-                width: 34,
-                height: 34,
+                width: 36,
+                height: 36,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: selected
@@ -640,16 +925,20 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     return _PickerTile(
       label: 'Date',
       value:
-          '${TimelineUtils.getShortDayName(_date.weekday)} ${_date.day}/${_date.month}',
+          '${TimelineUtils.getShortDayName(_draft.date.weekday)} ${_draft.date.day}/${_draft.date.month}',
       icon: Icons.calendar_today_rounded,
       onTap: () async {
         final picked = await showDatePicker(
           context: context,
-          initialDate: _date,
-          firstDate: DateTime.now().subtract(const Duration(days: 30)),
+          initialDate: _draft.date,
+          firstDate: DateTime.now().subtract(const Duration(days: 365)),
           lastDate: DateTime.now().add(const Duration(days: 365)),
         );
-        if (picked != null) setState(() => _date = picked);
+        if (picked != null) {
+          setState(() {
+            _draft = _draft.copyWith(date: picked);
+          });
+        }
       },
     );
   }
@@ -657,14 +946,18 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
   Widget _timeTile() {
     return _PickerTile(
       label: 'Start time',
-      value: _startTime.format(context),
+      value: _draft.startTime.format(context),
       icon: Icons.schedule_rounded,
       onTap: () async {
         final picked = await showTimePicker(
           context: context,
-          initialTime: _startTime,
+          initialTime: _draft.startTime,
         );
-        if (picked != null) setState(() => _startTime = picked);
+        if (picked != null) {
+          setState(() {
+            _draft = _draft.copyWith(startTime: picked);
+          });
+        }
       },
     );
   }
@@ -672,7 +965,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
   Widget _durationTile() {
     return _PickerTile(
       label: 'Duration',
-      value: TimelineUtils.formatDuration(_durationMinutes),
+      value: TimelineUtils.formatDuration(_draft.durationMinutes),
       icon: Icons.timelapse_rounded,
       onTap: _showDurationPicker,
       trailing: Row(
@@ -680,18 +973,20 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
         children: [
           IconButton(
             onPressed: () => setState(() {
-              _durationMinutes = (_durationMinutes - 5)
+              final newDur = (_draft.durationMinutes - 5)
                   .clamp(1, 24 * 60)
                   .toInt();
+              _draft = _draft.copyWith(durationMinutes: newDur);
             }),
             icon: const Icon(Icons.remove_circle_outline_rounded),
             color: OptivusColors.textSecondary,
           ),
           IconButton(
             onPressed: () => setState(() {
-              _durationMinutes = (_durationMinutes + 5)
+              final newDur = (_draft.durationMinutes + 5)
                   .clamp(1, 24 * 60)
                   .toInt();
+              _draft = _draft.copyWith(durationMinutes: newDur);
             }),
             icon: const Icon(Icons.add_circle_outline_rounded),
             color: OptivusColors.routineAccent,
@@ -735,17 +1030,18 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
                   alignment: WrapAlignment.center,
                   children: [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 480]
                       .map((mins) {
+                        final isSelected = _draft.durationMinutes == mins;
                         return ActionChip(
                           label: Text(
                             TimelineUtils.formatDuration(mins),
                             style: TextStyle(
                               fontWeight: FontWeight.w800,
-                              color: _durationMinutes == mins
+                              color: isSelected
                                   ? OptivusColors.routineAccent
                                   : OptivusColors.textPrimary,
                             ),
                           ),
-                          backgroundColor: _durationMinutes == mins
+                          backgroundColor: isSelected
                               ? OptivusColors.routineAccent.withValues(
                                   alpha: 0.15,
                                 )
@@ -755,7 +1051,9 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                           onPressed: () {
-                            setState(() => _durationMinutes = mins);
+                            setState(() {
+                              _draft = _draft.copyWith(durationMinutes: mins);
+                            });
                             Navigator.of(ctx).pop();
                           },
                         );
@@ -775,10 +1073,12 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     required String label,
     required String hint,
     int maxLines = 1,
+    ValueChanged<String>? onChanged,
   }) {
     return TextField(
       controller: controller,
       maxLines: maxLines,
+      onChanged: onChanged,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
@@ -823,70 +1123,15 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     );
   }
 
-  int get _startMinute => _startTime.hour * 60 + _startTime.minute;
-
-  RoutineItem _draftItem() {
-    final mode = _mode ?? 'flexible';
-    final blockType = _blockTypeForMode(mode);
-    final start = _startMinute;
-    final endRaw = start + _durationMinutes;
-    final crossesMidnight = endRaw > 1440;
-    final end = crossesMidnight
-        ? (endRaw - 1440).clamp(0, 1440).toInt()
-        : endRaw.clamp(1, 1440).toInt();
-
-    final endDate = crossesMidnight && _repeatDays.isEmpty
-        ? TimelineUtils.dateOnly(_date).add(const Duration(days: 1))
-        : null;
-
-    final subtasks = _lines(_subtasksController.text);
-    final steps = _lines(_stepsController.text);
-    final dishes = _lines(_dishesController.text);
-    return RoutineItem(
-      id: 'routine-${DateTime.now().millisecondsSinceEpoch}',
-      title: _titleController.text.trim(),
-      date: _repeatDays.isEmpty ? TimelineUtils.dateOnly(_date) : null,
-      endDate: endDate,
-      startMinute: start,
-      endMinute: end,
-      crossesMidnight: crossesMidnight,
-      endsNextDay: crossesMidnight,
-      repeatDays: _repeatDays,
-      blockType: blockType,
-      category: _category,
-      source: RoutineSource.manual,
-      status: RoutineStatus.planned,
-      priority: _priority,
-      isTrackerLinked:
-          blockType == RoutineBlockType.trackerTask ||
-          blockType == RoutineBlockType.moneyTask ||
-          _trackerType != TrackerType.none,
-      trackerType: blockType == RoutineBlockType.moneyTask
-          ? TrackerType.money
-          : _trackerType,
-      notes: _notesController.text.trim().isEmpty
-          ? null
-          : _notesController.text.trim(),
-      subtasks: subtasks.isEmpty ? null : subtasks,
-      subtasksCompleted: subtasks.isEmpty
-          ? null
-          : List<bool>.filled(subtasks.length, false),
-      steps: steps.isEmpty ? null : steps,
-      dishes: dishes.isEmpty ? null : dishes,
-      hardBlock: _hard,
-      repeatRule: _repeatDays.isEmpty ? 'once' : 'weekly',
-    );
-  }
-
-  void _letAiPlace() {
+  void _findFreeSlot() {
     if (_saving) return;
-    final draft = _draftItem();
+    final itemCandidate = AddRoutineMapper.toRoutineItem(_draft);
     final slot = ref
         .read(routineNotifierProvider.notifier)
         .findFreeSlot(
-          item: draft,
-          date: _date,
-          durationMinutes: _durationMinutes,
+          item: itemCandidate,
+          date: _draft.date,
+          durationMinutes: _draft.durationMinutes,
         );
     if (slot == null) {
       setState(
@@ -896,32 +1141,45 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
       return;
     }
     setState(() {
-      _startTime = TimeOfDay(hour: slot ~/ 60, minute: slot % 60);
+      _draft = _draft.copyWith(
+        startTime: TimeOfDay(hour: slot ~/ 60, minute: slot % 60),
+      );
       _error = null;
     });
   }
 
   Future<void> _save() async {
     if (_saving) return;
-    final validation = _validate();
-    if (validation != null) {
-      setState(() => _error = validation);
+
+    // Ensure title controller text is current
+    final currentDraft = _draft.copyWith(
+      title: _titleController.text,
+      notes: _notesController.text,
+    );
+
+    final validationError = AddRoutineValidator.validate(currentDraft);
+    if (validationError != null) {
+      setState(() => _error = validationError);
       return;
     }
-    final item = _draftItem();
+
+    final item = AddRoutineMapper.toRoutineItem(currentDraft);
     setState(() {
       _saving = true;
       _error = null;
     });
+
     final RoutineWriteResult result = await ref
         .read(routineNotifierProvider.notifier)
         .addItem(item);
+
     if (!mounted) return;
     if (result.outcome == RoutineWriteOutcome.saved ||
         result.outcome == RoutineWriteOutcome.noOp) {
       Navigator.of(context).pop();
       return;
     }
+
     setState(() {
       _saving = false;
       _error =
@@ -931,87 +1189,14 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     });
   }
 
-  String? _validate() {
-    if (_titleController.text.trim().isEmpty) return 'Title is required.';
-    if (_durationMinutes <= 0) return 'Duration must be greater than 0.';
-    final endRaw = _startMinute + _durationMinutes;
-    if (endRaw > 1440 && _fixedKind != 'Sleep') {
-      return 'Only Sleep blocks typically cross midnight. Adjust the time or set type to Sleep.';
-    }
-    return null;
-  }
-
-  void _applyModeDefaults(String mode) {
-    switch (mode) {
-      case 'fixed':
-        _durationMinutes = 60;
-        _hard = true;
-        _category = RoutineCategory.classBlock;
-        _fixedKind = 'Class';
-        break;
-      case 'habit':
-        _durationMinutes = 15;
-        _category = RoutineCategory.habit;
-        break;
-      case 'tracker':
-        _durationMinutes = 10;
-        _trackerType = TrackerType.meditation;
-        _category = RoutineCategory.meditation;
-        break;
-      case 'checkin':
-        _durationMinutes = 5;
-        _category = RoutineCategory.badHabit;
-        if (_titleController.text.isEmpty) _titleController.text = 'Smoking';
-        break;
-      case 'money':
-        _durationMinutes = 5;
-        _category = RoutineCategory.finance;
-        _trackerType = TrackerType.money;
-        if (_titleController.text.isEmpty) {
-          _titleController.text = 'Tiny money save';
-        }
-        break;
-      default:
-        _durationMinutes = 30;
-        _category = RoutineCategory.habit;
-    }
-  }
-
-  RoutineBlockType _blockTypeForMode(String mode) {
-    return switch (mode) {
-      'fixed' =>
-        _hard ? RoutineBlockType.hardBlock : RoutineBlockType.softBlock,
-      'habit' =>
-        _trackerType == TrackerType.none
-            ? RoutineBlockType.flexibleTask
-            : RoutineBlockType.trackerTask,
-      'tracker' => RoutineBlockType.trackerTask,
-      'checkin' => RoutineBlockType.checkIn,
-      'money' => RoutineBlockType.moneyTask,
-      _ => RoutineBlockType.flexibleTask,
-    };
-  }
-
-  RoutineCategory _categoryForFixedKind(String kind) {
-    return switch (kind) {
-      'Class' || 'Tuition' => RoutineCategory.classBlock,
-      'Job' => RoutineCategory.job,
-      'Eating' => RoutineCategory.eating,
-      'Sleep' => RoutineCategory.sleep,
-      'Skin Care' => RoutineCategory.skinCare,
-      'Bath' || 'Travel' || 'Prayer' => RoutineCategory.fixed,
-      _ => RoutineCategory.fixed,
-    };
-  }
-
-  String _hintForMode(String mode) {
-    return switch (mode) {
-      'fixed' => 'e.g., Class, Job, Sleep',
-      'habit' => 'e.g., Reading, Journaling',
-      'tracker' => 'e.g., Meditation, Workout',
-      'checkin' => 'e.g., Smoking',
-      'money' => 'e.g., Tiny money save',
-      _ => 'e.g., Morning Study',
+  String _hintForType(AddRoutineType type) {
+    return switch (type) {
+      AddRoutineType.fixed => 'e.g., Class, Job, Sleep',
+      AddRoutineType.habit => 'e.g., Reading, Journaling',
+      AddRoutineType.tracker => 'e.g., Meditation, Workout',
+      AddRoutineType.checkin => 'e.g., Smoking',
+      AddRoutineType.money => 'e.g., Tiny money save',
+      AddRoutineType.flexible => 'e.g., Morning Study',
     };
   }
 
@@ -1024,13 +1209,45 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
   }
 }
 
-class _Cat {
+class _ScheduleModeButton extends StatelessWidget {
   final String label;
-  final IconData icon;
-  final Color color;
-  final String key;
+  final bool isSelected;
+  final VoidCallback onTap;
 
-  const _Cat(this.label, this.icon, this.color, this.key);
+  const _ScheduleModeButton({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 40),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isSelected ? OptivusColors.ink : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: isSelected ? Colors.white : OptivusColors.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _PickerTile extends StatelessWidget {
@@ -1051,9 +1268,11 @@ class _PickerTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(13),
+        constraints: const BoxConstraints(minHeight: 48),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.6),
           borderRadius: BorderRadius.circular(12),
@@ -1066,6 +1285,7 @@ class _PickerTile extends StatelessWidget {
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
                     label,
@@ -1114,6 +1334,7 @@ class _DropTile<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      constraints: const BoxConstraints(minHeight: 48),
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.6),

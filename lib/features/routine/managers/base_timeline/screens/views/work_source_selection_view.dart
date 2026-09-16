@@ -139,6 +139,41 @@ class WorkSourceSelectionView extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (snapshot.isConfigured) ...[
+                    Container(
+                      key: const Key('work-source-selection-draft-notice'),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: OptivusColors.warning.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: OptivusColors.warning.withValues(alpha: 0.25),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.info_outline_rounded,
+                            size: 18,
+                            color: OptivusColors.warning,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              WorkPresentationUtils.sourceDraftNotice(lifeRole),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                height: 1.4,
+                                color: OptivusColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   if (snapshot.sourceR2Key != null ||
                       snapshot.sourceAssetId != null) ...[
                     const LiquidSectionHeader(title: 'CURRENT PHOTO'),

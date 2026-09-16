@@ -242,6 +242,7 @@ class BaseTimelineWorkAdapter {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // 1. ACTIVITY
               const Text(
                 'ACTIVITY',
                 style: TextStyle(
@@ -266,6 +267,41 @@ class BaseTimelineWorkAdapter {
                     ),
                   ),
                 ),
+              ),
+              const SizedBox(height: 18),
+
+              // 2. PROFESSIONAL CONTEXT
+              const Text(
+                'PROFESSIONAL CONTEXT',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  color: OptivusColors.textSecondary,
+                  letterSpacing: .8,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final ctx in [
+                    'job',
+                    'business',
+                    'startup',
+                    'freelance',
+                    'other',
+                  ])
+                    buildChoiceChip(
+                      label: WorkPresentationUtils.formatContext(ctx),
+                      selected: selectedContextType == ctx,
+                      onSelected: () => setSheetState(() {
+                        selectedContextType = selectedContextType == ctx
+                            ? null
+                            : ctx;
+                      }),
+                    ),
+                ],
               ),
               const SizedBox(height: 12),
               Text(
@@ -355,9 +391,11 @@ class BaseTimelineWorkAdapter {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 18),
+
+              // 3. SCHEDULE
               const Text(
-                'WORK CONTEXT',
+                'SCHEDULE',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w900,
@@ -365,25 +403,41 @@ class BaseTimelineWorkAdapter {
                   letterSpacing: .8,
                 ),
               ),
+              const SizedBox(height: 12),
+              const Text(
+                'BLOCK FOCUS / KIND',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: OptivusColors.textSecondary,
+                  letterSpacing: .6,
+                ),
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final ctx in [
-                    'job',
-                    'business',
-                    'startup',
-                    'freelance',
+                  for (final k in [
+                    'work_hours',
+                    'deep_work',
+                    'shift',
+                    'meeting',
+                    'client_call',
+                    'project_work',
+                    'team_sync',
+                    'training',
+                    'commute',
+                    'break',
+                    'business_hours',
+                    'admin',
                     'other',
                   ])
                     buildChoiceChip(
-                      label: WorkPresentationUtils.formatContext(ctx),
-                      selected: selectedContextType == ctx,
+                      label: WorkPresentationUtils.formatBlockKind(k),
+                      selected: selectedBlockKind == k,
                       onSelected: () => setSheetState(() {
-                        selectedContextType = selectedContextType == ctx
-                            ? null
-                            : ctx;
+                        selectedBlockKind = selectedBlockKind == k ? null : k;
                       }),
                     ),
                 ],
@@ -415,45 +469,6 @@ class BaseTimelineWorkAdapter {
                       selected: selectedMode == m,
                       onSelected: () => setSheetState(() {
                         selectedMode = selectedMode == m ? null : m;
-                      }),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'BLOCK FOCUS / KIND',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                  color: OptivusColors.textSecondary,
-                  letterSpacing: .8,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final k in [
-                    'work_hours',
-                    'deep_work',
-                    'shift',
-                    'meeting',
-                    'client_call',
-                    'project_work',
-                    'team_sync',
-                    'training',
-                    'commute',
-                    'break',
-                    'business_hours',
-                    'admin',
-                    'other',
-                  ])
-                    buildChoiceChip(
-                      label: WorkPresentationUtils.formatBlockKind(k),
-                      selected: selectedBlockKind == k,
-                      onSelected: () => setSheetState(() {
-                        selectedBlockKind = selectedBlockKind == k ? null : k;
                       }),
                     ),
                 ],
@@ -627,7 +642,7 @@ class BaseTimelineWorkAdapter {
               ),
               const SizedBox(height: 18),
               const Text(
-                'WORKPLACE & LOCATION',
+                'PLACE & DETAILS',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w900,

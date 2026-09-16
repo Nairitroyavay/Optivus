@@ -7,10 +7,22 @@ import 'package:optivus/models/onboarding_draft.dart';
 /// Modal bottom sheet displaying all stored details for a Work / Business block.
 class WorkDetailSheet extends StatelessWidget {
   final TimelineBlockDraft block;
+  final VoidCallback? onEdit;
+  final String? editLabel;
 
-  const WorkDetailSheet({super.key, required this.block});
+  const WorkDetailSheet({
+    super.key,
+    required this.block,
+    this.onEdit,
+    this.editLabel,
+  });
 
-  static Future<void> show(BuildContext context, TimelineBlockDraft block) {
+  static Future<void> show(
+    BuildContext context,
+    TimelineBlockDraft block, {
+    VoidCallback? onEdit,
+    String? editLabel,
+  }) {
     return showModalBottomSheet(
       context: context,
       backgroundColor: OptivusColors.backgroundBottom,
@@ -18,7 +30,11 @@ class WorkDetailSheet extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) => WorkDetailSheet(block: block),
+      builder: (ctx) => WorkDetailSheet(
+        block: block,
+        onEdit: onEdit,
+        editLabel: editLabel,
+      ),
     );
   }
 
@@ -226,6 +242,29 @@ class WorkDetailSheet extends StatelessWidget {
                   icon: Icons.notes_rounded,
                   label: 'Notes',
                   value: block.notes!.trim(),
+                ),
+              ],
+              if (onEdit != null) ...[
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    key: const Key('work-detail-sheet-edit-block-button'),
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: Text(editLabel ?? 'Edit this block'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: OptivusColors.warning,
+                      side: const BorderSide(color: OptivusColors.warning),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      onEdit?.call();
+                    },
+                  ),
                 ),
               ],
               const SizedBox(height: 8),
