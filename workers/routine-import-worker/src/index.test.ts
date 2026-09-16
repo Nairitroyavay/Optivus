@@ -627,4 +627,124 @@ describe("Routine Import Worker request boundary", () => {
     // Normalization of 'lunch break' to 'break'
     expect(c2.workBlockKind).toBe("break");
   });
+
+  test("preserves canonical work enums and ensures anti-hallucination undefined defaults for minimal schedule", async () => {
+    const btWorkObjectKey = "users/uid-1/routine_base_timeline/work_schedule/asset-work-2.jpg";
+    stubGemini(200, {
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                text: JSON.stringify({
+                  id: "ext-work-2",
+                  uid: "uid-1",
+                  source: "work",
+                  engine: "gemini",
+                  engineVersion: "phase2d",
+                  sourceAssetId: "asset-work-2",
+                  sourceR2Key: btWorkObjectKey,
+                  candidates: [
+                    {
+                      id: "w-canonical-1",
+                      title: "Platform Foundation",
+                      candidateType: "block",
+                      startMinute: 600,
+                      endMinute: 720,
+                      hasFixedTime: true,
+                      repeatDays: [1, 3, 5],
+                      blockType: "hard_block",
+                      category: "workBlock",
+                      hardBlock: true,
+                      selected: true,
+                      confidenceScore: 0.9,
+                      confidenceLabel: "high",
+                      workContextType: "startup",
+                      workMode: "field",
+                      workBlockKind: "project_work",
+                      steps: [],
+                    },
+                    {
+                      id: "w-canonical-2",
+                      title: "Operations Oversight",
+                      candidateType: "block",
+                      startMinute: 780,
+                      endMinute: 960,
+                      hasFixedTime: true,
+                      repeatDays: [2, 4],
+                      blockType: "hard_block",
+                      category: "workBlock",
+                      hardBlock: true,
+                      selected: true,
+                      confidenceScore: 0.88,
+                      confidenceLabel: "high",
+                      workMode: "mixed",
+                      workBlockKind: "business_hours",
+                      steps: [],
+                    },
+                    {
+                      id: "w-minimal-3",
+                      title: "Shift",
+                      candidateType: "block",
+                      startMinute: 540,
+                      endMinute: 1020,
+                      hasFixedTime: true,
+                      repeatDays: [1, 2, 3, 4, 5],
+                      blockType: "hard_block",
+                      category: "workBlock",
+                      hardBlock: true,
+                      selected: true,
+                      confidenceScore: 0.8,
+                      confidenceLabel: "high",
+                      steps: [],
+                    },
+                  ],
+                  warnings: [],
+                  createdAt: new Date().toISOString(),
+                }),
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    const env = makeEnv();
+    const response = await worker.fetch(
+      request({
+        reviewId: "review-bt-work-2",
+        source: "work",
+        uploadedAssetId: "asset-work-2",
+        uploadedAssetR2Key: btWorkObjectKey,
+        sourceLabel: "Work Schedule",
+      }),
+      env as never,
+    );
+
+    expect(response.status).toBe(200);
+    const json = await response.json() as {
+      candidates: Array<Record<string, unknown>>;
+    };
+    expect(json.candidates.length).toBe(3);
+
+    // Canonical enums survive exactly
+    const c1 = json.candidates[0];
+    expect(c1.workContextType).toBe("startup");
+    expect(c1.workMode).toBe("field");
+    expect(c1.workBlockKind).toBe("project_work");
+
+    const c2 = json.candidates[1];
+    expect(c2.workMode).toBe("mixed");
+    expect(c2.workBlockKind).toBe("business_hours");
+
+    // Minimal schedule must NOT hallucinate role, org, mode, or block kind
+    const c3 = json.candidates[2];
+    expect(c3.title).toBe("Shift");
+    expect(c3.workOrganization).toBeUndefined();
+    expect(c3.workRole).toBeUndefined();
+    expect(c3.workDepartmentOrProject).toBeUndefined();
+    expect(c3.workMode).toBeUndefined();
+    expect(c3.workBlockKind).toBeUndefined();
+    expect(c3.workContextType).toBeUndefined();
+  });
 });

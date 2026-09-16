@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,7 +17,9 @@ import 'package:optivus/features/routine/managers/base_timeline/screens/views/wo
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/work_source_selection_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/work_base_setup_screen.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_upload_lifecycle_helper.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_setup_controller.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/work_setup_error_mapper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_timeline_adapter.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
@@ -496,7 +499,7 @@ void main() {
 
         // 3. Reaches WorkReviewView with 1 block scheduled
         expect(find.byType(WorkReviewView), findsOneWidget);
-        expect(find.text('1 block scheduled'), findsOneWidget);
+        expect(find.text('1 work block scheduled'), findsOneWidget);
         expect(find.text('Store Shift'), findsOneWidget);
 
         // 4. Cancel via close icon
@@ -885,7 +888,7 @@ void main() {
         // 3. Back in ReviewView with 1 block scheduled
         expect(find.byType(WorkReviewView), findsOneWidget);
         expect(find.text('Focus Time'), findsOneWidget);
-        expect(find.text('1 block scheduled'), findsOneWidget);
+        expect(find.text('1 work block scheduled'), findsOneWidget);
 
         // Save button is now enabled
         final saveButton = find.widgetWithText(
@@ -1006,7 +1009,7 @@ void main() {
 
         // Block is now deleted from working blocks!
         expect(find.text('No work blocks scheduled'), findsOneWidget);
-        expect(find.text('0 blocks scheduled'), findsOneWidget);
+        expect(find.text('0 work blocks scheduled'), findsOneWidget);
       },
     );
 
@@ -3160,6 +3163,7 @@ void main() {
     test(
       'WorkPresentationUtils scheduledCount formats block counts accurately',
       () {
+        // Neutral
         expect(
           WorkPresentationUtils.scheduledCount(0),
           equals('0 blocks scheduled'),
@@ -3171,6 +3175,50 @@ void main() {
         expect(
           WorkPresentationUtils.scheduledCount(5),
           equals('5 blocks scheduled'),
+        );
+
+        // Work
+        expect(
+          WorkPresentationUtils.scheduledCount(0, LifeRoleDraft.workingKey),
+          equals('0 work blocks scheduled'),
+        );
+        expect(
+          WorkPresentationUtils.scheduledCount(1, LifeRoleDraft.workingKey),
+          equals('1 work block scheduled'),
+        );
+        expect(
+          WorkPresentationUtils.scheduledCount(5, LifeRoleDraft.workingKey),
+          equals('5 work blocks scheduled'),
+        );
+
+        // Student working (must use Work wording)
+        expect(
+          WorkPresentationUtils.scheduledCount(
+            1,
+            LifeRoleDraft.studentWorkingKey,
+          ),
+          equals('1 work block scheduled'),
+        );
+        expect(
+          WorkPresentationUtils.scheduledCount(
+            5,
+            LifeRoleDraft.studentWorkingKey,
+          ),
+          equals('5 work blocks scheduled'),
+        );
+
+        // Business
+        expect(
+          WorkPresentationUtils.scheduledCount(0, LifeRoleDraft.businessKey),
+          equals('0 business blocks scheduled'),
+        );
+        expect(
+          WorkPresentationUtils.scheduledCount(1, LifeRoleDraft.businessKey),
+          equals('1 business block scheduled'),
+        );
+        expect(
+          WorkPresentationUtils.scheduledCount(5, LifeRoleDraft.businessKey),
+          equals('5 business blocks scheduled'),
         );
       },
     );
@@ -3282,6 +3330,531 @@ void main() {
             );
           }
         }
+      },
+    );
+
+    group('WorkSetupErrorMapper regression tests', () {
+      test(
+        'Test A: FirebaseException(code: unauthenticated) maps to session expired copy',
+        () {
+          final saveError = FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'unauthenticated',
+          );
+          final saveMsg = WorkSetupErrorMapper.mapSaveError(saveError);
+          expect(saveMsg, contains('session expired'));
+          expect(saveMsg, contains('Sign in again before saving'));
+
+          final removeMsg = WorkSetupErrorMapper.mapRemoveError(saveError);
+          expect(removeMsg, contains('session expired'));
+          expect(removeMsg, contains('Sign in again before trying again'));
+        },
+      );
+
+      test(
+        'Test B: FirebaseException(code: permission-denied) does NOT claim session changed',
+        () {
+          final permError = FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'permission-denied',
+          );
+          final saveMsg = WorkSetupErrorMapper.mapSaveError(permError);
+          expect(saveMsg, isNot(contains('session changed')));
+          expect(saveMsg, isNot(contains('Sign in again')));
+          expect(saveMsg, contains("wasn't permitted"));
+          expect(saveMsg, contains('current setup is still active'));
+
+          final removeMsg = WorkSetupErrorMapper.mapRemoveError(permError);
+          expect(removeMsg, isNot(contains('session changed')));
+          expect(removeMsg, isNot(contains('Sign in again')));
+          expect(removeMsg, contains("wasn't permitted"));
+          expect(removeMsg, contains('current setup is still active'));
+
+          // Business profile-specific copy
+          final bizSaveMsg = WorkSetupErrorMapper.mapSaveError(
+            permError,
+            LifeRoleDraft.businessKey,
+          );
+          expect(bizSaveMsg, contains('business schedule'));
+          expect(bizSaveMsg, isNot(contains('session changed')));
+
+          final bizRemoveMsg = WorkSetupErrorMapper.mapRemoveError(
+            permError,
+            LifeRoleDraft.businessKey,
+          );
+          expect(bizRemoveMsg, contains('business setup'));
+          expect(bizRemoveMsg, isNot(contains('session changed')));
+        },
+      );
+
+      test(
+        'Test C: Concurrency exception maps to reload/latest-setup copy',
+        () {
+          final conflict = BaseTimelineConcurrencyException(
+            expectedRevision: 2,
+            actualRevision: 3,
+          );
+          final saveMsg = WorkSetupErrorMapper.mapSaveError(conflict);
+          expect(saveMsg, contains('changed while you were editing'));
+          expect(
+            saveMsg,
+            contains('Reload the latest setup before saving again'),
+          );
+
+          final removeMsg = WorkSetupErrorMapper.mapRemoveError(conflict);
+          expect(removeMsg, contains('changed while you were editing'));
+          expect(
+            removeMsg,
+            contains('Reload the latest setup before trying again'),
+          );
+        },
+      );
+
+      test('Test D: Timeout and network behavior remain consistent', () {
+        final timeout = TimeoutException('Operation timed out');
+        final timeoutMsg = WorkSetupErrorMapper.mapSaveError(timeout);
+        expect(timeoutMsg, contains('timed out'));
+        expect(timeoutMsg, contains('current setup is still active'));
+
+        final networkError = FirebaseException(
+          plugin: 'cloud_firestore',
+          code: 'unavailable',
+        );
+        final networkMsg = WorkSetupErrorMapper.mapSaveError(networkError);
+        expect(
+          networkMsg,
+          contains('current setup is still active. Please retry'),
+        );
+      });
+    });
+
+    group('WorkPresentationUtils secondarySetupSummary tests', () {
+      test('Consistent metadata returns clean summary string', () {
+        const blocks = [
+          TimelineBlockDraft(
+            id: 'b1',
+            section: 'work',
+            title: 'Morning Shift',
+            startMinute: 9 * 60,
+            endMinute: 13 * 60,
+            repeatDays: [1, 2],
+            workRole: 'Software Engineer',
+            workOrganization: 'Optivus',
+            workMode: 'hybrid',
+            blockType: TimelineBlockDraft.hardBlockKey,
+          ),
+          TimelineBlockDraft(
+            id: 'b2',
+            section: 'work',
+            title: 'Afternoon Sync',
+            startMinute: 14 * 60,
+            endMinute: 17 * 60,
+            repeatDays: [3, 4],
+            workRole: 'Software Engineer',
+            workOrganization: 'Optivus',
+            workMode: 'hybrid',
+            blockType: TimelineBlockDraft.hardBlockKey,
+          ),
+        ];
+
+        final summary = WorkPresentationUtils.secondarySetupSummary(blocks);
+        expect(summary, equals('Software Engineer · Optivus · Hybrid'));
+      });
+
+      test('Conflicting organizations return null', () {
+        const blocks = [
+          TimelineBlockDraft(
+            id: 'b1',
+            section: 'work',
+            title: 'Job 1',
+            startMinute: 9 * 60,
+            endMinute: 12 * 60,
+            repeatDays: [1],
+            workRole: 'Engineer',
+            workOrganization: 'Optivus',
+            workMode: 'hybrid',
+            blockType: TimelineBlockDraft.hardBlockKey,
+          ),
+          TimelineBlockDraft(
+            id: 'b2',
+            section: 'work',
+            title: 'Job 2',
+            startMinute: 13 * 60,
+            endMinute: 17 * 60,
+            repeatDays: [2],
+            workRole: 'Engineer',
+            workOrganization: 'Acme Corp',
+            workMode: 'hybrid',
+            blockType: TimelineBlockDraft.hardBlockKey,
+          ),
+        ];
+
+        expect(WorkPresentationUtils.secondarySetupSummary(blocks), isNull);
+      });
+
+      test('Conflicting roles return null', () {
+        const blocks = [
+          TimelineBlockDraft(
+            id: 'b1',
+            section: 'work',
+            title: 'Task A',
+            startMinute: 9 * 60,
+            endMinute: 12 * 60,
+            repeatDays: [1],
+            workRole: 'Staff Engineer',
+            workOrganization: 'Optivus',
+            workMode: 'remote',
+            blockType: TimelineBlockDraft.hardBlockKey,
+          ),
+          TimelineBlockDraft(
+            id: 'b2',
+            section: 'work',
+            title: 'Task B',
+            startMinute: 13 * 60,
+            endMinute: 17 * 60,
+            repeatDays: [2],
+            workRole: 'Consultant',
+            workOrganization: 'Optivus',
+            workMode: 'remote',
+            blockType: TimelineBlockDraft.hardBlockKey,
+          ),
+        ];
+
+        expect(WorkPresentationUtils.secondarySetupSummary(blocks), isNull);
+      });
+    });
+
+    testWidgets(
+      'Role-clear UI save and reopen contract ensures cleared role stays empty and does not resurrect',
+      (tester) async {
+        const initialBlock = TimelineBlockDraft(
+          id: 'role-clear-test-block',
+          section: 'work',
+          title: 'Sprint Planning',
+          startMinute: 10 * 60,
+          endMinute: 11 * 60,
+          repeatDays: [1],
+          workRole: 'Senior Engineer',
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        TimelineBlockDraft? savedResult;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) {
+                  return ElevatedButton(
+                    onPressed: () {
+                      BaseTimelineWorkAdapter.showEditSheet(
+                        context: context,
+                        block: initialBlock,
+                        onSave: (saved) async {
+                          savedResult = saved;
+                          return true;
+                        },
+                        lifeRole: LifeRoleDraft.workingKey,
+                      );
+                    },
+                    child: const Text('Open Sheet'),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // 1. Open editor
+        await tester.tap(find.text('Open Sheet'));
+        await tester.pumpAndSettle();
+
+        final titleField = find.byKey(const ValueKey('base-work-title-field'));
+        final roleField = find.byKey(const ValueKey('base-work-role-field'));
+
+        expect(
+          tester.widget<TextField>(titleField).controller?.text,
+          equals('Sprint Planning'),
+        );
+        expect(
+          tester.widget<TextField>(roleField).controller?.text,
+          equals('Senior Engineer'),
+        );
+
+        // 2. Clear role in UI
+        await tester.enterText(roleField, '');
+        await tester.pumpAndSettle();
+
+        // 3. Save
+        await tester.tap(find.text('Save'));
+        await tester.pumpAndSettle();
+
+        expect(savedResult, isNotNull);
+        expect(savedResult!.title, equals('Sprint Planning'));
+        expect(savedResult!.workRole, isNull);
+
+        // 4. Reopen editor using the returned saved block
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) {
+                  return ElevatedButton(
+                    onPressed: () {
+                      BaseTimelineWorkAdapter.showEditSheet(
+                        context: context,
+                        block: savedResult!,
+                        onSave: (_) async => true,
+                        lifeRole: LifeRoleDraft.workingKey,
+                      );
+                    },
+                    child: const Text('Reopen Sheet'),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Reopen Sheet'));
+        await tester.pumpAndSettle();
+
+        final reopenedTitle = find.byKey(
+          const ValueKey('base-work-title-field'),
+        );
+        final reopenedRole = find.byKey(const ValueKey('base-work-role-field'));
+
+        expect(
+          tester.widget<TextField>(reopenedTitle).controller?.text,
+          equals('Sprint Planning'),
+        );
+        // Role must remain strictly empty!
+        expect(
+          tester.widget<TextField>(reopenedRole).controller?.text,
+          isEmpty,
+        );
+      },
+    );
+
+    testWidgets(
+      'WorkCurrentSetupView with business lifeRole displays complete business copy and empty-day state',
+      (tester) async {
+        const businessBlock = TimelineBlockDraft(
+          id: 'biz-block-1',
+          section: 'work',
+          title: 'Executive Leadership Sync',
+          startMinute: 9 * 60,
+          endMinute: 11 * 60,
+          repeatDays: [1, 2, 3, 4, 5],
+          workRole: 'Founder & CEO',
+          workOrganization: 'Roy Enterprises',
+          workMode: 'in_person',
+          workBlockKind: 'business_hours',
+          workContextType: 'business',
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        final trackingAssetRepo = _TrackingAssetRepo();
+        final setup = BaseTimelineSetup(
+          uid: 'user-biz-1',
+          updatedAt: DateTime.now(),
+          revision: 2,
+          workAuthority: BaseTimelineSectionAuthority.baseTimeline,
+          workRoutineItemIds: const ['biz-block-1'],
+          workBlocks: const [businessBlock],
+          workLogicalAssetId: 'biz-photo-1',
+        );
+
+        int currentDay = 7; // Sunday - no scheduled business blocks
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              uploadedAssetRepositoryProvider.overrideWithValue(
+                trackingAssetRepo,
+              ),
+            ],
+            child: MaterialApp(
+              theme: ThemeData.dark(),
+              home: Scaffold(
+                body: StatefulBuilder(
+                  builder: (context, setState) {
+                    return WorkCurrentSetupView(
+                      setup: setup,
+                      routineBlocks: const [businessBlock],
+                      selectedDay: currentDay,
+                      onDayChanged: (day) => setState(() => currentDay = day),
+                      onBack: () {},
+                      onChangeSetup: () {},
+                      onRemoveSetup: () {},
+                      lifeRole: LifeRoleDraft.businessKey,
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        // 1. Business header title
+        expect(find.text('Business Hours'), findsOneWidget);
+
+        // 2. Business Schedule Photo
+        expect(find.text('Business Schedule Photo'), findsOneWidget);
+
+        // 3. Role-aware summary in header
+        expect(find.textContaining('business block'), findsAtLeastNWidgets(1));
+
+        // 4. Empty day message for business
+        expect(find.text('No business scheduled on this day.'), findsOneWidget);
+
+        // 5. Work-only strings must be absent initially
+        expect(find.text('Work Schedule'), findsNothing);
+        expect(find.text('Work Schedule Photo'), findsNothing);
+        expect(find.text('No work scheduled on this day.'), findsNothing);
+
+        // 6. Open header overflow menu to verify Remove Business Setup
+        final menuBtn = find.byKey(
+          const Key('base-timeline-header-menu-button'),
+        );
+        expect(menuBtn, findsOneWidget);
+        await tester.tap(menuBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Remove Business Setup'), findsOneWidget);
+        expect(find.text('Remove Work Setup'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'WorkCurrentSetupView with student_working profile displays Work domain labels and photo',
+      (tester) async {
+        final trackingAssetRepo = _TrackingAssetRepo();
+        const studentBlock = TimelineBlockDraft(
+          id: 'student-block-1',
+          section: 'work',
+          title: 'Campus IT Lab Support',
+          startMinute: 13 * 60,
+          endMinute: 17 * 60,
+          repeatDays: [2, 4],
+          workRole: 'Lab Assistant',
+          workOrganization: 'University IT',
+          workMode: 'in_person',
+          workBlockKind: 'shift',
+          workContextType: 'job',
+          blockType: TimelineBlockDraft.hardBlockKey,
+        );
+
+        final setup = BaseTimelineSetup(
+          uid: 'student-user-1',
+          updatedAt: DateTime.now(),
+          revision: 1,
+          workAuthority: BaseTimelineSectionAuthority.baseTimeline,
+          workRoutineItemIds: const ['student-block-1'],
+          workBlocks: const [studentBlock],
+          workLogicalAssetId: 'student-photo-1',
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              uploadedAssetRepositoryProvider.overrideWithValue(
+                trackingAssetRepo,
+              ),
+            ],
+            child: MaterialApp(
+              theme: ThemeData.dark(),
+              home: Scaffold(
+                body: WorkCurrentSetupView(
+                  setup: setup,
+                  routineBlocks: const [studentBlock],
+                  selectedDay: 1, // Monday (empty)
+                  onDayChanged: (_) {},
+                  onBack: () {},
+                  onChangeSetup: () {},
+                  onRemoveSetup: () {},
+                  lifeRole: LifeRoleDraft.studentWorkingKey,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(find.text('Work Schedule'), findsOneWidget);
+        expect(find.text('Work Schedule Photo'), findsOneWidget);
+        expect(find.text('No work scheduled on this day.'), findsOneWidget);
+        expect(find.text('Business Hours'), findsNothing);
+        expect(find.text('Business Schedule Photo'), findsNothing);
+
+        // Open header menu to verify Remove Work Setup
+        final menuBtn = find.byKey(
+          const Key('base-timeline-header-menu-button'),
+        );
+        expect(menuBtn, findsOneWidget);
+        await tester.tap(menuBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Remove Work Setup'), findsOneWidget);
+        expect(find.text('Remove Business Setup'), findsNothing);
+      },
+    );
+
+    test(
+      'student_working profile preserves Work domain labels throughout presentation utils',
+      () {
+        const studentRole = LifeRoleDraft.studentWorkingKey;
+        expect(WorkPresentationUtils.isWorkProfile(studentRole), isTrue);
+        expect(WorkPresentationUtils.isBusinessProfile(studentRole), isFalse);
+        expect(
+          WorkPresentationUtils.currentSetupHeaderTitle(studentRole),
+          equals('Work Schedule'),
+        );
+        expect(
+          WorkPresentationUtils.emptyDayMessage(studentRole),
+          equals('No work scheduled on this day.'),
+        );
+        expect(
+          WorkPresentationUtils.photoCardTitle(LifeRoleDraft.businessKey),
+          equals('Business Schedule Photo'),
+        );
+        expect(
+          WorkPresentationUtils.photoCardTitle(LifeRoleDraft.workingKey),
+          equals('Work Schedule Photo'),
+        );
+        expect(
+          WorkPresentationUtils.scheduledCount(2, studentRole),
+          equals('2 work blocks scheduled'),
+        );
+      },
+    );
+
+    test(
+      'WorkSetupErrorMapper distinguishes authority and permission errors without false session expired',
+      () {
+        // Authority mismatch string must NOT map to session expired
+        final authorityError = Exception(
+          'BaseTimelineSectionAuthority.baseTimeline mismatch',
+        );
+        final authSaveMsg = WorkSetupErrorMapper.mapSaveError(authorityError);
+        expect(authSaveMsg, isNot(contains('session expired')));
+        expect(authSaveMsg, isNot(contains('Sign in again')));
+
+        // Not authorized string must map to permission copy, NOT session expired
+        final notAuthError = Exception(
+          'Request not authorized to mutate routine',
+        );
+        final notAuthSaveMsg = WorkSetupErrorMapper.mapSaveError(notAuthError);
+        expect(notAuthSaveMsg, isNot(contains('session expired')));
+        expect(notAuthSaveMsg, isNot(contains('Sign in again')));
+        expect(notAuthSaveMsg, contains("wasn't permitted"));
       },
     );
   });

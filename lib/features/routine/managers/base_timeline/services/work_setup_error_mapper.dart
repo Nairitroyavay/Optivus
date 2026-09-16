@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/work_presentation_utils.dart';
 import 'package:optivus/repositories/routine_transaction_repository.dart';
 
 /// Maps raw exceptions and debug diagnostics into safe, user-friendly messages for Work setup.
@@ -17,10 +19,36 @@ class WorkSetupErrorMapper {
   }
 
   /// Maps save and transaction errors to actionable user-facing messages.
-  static String mapSaveError(Object error) {
+  static String mapSaveError(Object error, [String? lifeRole]) {
+    final isBusiness = WorkPresentationUtils.isBusinessProfile(lifeRole);
+    final scheduleNoun = isBusiness ? 'business schedule' : 'work schedule';
+    final setupNoun = isBusiness ? 'business setup' : 'work setup';
+
     if (error is BaseTimelineConcurrencyException) {
-      return 'Your Work setup changed while you were editing.\n'
+      return 'Your $setupNoun changed while you were editing.\n'
           'Reload the latest setup before saving again.';
+    }
+
+    if (error is FirebaseException) {
+      if (error.code == 'unauthenticated' ||
+          error.code == 'requires-recent-login' ||
+          error.code == 'user-token-expired') {
+        return 'Your session expired. Sign in again before saving.';
+      }
+      if (error.code == 'permission-denied' ||
+          error.code == 'permission_denied') {
+        return "We couldn't save this $scheduleNoun because the write wasn't permitted.\n"
+            'Your current setup is still active. Please try again.';
+      }
+      if (error.code == 'deadline-exceeded') {
+        return 'Failed to save $scheduleNoun.\n'
+            'Saving timed out. Your current setup is still active. Please retry.';
+      }
+      if (error.code == 'unavailable' ||
+          error.code == 'network-request-failed') {
+        return 'Failed to save $scheduleNoun.\n'
+            'Your current setup is still active. Please retry.';
+      }
     }
 
     final errStr = error.toString().toLowerCase();
@@ -29,19 +57,29 @@ class WorkSetupErrorMapper {
         errStr.contains('revision') ||
         errStr.contains('conflict') ||
         errStr.contains('concurrency')) {
-      return 'Your Work setup changed while you were editing.\n'
+      return 'Your $setupNoun changed while you were editing.\n'
           'Reload the latest setup before saving again.';
     }
 
+    if (errStr.contains('permission-denied') ||
+        errStr.contains('permission_denied') ||
+        errStr.contains('not authorized') ||
+        errStr.contains('forbidden')) {
+      return "We couldn't save this $scheduleNoun because the write wasn't permitted.\n"
+          'Your current setup is still active. Please try again.';
+    }
+
     if (errStr.contains('unauthenticated') ||
-        errStr.contains('session') ||
-        errStr.contains('permission-denied') ||
-        errStr.contains('auth')) {
-      return 'Your session changed. Sign in again before saving.';
+        errStr.contains('session expired') ||
+        errStr.contains('session-expired') ||
+        errStr.contains('user-token-expired') ||
+        errStr.contains('requires-recent-login') ||
+        errStr.contains('auth/')) {
+      return 'Your session expired. Sign in again before saving.';
     }
 
     if (error is TimeoutException || errStr.contains('timeout')) {
-      return 'Failed to save work schedule.\n'
+      return 'Failed to save $scheduleNoun.\n'
           'Saving timed out. Your current setup is still active. Please retry.';
     }
 
@@ -49,19 +87,44 @@ class WorkSetupErrorMapper {
         errStr.contains('unavailable') ||
         errStr.contains('offline') ||
         errStr.contains('connection')) {
-      return 'Failed to save work schedule.\n'
+      return 'Failed to save $scheduleNoun.\n'
           'Your current setup is still active. Please retry.';
     }
 
-    return 'Failed to save work schedule.\n'
+    return 'Failed to save $scheduleNoun.\n'
         'Your current setup is still active. Please try again.';
   }
 
   /// Maps removal errors to actionable user-facing messages.
-  static String mapRemoveError(Object error) {
+  static String mapRemoveError(Object error, [String? lifeRole]) {
+    final isBusiness = WorkPresentationUtils.isBusinessProfile(lifeRole);
+    final setupNoun = isBusiness ? 'business setup' : 'work setup';
+
     if (error is BaseTimelineConcurrencyException) {
-      return 'Your Work setup changed while you were editing.\n'
+      return 'Your $setupNoun changed while you were editing.\n'
           'Reload the latest setup before trying again.';
+    }
+
+    if (error is FirebaseException) {
+      if (error.code == 'unauthenticated' ||
+          error.code == 'requires-recent-login' ||
+          error.code == 'user-token-expired') {
+        return 'Your session expired. Sign in again before trying again.';
+      }
+      if (error.code == 'permission-denied' ||
+          error.code == 'permission_denied') {
+        return "We couldn't remove this $setupNoun because the request wasn't permitted.\n"
+            'Your current setup is still active. Please try again.';
+      }
+      if (error.code == 'deadline-exceeded') {
+        return 'Failed to remove $setupNoun.\n'
+            'Removal timed out. Your current setup is still active. Please retry.';
+      }
+      if (error.code == 'unavailable' ||
+          error.code == 'network-request-failed') {
+        return 'Failed to remove $setupNoun.\n'
+            'Your current setup is still active. Please retry.';
+      }
     }
 
     final errStr = error.toString().toLowerCase();
@@ -70,19 +133,29 @@ class WorkSetupErrorMapper {
         errStr.contains('revision') ||
         errStr.contains('conflict') ||
         errStr.contains('concurrency')) {
-      return 'Your Work setup changed while you were editing.\n'
+      return 'Your $setupNoun changed while you were editing.\n'
           'Reload the latest setup before trying again.';
     }
 
+    if (errStr.contains('permission-denied') ||
+        errStr.contains('permission_denied') ||
+        errStr.contains('not authorized') ||
+        errStr.contains('forbidden')) {
+      return "We couldn't remove this $setupNoun because the request wasn't permitted.\n"
+          'Your current setup is still active. Please try again.';
+    }
+
     if (errStr.contains('unauthenticated') ||
-        errStr.contains('session') ||
-        errStr.contains('permission-denied') ||
-        errStr.contains('auth')) {
-      return 'Your session changed. Sign in again before trying again.';
+        errStr.contains('session expired') ||
+        errStr.contains('session-expired') ||
+        errStr.contains('user-token-expired') ||
+        errStr.contains('requires-recent-login') ||
+        errStr.contains('auth/')) {
+      return 'Your session expired. Sign in again before trying again.';
     }
 
     if (error is TimeoutException || errStr.contains('timeout')) {
-      return 'Failed to remove work setup.\n'
+      return 'Failed to remove $setupNoun.\n'
           'Removal timed out. Your current setup is still active. Please retry.';
     }
 
@@ -90,11 +163,11 @@ class WorkSetupErrorMapper {
         errStr.contains('unavailable') ||
         errStr.contains('offline') ||
         errStr.contains('connection')) {
-      return 'Failed to remove work setup.\n'
+      return 'Failed to remove $setupNoun.\n'
           'Your current setup is still active. Please retry.';
     }
 
-    return 'Failed to remove work setup.\n'
+    return 'Failed to remove $setupNoun.\n'
         'Your current setup is still active. Please try again.';
   }
 

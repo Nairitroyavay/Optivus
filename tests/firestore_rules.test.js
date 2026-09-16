@@ -1203,6 +1203,184 @@ describe("Firestore Rules for Routine durability", () => {
       })));
     });
 
+    it("accepts fully populated Work routine template with all six work metadata fields", async () => {
+      const owner = ownerDb("user123", true);
+      const workRef = owner.collection("users").doc("user123").collection("routineItems").doc("work-rich-1");
+      await assertSucceeds(workRef.set(routineItemData("user123", "work-rich-1", {
+        category: "job",
+        source: "baseTimeline",
+        baseTimelineSection: "work",
+        workContextType: "job",
+        workRole: "Software Engineer",
+        workOrganization: "Optivus",
+        workDepartmentOrProject: "Mobile Team",
+        workMode: "hybrid",
+        workBlockKind: "meeting",
+      })));
+    });
+
+    it("rejects invalid Work enums and malformed work metadata types", async () => {
+      const owner = ownerDb("user123", true);
+
+      // Invalid workContextType
+      const badContextRef = owner.collection("users").doc("user123").collection("routineItems").doc("work-bad-ctx");
+      await assertFails(badContextRef.set(routineItemData("user123", "work-bad-ctx", {
+        category: "job",
+        workContextType: "hacker_job",
+      })));
+
+      // Invalid workMode
+      const badModeRef = owner.collection("users").doc("user123").collection("routineItems").doc("work-bad-mode");
+      await assertFails(badModeRef.set(routineItemData("user123", "work-bad-mode", {
+        category: "job",
+        workMode: "teleport",
+      })));
+
+      // Invalid workBlockKind
+      const badKindRef = owner.collection("users").doc("user123").collection("routineItems").doc("work-bad-kind");
+      await assertFails(badKindRef.set(routineItemData("user123", "work-bad-kind", {
+        category: "job",
+        workBlockKind: "mega_super_task",
+      })));
+
+      // Wrong field types
+      const badRoleTypeRef = owner.collection("users").doc("user123").collection("routineItems").doc("work-bad-role-type");
+      await assertFails(badRoleTypeRef.set(routineItemData("user123", "work-bad-role-type", {
+        category: "job",
+        workRole: 123,
+      })));
+
+      const badOrgTypeRef = owner.collection("users").doc("user123").collection("routineItems").doc("work-bad-org-type");
+      await assertFails(badOrgTypeRef.set(routineItemData("user123", "work-bad-org-type", {
+        category: "job",
+        workOrganization: {},
+      })));
+
+      const badDeptTypeRef = owner.collection("users").doc("user123").collection("routineItems").doc("work-bad-dept-type");
+      await assertFails(badDeptTypeRef.set(routineItemData("user123", "work-bad-dept-type", {
+        category: "job",
+        workDepartmentOrProject: ["engineering"],
+      })));
+
+      // Oversized free-text
+      const oversizedRoleRef = owner.collection("users").doc("user123").collection("routineItems").doc("work-oversized-role");
+      await assertFails(oversizedRoleRef.set(routineItemData("user123", "work-oversized-role", {
+        category: "job",
+        workRole: "x".repeat(501),
+      })));
+
+      const oversizedOrgRef = owner.collection("users").doc("user123").collection("routineItems").doc("work-oversized-org");
+      await assertFails(oversizedOrgRef.set(routineItemData("user123", "work-oversized-org", {
+        category: "job",
+        workOrganization: "x".repeat(501),
+      })));
+
+      const oversizedDeptRef = owner.collection("users").doc("user123").collection("routineItems").doc("work-oversized-dept");
+      await assertFails(oversizedDeptRef.set(routineItemData("user123", "work-oversized-dept", {
+        category: "job",
+        workDepartmentOrProject: "x".repeat(501),
+      })));
+    });
+
+    it("accepts bounded free-text at 500-char boundary and all valid canonical Work enums", async () => {
+      const owner = ownerDb("user123", true);
+
+      // Boundary: exactly 500 chars succeeds for all 3 free-text fields
+      const boundaryRef = owner.collection("users").doc("user123").collection("routineItems").doc("work-boundary-500");
+      await assertSucceeds(boundaryRef.set(routineItemData("user123", "work-boundary-500", {
+        category: "job",
+        workRole: "r".repeat(500),
+        workOrganization: "o".repeat(500),
+        workDepartmentOrProject: "d".repeat(500),
+      })));
+
+      // Context enums: job, business, startup, freelance, other
+      for (const ctx of ["job", "business", "startup", "freelance", "other"]) {
+        const ref = owner.collection("users").doc("user123").collection("routineItems").doc(`work-ctx-${ctx}`);
+        await assertSucceeds(ref.set(routineItemData("user123", `work-ctx-${ctx}`, {
+          category: "job",
+          workContextType: ctx,
+        })));
+      }
+
+      // Mode enums: in_person, remote, hybrid, field, mixed
+      for (const mode of ["in_person", "remote", "hybrid", "field", "mixed"]) {
+        const ref = owner.collection("users").doc("user123").collection("routineItems").doc(`work-mode-${mode}`);
+        await assertSucceeds(ref.set(routineItemData("user123", `work-mode-${mode}`, {
+          category: "job",
+          workMode: mode,
+        })));
+      }
+
+      // BlockKind enums: work_hours, deep_work, shift, meeting, client_call, project_work, team_sync, training, commute, break, business_hours, admin, other
+      const allKinds = [
+        "work_hours", "deep_work", "shift", "meeting", "client_call",
+        "project_work", "team_sync", "training", "commute", "break",
+        "business_hours", "admin", "other"
+      ];
+      for (const kind of allKinds) {
+        const ref = owner.collection("users").doc("user123").collection("routineItems").doc(`work-kind-${kind}`);
+        await assertSucceeds(ref.set(routineItemData("user123", `work-kind-${kind}`, {
+          category: "job",
+          workBlockKind: kind,
+        })));
+      }
+    });
+
+    it("rejects non-work routine items carrying work metadata", async () => {
+      const owner = ownerDb("user123", true);
+      const nonWorkEatingRef = owner.collection("users").doc("user123").collection("routineItems").doc("eating-with-work");
+      await assertFails(nonWorkEatingRef.set(routineItemData("user123", "eating-with-work", {
+        category: "eating",
+        workRole: "Engineer",
+      })));
+
+      const nonWorkSkinRef = owner.collection("users").doc("user123").collection("routineItems").doc("skin-with-work");
+      await assertFails(nonWorkSkinRef.set(routineItemData("user123", "skin-with-work", {
+        category: "skinCare",
+        workBlockKind: "deep_work",
+      })));
+    });
+
+    it("enforces cross-user and unauthenticated security on rich Work routines", async () => {
+      const owner = ownerDb("user123", true);
+      const other = ownerDb("other_user", true);
+      const anon = testEnv.unauthenticatedContext().firestore();
+      const unverified = ownerDb("user123", false);
+
+      const workPayload = routineItemData("user123", "work-cross-1", {
+        category: "job",
+        source: "baseTimeline",
+        baseTimelineSection: "work",
+        workContextType: "job",
+        workRole: "Lead Architect",
+        workOrganization: "Optivus",
+        workMode: "in_person",
+        workBlockKind: "work_hours",
+      });
+
+      // Owner succeeds
+      await assertSucceeds(owner.collection("users").doc("user123").collection("routineItems").doc("work-cross-1").set(workPayload));
+
+      // Different authenticated user fails
+      await assertFails(other.collection("users").doc("user123").collection("routineItems").doc("work-cross-1").get());
+      await assertFails(other.collection("users").doc("user123").collection("routineItems").doc("work-cross-other").set(
+        routineItemData("user123", "work-cross-other", { category: "job", workRole: "Lead Architect" })
+      ));
+
+      // Unauthenticated fails
+      await assertFails(anon.collection("users").doc("user123").collection("routineItems").doc("work-cross-1").get());
+      await assertFails(anon.collection("users").doc("user123").collection("routineItems").doc("work-cross-anon").set(
+        routineItemData("user123", "work-cross-anon", { category: "job", workRole: "Lead Architect" })
+      ));
+
+      // Unverified email fails
+      await assertFails(unverified.collection("users").doc("user123").collection("routineItems").doc("work-cross-1").get());
+      await assertFails(unverified.collection("users").doc("user123").collection("routineItems").doc("work-cross-unverified").set(
+        routineItemData("user123", "work-cross-unverified", { category: "job", workRole: "Lead Architect" })
+      ));
+    });
+
     it("accepts bounded onboarding visual style metadata and rejects malformed values", async () => {
       const owner = ownerDb("user123", true);
       const styledRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-style-1");
@@ -3692,5 +3870,69 @@ describe("Firestore Rules for baseTimelineSetup", () => {
       })
     );
     await assertFails(baseTimelineSetupRef(anon, "user123").get());
+  });
+
+  it("allows atomic Work replacement transaction updating baseTimelineSetup and creating rich Work routine items", async () => {
+    const db = ownerDb("user123", true);
+    const setupRef = baseTimelineSetupRef(db);
+    const routineItemRef = db.collection("users").doc("user123").collection("routineItems").doc("work-atomic-item-1");
+
+    await setupRef.set(baseTimelineSetupData("user123", {
+      revision: 1,
+      workRoutineItemIds: [],
+      workBlocks: [],
+    }));
+
+    await assertSucceeds(
+      db.runTransaction(async (transaction) => {
+        const currentDoc = await transaction.get(setupRef);
+        expect(currentDoc.exists).toBe(true);
+        const currentRevision = currentDoc.data().revision;
+
+        transaction.update(setupRef, {
+          revision: currentRevision + 1,
+          workAuthority: "baseTimeline",
+          workRoutineItemIds: ["work-atomic-item-1"],
+          workBlocks: [{
+            id: "work-draft-1",
+            section: "work",
+            title: "Sprint Planning",
+            startMinute: 600,
+            endMinute: 660,
+            repeatDays: [1, 2, 3, 4, 5],
+            workRole: "Software Engineer",
+            workOrganization: "Optivus",
+            workDepartmentOrProject: "Mobile Team",
+            workMode: "hybrid",
+            workBlockKind: "meeting",
+            workContextType: "job",
+          }],
+          updatedAt: new Date(),
+        });
+
+        transaction.set(routineItemRef, routineItemData("user123", "work-atomic-item-1", {
+          category: "job",
+          source: "baseTimeline",
+          baseTimelineSection: "work",
+          title: "Sprint Planning",
+          startMinute: 600,
+          endMinute: 660,
+          workContextType: "job",
+          workRole: "Software Engineer",
+          workOrganization: "Optivus",
+          workDepartmentOrProject: "Mobile Team",
+          workMode: "hybrid",
+          workBlockKind: "meeting",
+        }));
+      })
+    );
+
+    const updatedSetup = await setupRef.get();
+    expect(updatedSetup.data().workRoutineItemIds).toEqual(["work-atomic-item-1"]);
+    const savedItem = await routineItemRef.get();
+    expect(savedItem.data().workRole).toBe("Software Engineer");
+    expect(savedItem.data().workContextType).toBe("job");
+    expect(savedItem.data().workMode).toBe("hybrid");
+    expect(savedItem.data().workBlockKind).toBe("meeting");
   });
 });

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,6 +10,7 @@ import 'package:optivus/features/routine/managers/base_timeline/models/base_time
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_upload_lifecycle_helper.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/work_presentation_utils.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_setup_error_mapper.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
@@ -898,15 +900,21 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
     );
   }
 
-  Future<void> save({required String uid, BaseTimelineSetup? setup}) async {
+  Future<void> save({
+    required String uid,
+    BaseTimelineSetup? setup,
+    String? lifeRole,
+  }) async {
     if (state.isSaving) return;
     if (!_isActiveOwner(uid)) return;
 
     // Strict validation: Normal save must not allow empty working blocks
     if (state.workingBlocks.isEmpty) {
+      final isBusiness = WorkPresentationUtils.isBusinessProfile(lifeRole);
       state = state.copyWith(
-        errorMessage:
-            'Cannot save an empty work schedule. Use "Remove Work Setup" to remove it.',
+        errorMessage: isBusiness
+            ? 'Cannot save an empty business schedule. Use "Remove Business Setup" to remove it.'
+            : 'Cannot save an empty work schedule. Use "Remove Work Setup" to remove it.',
         errorKind: WorkSetupErrorKind.save,
       );
       return;
@@ -1039,7 +1047,19 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
         isConcurrencyConflict: false,
       );
     } catch (e) {
-      if (!_isActiveOwner(uid)) return;
+      final isOwnerActive = _isActiveOwner(uid);
+      if (kDebugMode) {
+        final errorType = e.runtimeType.toString();
+        final code = e is FirebaseException ? e.code : 'none';
+        debugPrint(
+          '[WorkSetupSave]\n'
+          'stage=transaction\n'
+          'errorType=$errorType\n'
+          'code=$code\n'
+          'ownerStillActive=$isOwnerActive',
+        );
+      }
+      if (!isOwnerActive) return;
       final isConflict =
           e is BaseTimelineConcurrencyException ||
           e.toString().toLowerCase().contains('concurrency') ||
@@ -1048,7 +1068,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       state = state.copyWith(
         stage: WorkSetupStage.review,
         isSaving: false,
-        errorMessage: WorkSetupErrorMapper.mapSaveError(e),
+        errorMessage: WorkSetupErrorMapper.mapSaveError(e, lifeRole),
         errorKind: isConflict
             ? WorkSetupErrorKind.concurrency
             : WorkSetupErrorKind.save,
@@ -1060,6 +1080,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
   Future<WorkRemoveOutcome> removeSetup({
     required String uid,
     required BaseTimelineSetup setup,
+    String? lifeRole,
   }) async {
     if (state.isSaving) {
       return const WorkRemoveOutcome(
@@ -1068,9 +1089,12 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       );
     }
     if (!_isActiveOwner(uid)) {
-      return const WorkRemoveOutcome(
+      final isBusiness = WorkPresentationUtils.isBusinessProfile(lifeRole);
+      return WorkRemoveOutcome(
         status: WorkRemoveOutcomeStatus.failed,
-        message: 'Active user changed. Cannot remove work setup.',
+        message: isBusiness
+            ? 'Active user changed. Cannot remove business setup.'
+            : 'Active user changed. Cannot remove work setup.',
       );
     }
 
@@ -1157,7 +1181,19 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
       }
       return const WorkRemoveOutcome(status: WorkRemoveOutcomeStatus.removed);
     } catch (e) {
-      if (!_isActiveOwner(uid)) {
+      final isOwnerActive = _isActiveOwner(uid);
+      if (kDebugMode) {
+        final errorType = e.runtimeType.toString();
+        final code = e is FirebaseException ? e.code : 'none';
+        debugPrint(
+          '[WorkSetupRemove]\n'
+          'stage=transaction\n'
+          'errorType=$errorType\n'
+          'code=$code\n'
+          'ownerStillActive=$isOwnerActive',
+        );
+      }
+      if (!isOwnerActive) {
         return const WorkRemoveOutcome(
           status: WorkRemoveOutcomeStatus.failed,
           message: 'Active user changed during removal.',
@@ -1167,7 +1203,7 @@ class WorkSetupController extends StateNotifier<WorkSetupState> {
           e is BaseTimelineConcurrencyException ||
           e.toString().toLowerCase().contains('concurrency') ||
           e.toString().toLowerCase().contains('conflict');
-      final mappedError = WorkSetupErrorMapper.mapRemoveError(e);
+      final mappedError = WorkSetupErrorMapper.mapRemoveError(e, lifeRole);
       state = state.copyWith(
         isSaving: false,
         errorMessage: mappedError,

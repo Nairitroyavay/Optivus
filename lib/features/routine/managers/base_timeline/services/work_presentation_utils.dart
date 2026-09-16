@@ -544,7 +544,12 @@ class WorkPresentationUtils {
 
   /// Scheduled block count headline in Review view.
   static String scheduledCount(int count, [String? lifeRole]) {
-    return '$count ${count == 1 ? 'block' : 'blocks'} scheduled';
+    final noun = isBusinessProfile(lifeRole)
+        ? (count == 1 ? 'business block' : 'business blocks')
+        : isWorkProfile(lifeRole)
+        ? (count == 1 ? 'work block' : 'work blocks')
+        : (count == 1 ? 'block' : 'blocks');
+    return '$count $noun scheduled';
   }
 
   /// Weekly block count subtitle for photo previews.
@@ -797,6 +802,10 @@ class WorkPresentationUtils {
         .map((b) => b.workMode?.trim())
         .where((m) => m != null && m.isNotEmpty)
         .toSet();
+
+    if (roles.length > 1 || orgs.length > 1 || modes.length > 1) {
+      return null;
+    }
 
     final parts = <String>[];
     if (roles.length == 1) parts.add(roles.first!);

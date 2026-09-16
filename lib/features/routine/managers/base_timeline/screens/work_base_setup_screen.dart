@@ -318,7 +318,11 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
     if (confirmed != true || !mounted) return;
 
     final controller = ref.read(workSetupControllerProvider.notifier);
-    final outcome = await controller.removeSetup(uid: uid, setup: setup);
+    final outcome = await controller.removeSetup(
+      uid: uid,
+      setup: setup,
+      lifeRole: lifeRole,
+    );
 
     if (mounted) {
       if (outcome.isSuccessful) {
@@ -539,7 +543,7 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
           onScanAgain: () => _showScanAgainSheet(uid),
           onAddBlock: () => _addNewBlock(state.selectedDay),
           onEditBlock: _editBlock,
-          onSave: () => controller.save(uid: uid),
+          onSave: () => controller.save(uid: uid, lifeRole: lifeRole),
           frontBlockId: state.frontBlockId,
           onFrontSelected: (id) => controller.selectFrontBlock(id),
           isConcurrencyConflict: state.isConcurrencyConflict,

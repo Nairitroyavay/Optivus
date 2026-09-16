@@ -144,11 +144,17 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
       isConfigured: snapshot.isConfigured,
       lifeRole: widget.lifeRole,
     );
-    final summary = WorkPresentationUtils.setupSummary(
+    final primarySummary = WorkPresentationUtils.setupSummary(
       snapshot: snapshot,
       blocks: widget.routineBlocks,
       lifeRole: widget.lifeRole,
     );
+    final secondarySummary = WorkPresentationUtils.secondarySetupSummary(
+      widget.routineBlocks,
+    );
+    final summary = (secondarySummary != null && secondarySummary.isNotEmpty)
+        ? '$primarySummary\n$secondarySummary'
+        : primarySummary;
 
     const adapter = BaseTimelineWorkAdapter(accent: OptivusColors.warning);
     final blockMap = {for (final b in widget.routineBlocks) b.id: b};

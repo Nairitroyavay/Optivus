@@ -207,6 +207,12 @@ service cloud.firestore {
         "courseCode",
         "classType",
         "sectionLabel",
+        "workContextType",
+        "workRole",
+        "workOrganization",
+        "workDepartmentOrProject",
+        "workMode",
+        "workBlockKind",
         "hardBlock",
         "allowedConflicts",
         "baseTimelineSection",
@@ -283,6 +289,49 @@ service cloud.firestore {
         || value == "hydration"
         || value == "smoking"
         || value == "none";
+    }
+
+    function validRoutineWorkContextType(value) {
+      return value == "job"
+        || value == "business"
+        || value == "startup"
+        || value == "freelance"
+        || value == "other";
+    }
+
+    function validRoutineWorkMode(value) {
+      return value == "in_person"
+        || value == "remote"
+        || value == "hybrid"
+        || value == "field"
+        || value == "mixed";
+    }
+
+    function validRoutineWorkBlockKind(value) {
+      return value == "work_hours"
+        || value == "deep_work"
+        || value == "shift"
+        || value == "meeting"
+        || value == "client_call"
+        || value == "project_work"
+        || value == "team_sync"
+        || value == "training"
+        || value == "commute"
+        || value == "break"
+        || value == "business_hours"
+        || value == "admin"
+        || value == "other";
+    }
+
+    function hasRoutineWorkMetadata(data) {
+      return data.keys().hasAny([
+        "workContextType",
+        "workRole",
+        "workOrganization",
+        "workDepartmentOrProject",
+        "workMode",
+        "workBlockKind"
+      ]);
     }
 
     function validRoutineDateKey(value) {
@@ -454,6 +503,20 @@ service cloud.firestore {
           || data.classType is string)
         && (!data.keys().hasAny(["sectionLabel"])
           || data.sectionLabel is string)
+        && (!hasRoutineWorkMetadata(data)
+          || data.category == "job")
+        && (!data.keys().hasAny(["workContextType"])
+          || validRoutineWorkContextType(data.workContextType))
+        && (!data.keys().hasAny(["workRole"])
+          || (data.workRole is string && data.workRole.size() <= 500))
+        && (!data.keys().hasAny(["workOrganization"])
+          || (data.workOrganization is string && data.workOrganization.size() <= 500))
+        && (!data.keys().hasAny(["workDepartmentOrProject"])
+          || (data.workDepartmentOrProject is string && data.workDepartmentOrProject.size() <= 500))
+        && (!data.keys().hasAny(["workMode"])
+          || validRoutineWorkMode(data.workMode))
+        && (!data.keys().hasAny(["workBlockKind"])
+          || validRoutineWorkBlockKind(data.workBlockKind))
         && (!data.keys().hasAny(["onboardingProjectionId"])
           || data.onboardingProjectionId is string)
         && (!data.keys().hasAny(["onboardingSourceItemId"])
