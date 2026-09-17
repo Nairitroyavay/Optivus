@@ -165,7 +165,7 @@ class EatingPresentationUtils {
   }
 
   static String formatDiet(String? foodType) {
-    if (foodType == null || foodType.trim().isEmpty) return 'Mixed';
+    if (foodType == null || foodType.trim().isEmpty) return 'Not set';
     final clean = foodType.trim().toLowerCase();
     return switch (clean) {
       'vegetarian' => 'Vegetarian',
@@ -178,7 +178,7 @@ class EatingPresentationUtils {
   }
 
   static String formatFoodStyle(String? mode, String? customText) {
-    if (mode == null || mode.trim().isEmpty) return 'Balanced';
+    if (mode == null || mode.trim().isEmpty) return 'Not set';
     final clean = mode.trim().toLowerCase();
     if (clean == 'custom') {
       return (customText != null && customText.trim().isNotEmpty)

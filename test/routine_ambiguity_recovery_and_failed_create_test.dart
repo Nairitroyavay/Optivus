@@ -273,10 +273,13 @@ void main() {
       final saveBtn = find.text('Save at this time');
       await tester.ensureVisible(saveBtn);
       final btn = tester.widget<ElevatedButton>(find.ancestor(of: saveBtn, matching: find.byType(ElevatedButton)));
+      // ignore: avoid_print
+      print('DEBUG: btn.onPressed is null: ${btn.onPressed == null}');
       btn.onPressed!();
 
-      await tester.idle();
-      await tester.pump();
+      for (int i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
 
       // 1. Verify warning banner appears
       expect(find.byKey(const ValueKey('add-routine-failed-warning')), findsOneWidget);

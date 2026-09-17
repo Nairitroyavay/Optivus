@@ -119,9 +119,9 @@ class EatingDomainEngine {
       if (block.repeatDays.isEmpty) {
         return 'Every meal must have at least one scheduled day (${block.title}).';
       }
-      final dishes = block.dishes;
-      if (dishes.isEmpty && block.title.trim().isEmpty) {
-        return 'Every meal must contain at least one dish.';
+      final dishes = block.dishes.where((d) => d.trim().isNotEmpty).toList();
+      if (dishes.isEmpty) {
+        return 'Every meal must contain at least one dish (${block.title}).';
       }
     }
 
@@ -133,11 +133,13 @@ class EatingDomainEngine {
         return 'Meals per day cannot exceed 6 meals on ${dayName(day)}.';
       }
 
-      for (var i = 0; i < dayBlocks.length - 1; i++) {
-        final current = dayBlocks[i];
-        final next = dayBlocks[i + 1];
-        if (next.startMinute - current.startMinute < 120) {
-          return 'Meals must be scheduled at least 120 minutes apart (${current.title} and ${next.title} on ${dayName(day)}).';
+      if (setup.eatingSetupPath == 'create') {
+        for (var i = 0; i < dayBlocks.length - 1; i++) {
+          final current = dayBlocks[i];
+          final next = dayBlocks[i + 1];
+          if (next.startMinute - current.startMinute < 120) {
+            return 'Meals must be scheduled at least 120 minutes apart (${current.title} and ${next.title} on ${dayName(day)}).';
+          }
         }
       }
     }

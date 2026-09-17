@@ -1487,10 +1487,18 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
   Future<void> _discardFailedCreate() async {
     if (_saving) return;
     setState(() => _saving = true);
-    await ref
+    final result = await ref
         .read(routineNotifierProvider.notifier)
         .discardFailedCreate(_draft.id);
     if (!mounted) return;
+    if (result.verificationUnavailable) {
+      setState(() {
+        _saving = false;
+        _error = result.message ??
+            'Could not verify save status. Draft preserved for safety.';
+      });
+      return;
+    }
     setState(() {
       _saving = false;
       _saveFailed = false;
@@ -1523,7 +1531,7 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
 
   Future<void> _save() async {
     // ignore: avoid_print
-    print('DEBUG: _save called! _saving=$_saving');
+    print('DEBUG: ENTERED _save()');
     if (_saving) return;
 
     if (_draft.type == AddRoutineType.fixed &&
@@ -1547,8 +1555,6 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
     );
 
     final validationError = AddRoutineValidator.validate(currentDraft);
-    // ignore: avoid_print
-    print('DEBUG _save: validationError=$validationError');
     if (validationError != null) {
       setState(() => _error = validationError);
       return;
@@ -1561,8 +1567,6 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
     }
 
     final item = AddRoutineMapper.toRoutineItem(currentDraft);
-    // ignore: avoid_print
-    print('DEBUG _save: mapped item title=${item.title}, date=${item.date}, repeatRule=${item.repeatRule}');
     setState(() {
       _saving = true;
       _error = null;
@@ -1571,8 +1575,6 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
     final RoutineWriteResult result = await ref
         .read(routineNotifierProvider.notifier)
         .addItem(item);
-    // ignore: avoid_print
-    print('DEBUG _save: addItem result outcome=${result.outcome}, message=${result.message}, validation=${result.validation?.userSafeMessage}');
 
     if (!mounted) return;
     if (result.outcome == RoutineWriteOutcome.saved ||

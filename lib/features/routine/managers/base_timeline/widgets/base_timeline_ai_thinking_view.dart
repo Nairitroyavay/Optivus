@@ -14,6 +14,7 @@ class BaseTimelineAiThinkingView extends StatefulWidget {
   final String? localPreviewPath;
   final String? assetId;
   final String? r2Key;
+  final VoidCallback? onCancel;
 
   const BaseTimelineAiThinkingView({
     super.key,
@@ -28,6 +29,7 @@ class BaseTimelineAiThinkingView extends StatefulWidget {
     this.localPreviewPath,
     this.assetId,
     this.r2Key,
+    this.onCancel,
   });
 
   @override
@@ -125,6 +127,29 @@ class _BaseTimelineAiThinkingViewState
                     ),
                   ),
                 ),
+                if (widget.onCancel != null) ...[
+                  const SizedBox(height: 20),
+                  OutlinedButton(
+                    onPressed: widget.onCancel,
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(
+                        color: OptivusColors.textSecondary.withValues(alpha: 0.3),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(OptivusRadii.controlCompact),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    ),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: OptivusColors.textSecondary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

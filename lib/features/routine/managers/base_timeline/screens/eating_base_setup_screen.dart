@@ -23,11 +23,14 @@ import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
-import 'package:optivus/features/routine/managers/base_timeline/services/eating_presentation_utils.dart';
+import 'package:optivus/services/nutrition_target_service.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/eating_setup_error_mapper.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_day_summary_bar.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_import_review_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_meal_detail_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_meal_edit_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_plan_settings_sheet.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_plan_summary_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_source_selection_view.dart';
 
 List<String> _importedMealDishes(RoutineImportCandidateBlock candidate) {
@@ -104,6 +107,63 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
   String? _frontBlockId;
   int _requestGeneration = 0;
   String? _editorOwnerUid;
+  String? _candidateAssetId;
+  String? _candidateR2Key;
+
+  void _cancelAiOperation() {
+    _requestGeneration++;
+    final uid = ref.read(userProfileProvider).uid;
+    if (_candidateAssetId != null) {
+      try {
+        final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
+        helper.retireUncommittedUpload(
+          uid: uid,
+          assetId: _candidateAssetId,
+          objectKey: _candidateR2Key,
+        );
+      } catch (_) {}
+    }
+    if (mounted) {
+      setState(() {
+        _isExtracting = false;
+        _candidateAssetId = null;
+        _candidateR2Key = null;
+        _errorMessage = null;
+      });
+    }
+  }
+
+  bool _isPlanStale(BaseTimelineSetup setup) {
+    if (setup.eatingSetupPath != 'create') return false;
+    final savedFingerprint = setup.eatingGeneratedInputFingerprint;
+    if (savedFingerprint == null || savedFingerprint.isEmpty) return false;
+
+    try {
+      final engine = ref.read(eatingDomainEngineProvider);
+      final profile = ref.read(userProfileProvider);
+      final targets = engine.calculateTargets(
+        profile: profile,
+        setup: setup,
+      );
+      final currentInputs = engine.buildInputs(
+        profile: profile,
+        setup: setup,
+        targets: targets,
+      );
+      return currentInputs.computeFingerprint() != savedFingerprint;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String _sourceLabelForPath(String? setupPath, bool customized) {
+    return switch (setupPath) {
+      'photo' => 'Imported from meal plan',
+      'manual' => 'Manual plan',
+      'create' => customized ? 'Built for me · Customized' : 'Built for me',
+      _ => 'Eating plan',
+    };
+  }
 
   void _initWorkingState(dynamic setup) {
     _workingBlocks = List.from(setup.eatingBlocks);
@@ -564,7 +624,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     }
   }
 
-  void _addMealBlock() {
+  void _addMealBlock({VoidCallback? onCancel}) {
     final newBlock = TimelineBlockDraft(
       id: 'meal_${DateTime.now().millisecondsSinceEpoch}',
       title: '',
@@ -591,7 +651,11 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         });
         return true;
       },
-    );
+    ).then((saved) {
+      if ((saved == null || !saved) && _workingBlocks.isEmpty) {
+        onCancel?.call();
+      }
+    });
   }
 
   void _editMealBlock(TimelineBlockDraft block) {
@@ -644,14 +708,41 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
           updatedAt: DateTime.now(),
         );
     final validationSetup = currentSetup.copyWith(
+      eatingBlocks: _workingBlocks,
       eatingSetupPath: _workingSetupPath,
+      mealPlanningGoal: _workingGoal,
+      mealsPerDay: _workingMealsPerDay,
+      eatingMode: _workingEatingMode,
+      foodType: _workingFoodType,
+      foodStyleCustomText: _workingFoodStyleCustomText,
+      breakfastMinute: _workingBreakfastMinute,
+      lunchMinute: _workingLunchMinute,
+      dinnerMinute: _workingDinnerMinute,
+      snackMinute: _workingSnackMinute,
+      extraSnackMinute: _workingExtraSnackMinute,
       targetCalories: _workingTargetCalories,
       targetProtein: _workingTargetProtein,
+      eatingGeneratedPlanVersion: _workingGeneratedPlanVersion,
+      eatingGeneratedInputFingerprint: _workingGeneratedInputFingerprint,
+      eatingCustomized: _workingCustomized,
+      eatingPhotoAssetId: _workingAssetId,
+      eatingPhotoR2Key: _workingR2Key,
     );
     final engine = ref.read(eatingDomainEngineProvider);
+    NutritionTargets? targets;
+    if (_workingSetupPath == 'create') {
+      try {
+        final profile = ref.read(userProfileProvider);
+        targets = engine.calculateTargets(
+          profile: profile,
+          setup: validationSetup,
+        );
+      } catch (_) {}
+    }
     final validationErr = engine.validateBeforeSave(
       blocks: _workingBlocks,
       setup: validationSetup,
+      targets: targets,
     );
     if (validationErr != null) {
       setState(() => _errorMessage = validationErr);
@@ -752,18 +843,14 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       }
     } catch (e) {
       if (mounted) {
-        final isConflict =
-            e.toString().toLowerCase().contains('conflict') ||
-            e.toString().toLowerCase().contains('concurrency');
+        final errorText = EatingSetupErrorMapper.mapError(e);
         setState(() {
           _isSaving = false;
-          _errorMessage = isConflict
-              ? 'This setup changed elsewhere. Reload the latest setup before saving again.'
-              : 'Failed to save Eating setup. Please try again.';
+          _errorMessage = errorText;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to update eating schedule: $e'),
+            content: Text(errorText),
             backgroundColor: OptivusColors.danger,
           ),
         );
@@ -778,14 +865,14 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         backgroundColor: OptivusColors.backgroundBottom,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
-          'Reset Eating Setup?',
+          'Remove Eating Plan?',
           style: TextStyle(
             color: OptivusColors.textPrimary,
             fontWeight: FontWeight.w700,
           ),
         ),
         content: const Text(
-          'This will remove your custom eating schedule and reset all meal planning preferences to default. This action cannot be undone.',
+          'This will delete your current eating schedule and clear your meal plan setup. This action cannot be undone.',
           style: TextStyle(color: OptivusColors.textSecondary),
         ),
         actions: [
@@ -798,7 +885,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
               backgroundColor: OptivusColors.danger,
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Reset'),
+            child: const Text('Remove'),
           ),
         ],
       ),
@@ -807,7 +894,17 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     if (confirmed != true || !mounted) return;
 
     final uid = ref.read(userProfileProvider).uid;
-    if (uid.trim().isEmpty) return;
+    if (uid.trim().isEmpty || uid != _editorOwnerUid) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('The active account changed. Reload Eating setup.'),
+            backgroundColor: OptivusColors.danger,
+          ),
+        );
+      }
+      return;
+    }
 
     try {
       final coordinator = ref.read(baseTimelineTransactionCoordinatorProvider);
@@ -843,22 +940,161 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
           SnackBar(
             content: Text(
               result.routineRefreshPending
-                  ? 'Reset saved. Routine needs to refresh.'
-                  : 'Eating schedule reset successfully.',
+                  ? 'Eating plan removed. Routine needs to refresh.'
+                  : 'Eating plan removed.',
             ),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
+        final msg = EatingSetupErrorMapper.mapError(e);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to reset eating schedule: $e'),
+            content: Text(msg),
             backgroundColor: OptivusColors.danger,
           ),
         );
       }
     }
+  }
+
+  void _showPhotoViewer(String r2Key, String? assetId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Align(
+              alignment: Alignment.topRight,
+              child: IconButton(
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+            ),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.75,
+              ),
+              child: BaseTimelinePhotoPreviewCard(
+                r2Key: r2Key,
+                assetId: assetId,
+                title: 'Meal Plan Photo',
+                height: MediaQuery.sizeOf(context).height * 0.65,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showChangeSourceSheet(BaseTimelineSetup setup) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: OptivusColors.backgroundBottom,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Text(
+                  'Change Eating Source',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: OptivusColors.textPrimary,
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: OptivusColors.roseAccent,
+                ),
+                title: const Text(
+                  'Build with AI',
+                  style: TextStyle(color: OptivusColors.textPrimary),
+                ),
+                subtitle: const Text(
+                  'Generate a personalized meal plan based on your targets',
+                  style: TextStyle(
+                    color: OptivusColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _initWorkingState(setup);
+                  _openPlanSettingsSheet(isBuildingNew: true);
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.document_scanner_rounded,
+                  color: OptivusColors.roseAccent,
+                ),
+                title: const Text(
+                  'Import from Photo',
+                  style: TextStyle(color: OptivusColors.textPrimary),
+                ),
+                subtitle: const Text(
+                  'Scan a meal timetable or diet chart',
+                  style: TextStyle(
+                    color: OptivusColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _initWorkingState(setup);
+                  _showPhotoSourceSheet();
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.edit_note_rounded,
+                  color: OptivusColors.roseAccent,
+                ),
+                title: const Text(
+                  'Create Manually',
+                  style: TextStyle(color: OptivusColors.textPrimary),
+                ),
+                subtitle: const Text(
+                  'Add and configure meals by hand',
+                  style: TextStyle(
+                    color: OptivusColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _initWorkingState(setup);
+                  setState(() {
+                    _workingSetupPath = 'manual';
+                    _workingBlocks = [];
+                    _isEditing = true;
+                    _isDirty = true;
+                  });
+                  _addMealBlock();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -994,74 +1230,64 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                       ),
                     ),
 
-                    // Setup Path Actions
+                    // Source label & Add Meal action
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
-                        vertical: 4,
+                        vertical: 6,
                       ),
                       child: Row(
                         children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                side: BorderSide(
-                                  color: OptivusColors.roseAccent.withValues(
-                                    alpha: 0.5,
-                                  ),
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              icon: const Icon(
-                                Icons.auto_awesome_rounded,
-                                size: 16,
-                              ),
-                              label: const Text('Build Balanced Plan'),
-                              onPressed: _isExtracting
-                                  ? null
-                                  : () => _openPlanSettingsSheet(
-                                      isBuildingNew: false,
-                                    ),
+                          const Text(
+                            'Source: ',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: OptivusColors.textSecondary,
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                side: BorderSide(
-                                  color: Colors.white.withValues(alpha: 0.2),
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              icon: const Icon(
-                                Icons.camera_alt_outlined,
-                                size: 16,
-                              ),
-                              label: const Text('Scan Photo'),
-                              onPressed: _isExtracting
-                                  ? null
-                                  : _showPhotoSourceSheet,
+                          Text(
+                            _sourceLabelForPath(
+                              _workingSetupPath,
+                              _workingCustomized,
+                            ),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: OptivusColors.textPrimary,
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          IconButton.outlined(
-                            icon: const Icon(
-                              Icons.add_rounded,
-                              color: Colors.white,
-                            ),
-                            style: IconButton.styleFrom(
+                          const Spacer(),
+                          FilledButton.icon(
+                            key: const Key('base-timeline-edit-add-meal-button'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: OptivusColors.roseAccent.withValues(
+                                alpha: 0.18,
+                              ),
+                              foregroundColor: OptivusColors.roseAccent,
                               side: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.2),
+                                color: OptivusColors.roseAccent.withValues(
+                                  alpha: 0.35,
+                                ),
+                                width: 0.8,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
                               ),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(10),
                               ),
                             ),
-                            onPressed: _isExtracting ? null : _addMealBlock,
+                            icon: const Icon(Icons.add_rounded, size: 16),
+                            label: const Text(
+                              'Add meal',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            onPressed: _isExtracting ? null : () => _addMealBlock(),
                           ),
                         ],
                       ),
@@ -1103,12 +1329,21 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                         ),
                       ),
 
+                    // Day summary bar
+                    EatingDaySummaryBar(
+                      blocks: _workingBlocks,
+                      selectedDay: _selectedDay,
+                      targetCalories: _workingTargetCalories,
+                      targetProtein: _workingTargetProtein,
+                    ),
+
                     // Interactive Timeline View
                     Expanded(
                       child: _isExtracting
                           ? BaseTimelineAiThinkingView(
                               initialMessage: _aiActionTitle,
                               progressMessages: _aiProgressMessages,
+                              onCancel: _cancelAiOperation,
                             )
                           : FullScreenTimelineScaffold(
                               entries: entries,
@@ -1173,23 +1408,55 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                   ? BaseTimelineAiThinkingView(
                       initialMessage: _aiActionTitle,
                       progressMessages: _aiProgressMessages,
+                      onCancel: _cancelAiOperation,
                     )
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        BaseTimelineCurrentSetupHeader(
-                          title: 'Eating',
-                          summary: snapshot.summary,
-                          accent: OptivusColors.roseAccent,
-                          onBack: widget.onBack,
-                          primaryButtonLabel: 'Set up Eating',
-                          onPrimaryAction: () {
-                            _initWorkingState(setup);
-                            setState(() {
-                              _isEditing = true;
-                              _isDirty = false;
-                            });
-                          },
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          child: Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.arrow_back_rounded,
+                                  color: OptivusColors.textPrimary,
+                                ),
+                                onPressed: widget.onBack,
+                                style: IconButton.styleFrom(
+                                  backgroundColor: Colors.white.withValues(
+                                    alpha: 0.1,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Eating',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w800,
+                                        color: OptivusColors.textPrimary,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Choose how to set up your meal plan',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: OptivusColors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                         Expanded(
                           child: EatingSourceSelectionView(
@@ -1207,9 +1474,16 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                                 _workingSetupPath = 'manual';
                                 _workingBlocks = [];
                                 _isEditing = true;
-                                _isDirty = true;
+                                _isDirty = false;
                               });
-                              _addMealBlock();
+                              _addMealBlock(onCancel: () {
+                                if (mounted && _workingBlocks.isEmpty) {
+                                  setState(() {
+                                    _isEditing = false;
+                                    _isDirty = false;
+                                  });
+                                }
+                              });
                             },
                           ),
                         ),
@@ -1239,7 +1513,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                   summary: snapshot.summary,
                   accent: OptivusColors.roseAccent,
                   onBack: widget.onBack,
-                  primaryButtonLabel: 'Change setup',
+                  primaryButtonLabel: 'Edit schedule',
                   onPrimaryAction: () {
                     _initWorkingState(setup);
                     setState(() {
@@ -1247,156 +1521,79 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                       _isDirty = false;
                     });
                   },
-                  resetLabel: 'Reset Eating Setup',
-                  onReset: () => _resetEatingSetup(setup),
+                  onChangeSource: () => _showChangeSourceSheet(setup),
+                  changeSourceLabel: 'Change source',
+                  onRemove: () => _resetEatingSetup(setup),
+                  removeLabel: 'Remove Eating Plan',
                 ),
 
-                // Targets & Settings card
+                // Plan Summary Card (truthful summary with settings/stale/photo actions)
+                EatingPlanSummaryCard(
+                  setup: setup,
+                  isStale: _isPlanStale(setup),
+                  onOpenSettings: () {
+                    _initWorkingState(setup);
+                    _openPlanSettingsSheet(isBuildingNew: false);
+                  },
+                  onRegenerate: () {
+                    _initWorkingState(setup);
+                    _openPlanSettingsSheet(isBuildingNew: false);
+                  },
+                  onViewPhoto: snapshot.sourceR2Key != null
+                      ? () => _showPhotoViewer(
+                            snapshot.sourceR2Key!,
+                            snapshot.sourceAssetId,
+                          )
+                      : null,
+                ),
+
+                // Day summary bar
+                EatingDaySummaryBar(
+                  blocks: setup.eatingBlocks,
+                  selectedDay: _selectedDay,
+                  targetCalories: setup.targetCalories,
+                  targetProtein: setup.targetProtein,
+                ),
+
+                // Add Meal quick action
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
-                    vertical: 4,
+                    vertical: 2,
                   ),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.1),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton.icon(
+                        key: const Key('base-timeline-configured-add-meal-button'),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          foregroundColor: OptivusColors.roseAccent,
+                        ),
+                        onPressed: () {
+                          _initWorkingState(setup);
+                          setState(() {
+                            _isEditing = true;
+                            _isDirty = false;
+                          });
+                          _addMealBlock(onCancel: () {
+                            if (mounted && !_isDirty) {
+                              setState(() => _isEditing = false);
+                            }
+                          });
+                        },
+                        icon: const Icon(Icons.add_rounded, size: 16),
+                        label: const Text(
+                          'Add meal',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
                       ),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  setup.targetCalories != null
-                                      ? '${setup.targetCalories} kcal'
-                                      : '—',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 15,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                              const Text(
-                                'Daily Target',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: OptivusColors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          height: 24,
-                          width: 1,
-                          color: Colors.white.withValues(alpha: 0.15),
-                        ),
-                        Expanded(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  setup.targetProtein != null
-                                      ? '${setup.targetProtein} g'
-                                      : '—',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 15,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                              const Text(
-                                'Protein',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: OptivusColors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          height: 24,
-                          width: 1,
-                          color: Colors.white.withValues(alpha: 0.15),
-                        ),
-                        Expanded(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  EatingPresentationUtils.scheduleSummary(
-                                    setup.eatingBlocks,
-                                  ),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 14,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                              const Text(
-                                'Schedule',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: OptivusColors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        IconButton(
-                          tooltip: 'Plan Settings',
-                          icon: const Icon(
-                            Icons.tune_rounded,
-                            color: OptivusColors.textSecondary,
-                            size: 20,
-                          ),
-                          onPressed: () {
-                            _initWorkingState(setup);
-                            _openPlanSettingsSheet(isBuildingNew: false);
-                          },
-                        ),
-                      ],
-                    ),
+                    ],
                   ),
                 ),
-
-                // Source Photo Preview
-                if (snapshot.sourceR2Key != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: BaseTimelinePhotoPreviewCard(
-                      r2Key: snapshot.sourceR2Key,
-                      assetId: snapshot.sourceAssetId,
-                      title: 'Meal Plan Photo',
-                      height: 140,
-                    ),
-                  ),
 
                 // Timeline View
                 if (_refreshPendingRevision != null)
@@ -1464,7 +1661,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                     visibleRangePolicy:
                         TimelineVisibleRangePolicy.contentAdaptive,
                     stretchPolicy: TimelineStretchPolicy.constraintBased,
-                    emptyDayMessage: 'No eating schedule configured.',
+                    emptyDayMessage: 'No meals scheduled.',
                   ),
                 ),
               ],

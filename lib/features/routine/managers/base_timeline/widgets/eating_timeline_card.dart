@@ -264,178 +264,104 @@ class EatingTimelineCard extends StatelessWidget {
             horizontal: isNarrow ? 8 : 12,
             vertical: verticalPad,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-                  // Header row
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Icon(
-                    _iconForMeal(title, b?.mealSlot),
-                    size: 16,
-                    color: accent,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: OptivusColors.textPrimary,
-                        height: 1.2,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+          child: SingleChildScrollView(
+            physics: const NeverScrollableScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header row
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Icon(
+                      _iconForMeal(title, b?.mealSlot),
+                      size: 16,
+                      color: accent,
                     ),
-                  ),
-                  if (isEditable && onDelete != null)
-                    IconButton(
-                      key: ValueKey('base-timeline-delete-${b?.id ?? entry.id}'),
-                      visualDensity: VisualDensity.compact,
-                      constraints: const BoxConstraints.tightFor(
-                        width: 26,
-                        height: 26,
-                      ),
-                      padding: EdgeInsets.zero,
-                      tooltip: 'Delete meal',
-                      onPressed: onDelete,
-                      icon: const Icon(
-                        Icons.delete_outline_rounded,
-                        size: 15,
-                        color: OptivusColors.danger,
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: OptivusColors.textPrimary,
+                          height: 1.2,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  if (isEditable)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4),
-                      child: Icon(
-                        Icons.edit_rounded,
-                        size: 13,
-                        color: accent.withValues(alpha: 0.7),
+                    if (isEditable && onDelete != null)
+                      IconButton(
+                        key: ValueKey('base-timeline-delete-${b?.id ?? entry.id}'),
+                        visualDensity: VisualDensity.compact,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 26,
+                          height: 26,
+                        ),
+                        padding: EdgeInsets.zero,
+                        tooltip: 'Delete meal',
+                        onPressed: onDelete,
+                        icon: const Icon(
+                          Icons.delete_outline_rounded,
+                          size: 15,
+                          color: OptivusColors.danger,
+                        ),
                       ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 4),
+                    if (isEditable)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: Icon(
+                          Icons.edit_rounded,
+                          size: 13,
+                          color: accent.withValues(alpha: 0.7),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
 
-              // Slot badge and time
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 5,
-                      vertical: 1.5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(5),
-                      border: Border.all(
-                        color: accent.withValues(alpha: 0.25),
-                        width: 0.7,
-                      ),
-                    ),
-                    child: Text(
-                      slot,
-                      style: TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w700,
-                        color: accent,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      timeLabel,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: OptivusColors.textSecondary,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-
-              // Dishes
-              if (dishes.isNotEmpty) ...[
-                const SizedBox(height: 5),
-                ...dishes.map(
-                  (dish) => Padding(
-                    padding: const EdgeInsets.only(bottom: 2.0),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '• ',
+                // Slot badge and time
+                Row(
+                  children: [
+                    Flexible(
+                      flex: 3,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: accent.withValues(alpha: 0.25),
+                            width: 0.7,
+                          ),
+                        ),
+                        child: Text(
+                          slot,
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: 9.5,
                             fontWeight: FontWeight.w700,
                             color: accent,
+                            letterSpacing: 0.2,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        Expanded(
-                          child: Text(
-                            dish,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: OptivusColors.textPrimary,
-                              height: 1.25,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-
-              // Macros
-              if (calories != null || protein != null) ...[
-                const SizedBox(height: 5),
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 2,
-                  children: [
-                    if (calories != null && protein != null)
-                      _buildMacroPill(
-                        '${calories.round()} kcal · ${protein.round()} g protein',
-                        accent,
-                      )
-                    else if (calories != null)
-                      _buildMacroPill('${calories.round()} kcal', accent)
-                    else if (protein != null)
-                      _buildMacroPill(
-                        '${protein.round()} g protein',
-                        OptivusColors.blueAccent,
                       ),
-                  ],
-                ),
-              ],
-
-              // Location
-              if (location.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.place_outlined,
-                      size: 11,
-                      color: OptivusColors.textSecondary.withValues(alpha: 0.7),
                     ),
-                    const SizedBox(width: 3),
-                    Expanded(
+                    const SizedBox(width: 4),
+                    Flexible(
+                      flex: 2,
                       child: Text(
-                        location,
+                        timeLabel,
                         style: const TextStyle(
                           fontSize: 10,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w600,
                           color: OptivusColors.textSecondary,
                         ),
                         maxLines: 1,
@@ -444,35 +370,119 @@ class EatingTimelineCard extends StatelessWidget {
                     ),
                   ],
                 ),
-              ],
 
-              // Notes
-              if (notes.isNotEmpty) ...[
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.notes_rounded,
-                      size: 11,
-                      color: OptivusColors.textSecondary.withValues(alpha: 0.7),
-                    ),
-                    const SizedBox(width: 3),
-                    Expanded(
-                      child: Text(
-                        notes,
-                        style: const TextStyle(
-                          fontSize: 9.5,
-                          fontStyle: FontStyle.italic,
-                          color: OptivusColors.textSecondary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                // Dishes
+                if (dishes.isNotEmpty) ...[
+                  const SizedBox(height: 5),
+                  ...dishes.map(
+                    (dish) => Padding(
+                      padding: const EdgeInsets.only(bottom: 2.0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '• ',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: accent,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              dish,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: OptivusColors.textPrimary,
+                                height: 1.25,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
+
+                // Macros
+                if (calories != null || protein != null) ...[
+                  const SizedBox(height: 5),
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 2,
+                    children: [
+                      if (calories != null && protein != null)
+                        _buildMacroPill(
+                          '${calories.round()} kcal · ${protein.round()} g protein',
+                          accent,
+                        )
+                      else if (calories != null)
+                        _buildMacroPill('${calories.round()} kcal', accent)
+                      else if (protein != null)
+                        _buildMacroPill(
+                          '${protein.round()} g protein',
+                          OptivusColors.blueAccent,
+                        ),
+                    ],
+                  ),
+                ],
+
+                // Location
+                if (location.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.place_outlined,
+                        size: 11,
+                        color: OptivusColors.textSecondary.withValues(alpha: 0.7),
+                      ),
+                      const SizedBox(width: 3),
+                      Expanded(
+                        child: Text(
+                          location,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: OptivusColors.textSecondary,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+
+                // Notes
+                if (notes.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.notes_rounded,
+                        size: 11,
+                        color: OptivusColors.textSecondary.withValues(alpha: 0.7),
+                      ),
+                      const SizedBox(width: 3),
+                      Expanded(
+                        child: Text(
+                          notes,
+                          style: const TextStyle(
+                            fontSize: 9.5,
+                            fontStyle: FontStyle.italic,
+                            color: OptivusColors.textSecondary,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -511,6 +521,8 @@ class EatingTimelineCard extends StatelessWidget {
         : (entry.title.isNotEmpty ? entry.title : 'Meal');
     final timeShort = TimelineUtils.formatMinuteShort(entry.startMinute);
 
+    final isNarrow = positioned.width < 140;
+
     return Semantics(
       button: true,
       label: 'Show $title in front',
@@ -543,20 +555,23 @@ class EatingTimelineCard extends StatelessWidget {
                 ),
               ],
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: EdgeInsets.symmetric(
+              horizontal: isNarrow ? 6 : 10,
+              vertical: isNarrow ? 4 : 6,
+            ),
             child: Row(
               children: [
                 Icon(
                   _iconForMeal(title, b?.mealSlot),
-                  size: 14,
+                  size: isNarrow ? 12 : 14,
                   color: accent,
                 ),
-                const SizedBox(width: 5),
+                SizedBox(width: isNarrow ? 3 : 5),
                 Expanded(
                   child: Text(
                     title,
-                    style: const TextStyle(
-                      fontSize: 11.5,
+                    style: TextStyle(
+                      fontSize: isNarrow ? 10.5 : 11.5,
                       fontWeight: FontWeight.w700,
                       color: OptivusColors.textPrimary,
                     ),
@@ -564,18 +579,19 @@ class EatingTimelineCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                const SizedBox(width: 3),
                 Text(
                   timeShort,
-                  style: const TextStyle(
-                    fontSize: 10,
+                  style: TextStyle(
+                    fontSize: isNarrow ? 9.5 : 10,
                     fontWeight: FontWeight.w600,
                     color: OptivusColors.textSecondary,
                   ),
                 ),
-                const SizedBox(width: 4),
+                SizedBox(width: isNarrow ? 2 : 4),
                 Icon(
                   Icons.flip_to_front_rounded,
-                  size: 12,
+                  size: isNarrow ? 10 : 12,
                   color: accent.withValues(alpha: 0.7),
                 ),
               ],

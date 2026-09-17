@@ -109,7 +109,11 @@ class RoutineActionExecutor {
 
     switch (result.outcome) {
       case RoutineWriteOutcome.saved:
-        message = result.message ?? 'Saved';
+        if (result.resultingStatus == RoutineStatus.skipped) {
+          message = 'Routine skipped';
+        } else {
+          message = result.message ?? 'Saved';
+        }
         bgColor = OptivusColors.success;
         duration = const Duration(milliseconds: 1400);
         break;
@@ -124,6 +128,10 @@ class RoutineActionExecutor {
             (result.message != null &&
                 result.message!.toLowerCase().contains('active'))) {
           message = 'Already active';
+        } else if (result.resultingStatus == RoutineStatus.skipped ||
+            (result.message != null &&
+                result.message!.toLowerCase().contains('skipped'))) {
+          message = 'Already skipped';
         } else {
           message = result.message ?? 'No change needed';
         }

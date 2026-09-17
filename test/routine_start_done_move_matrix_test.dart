@@ -129,13 +129,15 @@ void main() {
         ).isAllowed,
         true,
       );
+      final skipActiveDecision = RoutineTransitionPolicy.evaluate(
+        existingRecord: activeRecord,
+        requestedAction: RoutineOccurrenceAction.skip,
+        projectedStatus: RoutineStatus.active,
+      );
+      expect(skipActiveDecision.isAllowed, false);
       expect(
-        RoutineTransitionPolicy.evaluate(
-          existingRecord: activeRecord,
-          requestedAction: RoutineOccurrenceAction.skip,
-          projectedStatus: RoutineStatus.active,
-        ).isAllowed,
-        true,
+        skipActiveDecision.message,
+        'Stop this routine before skipping it.',
       );
       expect(
         RoutineTransitionPolicy.evaluate(

@@ -17,8 +17,8 @@ import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/routine_occurrence.dart';
 import 'package:optivus/repositories/routine_history_repository.dart';
 
-/// Standard 3 primary footer actions for routine timeline cards:
-/// [ ▶ Start ]   [ ✓ Done ]   [ ↗ Move ]
+/// Standard 4 primary footer actions for routine timeline cards:
+/// [ ▶ Start ]   [ ✓ Done ]   [ ↗ Move ]   [ ⏭ Skip ]
 class RoutineCardActions extends ConsumerWidget {
   final RoutineItem item;
   final Color color;
@@ -385,6 +385,8 @@ class RoutineCardActions extends ConsumerWidget {
         final startAction = _ActionButton(
           key: ValueKey('routine-action-start-${item.id}'),
           label: startLabel,
+          semanticLabel:
+              startLabel != null ? '$startLabel ${item.title}' : null,
           countdownStartedAt: hasGenericCountdown ? item.startedAt : null,
           countdownDurationSeconds: hasGenericCountdown
               ? item.countdownDurationSeconds
@@ -501,6 +503,7 @@ class RoutineCardActions extends ConsumerWidget {
         final doneAction = _ActionButton(
           key: ValueKey('routine-action-done-${item.id}'),
           label: 'Done',
+          semanticLabel: 'Mark ${item.title} as done',
           color: OptivusColors.success,
           icon: Icons.check_rounded,
           isSelected: false,
@@ -550,6 +553,7 @@ class RoutineCardActions extends ConsumerWidget {
         final moveAction = _ActionButton(
           key: ValueKey('routine-action-move-${item.id}'),
           label: 'Move',
+          semanticLabel: 'Move ${item.title} to another time or day',
           color: OptivusColors.textSecondary,
           icon: Icons.schedule_rounded,
           isPrimary: false,
@@ -586,7 +590,56 @@ class RoutineCardActions extends ConsumerWidget {
           },
         );
 
-        // Active generic task layout: Countdown + Done (primary) + Stop (secondary), Move hidden.
+        final skipDecision = availability.skipDecision;
+        final skipAction = _ActionButton(
+          key: ValueKey('routine-action-skip-${item.id}'),
+          label: 'Skip',
+          semanticLabel: 'Skip ${item.title}',
+          color: OptivusColors.warning,
+          icon: Icons.skip_next_rounded,
+          isPrimary: false,
+          isDisabled: isPending || !skipDecision.isAllowed,
+          onTap: () {
+            if (!hasScope) return;
+            if (!skipDecision.isAllowed) {
+              _executeRoutineAction(
+                context,
+                ref,
+                action: RoutineOccurrenceAction.skip,
+                perform: () => Future.value(
+                  skipDecision.isNoOp
+                      ? RoutineWriteResult.noOp(
+                          message: skipDecision.message ?? 'Already skipped.',
+                          failureCategory: skipDecision.failureCategory,
+                        )
+                      : RoutineWriteResult.validationFailed(
+                          RoutineValidationResult.invalid(
+                            errorType: RoutineValidationErrorType.invalidTime,
+                            userSafeMessage: skipDecision.message ??
+                                'Cannot skip routine.',
+                          ),
+                          message: skipDecision.message,
+                          failureCategory: skipDecision.failureCategory,
+                        ),
+                ),
+              );
+              return;
+            }
+            _executeRoutineAction(
+              context,
+              ref,
+              action: RoutineOccurrenceAction.skip,
+              perform: () => ref
+                  .read(routineNotifierProvider.notifier)
+                  .markSkipped(
+                    item.id,
+                    occurrenceDate: effectiveOccurrenceDate,
+                  ),
+            );
+          },
+        );
+
+        // Active generic task layout: Countdown + Done (primary) + Stop (secondary), Move and Skip hidden.
         if (hasGenericCountdown) {
           if (actionLayout == RoutineCardActionLayout.stacked) {
             return Column(
@@ -616,7 +669,7 @@ class RoutineCardActions extends ConsumerWidget {
           );
         }
 
-        // Active tracker layout: Open Tracker (primary) + Done (secondary), Move hidden.
+        // Active tracker layout: Open Tracker (primary) + Done (secondary), Move and Skip hidden.
         if (isTrackerActive) {
           if (actionLayout == RoutineCardActionLayout.stacked) {
             return Column(
@@ -638,7 +691,7 @@ class RoutineCardActions extends ConsumerWidget {
           );
         }
 
-        // 2-Action Cards: Money ('Save money' + 'Move'), Bad Habit ('Check in' + 'Move'), Planned Tracker ('Start Tracker' + 'Move').
+        // 3-Action Cards: Money ('Save money' + 'Move' + 'Skip'), Bad Habit ('Check in' + 'Move' + 'Skip'), Planned Tracker ('Start Tracker' + 'Move' + 'Skip').
         // Done is NEVER shown.
         if (isMoney || isBadHabit || isTrackerPlanned) {
           if (actionLayout == RoutineCardActionLayout.stacked) {
@@ -649,6 +702,8 @@ class RoutineCardActions extends ConsumerWidget {
                 startAction,
                 const SizedBox(height: RoutineCardPresentation.actionGap),
                 moveAction,
+                const SizedBox(height: RoutineCardPresentation.actionGap),
+                skipAction,
               ],
             );
           }
@@ -657,6 +712,33 @@ class RoutineCardActions extends ConsumerWidget {
               Expanded(flex: 3, child: startAction),
               const SizedBox(width: RoutineCardPresentation.actionGap),
               Expanded(flex: 2, child: moveAction),
+              const SizedBox(width: RoutineCardPresentation.actionGap),
+              Expanded(flex: 2, child: skipAction),
+            ],
+          );
+        }
+
+        // Normal 4-Action Planned Cards: Start | Done | Move | Skip
+        if (actionLayout == RoutineCardActionLayout.grid2x2) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: startAction),
+                  const SizedBox(width: RoutineCardPresentation.actionGap),
+                  Expanded(child: doneAction),
+                ],
+              ),
+              const SizedBox(height: RoutineCardPresentation.actionGap),
+              Row(
+                children: [
+                  Expanded(child: moveAction),
+                  const SizedBox(width: RoutineCardPresentation.actionGap),
+                  Expanded(child: skipAction),
+                ],
+              ),
             ],
           );
         }
@@ -668,13 +750,11 @@ class RoutineCardActions extends ConsumerWidget {
             children: [
               startAction,
               const SizedBox(height: RoutineCardPresentation.actionGap),
-              Row(
-                children: [
-                  Expanded(child: doneAction),
-                  const SizedBox(width: RoutineCardPresentation.actionGap),
-                  Expanded(child: moveAction),
-                ],
-              ),
+              doneAction,
+              const SizedBox(height: RoutineCardPresentation.actionGap),
+              moveAction,
+              const SizedBox(height: RoutineCardPresentation.actionGap),
+              skipAction,
             ],
           );
         }
@@ -686,6 +766,8 @@ class RoutineCardActions extends ConsumerWidget {
             Expanded(child: doneAction),
             const SizedBox(width: RoutineCardPresentation.actionGap),
             Expanded(child: moveAction),
+            const SizedBox(width: RoutineCardPresentation.actionGap),
+            Expanded(child: skipAction),
           ],
         );
       },
@@ -847,6 +929,7 @@ class _SheetOptionButton extends StatelessWidget {
 
 class _ActionButton extends StatelessWidget {
   final String? label;
+  final String? semanticLabel;
   final DateTime? countdownStartedAt;
   final int? countdownDurationSeconds;
   final Color color;
@@ -859,6 +942,7 @@ class _ActionButton extends StatelessWidget {
   const _ActionButton({
     super.key,
     this.label,
+    this.semanticLabel,
     this.countdownStartedAt,
     this.countdownDurationSeconds,
     required this.color,
@@ -889,7 +973,7 @@ class _ActionButton extends StatelessWidget {
 
     return Semantics(
       button: true,
-      label: effectiveLabel,
+      label: semanticLabel ?? effectiveLabel,
       enabled: !isDisabled,
       selected: isSelected,
       child: GestureDetector(

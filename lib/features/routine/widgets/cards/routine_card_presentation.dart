@@ -138,35 +138,108 @@ class RoutineCardPresentation {
   /// Normal width cards (where actions fit in a single row) render
   /// a single horizontal Row of Expanded buttons.
   /// Narrow overlapping front-cards or large accessibility scales fallback to a
-  /// non-truncating stacked column of full-width 44px+ buttons.
+  /// deliberate 2x2 grid (for 4 actions) or a non-truncating stacked layout.
   static RoutineCardActionLayout resolveRoutineCardActionLayout({
     required double availableWidth,
     required TextScaler textScaler,
     required TextDirection textDirection,
-    List<String> labels = const ['00:00:00', 'Done', 'Move'],
-    int actionCount = 3,
+    List<String> labels = const ['Start', 'Done', 'Move', 'Skip'],
+    int actionCount = 4,
   }) {
     if (actionCount <= 1) return RoutineCardActionLayout.horizontal;
+
+    // 1. First test whether all actions fit in a single horizontal row
     final totalGaps = (actionCount - 1) * actionGap;
     final buttonWidth = (availableWidth - totalGaps) / actionCount.toDouble();
     final maxInnerWidth = buttonWidth -
         (2 * actionButtonPaddingHorizontal) -
         (2 * actionButtonBorderWidth);
-    if (maxInnerWidth <= 0) return RoutineCardActionLayout.stacked;
 
-    for (final label in labels) {
-      final painter = TextPainter(
-        text: TextSpan(text: label, style: actionLabelStyle),
-        textDirection: textDirection,
-        textScaler: textScaler,
-        maxLines: 1,
-      )..layout();
+    bool allFitHorizontal = maxInnerWidth > 0;
+    if (allFitHorizontal) {
+      for (final label in labels) {
+        final painter = TextPainter(
+          text: TextSpan(text: label, style: actionLabelStyle),
+          textDirection: textDirection,
+          textScaler: textScaler,
+          maxLines: 1,
+        )..layout();
 
-      if (painter.width > maxInnerWidth) {
-        return RoutineCardActionLayout.stacked;
+        if (painter.width > maxInnerWidth) {
+          allFitHorizontal = false;
+          break;
+        }
       }
     }
-    return RoutineCardActionLayout.horizontal;
+
+    if (allFitHorizontal) {
+      return RoutineCardActionLayout.horizontal;
+    }
+
+    // 2. For 4 actions, test if they fit in a clean 2x2 grid
+    if (actionCount == 4) {
+      final gridButtonWidth = (availableWidth - actionGap) / 2.0;
+      final maxInnerWidthGrid = gridButtonWidth -
+          (2 * actionButtonPaddingHorizontal) -
+          (2 * actionButtonBorderWidth);
+
+      if (maxInnerWidthGrid > 0) {
+        bool allFitGrid = true;
+        for (final label in labels) {
+          final painter = TextPainter(
+            text: TextSpan(text: label, style: actionLabelStyle),
+            textDirection: textDirection,
+            textScaler: textScaler,
+            maxLines: 1,
+          )..layout();
+
+          if (painter.width > maxInnerWidthGrid) {
+            allFitGrid = false;
+            break;
+          }
+        }
+        if (allFitGrid) {
+          return RoutineCardActionLayout.grid2x2;
+        }
+      }
+    }
+
+    // 3. Fallback to stacked if horizontal and grid2x2 do not fit
+    return RoutineCardActionLayout.stacked;
+  }
+
+  /// Calculates the exact height of the routine action footer.
+  /// Shared identically between rendering and height measurement.
+  static double actionFooterHeight(
+    RoutineCardActionLayout actionLayout, {
+    int actionCount = 4,
+    bool isTerminal = false,
+    bool canUndo = false,
+    double singleButtonHeight = RoutineCardPresentation.actionButtonMinHeight,
+  }) {
+    if (isTerminal) {
+      if (!canUndo) {
+        return singleButtonHeight;
+      }
+      return switch (actionLayout) {
+        RoutineCardActionLayout.horizontal => singleButtonHeight,
+        RoutineCardActionLayout.grid2x2 ||
+        RoutineCardActionLayout.stacked =>
+          (singleButtonHeight * 2) + RoutineCardPresentation.actionGap,
+      };
+    }
+    if (actionCount <= 1) {
+      return singleButtonHeight;
+    }
+    return switch (actionLayout) {
+      RoutineCardActionLayout.horizontal => singleButtonHeight,
+      RoutineCardActionLayout.grid2x2 =>
+        (singleButtonHeight * 2) + RoutineCardPresentation.actionGap,
+      RoutineCardActionLayout.stacked =>
+        actionCount == 4
+            ? (singleButtonHeight * 4) + (RoutineCardPresentation.actionGap * 3)
+            : (singleButtonHeight * 2) + RoutineCardPresentation.actionGap,
+    };
   }
 
   /// Accurately simulates Flutter's [Wrap] widget row-by-row layout
@@ -230,7 +303,7 @@ class RoutineCardPresentation {
 }
 
 /// Layout mode for routine card footer primary actions.
-enum RoutineCardActionLayout { horizontal, stacked }
+enum RoutineCardActionLayout { horizontal, grid2x2, stacked }
 
 enum RoutineCardActionType {
   start,
@@ -240,6 +313,7 @@ enum RoutineCardActionType {
   checkIn,
   done,
   move,
+  skip,
   stop,
   undo,
   countdown,
@@ -335,6 +409,10 @@ class RoutineCardActionSet {
           label: 'Move',
           type: RoutineCardActionType.move,
         ),
+        RoutineCardActionConfig(
+          label: 'Skip',
+          type: RoutineCardActionType.skip,
+        ),
       ]);
     }
 
@@ -349,6 +427,10 @@ class RoutineCardActionSet {
         RoutineCardActionConfig(
           label: 'Move',
           type: RoutineCardActionType.move,
+        ),
+        RoutineCardActionConfig(
+          label: 'Skip',
+          type: RoutineCardActionType.skip,
         ),
       ]);
     }
@@ -377,26 +459,47 @@ class RoutineCardActionSet {
             label: 'Move',
             type: RoutineCardActionType.move,
           ),
+          RoutineCardActionConfig(
+            label: 'Skip',
+            type: RoutineCardActionType.skip,
+          ),
         ]);
       }
     }
 
     // Standard planned/active routine item
     final isAlreadyActive = effectiveStatus == RoutineStatus.active;
-    return RoutineCardActionSet([
+    if (isAlreadyActive) {
+      return const RoutineCardActionSet([
+        RoutineCardActionConfig(
+          label: 'Done',
+          type: RoutineCardActionType.done,
+          isPrimary: true,
+        ),
+        RoutineCardActionConfig(
+          label: 'Stop',
+          type: RoutineCardActionType.stop,
+        ),
+      ]);
+    }
+
+    return const RoutineCardActionSet([
       RoutineCardActionConfig(
-        label: isAlreadyActive ? 'Running' : 'Start',
+        label: 'Start',
         type: RoutineCardActionType.start,
-        isPrimary: !isAlreadyActive,
+        isPrimary: true,
       ),
       RoutineCardActionConfig(
         label: 'Done',
         type: RoutineCardActionType.done,
-        isPrimary: isAlreadyActive,
       ),
-      const RoutineCardActionConfig(
+      RoutineCardActionConfig(
         label: 'Move',
         type: RoutineCardActionType.move,
+      ),
+      RoutineCardActionConfig(
+        label: 'Skip',
+        type: RoutineCardActionType.skip,
       ),
     ]);
   }

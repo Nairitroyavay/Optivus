@@ -132,6 +132,9 @@ class RoutineTransitionPolicy {
             message: 'No occurrence action to undo.',
           );
         }
+        if (status == RoutineStatus.skipped) {
+          return const RoutineTransitionDecision.allow();
+        }
         if (!existingRecord.undoToPlannedAllowed) {
           return const RoutineTransitionDecision.reject(
             message: 'This action can no longer be undone.',
@@ -140,9 +143,22 @@ class RoutineTransitionPolicy {
         return const RoutineTransitionDecision.allow();
 
       case RoutineOccurrenceAction.skip:
+        if (status == RoutineStatus.active) {
+          return const RoutineTransitionDecision.reject(
+            message: 'Stop this routine before skipping it.',
+            failureCategory: RoutineFailureCategory.invalidTransition,
+          );
+        }
+        if (status == RoutineStatus.inTracker) {
+          return const RoutineTransitionDecision.reject(
+            message: 'Stop or complete the tracker session before skipping it.',
+            failureCategory: RoutineFailureCategory.invalidTransition,
+          );
+        }
         if (status == RoutineStatus.completed) {
           return const RoutineTransitionDecision.reject(
             message: 'Completed routine cannot be skipped.',
+            failureCategory: RoutineFailureCategory.invalidTransition,
           );
         }
         if (status == RoutineStatus.skipped) {
@@ -153,6 +169,7 @@ class RoutineTransitionPolicy {
         if (status == RoutineStatus.missed) {
           return const RoutineTransitionDecision.reject(
             message: 'Missed routine cannot be skipped.',
+            failureCategory: RoutineFailureCategory.invalidTransition,
           );
         }
         return const RoutineTransitionDecision.allow();

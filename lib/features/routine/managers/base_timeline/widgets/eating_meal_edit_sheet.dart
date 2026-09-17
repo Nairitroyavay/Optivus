@@ -35,8 +35,8 @@ class EatingMealEditSheet {
 
     var startMinute = block.startMinute;
     var endMinute = block.endMinute;
-    var selectedSlot = block.mealSlot?.trim().toLowerCase() ??
-        block.mealCategory?.trim().toLowerCase();
+    var selectedSlot = block.mealSlot?.trim().toLowerCase();
+    var currentCategory = block.mealCategory?.trim().toLowerCase();
     final selectedDays = Set<int>.from(
       block.repeatDays.where((day) => day >= 1 && day <= 7),
     );
@@ -70,7 +70,7 @@ class EatingMealEditSheet {
           throw Exception('Meal name is required.');
         }
         if (dishes.isEmpty) {
-          dishes = [title];
+          throw Exception('At least one dish is required.');
         }
         if (endMinute <= startMinute) {
           throw Exception('End time must be after start time.');
@@ -94,6 +94,20 @@ class EatingMealEditSheet {
         final clearNotes = notesText.isEmpty;
 
         final clearSlot = selectedSlot == null || selectedSlot!.isEmpty;
+        final String? finalCategory;
+        if (currentCategory != null && currentCategory.isNotEmpty) {
+          finalCategory = currentCategory;
+        } else if (!clearSlot) {
+          finalCategory = switch (selectedSlot!) {
+            'breakfast' => 'breakfast',
+            'lunch' => 'lunch',
+            'dinner' => 'dinner',
+            'morning_snack' || 'afternoon_snack' => 'snack',
+            _ => selectedSlot,
+          };
+        } else {
+          finalCategory = null;
+        }
 
         final updated = block.copyWith(
           title: title,
@@ -103,8 +117,8 @@ class EatingMealEditSheet {
           repeatDays: selectedDays.toList()..sort(),
           mealSlot: clearSlot ? null : selectedSlot,
           clearMealSlot: clearSlot,
-          mealCategory: clearSlot ? null : selectedSlot,
-          clearMealCategory: clearSlot,
+          mealCategory: finalCategory,
+          clearMealCategory: finalCategory == null,
           calories: clearCal ? null : rawCal.toDouble(),
           clearCalories: clearCal,
           protein: clearProt ? null : rawProt,

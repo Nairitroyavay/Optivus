@@ -27,6 +27,10 @@ class RoutineOccurrenceRecord {
   final String? sourceFingerprint;
   final DateTime? startedAt;
   final int? countdownDurationSeconds;
+  final RoutineStatus? previousStatus;
+  final String? previousAction;
+  final String? trackerSessionId;
+  final String? trackerType;
 
   const RoutineOccurrenceRecord({
     required this.id,
@@ -52,6 +56,10 @@ class RoutineOccurrenceRecord {
     this.sourceFingerprint,
     this.startedAt,
     this.countdownDurationSeconds,
+    this.previousStatus,
+    this.previousAction,
+    this.trackerSessionId,
+    this.trackerType,
   });
 
   RoutineOccurrenceRecord copyWith({
@@ -73,6 +81,10 @@ class RoutineOccurrenceRecord {
     String? sourceFingerprint,
     DateTime? startedAt,
     int? countdownDurationSeconds,
+    RoutineStatus? previousStatus,
+    String? previousAction,
+    String? trackerSessionId,
+    String? trackerType,
   }) {
     return RoutineOccurrenceRecord(
       id: id,
@@ -102,6 +114,10 @@ class RoutineOccurrenceRecord {
       startedAt: startedAt ?? this.startedAt,
       countdownDurationSeconds:
           countdownDurationSeconds ?? this.countdownDurationSeconds,
+      previousStatus: previousStatus ?? this.previousStatus,
+      previousAction: previousAction ?? this.previousAction,
+      trackerSessionId: trackerSessionId ?? this.trackerSessionId,
+      trackerType: trackerType ?? this.trackerType,
     );
   }
 
@@ -130,6 +146,10 @@ class RoutineOccurrenceRecord {
     if (startedAt != null) 'startedAt': startedAt!.toUtc().toIso8601String(),
     if (countdownDurationSeconds != null)
       'countdownDurationSeconds': countdownDurationSeconds,
+    if (previousStatus != null) 'previousStatus': previousStatus!.name,
+    if (previousAction != null) 'previousAction': previousAction,
+    if (trackerSessionId != null) 'trackerSessionId': trackerSessionId,
+    if (trackerType != null) 'trackerType': trackerType,
     'createdAt': createdAt.toUtc().toIso8601String(),
     'updatedAt': updatedAt.toUtc().toIso8601String(),
     'schemaVersion': schemaVersion,
@@ -192,6 +212,15 @@ class RoutineOccurrenceRecord {
           : null,
       countdownDurationSeconds: (map['countdownDurationSeconds'] as num?)
           ?.toInt(),
+      previousStatus: map['previousStatus'] != null
+          ? RoutineStatus.values.firstWhere(
+              (e) => e.name == map['previousStatus'],
+              orElse: () => RoutineStatus.planned,
+            )
+          : null,
+      previousAction: map['previousAction'] as String?,
+      trackerSessionId: map['trackerSessionId'] as String?,
+      trackerType: map['trackerType'] as String?,
     );
   }
 

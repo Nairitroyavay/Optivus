@@ -179,20 +179,40 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
           body:
               '${item.title} was missed. Suggestion: reschedule it to an open slot later or another day.',
           accept: () async {
-            showRoutineMoveSheet(
-              context,
-              ref,
-              item,
-              actionContext: actionContext,
-            );
+            final undoResult = await ref
+                .read(routineNotifierProvider.notifier)
+                .undoOccurrenceAction(
+                  item.id,
+                  occurrenceDate: actionContext.occurrenceDate,
+                );
+            if (!undoResult.isSuccessful) return undoResult;
+            if (context.mounted) {
+              showRoutineMoveSheet(
+                context,
+                ref,
+                item,
+                actionContext: actionContext,
+              );
+            }
             return null;
           },
-          edit: () => showRoutineMoveSheet(
-            context,
-            ref,
-            item,
-            actionContext: actionContext,
-          ),
+          edit: () async {
+            final undoResult = await ref
+                .read(routineNotifierProvider.notifier)
+                .undoOccurrenceAction(
+                  item.id,
+                  occurrenceDate: actionContext.occurrenceDate,
+                );
+            if (!undoResult.isSuccessful) return;
+            if (context.mounted) {
+              showRoutineMoveSheet(
+                context,
+                ref,
+                item,
+                actionContext: actionContext,
+              );
+            }
+          },
           closesUserFlow: false,
         ),
       );

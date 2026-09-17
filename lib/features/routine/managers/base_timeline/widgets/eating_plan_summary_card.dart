@@ -52,76 +52,86 @@ class EatingPlanSummaryCard extends StatelessWidget {
           // Header section
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-            child: Row(
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: OptivusColors.roseAccent.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.restaurant_menu_rounded,
-                    color: OptivusColors.roseAccent,
-                    size: 18,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _planTitle(origin),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          color: OptivusColors.textPrimary,
-                          letterSpacing: 0.3,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = constraints.maxWidth < 280;
+                return Row(
+                  children: [
+                    Container(
+                      width: isNarrow ? 30 : 34,
+                      height: isNarrow ? 30 : 34,
+                      decoration: BoxDecoration(
+                        color: OptivusColors.roseAccent.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.restaurant_menu_rounded,
+                        color: OptivusColors.roseAccent,
+                        size: isNarrow ? 16 : 18,
+                      ),
+                    ),
+                    SizedBox(width: isNarrow ? 8 : 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _planTitle(origin),
+                            style: TextStyle(
+                              fontSize: isNarrow ? 13 : 14,
+                              fontWeight: FontWeight.w800,
+                              color: OptivusColors.textPrimary,
+                              letterSpacing: 0.3,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            _sourceDescription(origin),
+                            style: TextStyle(
+                              fontSize: isNarrow ? 11 : 12,
+                              fontWeight: FontWeight.w500,
+                              color: OptivusColors.textSecondary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (origin == BaseSetupOrigin.generatedFromAnswers && onOpenSettings != null)
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.symmetric(horizontal: isNarrow ? 4 : 8, vertical: 4),
+                          visualDensity: VisualDensity.compact,
+                          foregroundColor: OptivusColors.roseAccent,
+                        ),
+                        onPressed: onOpenSettings,
+                        icon: const Icon(Icons.tune_rounded, size: 14),
+                        label: Text(
+                          isNarrow ? 'Settings' : 'Plan settings >',
+                          style: TextStyle(fontSize: isNarrow ? 11 : 12, fontWeight: FontWeight.w700),
+                        ),
+                      )
+                    else if (origin == BaseSetupOrigin.photo && onViewPhoto != null)
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.symmetric(horizontal: isNarrow ? 4 : 8, vertical: 4),
+                          visualDensity: VisualDensity.compact,
+                          foregroundColor: OptivusColors.roseAccent,
+                        ),
+                        onPressed: onViewPhoto,
+                        icon: const Icon(Icons.image_outlined, size: 14),
+                        label: Text(
+                          isNarrow ? 'Photo' : 'View photo >',
+                          style: TextStyle(fontSize: isNarrow ? 11 : 12, fontWeight: FontWeight.w700),
                         ),
                       ),
-                      const SizedBox(height: 1),
-                      Text(
-                        _sourceDescription(origin),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: OptivusColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (origin == BaseSetupOrigin.generatedFromAnswers && onOpenSettings != null)
-                  TextButton.icon(
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      visualDensity: VisualDensity.compact,
-                      foregroundColor: OptivusColors.roseAccent,
-                    ),
-                    onPressed: onOpenSettings,
-                    icon: const Icon(Icons.tune_rounded, size: 14),
-                    label: const Text(
-                      'Plan settings >',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                    ),
-                  )
-                else if (origin == BaseSetupOrigin.photo && setup.eatingPhotoR2Key != null && onViewPhoto != null)
-                  TextButton.icon(
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      visualDensity: VisualDensity.compact,
-                      foregroundColor: OptivusColors.roseAccent,
-                    ),
-                    onPressed: onViewPhoto,
-                    icon: const Icon(Icons.image_outlined, size: 14),
-                    label: const Text(
-                      'View photo >',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                    ),
-                  ),
-              ],
+                  ],
+                );
+              },
             ),
           ),
 
@@ -230,7 +240,11 @@ class EatingPlanSummaryCard extends StatelessWidget {
         ? '${setup.mealsPerDay} meals/day'
         : 'Not set';
 
-    final foodStyleStr = '${EatingPresentationUtils.formatDiet(setup.foodType)} · ${EatingPresentationUtils.formatFoodStyle(setup.eatingMode, setup.foodStyleCustomText)}';
+    final diet = EatingPresentationUtils.formatDiet(setup.foodType);
+    final foodStyle = EatingPresentationUtils.formatFoodStyle(
+      setup.eatingMode,
+      setup.foodStyleCustomText,
+    );
 
     final preferredTimes = EatingPresentationUtils.formatPreferredMealTimes(
       breakfast: setup.breakfastMinute,
@@ -249,7 +263,9 @@ class EatingPlanSummaryCard extends StatelessWidget {
         const SizedBox(height: 6),
         _buildInfoRow('Meal preference', prefMeals),
         const SizedBox(height: 6),
-        _buildInfoRow('Food style', foodStyleStr),
+        _buildInfoRow('Diet', diet),
+        const SizedBox(height: 6),
+        _buildInfoRow('Food style', foodStyle),
         if (preferredTimes.isNotEmpty) ...[
           const SizedBox(height: 6),
           _buildInfoRow('Preferred times', preferredTimes),
@@ -287,31 +303,36 @@ class EatingPlanSummaryCard extends StatelessWidget {
   }
 
   Widget _buildInfoRow(String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 120,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: OptivusColors.textSecondary,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final labelWidth = constraints.maxWidth < 280 ? 90.0 : 120.0;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: labelWidth,
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: OptivusColors.textSecondary,
+                ),
+              ),
             ),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w700,
-              color: OptivusColors.textPrimary,
+            Expanded(
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: OptivusColors.textPrimary,
+                ),
+              ),
             ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 

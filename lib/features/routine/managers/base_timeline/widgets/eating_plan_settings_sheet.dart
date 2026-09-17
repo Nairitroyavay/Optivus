@@ -37,6 +37,7 @@ class EatingPlanSettingsResult {
 class EatingPlanSettingsSheet extends StatefulWidget {
   final String title;
   final String regenerateActionLabel;
+  final bool isNew;
   final String? initialGoal;
   final int? initialMealsPerDay;
   final String? initialEatingMode;
@@ -55,6 +56,7 @@ class EatingPlanSettingsSheet extends StatefulWidget {
     super.key,
     this.title = 'Build Balanced Meal Plan',
     this.regenerateActionLabel = 'Generate Balanced Plan',
+    this.isNew = false,
     this.initialGoal,
     this.initialMealsPerDay,
     this.initialEatingMode,
@@ -74,6 +76,7 @@ class EatingPlanSettingsSheet extends StatefulWidget {
     BuildContext context, {
     String title = 'Build Balanced Meal Plan',
     String regenerateActionLabel = 'Generate Balanced Plan',
+    bool isNew = false,
     String? initialGoal,
     int? initialMealsPerDay,
     String? initialEatingMode,
@@ -98,6 +101,7 @@ class EatingPlanSettingsSheet extends StatefulWidget {
       builder: (ctx) => EatingPlanSettingsSheet(
         title: title,
         regenerateActionLabel: regenerateActionLabel,
+        isNew: isNew,
         initialGoal: initialGoal,
         initialMealsPerDay: initialMealsPerDay,
         initialEatingMode: initialEatingMode,
@@ -123,8 +127,8 @@ class EatingPlanSettingsSheet extends StatefulWidget {
 class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
   late String _goal;
   late int _mealsPerDay;
-  late String _eatingMode;
-  late String _foodType;
+  String? _eatingMode;
+  String? _foodType;
   late TextEditingController _customStyleController;
   late int _breakfastMinute;
   late int _lunchMinute;
@@ -150,10 +154,10 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
     _mealsPerDay = widget.initialMealsPerDay ?? 3;
     _eatingMode = (widget.initialEatingMode?.isNotEmpty == true)
         ? widget.initialEatingMode!.toLowerCase()
-        : 'balanced';
+        : (widget.isNew ? 'balanced' : null);
     _foodType = (widget.initialFoodType?.isNotEmpty == true)
         ? widget.initialFoodType!.toLowerCase()
-        : 'mixed';
+        : (widget.isNew ? 'mixed' : null);
     _customStyleController = TextEditingController(
       text: widget.initialFoodStyleCustomText ?? '',
     );
@@ -253,8 +257,8 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
     final result = EatingPlanSettingsResult(
       goal: _goal,
       mealsPerDay: _mealsPerDay,
-      eatingMode: _eatingMode,
-      foodType: _foodType,
+      eatingMode: regenerate ? (_eatingMode ?? 'balanced') : _eatingMode,
+      foodType: regenerate ? (_foodType ?? 'mixed') : _foodType,
       foodStyleCustomText: _eatingMode == 'custom'
           ? _customStyleController.text.trim()
           : null,

@@ -255,7 +255,7 @@ void main() {
 
         expect(find.byType(BaseTimelineCurrentSetupHeader), findsOneWidget);
         expect(find.text('Eating'), findsWidgets);
-        expect(find.text('Change setup'), findsOneWidget);
+        expect(find.text('Edit schedule'), findsOneWidget);
         final err = tester.takeException();
         if (err != null) {
           debugPrint('OVERFLOW: $err');
@@ -351,14 +351,14 @@ void main() {
         await tester.tap(moreButton);
         await tester.pumpAndSettle();
 
-        expect(find.text('Reset Eating Setup'), findsOneWidget);
-        await tester.tap(find.text('Reset Eating Setup'));
+        expect(find.text('Remove Eating Plan'), findsOneWidget);
+        await tester.tap(find.text('Remove Eating Plan'));
         await tester.pumpAndSettle();
 
-        expect(find.text('Reset Eating Setup?'), findsOneWidget);
+        expect(find.text('Remove Eating Plan?'), findsOneWidget);
         expect(
           find.text(
-            'This will remove your custom eating schedule and reset all meal planning preferences to default. This action cannot be undone.',
+            'This will delete your current eating schedule and clear your meal plan setup. This action cannot be undone.',
           ),
           findsOneWidget,
         );
@@ -374,14 +374,14 @@ void main() {
         // Confirm reset
         await tester.tap(moreButton);
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Reset Eating Setup'));
+        await tester.tap(find.text('Remove Eating Plan'));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Reset'));
+        await tester.tap(find.text('Remove'));
         await tester.pumpAndSettle();
 
         expect(
-          find.text('Eating schedule reset successfully.'),
+          find.text('Eating plan removed.'),
           findsOneWidget,
         );
 

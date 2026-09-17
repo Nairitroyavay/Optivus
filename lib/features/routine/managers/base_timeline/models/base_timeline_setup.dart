@@ -602,6 +602,76 @@ class BaseTimelineSetup {
     String? mode,
     String? type,
     String? styleCustomText,
+    bool clearFoodStyleCustomText = false,
+    String? budget,
+    String? ability,
+    int? breakfast,
+    int? lunch,
+    int? dinner,
+    int? snack,
+    bool clearSnackMinute = false,
+    int? extraSnack,
+    bool clearExtraSnackMinute = false,
+    int? calories,
+    bool clearTargetCalories = false,
+    int? protein,
+    bool clearTargetProtein = false,
+    int? planVersion,
+    String? inputFingerprint,
+    bool customized = false,
+  }) {
+    final effectiveMeals = meals ?? mealsPerDay;
+    final shouldClearExtraSnack = clearExtraSnackMinute ||
+        (effectiveMeals != null && effectiveMeals < 5);
+    final shouldClearSnack = clearSnackMinute ||
+        (effectiveMeals != null && effectiveMeals < 4);
+    final shouldClearCustomText = clearFoodStyleCustomText ||
+        (mode != null && mode.trim().toLowerCase() != 'custom');
+
+    return copyWith(
+      eatingSetupPath: 'create',
+      eatingBlocks: blocks ?? eatingBlocks,
+      clearEatingPhotoAssetId: true,
+      clearEatingPhotoR2Key: true,
+      mealPlanningGoal: goal ?? mealPlanningGoal,
+      mealsPerDay: effectiveMeals,
+      eatingMode: mode ?? eatingMode,
+      foodType: type ?? foodType,
+      foodStyleCustomText: shouldClearCustomText
+          ? null
+          : (styleCustomText ?? foodStyleCustomText),
+      clearFoodStyleCustomText: shouldClearCustomText,
+      mealBudget: budget ?? mealBudget,
+      cookingAbility: ability ?? cookingAbility,
+      breakfastMinute: breakfast ?? breakfastMinute,
+      lunchMinute: lunch ?? lunchMinute,
+      dinnerMinute: dinner ?? dinnerMinute,
+      snackMinute: shouldClearSnack ? null : (snack ?? snackMinute),
+      clearSnackMinute: shouldClearSnack,
+      extraSnackMinute:
+          shouldClearExtraSnack ? null : (extraSnack ?? extraSnackMinute),
+      clearExtraSnackMinute: shouldClearExtraSnack,
+      targetCalories:
+          clearTargetCalories ? null : (calories ?? targetCalories),
+      clearTargetCalories: clearTargetCalories,
+      targetProtein:
+          clearTargetProtein ? null : (protein ?? targetProtein),
+      clearTargetProtein: clearTargetProtein,
+      eatingGeneratedPlanVersion: planVersion ?? eatingGeneratedPlanVersion,
+      eatingGeneratedInputFingerprint:
+          inputFingerprint ?? eatingGeneratedInputFingerprint,
+      eatingCustomized: customized,
+    );
+  }
+
+  /// Exactly replaces all generated Eating settings with the new complete state.
+  BaseTimelineSetup replaceEatingGeneratedConfiguration({
+    required List<TimelineBlockDraft> blocks,
+    String? goal,
+    int? meals,
+    String? mode,
+    String? type,
+    String? styleCustomText,
     String? budget,
     String? ability,
     int? breakfast,
@@ -615,28 +685,48 @@ class BaseTimelineSetup {
     String? inputFingerprint,
     bool customized = false,
   }) {
+    final effectiveMeals = meals;
+    final hasExtraSnack = effectiveMeals == 5;
+    final hasSnack = effectiveMeals == 4 || effectiveMeals == 5;
+    final isCustomMode = mode?.trim().toLowerCase() == 'custom';
+
     return copyWith(
       eatingSetupPath: 'create',
-      eatingBlocks: blocks ?? eatingBlocks,
+      eatingBlocks: blocks,
       clearEatingPhotoAssetId: true,
       clearEatingPhotoR2Key: true,
-      mealPlanningGoal: goal ?? mealPlanningGoal,
-      mealsPerDay: meals ?? mealsPerDay,
-      eatingMode: mode ?? eatingMode,
-      foodType: type ?? foodType,
-      foodStyleCustomText: styleCustomText ?? foodStyleCustomText,
-      mealBudget: budget ?? mealBudget,
-      cookingAbility: ability ?? cookingAbility,
-      breakfastMinute: breakfast ?? breakfastMinute,
-      lunchMinute: lunch ?? lunchMinute,
-      dinnerMinute: dinner ?? dinnerMinute,
-      snackMinute: snack ?? snackMinute,
-      extraSnackMinute: extraSnack ?? extraSnackMinute,
-      targetCalories: calories ?? targetCalories,
-      targetProtein: protein ?? targetProtein,
-      eatingGeneratedPlanVersion: planVersion ?? eatingGeneratedPlanVersion,
-      eatingGeneratedInputFingerprint:
-          inputFingerprint ?? eatingGeneratedInputFingerprint,
+      mealPlanningGoal: goal,
+      clearMealPlanningGoal: goal == null,
+      mealsPerDay: effectiveMeals,
+      clearMealsPerDay: effectiveMeals == null,
+      eatingMode: mode,
+      clearEatingMode: mode == null,
+      foodType: type,
+      clearFoodType: type == null,
+      foodStyleCustomText: isCustomMode ? styleCustomText : null,
+      clearFoodStyleCustomText: !isCustomMode || styleCustomText == null,
+      mealBudget: budget,
+      clearMealBudget: budget == null,
+      cookingAbility: ability,
+      clearCookingAbility: ability == null,
+      breakfastMinute: breakfast,
+      clearBreakfastMinute: breakfast == null,
+      lunchMinute: lunch,
+      clearLunchMinute: lunch == null,
+      dinnerMinute: dinner,
+      clearDinnerMinute: dinner == null,
+      snackMinute: hasSnack ? snack : null,
+      clearSnackMinute: !hasSnack || snack == null,
+      extraSnackMinute: hasExtraSnack ? extraSnack : null,
+      clearExtraSnackMinute: !hasExtraSnack || extraSnack == null,
+      targetCalories: calories,
+      clearTargetCalories: calories == null,
+      targetProtein: protein,
+      clearTargetProtein: protein == null,
+      eatingGeneratedPlanVersion: planVersion,
+      clearEatingGeneratedPlanVersion: planVersion == null,
+      eatingGeneratedInputFingerprint: inputFingerprint,
+      clearEatingGeneratedInputFingerprint: inputFingerprint == null,
       eatingCustomized: customized,
     );
   }
@@ -653,7 +743,7 @@ class BaseTimelineSetup {
       eatingPhotoAssetId: photoAssetId,
       eatingPhotoR2Key: photoR2Key,
       eatingBlocks: blocks ?? eatingBlocks,
-      mealsPerDay: meals ?? mealsPerDay,
+      mealsPerDay: meals,
       clearMealsPerDay: meals == null,
       clearMealPlanningGoal: true,
       clearEatingMode: true,
@@ -680,18 +770,33 @@ class BaseTimelineSetup {
     int? meals,
     int? targetCalories,
     int? targetProtein,
+    bool clearTargetCalories = false,
+    bool clearTargetProtein = false,
   }) {
     return copyWith(
       eatingSetupPath: 'manual',
       eatingBlocks: blocks ?? eatingBlocks,
-      mealsPerDay: meals ?? mealsPerDay,
+      mealsPerDay: meals,
       clearMealsPerDay: meals == null,
       clearEatingPhotoAssetId: true,
       clearEatingPhotoR2Key: true,
+      clearMealPlanningGoal: true,
+      clearEatingMode: true,
+      clearFoodType: true,
+      clearFoodStyleCustomText: true,
+      clearMealBudget: true,
+      clearCookingAbility: true,
+      clearBreakfastMinute: true,
+      clearLunchMinute: true,
+      clearDinnerMinute: true,
+      clearSnackMinute: true,
+      clearExtraSnackMinute: true,
       clearEatingGeneratedPlanVersion: true,
       clearEatingGeneratedInputFingerprint: true,
-      targetCalories: targetCalories ?? this.targetCalories,
-      targetProtein: targetProtein ?? this.targetProtein,
+      targetCalories: clearTargetCalories ? null : targetCalories,
+      clearTargetCalories: clearTargetCalories || targetCalories == null,
+      targetProtein: clearTargetProtein ? null : targetProtein,
+      clearTargetProtein: clearTargetProtein || targetProtein == null,
       eatingCustomized: false,
     );
   }

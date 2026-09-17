@@ -47,11 +47,21 @@ enum RoutineWriteAction { create, update, delete, moveTemplate, batchCreate }
 class RoutineDiscardResult {
   final bool wasSaved;
   final bool discarded;
+  final bool verificationUnavailable;
+  final String? message;
 
   const RoutineDiscardResult({
     required this.wasSaved,
     required this.discarded,
+    this.verificationUnavailable = false,
+    this.message,
   });
+
+  const RoutineDiscardResult.verificationUnavailable({
+    this.message = 'Could not verify remote save status. Draft preserved.',
+  })  : wasSaved = false,
+        discarded = false,
+        verificationUnavailable = true;
 }
 
 enum RoutineOccurrenceAction {
@@ -1096,6 +1106,21 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         }
       }
 
+      for (final occ in mergedOccurrences) {
+        if (occ.status == RoutineStatus.inTracker &&
+            occ.trackerSessionId != null) {
+          final link = TrackerSessionLink(
+            routineTaskId: occ.routineItemId,
+            occurrenceDateKey: occ.occurrenceDateKey,
+            trackerType: occ.trackerType ?? TrackerType.none.name,
+            sessionId: occ.trackerSessionId!,
+            startedAt: occ.startedAt ?? occ.createdAt,
+            status: 'active',
+          );
+          _ref.read(trackerSessionLinksProvider.notifier).upsert(link);
+        }
+      }
+
       state = state.copyWith(
         items: mergedItems,
         occurrences: mergedOccurrences,
@@ -1575,7 +1600,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   }
 
   Future<RoutineWriteResult> addItem(RoutineItem item) async {
-    await _initialLoad;
+    if (_ownerUid == null || _inFlightLoad != null) {
+      await (_inFlightLoad ?? _initialLoad);
+    }
     final uid = _requireOwnerUid();
     final validation = _validate(
       item,
@@ -1727,7 +1754,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   Future<RoutineBatchValidationResult> addMissingItems(
     List<RoutineItem> items,
   ) async {
-    await _initialLoad;
+    if (_ownerUid == null || _inFlightLoad != null) {
+      await (_inFlightLoad ?? _initialLoad);
+    }
     final existingIds = state.items.map((item) => item.id).toSet();
     final toAdd = items
         .where(
@@ -2196,7 +2225,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           break;
         }
       }
-    } catch (_) {}
+    } catch (_) {
+      return const RoutineDiscardResult.verificationUnavailable();
+    }
 
     if (isCommittedRemotely && remoteItem != null) {
       // The item committed remotely! Do NOT delete locally.
@@ -2499,6 +2530,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     String? displayTitleOverride,
     DateTime? startedAt,
     int? countdownDurationSeconds,
+    String? trackerSessionId,
+    String? trackerType,
   }) async {
     final uid = _requireOwnerUid();
     final date =
@@ -2555,12 +2588,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             existing: existing,
           )
         : null;
-    final effectiveStartedAt =
-        existing?.startedAt ?? startedAt ?? timerAllocation?.startedAt;
-    final effectiveCountdownDurationSeconds =
-        existing?.countdownDurationSeconds ??
-        countdownDurationSeconds ??
-        timerAllocation?.durationSeconds;
+    final effectiveStartedAt = action == 'skip'
+        ? null
+        : (existing?.startedAt ?? startedAt ?? timerAllocation?.startedAt);
+    final effectiveCountdownDurationSeconds = action == 'skip'
+        ? null
+        : (existing?.countdownDurationSeconds ??
+            countdownDurationSeconds ??
+            timerAllocation?.durationSeconds);
 
     final operationId = _stableOperationId('occurrence', [
       uid,
@@ -2600,12 +2635,20 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       note: note ?? existing?.note,
       displayTitleOverride:
           displayTitleOverride ?? existing?.displayTitleOverride,
-      undoToPlannedAllowed: existing == null,
+      undoToPlannedAllowed: action == 'skip' ? true : (existing == null),
       onboardingProjectionId: existing?.onboardingProjectionId,
       onboardingSourceItemId: existing?.onboardingSourceItemId,
       sourceFingerprint: existing?.sourceFingerprint,
       startedAt: effectiveStartedAt,
       countdownDurationSeconds: effectiveCountdownDurationSeconds,
+      previousStatus: action == 'skip'
+          ? (existing?.status == RoutineStatus.moved ? RoutineStatus.moved : null)
+          : null,
+      previousAction: action == 'skip'
+          ? (existing?.status == RoutineStatus.moved ? existing?.action : null)
+          : null,
+      trackerSessionId: trackerSessionId ?? existing?.trackerSessionId,
+      trackerType: trackerType ?? existing?.trackerType,
     );
 
     RoutineEventType eventType = RoutineEventType.edited;
@@ -3029,18 +3072,42 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       event: event,
     );
 
+    final restoredRecord = undoRecord.previousStatus == RoutineStatus.moved
+        ? undoRecord.copyWith(
+            status: RoutineStatus.moved,
+            action: undoRecord.previousAction ?? 'move',
+            previousStatus: null,
+            previousAction: null,
+            undoToPlannedAllowed: true,
+            updatedAt: DateTime.now().toUtc(),
+          )
+        : null;
+
     state = state.copyWith(
       pendingOccurrenceIds: {...state.pendingOccurrenceIds, id},
-      occurrences: state.occurrences.where((e) => e.id != id).toList(),
+      occurrences: restoredRecord != null
+          ? [
+              for (final occ in state.occurrences)
+                if (occ.id == id) restoredRecord else occ,
+            ]
+          : state.occurrences.where((e) => e.id != id).toList(),
       error: null,
     );
 
     try {
-      await _transactionRepository.commitWrite(
-        uid: uid,
-        deleteOccurrenceId: id,
-        addEvent: event,
-      );
+      if (restoredRecord != null) {
+        await _transactionRepository.commitWrite(
+          uid: uid,
+          setOccurrence: restoredRecord,
+          addEvent: event,
+        );
+      } else {
+        await _transactionRepository.commitWrite(
+          uid: uid,
+          deleteOccurrenceId: id,
+          addEvent: event,
+        );
+      }
       if (!mounted) return _supersededWriteResult(operationId);
       if (_ownerUid != uid) return _supersededWriteResult(operationId);
 
@@ -3053,7 +3120,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       );
       return RoutineWriteResult.saved(
         operationId: operationId,
-        resultingStatus: RoutineStatus.planned,
+        resultingStatus: restoredRecord != null
+            ? RoutineStatus.moved
+            : RoutineStatus.planned,
       );
     } catch (error) {
       if (!mounted) return _supersededWriteResult(operationId);
@@ -3063,7 +3132,11 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         pendingOccurrenceIds: state.pendingOccurrenceIds
             .where((e) => e != id)
             .toSet(),
-        occurrences: [...state.occurrences, undoRecord],
+        occurrences: [
+          for (final occ in state.occurrences)
+            if (occ.id != id) occ,
+          undoRecord,
+        ],
         failedOccurrenceIntentsById: {
           ...state.failedOccurrenceIntentsById,
           id: intent,
@@ -3334,18 +3407,13 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         );
       }
       if (item.blockType == RoutineBlockType.moneyTask) {
-        if (!hasConfirmedMoneySaveForRoutine(itemId, date: occurrenceDate)) {
-          return RoutineWriteResult.validationFailed(
-            const RoutineValidationResult.invalid(
-              errorType: RoutineValidationErrorType.missingData,
-              userSafeMessage:
-                  'Please save money via UPI or Tracker to complete this task.',
-            ),
-            message: 'Money task requires a confirmed save.',
-            failureCategory: RoutineFailureCategory.validation,
-          );
-        }
-        return await _alreadySaved(itemId, occurrenceDate: occurrenceDate);
+        return await _writeOccurrence(
+          itemId,
+          status: RoutineStatus.completed,
+          actionSource: 'money',
+          action: 'complete',
+          occurrenceDate: occurrenceDate,
+        );
       }
       if (item.blockType == RoutineBlockType.checkIn &&
           item.category == RoutineCategory.badHabit) {
@@ -3432,17 +3500,6 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     String itemId, {
     DateTime? occurrenceDate,
   }) async {
-    try {
-      final item = state.items.firstWhere((e) => e.id == itemId);
-      if (item.blockType == RoutineBlockType.moneyTask) {
-        if (_ref.read(fakeDataAllowedProvider)) {
-          _ref
-              .read(mockTrackerProvider.notifier)
-              .skipMoneyToday(reason: 'Skipped from routine');
-        }
-      }
-    } catch (_) {}
-
     return await _writeOccurrence(
       itemId,
       status: RoutineStatus.skipped,
@@ -3610,9 +3667,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     }
 
     final now = DateTime.now();
-    final occurrenceDateKey = occurrenceDate == null
-        ? null
-        : routineLocalDateKey(occurrenceDate);
+    final occurrenceDateKey = routineLocalDateKey(anchor);
     final sessionId = 'tracker-${item.id}-${now.millisecondsSinceEpoch}';
     final trackerType = item.trackerType == TrackerType.none
         ? _inferTrackerType(item)
@@ -3632,6 +3687,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       actionSource: 'tracker',
       action: 'startTracker',
       occurrenceDate: occurrenceDate,
+      trackerSessionId: sessionId,
+      trackerType: trackerType.name,
     );
     if (!result.closesUserFlow) return result;
     if (_ownerUid == null) return result;
@@ -3691,6 +3748,18 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         link = candidate;
         break;
       }
+    }
+    final existing = _occurrenceFor(routineTaskId, anchor);
+    if (link == null && existing?.trackerSessionId != null) {
+      link = TrackerSessionLink(
+        routineTaskId: routineTaskId,
+        occurrenceDateKey: occurrenceDateKey,
+        trackerType: existing!.trackerType ?? TrackerType.none.name,
+        sessionId: existing.trackerSessionId!,
+        startedAt: existing.startedAt ?? existing.createdAt,
+        status: 'active',
+      );
+      _ref.read(trackerSessionLinksProvider.notifier).upsert(link);
     }
     if (!allowUntracked && (link == null || link.status != 'active')) {
       return RoutineWriteResult.validationFailed(

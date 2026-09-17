@@ -260,8 +260,12 @@ class RoutineCardFactory {
   static double measureHeight(
     BuildContext context,
     double width,
-    RoutineItem item,
-  ) {
+    RoutineItem item, {
+    RoutineOccurrenceRecord? existingRecord,
+    RoutineStatus? effectiveStatus,
+    bool canUndo = false,
+    bool? isTrackerActive,
+  }) {
     final scaler = MediaQuery.textScalerOf(context);
     final textDirection = Directionality.of(context);
     final defaultStyle = DefaultTextStyle.of(context).style;
@@ -491,7 +495,7 @@ class RoutineCardFactory {
           measure(continuation, detailStyle);
     }
 
-    // Three Primary Actions footer (min 44px, scaling with textScaler)
+    // Primary Actions footer (min 44px, scaling with textScaler)
     final hideActionIcon = scaler.scale(12) > 15;
     final actionTextPainter = TextPainter(
       text: TextSpan(
@@ -511,17 +515,25 @@ class RoutineCardFactory {
           actionBorderTotal,
     );
 
+    final resolvedStatus =
+        effectiveStatus ?? existingRecord?.status ?? item.status;
+    final resolvedTrackerActive = isTrackerActive ??
+        (item.blockType == RoutineBlockType.trackerTask &&
+            resolvedStatus == RoutineStatus.inTracker);
+    final resolvedCanUndo =
+        canUndo || (existingRecord?.undoToPlannedAllowed ?? false);
+
     final actionSet = RoutineCardActionSet.resolve(
       item: item,
-      effectiveStatus: item.status,
-      isTrackerActive: item.status == RoutineStatus.inTracker,
-      hasGenericCountdown: item.status == RoutineStatus.active &&
+      effectiveStatus: resolvedStatus,
+      isTrackerActive: resolvedTrackerActive,
+      hasGenericCountdown: resolvedStatus == RoutineStatus.active &&
           item.blockType != RoutineBlockType.trackerTask &&
           item.blockType != RoutineBlockType.checkIn &&
           item.blockType != RoutineBlockType.moneyTask &&
           item.startedAt != null &&
           item.countdownDurationSeconds != null,
-      canUndo: false,
+      canUndo: resolvedCanUndo,
     );
 
     final actionLayout = RoutineCardPresentation.resolveRoutineCardActionLayout(
@@ -534,14 +546,15 @@ class RoutineCardFactory {
 
     final isTerminal =
         item.isCompleted ||
-        item.status == RoutineStatus.completed ||
-        item.status == RoutineStatus.skipped ||
-        item.status == RoutineStatus.missed;
+        resolvedStatus == RoutineStatus.completed ||
+        resolvedStatus == RoutineStatus.skipped ||
+        resolvedStatus == RoutineStatus.missed;
 
     final actionFooter = actionFooterHeight(
       actionLayout,
       actionCount: actionSet.count,
       isTerminal: isTerminal,
+      canUndo: resolvedCanUndo,
       singleButtonHeight: singleButtonHeight,
     );
     height += RoutineCardPresentation.actionsFooterGap + actionFooter;
@@ -557,17 +570,17 @@ class RoutineCardFactory {
 
   static double actionFooterHeight(
     RoutineCardActionLayout actionLayout, {
-    int actionCount = 3,
+    int actionCount = 4,
     bool isTerminal = false,
+    bool canUndo = false,
     double singleButtonHeight = RoutineCardPresentation.actionButtonMinHeight,
   }) {
-    if (actionCount <= 1 || isTerminal) {
-      return singleButtonHeight;
-    }
-    return switch (actionLayout) {
-      RoutineCardActionLayout.horizontal => singleButtonHeight,
-      RoutineCardActionLayout.stacked =>
-        (singleButtonHeight * 2) + RoutineCardPresentation.actionGap,
-    };
+    return RoutineCardPresentation.actionFooterHeight(
+      actionLayout,
+      actionCount: actionCount,
+      isTerminal: isTerminal,
+      canUndo: canUndo,
+      singleButtonHeight: singleButtonHeight,
+    );
   }
 }

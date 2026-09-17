@@ -57,11 +57,7 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
           .toSet()
           .toList()
         ..sort();
-      var dishes = b.dishes;
-      if (dishes.isEmpty && b.title.trim().isNotEmpty) {
-        dishes = [b.title.trim()];
-      }
-      return b.copyWith(repeatDays: validDays, dishes: dishes);
+      return b.copyWith(repeatDays: validDays);
     }).toList();
   }
 
@@ -89,6 +85,8 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
     var endMin = block.endMinute;
     final selectedDays = Set<int>.from(block.repeatDays);
 
+    String? errorText;
+
     showDialog<TimelineBlockDraft>(
       context: context,
       builder: (dlgCtx) => StatefulBuilder(
@@ -99,9 +97,34 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (errorText != null) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    margin: const EdgeInsets.only(bottom: 10),
+                    decoration: BoxDecoration(
+                      color: OptivusColors.danger.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: OptivusColors.danger.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Text(
+                      errorText!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: OptivusColors.danger,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
                 TextField(
                   controller: titleCtrl,
                   decoration: const InputDecoration(labelText: 'Meal Name'),
+                  onChanged: (_) {
+                    if (errorText != null) setDlgState(() => errorText = null);
+                  },
                 ),
                 const SizedBox(height: 10),
                 TextField(
@@ -111,6 +134,9 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                   decoration: const InputDecoration(
                     labelText: 'Dishes (one per line)',
                   ),
+                  onChanged: (_) {
+                    if (errorText != null) setDlgState(() => errorText = null);
+                  },
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -126,7 +152,10 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                             ),
                           );
                           if (picked != null) {
-                            setDlgState(() => startMin = picked.hour * 60 + picked.minute);
+                            setDlgState(() {
+                              startMin = picked.hour * 60 + picked.minute;
+                              errorText = null;
+                            });
                           }
                         },
                         child: Text(EatingPresentationUtils.formatTime(startMin)),
@@ -144,7 +173,10 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                             ),
                           );
                           if (picked != null) {
-                            setDlgState(() => endMin = picked.hour * 60 + picked.minute);
+                            setDlgState(() {
+                              endMin = picked.hour * 60 + picked.minute;
+                              errorText = null;
+                            });
                           }
                         },
                         child: Text(EatingPresentationUtils.formatTime(endMin)),
@@ -179,6 +211,7 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                             } else {
                               selectedDays.remove(d);
                             }
+                            errorText = null;
                           });
                         },
                       ),
@@ -200,11 +233,27 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                     .map((d) => d.trim())
                     .where((d) => d.isNotEmpty)
                     .toList();
+                if (title.isEmpty) {
+                  setDlgState(() => errorText = 'Meal name cannot be empty.');
+                  return;
+                }
+                if (dishes.isEmpty) {
+                  setDlgState(() => errorText = 'At least one dish is required.');
+                  return;
+                }
+                if (endMin <= startMin) {
+                  setDlgState(() => errorText = 'End time must be after start time.');
+                  return;
+                }
+                if (selectedDays.isEmpty) {
+                  setDlgState(() => errorText = 'Please select at least one day.');
+                  return;
+                }
                 final updated = block.copyWith(
                   title: title,
-                  dishes: dishes.isNotEmpty ? dishes : [title],
+                  dishes: dishes,
                   startMinute: startMin,
-                  endMinute: endMin > startMin ? endMin : startMin + 30,
+                  endMinute: endMin,
                   repeatDays: selectedDays.toList()..sort(),
                 );
                 Navigator.pop(dlgCtx, updated);
