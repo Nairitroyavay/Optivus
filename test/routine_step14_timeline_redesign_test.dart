@@ -17,6 +17,7 @@ import 'package:optivus/features/routine/widgets/cards/routine_card_presentation
 import 'package:optivus/features/routine/widgets/routine_timeline_adapter.dart';
 import 'package:optivus/features/routine/widgets/routine_timeline_viewport.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/models/routine_occurrence.dart';
 import 'package:optivus/models/timeline_layout.dart';
 import 'package:optivus/core/timeline/widgets/timeline_back_tab_strip.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_base.dart';
@@ -93,7 +94,30 @@ class _MockRoutineNotifier extends RoutineNotifier {
     DateTime? occurrenceDate,
   }) async {
     trackerStarts.add(item.id);
+    final dateKey = occurrenceDate != null
+        ? routineLocalDateKey(occurrenceDate)
+        : '2026-09-14';
+    final effectiveUid = ownerUid ?? 'local-development-user';
+    final occ = RoutineOccurrenceRecord(
+      id: 'occ-${item.id}-$dateKey',
+      ownerUid: effectiveUid,
+      routineItemId: item.id,
+      occurrenceDateKey: dateKey,
+      status: RoutineStatus.inTracker,
+      source: 'routine',
+      action: 'startTracker',
+      operationKey: 'start-tracker-${item.id}',
+      createdAt: DateTime.now().toUtc(),
+      updatedAt: DateTime.now().toUtc(),
+    );
+    final remainingOccurrences = state.occurrences
+        .where(
+          (o) =>
+              !(o.routineItemId == item.id && o.occurrenceDateKey == dateKey),
+        )
+        .toList();
     state = state.copyWith(
+      occurrences: [...remainingOccurrences, occ],
       items: state.items
           .map(
             (i) => i.id == item.id
@@ -111,11 +135,36 @@ class _MockRoutineNotifier extends RoutineNotifier {
   @override
   Future<RoutineWriteResult> completeTrackerSession(
     String routineTaskId, {
+    bool allowUntracked = false,
     DateTime? occurrenceDate,
   }) async {
     trackerCompletes.add(routineTaskId);
     completedItemIds.add(routineTaskId);
+    final dateKey = occurrenceDate != null
+        ? routineLocalDateKey(occurrenceDate)
+        : '2026-09-14';
+    final effectiveUid = ownerUid ?? 'local-development-user';
+    final occ = RoutineOccurrenceRecord(
+      id: 'occ-$routineTaskId-$dateKey',
+      ownerUid: effectiveUid,
+      routineItemId: routineTaskId,
+      occurrenceDateKey: dateKey,
+      status: RoutineStatus.completed,
+      source: 'routine',
+      action: 'completeTrackerSession',
+      operationKey: 'complete-tracker-$routineTaskId',
+      createdAt: DateTime.now().toUtc(),
+      updatedAt: DateTime.now().toUtc(),
+    );
+    final remainingOccurrences = state.occurrences
+        .where(
+          (o) =>
+              !(o.routineItemId == routineTaskId &&
+                  o.occurrenceDateKey == dateKey),
+        )
+        .toList();
     state = state.copyWith(
+      occurrences: [...remainingOccurrences, occ],
       items: state.items
           .map(
             (i) => i.id == routineTaskId
@@ -127,6 +176,53 @@ class _MockRoutineNotifier extends RoutineNotifier {
     return RoutineWriteResult.saved(
       operationId: 'complete-tracker-$routineTaskId',
       message: 'Tracker completed',
+    );
+  }
+
+  @override
+  Future<RoutineWriteResult> recordMoneySavedAndComplete(
+    String routineTaskId, {
+    double? amount,
+    DateTime? occurrenceDate,
+  }) async {
+    moneySavedIds.add(routineTaskId);
+    completedItemIds.add(routineTaskId);
+    final dateKey = occurrenceDate != null
+        ? routineLocalDateKey(occurrenceDate)
+        : '2026-09-14';
+    final effectiveUid = ownerUid ?? 'local-development-user';
+    final occ = RoutineOccurrenceRecord(
+      id: 'occ-$routineTaskId-$dateKey',
+      ownerUid: effectiveUid,
+      routineItemId: routineTaskId,
+      occurrenceDateKey: dateKey,
+      status: RoutineStatus.completed,
+      source: 'routine',
+      action: 'recordMoneySavedAndComplete',
+      operationKey: 'money-$routineTaskId',
+      createdAt: DateTime.now().toUtc(),
+      updatedAt: DateTime.now().toUtc(),
+    );
+    final remainingOccurrences = state.occurrences
+        .where(
+          (o) =>
+              !(o.routineItemId == routineTaskId &&
+                  o.occurrenceDateKey == dateKey),
+        )
+        .toList();
+    state = state.copyWith(
+      occurrences: [...remainingOccurrences, occ],
+      items: state.items
+          .map(
+            (i) => i.id == routineTaskId
+                ? i.copyWith(isCompleted: true, status: RoutineStatus.completed)
+                : i,
+          )
+          .toList(),
+    );
+    return RoutineWriteResult.saved(
+      operationId: 'money-$routineTaskId',
+      message: 'Money saved and completed',
     );
   }
 
@@ -244,8 +340,9 @@ class _MockRoutineNotifier extends RoutineNotifier {
   }
 
   @override
-  void discardFailedCreate(String itemId) {
+  Future<RoutineDiscardResult> discardFailedCreate(String itemId) async {
     discardedCreates.add(itemId);
+    return const RoutineDiscardResult(wasSaved: false, discarded: true);
   }
 }
 
@@ -1158,7 +1255,7 @@ void main() {
         // Tracker type is shown
         expect(find.textContaining('hydration'), findsOneWidget);
 
-        // Tap Start
+        // Tap Start Tracker (start action for planned tracker)
         await tester.tap(
           find.byKey(const ValueKey('routine-action-start-tracker_1')),
         );
@@ -1166,7 +1263,7 @@ void main() {
 
         expect(capturedNotifier!.trackerStarts, contains('tracker_1'));
 
-        // Tap Done
+        // Now in active tracker state, Done action is present
         await tester.tap(
           find.byKey(const ValueKey('routine-action-done-tracker_1')),
         );
@@ -1206,10 +1303,29 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Tap Done
+      // Canonical 3-action card: Save money + Move + Skip (never Done)
+      expect(find.text('Save money'), findsOneWidget);
+      expect(find.text('Move'), findsOneWidget);
+      expect(find.text('Skip'), findsOneWidget);
+      expect(find.text('Done'), findsNothing);
+
+      // Tap Save money
       await tester.tap(
-        find.byKey(const ValueKey('routine-action-done-money_1')),
+        find.byKey(const ValueKey('routine-action-start-money_1')),
       );
+      await tester.pumpAndSettle();
+
+      // Sheet opens; confirm transfer
+      expect(find.textContaining('Save'), findsWidgets);
+      final confirmButton = find.byWidgetPredicate(
+        (w) =>
+            w.runtimeType.toString() == 'LiquidPrimaryButton' ||
+            (w is Text &&
+                (w.data == 'Mark saving done' ||
+                    w.data == 'Mark UPI transfer done')),
+      );
+      expect(confirmButton, findsAtLeastNWidgets(1));
+      await tester.tap(confirmButton.first);
       await tester.pumpAndSettle();
 
       expect(capturedNotifier!.moneySavedIds, contains('money_1'));
@@ -1246,10 +1362,20 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Tap Done
+      // Canonical 3-action card: Check in + Move + Skip (never Done)
+      expect(find.text('Check in'), findsOneWidget);
+      expect(find.text('Move'), findsOneWidget);
+      expect(find.text('Skip'), findsOneWidget);
+      expect(find.text('Done'), findsNothing);
+
+      // Tap Check in (start action)
       await tester.tap(
-        find.byKey(const ValueKey('routine-action-done-habit_checkin')),
+        find.byKey(const ValueKey('routine-action-start-habit_checkin')),
       );
+      await tester.pumpAndSettle();
+
+      // Tap Avoided option in sheet
+      await tester.tap(find.text('Avoided'));
       await tester.pumpAndSettle();
 
       expect(
@@ -1406,7 +1532,7 @@ void main() {
     );
 
     testWidgets(
-      'RoutineCardActions consists of a single Row of 3 Expanded buttons with minHeight 44.0',
+      'RoutineCardActions consists of 4 Expanded buttons (Start, Done, Move, Skip) with minHeight 44.0',
       (tester) async {
         final item = RoutineItem(
           id: 'actions_test',
@@ -1425,6 +1551,7 @@ void main() {
         expect(find.text('Start'), findsOneWidget);
         expect(find.text('Done'), findsOneWidget);
         expect(find.text('Move'), findsOneWidget);
+        expect(find.text('Skip'), findsOneWidget);
 
         // Each button container has stable minHeight of 44.0, whether the
         // countdown-safe solver chooses a row or stacked layout.
@@ -1436,7 +1563,7 @@ void main() {
             ),
           ),
         );
-        expect(containers.length, 3);
+        expect(containers.length, 4);
       },
     );
   });

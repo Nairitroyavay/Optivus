@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
+import 'package:optivus/features/routine/managers/base_timeline/models/eating_plan_freshness.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_presentation_utils.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 
@@ -17,6 +18,7 @@ import 'package:optivus/models/onboarding_draft.dart';
 class EatingPlanSummaryCard extends StatelessWidget {
   final BaseTimelineSetup setup;
   final bool isStale;
+  final EatingPlanFreshness? freshness;
   final VoidCallback? onOpenSettings;
   final VoidCallback? onRegenerate;
   final VoidCallback? onViewPhoto;
@@ -25,10 +27,15 @@ class EatingPlanSummaryCard extends StatelessWidget {
     super.key,
     required this.setup,
     this.isStale = false,
+    this.freshness,
     this.onOpenSettings,
     this.onRegenerate,
     this.onViewPhoto,
   });
+
+  EatingPlanFreshness get effectiveFreshness =>
+      freshness ??
+      (isStale ? EatingPlanFreshness.stale : EatingPlanFreshness.current);
 
   @override
   Widget build(BuildContext context) {
@@ -101,10 +108,14 @@ class EatingPlanSummaryCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    if (origin == BaseSetupOrigin.generatedFromAnswers && onOpenSettings != null)
+                    if (origin == BaseSetupOrigin.generatedFromAnswers &&
+                        onOpenSettings != null)
                       TextButton.icon(
                         style: TextButton.styleFrom(
-                          padding: EdgeInsets.symmetric(horizontal: isNarrow ? 4 : 8, vertical: 4),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isNarrow ? 4 : 8,
+                            vertical: 4,
+                          ),
                           visualDensity: VisualDensity.compact,
                           foregroundColor: OptivusColors.roseAccent,
                         ),
@@ -112,13 +123,20 @@ class EatingPlanSummaryCard extends StatelessWidget {
                         icon: const Icon(Icons.tune_rounded, size: 14),
                         label: Text(
                           isNarrow ? 'Settings' : 'Plan settings >',
-                          style: TextStyle(fontSize: isNarrow ? 11 : 12, fontWeight: FontWeight.w700),
+                          style: TextStyle(
+                            fontSize: isNarrow ? 11 : 12,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       )
-                    else if (origin == BaseSetupOrigin.photo && onViewPhoto != null)
+                    else if (origin == BaseSetupOrigin.photo &&
+                        onViewPhoto != null)
                       TextButton.icon(
                         style: TextButton.styleFrom(
-                          padding: EdgeInsets.symmetric(horizontal: isNarrow ? 4 : 8, vertical: 4),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isNarrow ? 4 : 8,
+                            vertical: 4,
+                          ),
                           visualDensity: VisualDensity.compact,
                           foregroundColor: OptivusColors.roseAccent,
                         ),
@@ -126,7 +144,10 @@ class EatingPlanSummaryCard extends StatelessWidget {
                         icon: const Icon(Icons.image_outlined, size: 14),
                         label: Text(
                           isNarrow ? 'Photo' : 'View photo >',
-                          style: TextStyle(fontSize: isNarrow ? 11 : 12, fontWeight: FontWeight.w700),
+                          style: TextStyle(
+                            fontSize: isNarrow ? 11 : 12,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                   ],
@@ -136,7 +157,7 @@ class EatingPlanSummaryCard extends StatelessWidget {
           ),
 
           // Stale generated plan notice
-          if (isStale)
+          if (effectiveFreshness == EatingPlanFreshness.stale)
             Container(
               margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -169,16 +190,55 @@ class EatingPlanSummaryCard extends StatelessWidget {
                   if (onRegenerate != null)
                     TextButton(
                       style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         visualDensity: VisualDensity.compact,
                         foregroundColor: OptivusColors.warning,
                       ),
                       onPressed: onRegenerate,
                       child: const Text(
                         'Regenerate plan',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
+                ],
+              ),
+            )
+          else if (effectiveFreshness == EatingPlanFreshness.unknown)
+            Container(
+              margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: OptivusColors.warning.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: OptivusColors.warning.withValues(alpha: 0.2),
+                  width: 1,
+                ),
+              ),
+              child: const Row(
+                children: [
+                  Icon(
+                    Icons.help_outline_rounded,
+                    size: 16,
+                    color: OptivusColors.warning,
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "Plan freshness couldn't be checked. Review Body Basics before regenerating.",
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: OptivusColors.textPrimary,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -207,9 +267,8 @@ class EatingPlanSummaryCard extends StatelessWidget {
     return switch (origin) {
       BaseSetupOrigin.photo => 'Meal plan photo',
       BaseSetupOrigin.manual => 'Created manually',
-      _ => setup.eatingCustomized
-          ? 'Built for me · Customized'
-          : 'Built for me',
+      _ =>
+        setup.eatingCustomized ? 'Built for me · Customized' : 'Built for me',
     };
   }
 
@@ -229,10 +288,12 @@ class EatingPlanSummaryCard extends StatelessWidget {
     final targetStr = (cal != null && prot != null)
         ? '$cal kcal · $prot g protein'
         : (cal != null
-            ? '$cal kcal/day'
-            : (prot != null ? '$prot g protein/day' : 'Not set'));
+              ? '$cal kcal/day'
+              : (prot != null ? '$prot g protein/day' : 'Not set'));
 
-    final goalStr = setup.mealPlanningGoal != null && setup.mealPlanningGoal!.trim().isNotEmpty
+    final goalStr =
+        setup.mealPlanningGoal != null &&
+            setup.mealPlanningGoal!.trim().isNotEmpty
         ? _formatGoal(setup.mealPlanningGoal!)
         : 'Not set';
 
@@ -275,7 +336,9 @@ class EatingPlanSummaryCard extends StatelessWidget {
   }
 
   Widget _buildPhotoPlanDetails() {
-    final scheduleDesc = EatingPresentationUtils.scheduleSummary(setup.eatingBlocks);
+    final scheduleDesc = EatingPresentationUtils.scheduleSummary(
+      setup.eatingBlocks,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -283,13 +346,18 @@ class EatingPlanSummaryCard extends StatelessWidget {
         const SizedBox(height: 6),
         _buildInfoRow('Schedule', scheduleDesc),
         const SizedBox(height: 6),
-        _buildInfoRow('Nutrition estimates', _calculateMacroCoverage(setup.eatingBlocks)),
+        _buildInfoRow(
+          'Nutrition estimates',
+          _calculateMacroCoverage(setup.eatingBlocks),
+        ),
       ],
     );
   }
 
   Widget _buildManualPlanDetails() {
-    final scheduleDesc = EatingPresentationUtils.scheduleSummary(setup.eatingBlocks);
+    final scheduleDesc = EatingPresentationUtils.scheduleSummary(
+      setup.eatingBlocks,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -297,7 +365,10 @@ class EatingPlanSummaryCard extends StatelessWidget {
         const SizedBox(height: 6),
         _buildInfoRow('Schedule', scheduleDesc),
         const SizedBox(height: 6),
-        _buildInfoRow('Nutrition estimates', _calculateMacroCoverage(setup.eatingBlocks)),
+        _buildInfoRow(
+          'Nutrition estimates',
+          _calculateMacroCoverage(setup.eatingBlocks),
+        ),
       ],
     );
   }

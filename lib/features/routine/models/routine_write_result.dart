@@ -85,4 +85,6 @@ class RoutineWriteResult {
   bool get closesUserFlow =>
       outcome == RoutineWriteOutcome.saved ||
       outcome == RoutineWriteOutcome.noOp;
+
+  bool get isSuccessful => closesUserFlow;
 }

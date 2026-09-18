@@ -39,11 +39,18 @@ class EatingTimelineCard extends StatelessWidget {
   }) {
     final title = block.title.trim().isNotEmpty
         ? block.title.trim()
-        : EatingPresentationUtils.formatSlotName(block.mealSlot, block.mealCategory);
+        : EatingPresentationUtils.formatSlotName(
+            block.mealSlot,
+            block.mealCategory,
+          );
     final slotLabel = () {
       final s = block.mealSlot?.trim();
       final c = block.mealCategory?.trim();
-      if (s != null && s.isNotEmpty && c != null && c.isNotEmpty && s.toLowerCase() != c.toLowerCase()) {
+      if (s != null &&
+          s.isNotEmpty &&
+          c != null &&
+          c.isNotEmpty &&
+          s.toLowerCase() != c.toLowerCase()) {
         final formattedS = EatingPresentationUtils.formatSlotName(s);
         final formattedC = EatingPresentationUtils.formatSlotName(c);
         return '$formattedS · $formattedC';
@@ -137,7 +144,7 @@ class EatingTimelineCard extends StatelessWidget {
       totalHeight += macroHeight + 6.0;
     }
 
-    // 5. Location
+    // 5. Location (matches maxLines: 2 in card preview)
     if (location.isNotEmpty) {
       totalHeight += 3.0;
       final locHeight = _measureTextHeight(
@@ -149,11 +156,12 @@ class EatingTimelineCard extends StatelessWidget {
         ),
         maxWidth: (innerWidth - 14.0).clamp(30.0, double.infinity),
         textScale: textScale,
+        maxLines: 2,
       );
       totalHeight += math.max(12.0, locHeight);
     }
 
-    // 6. Notes
+    // 6. Notes (matches maxLines: 3 in card preview)
     if (notes.isNotEmpty) {
       totalHeight += 3.0;
       final notesHeight = _measureTextHeight(
@@ -165,6 +173,7 @@ class EatingTimelineCard extends StatelessWidget {
         ),
         maxWidth: (innerWidth - 14.0).clamp(30.0, double.infinity),
         textScale: textScale,
+        maxLines: 3,
       );
       totalHeight += math.max(12.0, notesHeight);
     }
@@ -180,11 +189,13 @@ class EatingTimelineCard extends StatelessWidget {
     required TextStyle style,
     required double maxWidth,
     double textScale = 1.0,
+    int? maxLines,
   }) {
     final painter = TextPainter(
       text: TextSpan(text: text, style: style),
       textDirection: TextDirection.ltr,
       textScaler: TextScaler.linear(textScale),
+      maxLines: maxLines,
     )..layout(maxWidth: maxWidth);
     final h = painter.size.height;
     painter.dispose();
@@ -205,14 +216,19 @@ class EatingTimelineCard extends StatelessWidget {
     final slot = () {
       final s = b?.mealSlot?.trim();
       final c = b?.mealCategory?.trim();
-      if (s != null && s.isNotEmpty && c != null && c.isNotEmpty && s.toLowerCase() != c.toLowerCase()) {
+      if (s != null &&
+          s.isNotEmpty &&
+          c != null &&
+          c.isNotEmpty &&
+          s.toLowerCase() != c.toLowerCase()) {
         final formattedS = EatingPresentationUtils.formatSlotName(s);
         final formattedC = EatingPresentationUtils.formatSlotName(c);
         return '$formattedS · $formattedC';
       }
       return EatingPresentationUtils.formatSlotName(s, c);
     }();
-    final dishes = b?.dishes.where((d) => d.trim().isNotEmpty).toList() ??
+    final dishes =
+        b?.dishes.where((d) => d.trim().isNotEmpty).toList() ??
         (entry.subtitle != null && entry.subtitle!.isNotEmpty
             ? [entry.subtitle!]
             : const <String>[]);
@@ -295,7 +311,9 @@ class EatingTimelineCard extends StatelessWidget {
                     ),
                     if (isEditable && onDelete != null)
                       IconButton(
-                        key: ValueKey('base-timeline-delete-${b?.id ?? entry.id}'),
+                        key: ValueKey(
+                          'base-timeline-delete-${b?.id ?? entry.id}',
+                        ),
                         visualDensity: VisualDensity.compact,
                         constraints: const BoxConstraints.tightFor(
                           width: 26,
@@ -436,7 +454,9 @@ class EatingTimelineCard extends StatelessWidget {
                       Icon(
                         Icons.place_outlined,
                         size: 11,
-                        color: OptivusColors.textSecondary.withValues(alpha: 0.7),
+                        color: OptivusColors.textSecondary.withValues(
+                          alpha: 0.7,
+                        ),
                       ),
                       const SizedBox(width: 3),
                       Expanded(
@@ -463,7 +483,9 @@ class EatingTimelineCard extends StatelessWidget {
                       Icon(
                         Icons.notes_rounded,
                         size: 11,
-                        color: OptivusColors.textSecondary.withValues(alpha: 0.7),
+                        color: OptivusColors.textSecondary.withValues(
+                          alpha: 0.7,
+                        ),
                       ),
                       const SizedBox(width: 3),
                       Expanded(
@@ -497,10 +519,7 @@ class EatingTimelineCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: color.withValues(alpha: 0.22),
-          width: 0.6,
-        ),
+        border: Border.all(color: color.withValues(alpha: 0.22), width: 0.6),
       ),
       child: Text(
         text,

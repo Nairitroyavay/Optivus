@@ -383,13 +383,27 @@ void main() {
       expect(availability.canUndo, true);
     });
 
-    test('RoutineCardFactory stacked action footer height matches exactly 2 rows', () {
+    test('RoutineCardFactory stacked action footer height matches expected rows', () {
       const singleButtonHeight = RoutineCardPresentation.actionButtonMinHeight;
-      const expectedHeight = (singleButtonHeight * 2) + RoutineCardPresentation.actionGap; // 44*2 + 6 = 94
-      final calculated = RoutineCardFactory.actionFooterHeight(
+      const expected2RowHeight = (singleButtonHeight * 2) + RoutineCardPresentation.actionGap; // 44*2 + 6 = 94
+      final calculated2Row = RoutineCardFactory.actionFooterHeight(
         RoutineCardActionLayout.stacked,
+        actionCount: 2,
       );
-      expect(calculated, expectedHeight);
+      expect(calculated2Row, expected2RowHeight);
+
+      final calculatedCanUndo = RoutineCardFactory.actionFooterHeight(
+        RoutineCardActionLayout.stacked,
+        canUndo: true,
+      );
+      expect(calculatedCanUndo, expected2RowHeight);
+
+      const expected4RowHeight = (singleButtonHeight * 4) + (RoutineCardPresentation.actionGap * 3); // 44*4 + 18 = 194
+      final calculated4Row = RoutineCardFactory.actionFooterHeight(
+        RoutineCardActionLayout.stacked,
+        actionCount: 4,
+      );
+      expect(calculated4Row, expected4RowHeight);
     });
   });
 }

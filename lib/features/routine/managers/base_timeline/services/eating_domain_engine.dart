@@ -60,7 +60,8 @@ class EatingDomainEngine {
       if (snack == null || snack < 0 || snack > 1439) {
         return 'Snack time must be within a valid day range.';
       }
-      if (lunchMinute <= breakfastMinute || lunchMinute - breakfastMinute < 120) {
+      if (lunchMinute <= breakfastMinute ||
+          lunchMinute - breakfastMinute < 120) {
         return 'Lunch must be scheduled at least 2 hours after breakfast.';
       }
       if (snack <= lunchMinute || snack - lunchMinute < 120) {
@@ -133,7 +134,10 @@ class EatingDomainEngine {
         return 'Meals per day cannot exceed 6 meals on ${dayName(day)}.';
       }
 
-      if (setup.eatingSetupPath == 'create') {
+      final isPristineGenerated =
+          setup.eatingSetupPath == 'create' && !setup.eatingCustomized;
+
+      if (isPristineGenerated) {
         for (var i = 0; i < dayBlocks.length - 1; i++) {
           final current = dayBlocks[i];
           final next = dayBlocks[i + 1];
@@ -144,9 +148,16 @@ class EatingDomainEngine {
       }
     }
 
-    final hasAiBlocks =
-        blocks.any((b) => b.source == 'ai_generated_meal_setup');
-    if (setup.eatingSetupPath == 'create' && hasAiBlocks) {
+    final hasAiBlocks = blocks.any(
+      (b) => b.source == 'ai_generated_meal_setup',
+    );
+    // Full generated weekly-plan validation (cardinality, exact slot coverage,
+    // macro tolerances, diversity) ONLY applies to pristine AI plans.
+    // Customized plans (where the user edited dishes, timing, or added/deleted meals)
+    // require standard schedule integrity instead.
+    if (setup.eatingSetupPath == 'create' &&
+        !setup.eatingCustomized &&
+        hasAiBlocks) {
       final draft = setup.toBaseTimelineDraft().copyWith(blocks: blocks);
       final validationErr = validateGeneratedEatingWeeklyPlan(
         draft,
@@ -184,8 +195,7 @@ class EatingDomainEngine {
     }
 
     final mode = setup.eatingMode?.trim().toLowerCase();
-    if (mode == 'custom' &&
-        (setup.foodStyleCustomText ?? '').trim().isEmpty) {
+    if (mode == 'custom' && (setup.foodStyleCustomText ?? '').trim().isEmpty) {
       throw StateError('Please describe your custom food style.');
     }
 
@@ -193,10 +203,10 @@ class EatingDomainEngine {
     final bMinute = setup.breakfastMinute ?? 480;
     final lMinute = setup.lunchMinute ?? 780;
     final dMinute = setup.dinnerMinute ?? 1230;
-    final mSnackMinute =
-        meals == 5 ? (setup.extraSnackMinute ?? 660) : null;
-    final aSnackMinute =
-        (meals == 4 || meals == 5) ? (setup.snackMinute ?? 1020) : null;
+    final mSnackMinute = meals == 5 ? (setup.extraSnackMinute ?? 660) : null;
+    final aSnackMinute = (meals == 4 || meals == 5)
+        ? (setup.snackMinute ?? 1020)
+        : null;
 
     final timeErr = validatePreferredMealTimes(
       mealsPerDay: meals,
@@ -227,8 +237,7 @@ class EatingDomainEngine {
         targets.weightKg ?? (profile.weight > 0 ? profile.weight : null);
     final age = targets.estimatedAge;
     final gender =
-        targets.gender ??
-        (profile.gender.isNotEmpty ? profile.gender : null);
+        targets.gender ?? (profile.gender.isNotEmpty ? profile.gender : null);
     final exercise =
         targets.exerciseLevel ??
         (profile.exerciseLevel.isNotEmpty ? profile.exerciseLevel : null);
@@ -258,7 +267,8 @@ class EatingDomainEngine {
       foodType: (setup.foodType != null && setup.foodType!.trim().isNotEmpty)
           ? setup.foodType!.trim().toLowerCase()
           : 'mixed',
-      eatingMode: (setup.eatingMode != null && setup.eatingMode!.trim().isNotEmpty)
+      eatingMode:
+          (setup.eatingMode != null && setup.eatingMode!.trim().isNotEmpty)
           ? setup.eatingMode!.trim().toLowerCase()
           : 'balanced',
       foodStyleCustomText: setup.foodStyleCustomText,

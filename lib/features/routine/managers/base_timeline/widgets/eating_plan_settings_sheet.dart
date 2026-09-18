@@ -4,7 +4,7 @@ import 'package:optivus/features/routine/managers/base_timeline/services/eating_
 
 class EatingPlanSettingsResult {
   final String? goal;
-  final int mealsPerDay;
+  final int? mealsPerDay;
   final String? eatingMode;
   final String? foodType;
   final String? foodStyleCustomText;
@@ -50,6 +50,8 @@ class EatingPlanSettingsSheet extends StatefulWidget {
   final int? initialExtraSnackMinute;
   final int? initialTargetCalories;
   final int? initialTargetProtein;
+  final int? calculatedCalories;
+  final int? calculatedProtein;
   final bool showRegenerateAction;
 
   const EatingPlanSettingsSheet({
@@ -69,6 +71,8 @@ class EatingPlanSettingsSheet extends StatefulWidget {
     this.initialExtraSnackMinute,
     this.initialTargetCalories,
     this.initialTargetProtein,
+    this.calculatedCalories,
+    this.calculatedProtein,
     this.showRegenerateAction = true,
   });
 
@@ -89,6 +93,8 @@ class EatingPlanSettingsSheet extends StatefulWidget {
     int? initialExtraSnackMinute,
     int? initialTargetCalories,
     int? initialTargetProtein,
+    int? calculatedCalories,
+    int? calculatedProtein,
     bool showRegenerateAction = true,
   }) {
     return showModalBottomSheet<EatingPlanSettingsResult>(
@@ -114,6 +120,8 @@ class EatingPlanSettingsSheet extends StatefulWidget {
         initialExtraSnackMinute: initialExtraSnackMinute,
         initialTargetCalories: initialTargetCalories,
         initialTargetProtein: initialTargetProtein,
+        calculatedCalories: calculatedCalories,
+        calculatedProtein: calculatedProtein,
         showRegenerateAction: showRegenerateAction,
       ),
     );
@@ -125,8 +133,8 @@ class EatingPlanSettingsSheet extends StatefulWidget {
 }
 
 class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
-  late String _goal;
-  late int _mealsPerDay;
+  String? _goal;
+  int? _mealsPerDay;
   String? _eatingMode;
   String? _foodType;
   late TextEditingController _customStyleController;
@@ -150,8 +158,8 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
             widget.initialTargetProtein! > 0);
     _goal = (widget.initialGoal?.isNotEmpty == true)
         ? widget.initialGoal!.toLowerCase()
-        : 'maintain';
-    _mealsPerDay = widget.initialMealsPerDay ?? 3;
+        : (widget.isNew ? 'maintain' : null);
+    _mealsPerDay = widget.initialMealsPerDay ?? (widget.isNew ? 3 : null);
     _eatingMode = (widget.initialEatingMode?.isNotEmpty == true)
         ? widget.initialEatingMode!.toLowerCase()
         : (widget.isNew ? 'balanced' : null);
@@ -176,14 +184,84 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
           ? widget.initialTargetProtein.toString()
           : '',
     );
+    _customStyleController.addListener(_onFieldChanged);
+    _caloriesController.addListener(_onFieldChanged);
+    _proteinController.addListener(_onFieldChanged);
+  }
+
+  void _onFieldChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _customStyleController.removeListener(_onFieldChanged);
+    _caloriesController.removeListener(_onFieldChanged);
+    _proteinController.removeListener(_onFieldChanged);
     _customStyleController.dispose();
     _caloriesController.dispose();
     _proteinController.dispose();
     super.dispose();
+  }
+
+  bool get isDirty {
+    if (widget.isNew) return true;
+
+    final currentGoal = _goal;
+    final initialGoal = widget.initialGoal?.toLowerCase();
+    if (currentGoal != initialGoal) return true;
+
+    final currentMeals = _mealsPerDay;
+    final initialMeals = widget.initialMealsPerDay;
+    if (currentMeals != initialMeals) return true;
+
+    final currentMode = _eatingMode;
+    final initialMode = widget.initialEatingMode?.toLowerCase();
+    if (currentMode != initialMode) return true;
+
+    final currentFood = _foodType;
+    final initialFood = widget.initialFoodType?.toLowerCase();
+    if (currentFood != initialFood) return true;
+
+    final currentCustomText = _customStyleController.text.trim();
+    final initialCustomText = (widget.initialFoodStyleCustomText ?? '').trim();
+    if (currentCustomText != initialCustomText) return true;
+
+    final initBf = widget.initialBreakfastMinute ?? 480;
+    if (_breakfastMinute != initBf) return true;
+
+    final initLunch = widget.initialLunchMinute ?? 780;
+    if (_lunchMinute != initLunch) return true;
+
+    final initDinner = widget.initialDinnerMinute ?? 1230;
+    if (_dinnerMinute != initDinner) return true;
+
+    final initSnack = widget.initialSnackMinute ?? 1020;
+    if (_snackMinute != initSnack) return true;
+
+    final initExtra = widget.initialExtraSnackMinute ?? 660;
+    if (_extraSnackMinute != initExtra) return true;
+
+    final rawCal = _showNutritionOverrides
+        ? int.tryParse(_caloriesController.text.trim())
+        : null;
+    final initialCal = widget.initialTargetCalories;
+    if (rawCal != initialCal) return true;
+
+    final rawProt = _showNutritionOverrides
+        ? int.tryParse(_proteinController.text.trim())
+        : null;
+    final initialProt = widget.initialTargetProtein;
+    if (rawProt != initialProt) return true;
+
+    final initialHadOverrides =
+        (widget.initialTargetCalories != null &&
+            widget.initialTargetCalories! > 0) ||
+        (widget.initialTargetProtein != null &&
+            widget.initialTargetProtein! > 0);
+    if (_showNutritionOverrides != initialHadOverrides) return true;
+
+    return false;
   }
 
   String? _validate() {
@@ -201,7 +279,8 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
       return 'Dinner time must be within a valid day range.';
     }
 
-    if (_mealsPerDay == 3) {
+    final effectiveMeals = _mealsPerDay ?? 3;
+    if (effectiveMeals == 3) {
       if (_lunchMinute <= _breakfastMinute) {
         return 'Lunch must be scheduled after breakfast.';
       }
@@ -214,8 +293,9 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
       if (_dinnerMinute - _lunchMinute < 120) {
         return 'Meals must be scheduled at least 2 hours apart.';
       }
-    } else if (_mealsPerDay == 4) {
-      if (_lunchMinute <= _breakfastMinute || _lunchMinute - _breakfastMinute < 120) {
+    } else if (effectiveMeals == 4) {
+      if (_lunchMinute <= _breakfastMinute ||
+          _lunchMinute - _breakfastMinute < 120) {
         return 'Lunch must be scheduled at least 2 hours after breakfast.';
       }
       if (_snackMinute <= _lunchMinute || _snackMinute - _lunchMinute < 120) {
@@ -224,11 +304,13 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
       if (_dinnerMinute <= _snackMinute || _dinnerMinute - _snackMinute < 120) {
         return 'Dinner must be scheduled at least 2 hours after snack.';
       }
-    } else if (_mealsPerDay == 5) {
-      if (_extraSnackMinute <= _breakfastMinute || _extraSnackMinute - _breakfastMinute < 120) {
+    } else if (effectiveMeals == 5) {
+      if (_extraSnackMinute <= _breakfastMinute ||
+          _extraSnackMinute - _breakfastMinute < 120) {
         return 'Morning snack must be scheduled at least 2 hours after breakfast.';
       }
-      if (_lunchMinute <= _extraSnackMinute || _lunchMinute - _extraSnackMinute < 120) {
+      if (_lunchMinute <= _extraSnackMinute ||
+          _lunchMinute - _extraSnackMinute < 120) {
         return 'Lunch must be scheduled at least 2 hours after morning snack.';
       }
       if (_snackMinute <= _lunchMinute || _snackMinute - _lunchMinute < 120) {
@@ -251,21 +333,29 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
       return;
     }
 
-    final rawCal = int.tryParse(_caloriesController.text.trim());
-    final rawProt = int.tryParse(_proteinController.text.trim());
+    final rawCal = _showNutritionOverrides
+        ? int.tryParse(_caloriesController.text.trim())
+        : null;
+    final rawProt = _showNutritionOverrides
+        ? int.tryParse(_proteinController.text.trim())
+        : null;
+
+    final effectiveMeals = _mealsPerDay ?? (regenerate ? 3 : null);
 
     final result = EatingPlanSettingsResult(
-      goal: _goal,
-      mealsPerDay: _mealsPerDay,
+      goal: regenerate ? (_goal ?? 'maintain') : _goal,
+      mealsPerDay: effectiveMeals,
       eatingMode: regenerate ? (_eatingMode ?? 'balanced') : _eatingMode,
       foodType: regenerate ? (_foodType ?? 'mixed') : _foodType,
       foodStyleCustomText: _eatingMode == 'custom'
           ? _customStyleController.text.trim()
           : null,
       breakfastMinute: _breakfastMinute,
-      extraSnackMinute: _mealsPerDay == 5 ? _extraSnackMinute : null,
+      extraSnackMinute: effectiveMeals == 5 ? _extraSnackMinute : null,
       lunchMinute: _lunchMinute,
-      snackMinute: (_mealsPerDay == 4 || _mealsPerDay == 5) ? _snackMinute : null,
+      snackMinute: (effectiveMeals == 4 || effectiveMeals == 5)
+          ? _snackMinute
+          : null,
       dinnerMinute: _dinnerMinute,
       targetCalories: (rawCal != null && rawCal > 0) ? rawCal : null,
       targetProtein: (rawProt != null && rawProt > 0) ? rawProt : null,
@@ -396,15 +486,19 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                       _buildHeader('Goal'),
                       const SizedBox(height: 6),
                       SegmentedButton<String>(
+                        emptySelectionAllowed: true,
                         segments: const [
                           ButtonSegment(value: 'lose', label: Text('Lose')),
-                          ButtonSegment(value: 'maintain', label: Text('Maintain')),
+                          ButtonSegment(
+                            value: 'maintain',
+                            label: Text('Maintain'),
+                          ),
                           ButtonSegment(value: 'gain', label: Text('Gain')),
                         ],
-                        selected: {_goal},
+                        selected: _goal != null ? {_goal!} : const <String>{},
                         onSelectionChanged: (s) {
                           setState(() {
-                            _goal = s.first;
+                            _goal = s.isEmpty ? null : s.first;
                             _validationError = null;
                           });
                         },
@@ -415,15 +509,18 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                       _buildHeader('Meals per Day'),
                       const SizedBox(height: 6),
                       SegmentedButton<int>(
+                        emptySelectionAllowed: true,
                         segments: const [
                           ButtonSegment(value: 3, label: Text('3 meals')),
                           ButtonSegment(value: 4, label: Text('4 meals')),
                           ButtonSegment(value: 5, label: Text('5 meals')),
                         ],
-                        selected: {_mealsPerDay},
+                        selected: _mealsPerDay != null
+                            ? {_mealsPerDay!}
+                            : const <int>{},
                         onSelectionChanged: (s) {
                           setState(() {
-                            _mealsPerDay = s.first;
+                            _mealsPerDay = s.isEmpty ? null : s.first;
                             _validationError = null;
                           });
                         },
@@ -436,33 +533,39 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                       Wrap(
                         spacing: 6,
                         runSpacing: 6,
-                        children: [
-                          ('balanced', 'Balanced'),
-                          ('mediterranean', 'Mediterranean'),
-                          ('india', 'Indian Cuisine'),
-                          ('high_protein', 'High Protein'),
-                          ('custom', 'Custom Style'),
-                        ].map((item) {
-                          final isSel = _eatingMode == item.$1;
-                          return ChoiceChip(
-                            label: Text(item.$2),
-                            selected: isSel,
-                            selectedColor: OptivusColors.roseAccent.withValues(alpha: 0.18),
-                            labelStyle: TextStyle(
-                              fontSize: 12,
-                              fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
-                              color: isSel ? OptivusColors.roseAccent : OptivusColors.textSecondary,
-                            ),
-                            onSelected: (sel) {
-                              if (sel) {
-                                setState(() {
-                                  _eatingMode = item.$1;
-                                  _validationError = null;
-                                });
-                              }
-                            },
-                          );
-                        }).toList(),
+                        children:
+                            [
+                              ('balanced', 'Balanced'),
+                              ('mediterranean', 'Mediterranean'),
+                              ('india', 'Indian Cuisine'),
+                              ('high_protein', 'High Protein'),
+                              ('custom', 'Custom Style'),
+                            ].map((item) {
+                              final isSel = _eatingMode == item.$1;
+                              return ChoiceChip(
+                                label: Text(item.$2),
+                                selected: isSel,
+                                selectedColor: OptivusColors.roseAccent
+                                    .withValues(alpha: 0.18),
+                                labelStyle: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: isSel
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  color: isSel
+                                      ? OptivusColors.roseAccent
+                                      : OptivusColors.textSecondary,
+                                ),
+                                onSelected: (sel) {
+                                  if (sel) {
+                                    setState(() {
+                                      _eatingMode = item.$1;
+                                      _validationError = null;
+                                    });
+                                  }
+                                },
+                              );
+                            }).toList(),
                       ),
 
                       if (_eatingMode == 'custom') ...[
@@ -471,7 +574,8 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                           controller: _customStyleController,
                           decoration: const InputDecoration(
                             labelText: 'Describe Custom Food Style',
-                            hintText: 'e.g. Keto-friendly, Asian stir-fries, plant-forward',
+                            hintText:
+                                'e.g. Keto-friendly, Asian stir-fries, plant-forward',
                           ),
                           onChanged: (_) {
                             if (_validationError != null) {
@@ -488,33 +592,39 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                       Wrap(
                         spacing: 6,
                         runSpacing: 6,
-                        children: [
-                          ('mixed', 'Mixed / Any'),
-                          ('veg', 'Vegetarian'),
-                          ('vegan', 'Vegan'),
-                          ('eggetarian', 'Eggetarian'),
-                          ('non_veg', 'Non-Vegetarian'),
-                        ].map((item) {
-                          final isSel = _foodType == item.$1;
-                          return ChoiceChip(
-                            label: Text(item.$2),
-                            selected: isSel,
-                            selectedColor: OptivusColors.roseAccent.withValues(alpha: 0.18),
-                            labelStyle: TextStyle(
-                              fontSize: 12,
-                              fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
-                              color: isSel ? OptivusColors.roseAccent : OptivusColors.textSecondary,
-                            ),
-                            onSelected: (sel) {
-                              if (sel) {
-                                setState(() {
-                                  _foodType = item.$1;
-                                  _validationError = null;
-                                });
-                              }
-                            },
-                          );
-                        }).toList(),
+                        children:
+                            [
+                              ('mixed', 'Mixed / Any'),
+                              ('veg', 'Vegetarian'),
+                              ('vegan', 'Vegan'),
+                              ('eggetarian', 'Eggetarian'),
+                              ('non_veg', 'Non-Vegetarian'),
+                            ].map((item) {
+                              final isSel = _foodType == item.$1;
+                              return ChoiceChip(
+                                label: Text(item.$2),
+                                selected: isSel,
+                                selectedColor: OptivusColors.roseAccent
+                                    .withValues(alpha: 0.18),
+                                labelStyle: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: isSel
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  color: isSel
+                                      ? OptivusColors.roseAccent
+                                      : OptivusColors.textSecondary,
+                                ),
+                                onSelected: (sel) {
+                                  if (sel) {
+                                    setState(() {
+                                      _foodType = item.$1;
+                                      _validationError = null;
+                                    });
+                                  }
+                                },
+                              );
+                            }).toList(),
                       ),
                       const SizedBox(height: 16),
 
@@ -526,7 +636,10 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                           borderRadius: BorderRadius.circular(10),
                           side: BorderSide(color: OptivusColors.borderSubtle),
                         ),
-                        leading: const Icon(Icons.wb_sunny_rounded, color: OptivusColors.roseAccent),
+                        leading: const Icon(
+                          Icons.wb_sunny_rounded,
+                          color: OptivusColors.roseAccent,
+                        ),
                         title: const Text('Breakfast'),
                         trailing: Text(
                           EatingPresentationUtils.formatTime(_breakfastMinute),
@@ -542,7 +655,8 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                           );
                           if (picked != null) {
                             setState(() {
-                              _breakfastMinute = picked.hour * 60 + picked.minute;
+                              _breakfastMinute =
+                                  picked.hour * 60 + picked.minute;
                               _validationError = null;
                             });
                           }
@@ -555,10 +669,15 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                             borderRadius: BorderRadius.circular(10),
                             side: BorderSide(color: OptivusColors.borderSubtle),
                           ),
-                          leading: const Icon(Icons.cookie_rounded, color: OptivusColors.roseAccent),
+                          leading: const Icon(
+                            Icons.cookie_rounded,
+                            color: OptivusColors.roseAccent,
+                          ),
                           title: const Text('Morning Snack'),
                           trailing: Text(
-                            EatingPresentationUtils.formatTime(_extraSnackMinute),
+                            EatingPresentationUtils.formatTime(
+                              _extraSnackMinute,
+                            ),
                             style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                           onTap: () async {
@@ -571,7 +690,8 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                             );
                             if (picked != null) {
                               setState(() {
-                                _extraSnackMinute = picked.hour * 60 + picked.minute;
+                                _extraSnackMinute =
+                                    picked.hour * 60 + picked.minute;
                                 _validationError = null;
                               });
                             }
@@ -584,7 +704,10 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                           borderRadius: BorderRadius.circular(10),
                           side: BorderSide(color: OptivusColors.borderSubtle),
                         ),
-                        leading: const Icon(Icons.lunch_dining_rounded, color: OptivusColors.roseAccent),
+                        leading: const Icon(
+                          Icons.lunch_dining_rounded,
+                          color: OptivusColors.roseAccent,
+                        ),
                         title: const Text('Lunch'),
                         trailing: Text(
                           EatingPresentationUtils.formatTime(_lunchMinute),
@@ -613,7 +736,10 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                             borderRadius: BorderRadius.circular(10),
                             side: BorderSide(color: OptivusColors.borderSubtle),
                           ),
-                          leading: const Icon(Icons.cookie_rounded, color: OptivusColors.roseAccent),
+                          leading: const Icon(
+                            Icons.cookie_rounded,
+                            color: OptivusColors.roseAccent,
+                          ),
                           title: const Text('Afternoon Snack'),
                           trailing: Text(
                             EatingPresentationUtils.formatTime(_snackMinute),
@@ -642,7 +768,10 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                           borderRadius: BorderRadius.circular(10),
                           side: BorderSide(color: OptivusColors.borderSubtle),
                         ),
-                        leading: const Icon(Icons.dinner_dining_rounded, color: OptivusColors.roseAccent),
+                        leading: const Icon(
+                          Icons.dinner_dining_rounded,
+                          color: OptivusColors.roseAccent,
+                        ),
                         title: const Text('Dinner'),
                         trailing: Text(
                           EatingPresentationUtils.formatTime(_dinnerMinute),
@@ -669,25 +798,70 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                       // Optional Nutrition Targets
                       _buildHeader('Target Nutrition (Optional Overrides)'),
                       const SizedBox(height: 8),
-                      if (!_showNutritionOverrides)
-                        OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(
-                              color: Colors.white.withValues(alpha: 0.2),
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
+                      if (widget.calculatedCalories != null ||
+                          widget.calculatedProtein != null) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
                           ),
-                          icon: const Icon(Icons.tune_rounded, size: 16),
-                          label: const Text(
-                            'Customize calorie & protein targets',
-                            style: TextStyle(fontSize: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.white10),
                           ),
-                          onPressed: () =>
-                              setState(() => _showNutritionOverrides = true),
-                        )
-                      else
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.calculate_outlined,
+                                size: 16,
+                                color: OptivusColors.textSecondary,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Calculated targets: ${widget.calculatedCalories ?? '—'} kcal · ${widget.calculatedProtein ?? '—'} g protein',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: OptivusColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      SwitchListTile.adaptive(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          'Override calculated targets',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: OptivusColors.textPrimary,
+                          ),
+                        ),
+                        subtitle: const Text(
+                          'Manually set your own daily calories and protein',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: OptivusColors.textSecondary,
+                          ),
+                        ),
+                        value: _showNutritionOverrides,
+                        activeTrackColor: OptivusColors.roseAccent,
+                        onChanged: (val) {
+                          setState(() {
+                            _showNutritionOverrides = val;
+                            if (!val) {
+                              _caloriesController.clear();
+                              _proteinController.clear();
+                            }
+                          });
+                        },
+                      ),
+                      if (_showNutritionOverrides) ...[
+                        const SizedBox(height: 8),
                         Row(
                           children: [
                             Expanded(
@@ -696,7 +870,7 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                                 keyboardType: TextInputType.number,
                                 decoration: const InputDecoration(
                                   labelText: 'Daily Calories (kcal)',
-                                  hintText: 'Auto-calculated',
+                                  hintText: 'e.g. 2000',
                                 ),
                               ),
                             ),
@@ -707,12 +881,13 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                                 keyboardType: TextInputType.number,
                                 decoration: const InputDecoration(
                                   labelText: 'Daily Protein (g)',
-                                  hintText: 'Auto-calculated',
+                                  hintText: 'e.g. 130',
                                 ),
                               ),
                             ),
                           ],
                         ),
+                      ],
                       const SizedBox(height: 24),
 
                       // Bottom Actions
@@ -721,13 +896,16 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                           Expanded(
                             child: OutlinedButton(
                               style: OutlinedButton.styleFrom(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
-                              onPressed: () => _submit(regenerate: false),
+                              onPressed: isDirty
+                                  ? () => _submit(regenerate: false)
+                                  : null,
                               child: const Text('Save Settings'),
                             ),
                           ),
@@ -738,8 +916,9 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                               child: FilledButton.icon(
                                 style: FilledButton.styleFrom(
                                   backgroundColor: OptivusColors.roseAccent,
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 14),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),

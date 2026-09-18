@@ -52,24 +52,22 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
     super.initState();
     // Preserve extracted repeat days truthfully. Never invent fake repeat days!
     _blocks = widget.initialBlocks.map((b) {
-      final validDays = b.repeatDays
-          .where((d) => d >= 1 && d <= 7)
-          .toSet()
-          .toList()
-        ..sort();
+      final validDays =
+          b.repeatDays.where((d) => d >= 1 && d <= 7).toSet().toList()..sort();
       return b.copyWith(repeatDays: validDays);
     }).toList();
   }
 
   bool get _hasInvalidCandidates => _blocks.any((b) {
-        final hasDishes = b.dishes.isNotEmpty;
-        final hasDays = b.repeatDays.isNotEmpty;
-        final isValidTime = b.endMinute > b.startMinute &&
-            b.startMinute >= 0 &&
-            b.endMinute <= 1440;
-        final hasTitle = b.title.trim().isNotEmpty;
-        return !hasDishes || !hasDays || !isValidTime || !hasTitle;
-      });
+    final hasDishes = b.dishes.isNotEmpty;
+    final hasDays = b.repeatDays.isNotEmpty;
+    final isValidTime =
+        b.endMinute > b.startMinute &&
+        b.startMinute >= 0 &&
+        b.endMinute <= 1440;
+    final hasTitle = b.title.trim().isNotEmpty;
+    return !hasDishes || !hasDays || !isValidTime || !hasTitle;
+  });
 
   void _removeBlock(int index) {
     setState(() {
@@ -81,6 +79,16 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
     final block = _blocks[index];
     final titleCtrl = TextEditingController(text: block.title);
     final dishesCtrl = TextEditingController(text: block.dishes.join('\n'));
+    final categoryCtrl = TextEditingController(text: block.mealCategory ?? '');
+    final caloriesCtrl = TextEditingController(
+      text: block.calories != null ? block.calories!.toStringAsFixed(0) : '',
+    );
+    final proteinCtrl = TextEditingController(
+      text: block.protein != null ? block.protein!.toStringAsFixed(0) : '',
+    );
+    final locationCtrl = TextEditingController(text: block.location ?? '');
+    final notesCtrl = TextEditingController(text: block.notes ?? '');
+    String? currentSlot = block.mealSlot;
     var startMin = block.startMinute;
     var endMin = block.endMinute;
     final selectedDays = Set<int>.from(block.repeatDays);
@@ -100,7 +108,10 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                 if (errorText != null) ...[
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     margin: const EdgeInsets.only(bottom: 10),
                     decoration: BoxDecoration(
                       color: OptivusColors.danger.withValues(alpha: 0.12),
@@ -127,6 +138,57 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                   },
                 ),
                 const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String?>(
+                        initialValue: currentSlot,
+                        decoration: const InputDecoration(
+                          labelText: 'Meal Slot',
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: null,
+                            child: Text('Unspecified'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'breakfast',
+                            child: Text('Breakfast'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'morning_snack',
+                            child: Text('Morning Snack'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'lunch',
+                            child: Text('Lunch'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'snack',
+                            child: Text('Snack'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'dinner',
+                            child: Text('Dinner'),
+                          ),
+                        ],
+                        onChanged: (val) {
+                          setDlgState(() => currentSlot = val);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: categoryCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Category (opt)',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
                 TextField(
                   controller: dishesCtrl,
                   minLines: 2,
@@ -137,6 +199,30 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                   onChanged: (_) {
                     if (errorText != null) setDlgState(() => errorText = null);
                   },
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: caloriesCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Calories (kcal)',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: proteinCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Protein (g)',
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -158,7 +244,9 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                             });
                           }
                         },
-                        child: Text(EatingPresentationUtils.formatTime(startMin)),
+                        child: Text(
+                          EatingPresentationUtils.formatTime(startMin),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -200,10 +288,20 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                     for (var d = 1; d <= 7; d++)
                       FilterChip(
                         label: Text(
-                          const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d - 1],
+                          const [
+                            'Mon',
+                            'Tue',
+                            'Wed',
+                            'Thu',
+                            'Fri',
+                            'Sat',
+                            'Sun',
+                          ][d - 1],
                         ),
                         selected: selectedDays.contains(d),
-                        selectedColor: OptivusColors.roseAccent.withValues(alpha: 0.18),
+                        selectedColor: OptivusColors.roseAccent.withValues(
+                          alpha: 0.18,
+                        ),
                         onSelected: (sel) {
                           setDlgState(() {
                             if (sel) {
@@ -216,6 +314,22 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                         },
                       ),
                   ],
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: locationCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Location (optional)',
+                    hintText: 'e.g. Dining Hall, Home',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: notesCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Notes (optional)',
+                    hintText: 'e.g. Extra hydration',
+                  ),
                 ),
               ],
             ),
@@ -238,23 +352,66 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                   return;
                 }
                 if (dishes.isEmpty) {
-                  setDlgState(() => errorText = 'At least one dish is required.');
+                  setDlgState(
+                    () => errorText = 'At least one dish is required.',
+                  );
                   return;
                 }
                 if (endMin <= startMin) {
-                  setDlgState(() => errorText = 'End time must be after start time.');
+                  setDlgState(
+                    () => errorText = 'End time must be after start time.',
+                  );
                   return;
                 }
                 if (selectedDays.isEmpty) {
-                  setDlgState(() => errorText = 'Please select at least one day.');
+                  setDlgState(
+                    () => errorText = 'Please select at least one day.',
+                  );
                   return;
                 }
+
+                final rawCal = caloriesCtrl.text.trim();
+                final cal = rawCal.isNotEmpty ? double.tryParse(rawCal) : null;
+                if (rawCal.isNotEmpty && cal == null) {
+                  setDlgState(
+                    () => errorText = 'Calories must be a valid number.',
+                  );
+                  return;
+                }
+
+                final rawProt = proteinCtrl.text.trim();
+                final prot = rawProt.isNotEmpty
+                    ? double.tryParse(rawProt)
+                    : null;
+                if (rawProt.isNotEmpty && prot == null) {
+                  setDlgState(
+                    () => errorText = 'Protein must be a valid number.',
+                  );
+                  return;
+                }
+
+                final loc = locationCtrl.text.trim();
+                final nts = notesCtrl.text.trim();
+                final cat = categoryCtrl.text.trim();
+
                 final updated = block.copyWith(
                   title: title,
                   dishes: dishes,
                   startMinute: startMin,
                   endMinute: endMin,
                   repeatDays: selectedDays.toList()..sort(),
+                  mealSlot: currentSlot,
+                  clearMealSlot: currentSlot == null,
+                  mealCategory: cat.isNotEmpty ? cat : null,
+                  clearMealCategory: cat.isEmpty,
+                  calories: cal,
+                  clearCalories: cal == null,
+                  protein: prot,
+                  clearProtein: prot == null,
+                  location: loc.isNotEmpty ? loc : null,
+                  clearLocation: loc.isEmpty,
+                  notes: nts.isNotEmpty ? nts : null,
+                  clearNotes: nts.isEmpty,
                 );
                 Navigator.pop(dlgCtx, updated);
               },
@@ -366,11 +523,16 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                           final b = _blocks[index];
                           final hasDishes = b.dishes.isNotEmpty;
                           final hasDays = b.repeatDays.isNotEmpty;
-                          final isValidTime = b.endMinute > b.startMinute &&
+                          final isValidTime =
+                              b.endMinute > b.startMinute &&
                               b.startMinute >= 0 &&
                               b.endMinute <= 1440;
                           final hasTitle = b.title.trim().isNotEmpty;
-                          final needsAttention = !hasDishes || !hasDays || !isValidTime || !hasTitle;
+                          final needsAttention =
+                              !hasDishes ||
+                              !hasDays ||
+                              !isValidTime ||
+                              !hasTitle;
 
                           return Material(
                             color: Colors.transparent,
@@ -384,7 +546,9 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
                                     color: needsAttention
-                                        ? OptivusColors.warning.withValues(alpha: 0.5)
+                                        ? OptivusColors.warning.withValues(
+                                            alpha: 0.5,
+                                          )
                                         : OptivusColors.borderSubtle,
                                     width: 1,
                                   ),
@@ -394,38 +558,51 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                                   children: [
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Row(
                                             children: [
                                               Expanded(
                                                 child: Text(
-                                                  b.title.isEmpty ? 'Untitled meal' : b.title,
+                                                  b.title.isEmpty
+                                                      ? 'Untitled meal'
+                                                      : b.title,
                                                   style: TextStyle(
                                                     fontSize: 14,
                                                     fontWeight: FontWeight.w700,
                                                     color: b.title.isEmpty
                                                         ? OptivusColors.warning
-                                                        : OptivusColors.textPrimary,
+                                                        : OptivusColors
+                                                              .textPrimary,
                                                   ),
                                                 ),
                                               ),
                                               if (needsAttention)
                                                 Container(
-                                                  padding: const EdgeInsets.symmetric(
-                                                    horizontal: 6,
-                                                    vertical: 2,
-                                                  ),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 2,
+                                                      ),
                                                   decoration: BoxDecoration(
-                                                    color: OptivusColors.warning.withValues(alpha: 0.14),
-                                                    borderRadius: BorderRadius.circular(4),
+                                                    color: OptivusColors.warning
+                                                        .withValues(
+                                                          alpha: 0.14,
+                                                        ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
+                                                        ),
                                                   ),
                                                   child: const Text(
                                                     'Needs Review',
                                                     style: TextStyle(
                                                       fontSize: 10,
-                                                      fontWeight: FontWeight.w700,
-                                                      color: OptivusColors.warning,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      color:
+                                                          OptivusColors.warning,
                                                     ),
                                                   ),
                                                 ),
@@ -437,7 +614,8 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                                             style: const TextStyle(
                                               fontSize: 12,
                                               fontWeight: FontWeight.w500,
-                                              color: OptivusColors.textSecondary,
+                                              color:
+                                                  OptivusColors.textSecondary,
                                             ),
                                           ),
                                           if (b.dishes.isNotEmpty) ...[
@@ -446,7 +624,8 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                                               b.dishes.join(', '),
                                               style: const TextStyle(
                                                 fontSize: 11,
-                                                color: OptivusColors.textPrimary,
+                                                color:
+                                                    OptivusColors.textPrimary,
                                               ),
                                               maxLines: 2,
                                               overflow: TextOverflow.ellipsis,
@@ -500,13 +679,19 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                                       ),
                                     ),
                                     IconButton(
-                                      icon: const Icon(Icons.edit_rounded, size: 18),
+                                      icon: const Icon(
+                                        Icons.edit_rounded,
+                                        size: 18,
+                                      ),
                                       color: OptivusColors.roseAccent,
                                       onPressed: () => _editBlock(index),
                                       tooltip: 'Edit meal',
                                     ),
                                     IconButton(
-                                      icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                                      icon: const Icon(
+                                        Icons.delete_outline_rounded,
+                                        size: 18,
+                                      ),
                                       color: OptivusColors.textSecondary,
                                       onPressed: () => _removeBlock(index),
                                       tooltip: 'Remove',

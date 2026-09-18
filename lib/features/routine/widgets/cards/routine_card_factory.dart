@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/models/routine_occurrence.dart';
 import 'package:optivus/features/routine/models/routine_action_context.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/cards/hard_block_card.dart';

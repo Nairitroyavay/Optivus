@@ -3,10 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/config/backend_config.dart';
-import 'package:optivus/features/routine/models/add_routine_draft.dart';
 import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/features/routine/routine_state.dart';
-import 'package:optivus/features/routine/services/add_routine_validator.dart';
 import 'package:optivus/features/routine/sheets/add_routine_sheet.dart';
 import 'package:optivus/models/conflict_acceptance.dart';
 import 'package:optivus/models/routine_event_record.dart';
@@ -20,7 +18,7 @@ class _AmbiguousRoutineRepository extends FakeRoutineRepository {
   bool shouldThrowOnCreateAfterPersisting = false;
   bool shouldThrowOnCreateWithoutPersisting = false;
 
-  _AmbiguousRoutineRepository({super.database});
+  _AmbiguousRoutineRepository();
 
   @override
   Future<RoutineItem> createRoutineItem(String uid, RoutineItem item) async {
@@ -42,11 +40,8 @@ class _AmbiguousTransactionRepository extends FakeRoutineTransactionRepository {
 
   _AmbiguousTransactionRepository(
     this.historyRepo, {
-    RoutineRepository? routineRepository,
-  }) : super(
-          historyRepository: historyRepo,
-          routineRepository: routineRepository,
-        );
+    super.routineRepository,
+  }) : super(historyRepository: historyRepo);
 
   @override
   Future<void> commitWrite({
@@ -250,36 +245,17 @@ void main() {
       await tester.tap(find.text('Flexible Task'));
       await tester.pumpAndSettle();
 
-      final fields = tester.widgetList<TextField>(find.byType(TextField)).toList();
-      // ignore: avoid_print
-      print('DEBUG: fields count=${fields.length}, labels=${fields.map((f) => f.decoration?.labelText).toList()}');
-
       // Enter title
       await tester.enterText(find.byType(TextField).first, 'Save-Failed Task');
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pump(const Duration(milliseconds: 100));
 
-      final testDraft = AddRoutineDraft.initial().copyWith(title: 'Save-Failed Task');
-      // ignore: avoid_print
-      print('DEBUG: validator on initial draft: ${AddRoutineValidator.validate(testDraft)}');
-      // ignore: avoid_print
-      print('DEBUG: draft scheduleMode: ${testDraft.scheduleMode}, repeatDays: ${testDraft.repeatDays}');
-
-      final titleEntered = tester.widget<TextField>(find.byType(TextField).first).controller?.text;
-      // ignore: avoid_print
-      print('DEBUG: titleEntered="$titleEntered"');
-
       // Tap 'Save at this time' (will fail due to shouldThrowOnCreateWithoutPersisting)
       final saveBtn = find.text('Save at this time');
       await tester.ensureVisible(saveBtn);
-      final btn = tester.widget<ElevatedButton>(find.ancestor(of: saveBtn, matching: find.byType(ElevatedButton)));
-      // ignore: avoid_print
-      print('DEBUG: btn.onPressed is null: ${btn.onPressed == null}');
-      btn.onPressed!();
-
-      for (int i = 0; i < 20; i++) {
-        await tester.pump(const Duration(milliseconds: 50));
-      }
+      await tester.tap(saveBtn);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
 
       // 1. Verify warning banner appears
       expect(find.byKey(const ValueKey('add-routine-failed-warning')), findsOneWidget);
@@ -295,7 +271,7 @@ void main() {
         find.ancestor(
           of: find.byType(TextField).first,
           matching: find.byType(AbsorbPointer),
-        ),
+        ).first,
       );
       expect(absorbPointer.absorbing, isTrue);
 

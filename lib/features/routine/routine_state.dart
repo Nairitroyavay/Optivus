@@ -78,8 +78,14 @@ enum RoutineOccurrenceAction {
   undo,
 }
 
+enum RoutineOccurrenceMutationType {
+  setRecord,
+  deleteRecord,
+}
+
 class RoutineOccurrenceWriteIntent {
   final RoutineOccurrenceAction action;
+  final RoutineOccurrenceMutationType mutationType;
   final String ownerUid;
   final String occurrenceId;
   final String operationId;
@@ -91,6 +97,7 @@ class RoutineOccurrenceWriteIntent {
 
   const RoutineOccurrenceWriteIntent({
     required this.action,
+    this.mutationType = RoutineOccurrenceMutationType.setRecord,
     required this.ownerUid,
     required this.occurrenceId,
     required this.operationId,
@@ -1106,6 +1113,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         }
       }
 
+      TrackerLaunchIntent? restoredTrackerIntent;
       for (final occ in mergedOccurrences) {
         if (occ.status == RoutineStatus.inTracker &&
             occ.trackerSessionId != null) {
@@ -1118,12 +1126,24 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             status: 'active',
           );
           _ref.read(trackerSessionLinksProvider.notifier).upsert(link);
+          restoredTrackerIntent ??= TrackerLaunchIntent(
+            trackerType: TrackerType.values.firstWhere(
+              (t) => t.name == occ.trackerType,
+              orElse: () => TrackerType.none,
+            ),
+            routineTaskId: occ.routineItemId,
+            occurrenceDateKey: occ.occurrenceDateKey,
+            sessionId: occ.trackerSessionId!,
+            startedAt: occ.startedAt ?? occ.createdAt,
+          );
         }
       }
 
       state = state.copyWith(
         items: mergedItems,
         occurrences: mergedOccurrences,
+        activeTrackerLaunchIntent:
+            restoredTrackerIntent ?? state.activeTrackerLaunchIntent,
         loading: false,
         eventsLoading: true,
       );
@@ -2473,16 +2493,25 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       sourceFingerprint: previous.sourceFingerprint,
       startedAt: attempted.startedAt,
       countdownDurationSeconds: attempted.countdownDurationSeconds,
+      previousStatus: attempted.previousStatus,
+      previousAction: attempted.previousAction,
+      trackerSessionId: attempted.trackerSessionId,
+      trackerType: attempted.trackerType,
     );
     if (normalized.source == attempted.source &&
         normalized.createdAt == attempted.createdAt &&
         normalized.onboardingProjectionId == attempted.onboardingProjectionId &&
         normalized.onboardingSourceItemId == attempted.onboardingSourceItemId &&
-        normalized.sourceFingerprint == attempted.sourceFingerprint) {
+        normalized.sourceFingerprint == attempted.sourceFingerprint &&
+        normalized.previousStatus == attempted.previousStatus &&
+        normalized.previousAction == attempted.previousAction &&
+        normalized.trackerSessionId == attempted.trackerSessionId &&
+        normalized.trackerType == attempted.trackerType) {
       return intent;
     }
     return RoutineOccurrenceWriteIntent(
       action: intent.action,
+      mutationType: intent.mutationType,
       ownerUid: intent.ownerUid,
       occurrenceId: intent.occurrenceId,
       operationId: intent.operationId,
@@ -2761,125 +2790,181 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       ],
       error: null,
     );
+    return await _commitOccurrenceIntentWithRecovery(intent);
+  }
+
+  Future<RoutineWriteResult> _commitOccurrenceIntentWithRecovery(
+    RoutineOccurrenceWriteIntent intent, {
+    bool isQueued = false,
+  }) async {
+    final uid = intent.ownerUid;
+    final id = intent.occurrenceId;
+    final operationId = intent.operationId;
+    final isDelete =
+        intent.mutationType == RoutineOccurrenceMutationType.deleteRecord;
+
     try {
-      await _transactionRepository.commitWrite(
-        uid: uid,
-        setOccurrence: record,
-        addEvent: event,
-      );
+      if (isDelete) {
+        await _transactionRepository.commitWrite(
+          uid: uid,
+          deleteOccurrenceId: id,
+          addEvent: intent.event,
+        );
+      } else {
+        await _transactionRepository.commitWrite(
+          uid: uid,
+          setOccurrence: intent.attemptedRecord,
+          addEvent: intent.event,
+        );
+      }
+
       _logRoutineActionWrite(
-        action: action,
-        occurrenceSource: occurrenceSource,
-        actionSource: actionSource,
-        existing: existing != null,
+        action: intent.attemptedRecord.action,
+        occurrenceSource: intent.attemptedRecord.source,
+        actionSource: intent.event?.source ?? intent.attemptedRecord.source,
+        existing: intent.previousRecord != null,
         result: 'success',
       );
-      if (!mounted) return _supersededWriteResult(operationId);
-      if (_ownerUid != uid) return _supersededWriteResult(operationId);
+
+      if (!mounted || _ownerUid != uid) {
+        final res = _supersededWriteResult(operationId);
+        if (intent.completer != null && !intent.completer!.isCompleted) {
+          intent.completer!.complete(res);
+        }
+        return res;
+      }
 
       state = state.copyWith(
         failedOccurrenceIntentsById: {...state.failedOccurrenceIntentsById}
           ..remove(id),
       );
-      await _processNextQueuedOccurrence(uid, id);
-      if (!completer.isCompleted) {
-        completer.complete(
-          RoutineWriteResult.saved(
-            operationId: operationId,
-            resultingStatus: record.status,
-          ),
-        );
-      }
-      return RoutineWriteResult.saved(
-        operationId: operationId,
-        resultingStatus: record.status,
-      );
-    } catch (error) {
-      if (!mounted) return _supersededWriteResult(operationId);
-      if (_ownerUid != uid) return _supersededWriteResult(operationId);
 
+      final resultingStatus = isDelete
+          ? RoutineStatus.planned
+          : intent.attemptedRecord.status;
+
+      final writeResult = RoutineWriteResult.saved(
+        operationId: operationId,
+        resultingStatus: resultingStatus,
+      );
+
+      if (intent.completer != null && !intent.completer!.isCompleted) {
+        intent.completer!.complete(writeResult);
+      }
+
+      await _processNextQueuedOccurrence(uid, id);
+      return writeResult;
+    } catch (error) {
+      if (!mounted || _ownerUid != uid) {
+        final res = _supersededWriteResult(operationId);
+        if (intent.completer != null && !intent.completer!.isCompleted) {
+          intent.completer!.complete(res);
+        }
+        return res;
+      }
+
+      // Check authoritative remote ambiguity recovery on transport / timeout errors
       bool isAmbiguitySuccess = false;
       RoutineOccurrenceRecord? recoveredRecord;
       try {
         final history = await _historyRepository.fetchHistory(uid);
-        for (final occ in history) {
-          if (occ.id == id && occ.operationKey == operationId) {
+        if (isDelete) {
+          final stillExists = history.any((occ) => occ.id == id);
+          if (!stillExists) {
             isAmbiguitySuccess = true;
-            recoveredRecord = occ;
-            break;
+          }
+        } else {
+          for (final occ in history) {
+            if (occ.id == id && occ.operationKey == operationId) {
+              isAmbiguitySuccess = true;
+              recoveredRecord = occ;
+              break;
+            }
           }
         }
       } catch (_) {}
 
-      if (isAmbiguitySuccess && recoveredRecord != null) {
+      if (isAmbiguitySuccess) {
         _logRoutineActionWrite(
-          action: action,
-          occurrenceSource: occurrenceSource,
-          actionSource: actionSource,
-          existing: existing != null,
+          action: intent.attemptedRecord.action,
+          occurrenceSource: intent.attemptedRecord.source,
+          actionSource: intent.event?.source ?? intent.attemptedRecord.source,
+          existing: intent.previousRecord != null,
           result: 'success',
         );
+
         state = state.copyWith(
           failedOccurrenceIntentsById: {...state.failedOccurrenceIntentsById}
             ..remove(id),
-          occurrences: [
-            for (final candidate in state.occurrences)
-              if (candidate.id != id) candidate,
-            recoveredRecord,
-          ],
+          occurrences: isDelete
+              ? state.occurrences.where((e) => e.id != id).toList()
+              : [
+                  for (final candidate in state.occurrences)
+                    if (candidate.id != id) candidate,
+                  recoveredRecord ?? intent.attemptedRecord,
+                ],
         );
-        await _processNextQueuedOccurrence(uid, id);
-        if (!completer.isCompleted) {
-          completer.complete(
-            RoutineWriteResult.saved(
-              operationId: operationId,
-              resultingStatus: recoveredRecord.status,
-            ),
-          );
-        }
-        return RoutineWriteResult.saved(
+
+        final resultingStatus = isDelete
+            ? RoutineStatus.planned
+            : (recoveredRecord?.status ?? intent.attemptedRecord.status);
+
+        final writeResult = RoutineWriteResult.saved(
           operationId: operationId,
-          resultingStatus: recoveredRecord.status,
+          resultingStatus: resultingStatus,
         );
+
+        if (intent.completer != null && !intent.completer!.isCompleted) {
+          intent.completer!.complete(writeResult);
+        }
+
+        await _processNextQueuedOccurrence(uid, id);
+        return writeResult;
       }
 
       final failureCat = classifyRoutineWriteFailure(error);
-
       _logRoutineActionWrite(
-        action: action,
-        occurrenceSource: occurrenceSource,
-        actionSource: actionSource,
-        existing: existing != null,
+        action: intent.attemptedRecord.action,
+        occurrenceSource: intent.attemptedRecord.source,
+        actionSource: intent.event?.source ?? intent.attemptedRecord.source,
+        existing: intent.previousRecord != null,
         result: 'failure',
         error: error,
       );
+
+      final rolledBackOccurrences = [
+        for (final candidate in state.occurrences)
+          if (candidate.id != id) candidate,
+        if (intent.previousRecord != null) intent.previousRecord!,
+      ];
+
       state = state.copyWith(
         failedOccurrenceIntentsById: {
           ...state.failedOccurrenceIntentsById,
           id: intent,
         },
-        occurrences: [
-          for (final candidate in state.occurrences)
-            if (candidate.id != id) candidate,
-          if (intent.previousRecord != null) intent.previousRecord!,
-        ],
+        occurrences: rolledBackOccurrences,
         error: failureCat == RoutineFailureCategory.offlineOrUnavailable
             ? 'Offline / sync pending.'
             : 'Could not update routine. Please try again.',
       );
-      await _processNextQueuedOccurrence(uid, id);
-      final result = RoutineWriteResult.retryRequired(
+
+      final retryResult = RoutineWriteResult.retryRequired(
         message: failureCat == RoutineFailureCategory.offlineOrUnavailable
             ? 'Offline / sync pending.'
             : 'Could not update routine. Please try again.',
         operationId: operationId,
         failureCategory: failureCat,
-        resultingStatus: existing?.status ?? RoutineStatus.planned,
+        resultingStatus:
+            intent.previousRecord?.status ?? RoutineStatus.planned,
       );
-      if (!completer.isCompleted) {
-        completer.complete(result);
+
+      if (intent.completer != null && !intent.completer!.isCompleted) {
+        intent.completer!.complete(retryResult);
       }
-      return result;
+
+      await _processNextQueuedOccurrence(uid, id);
+      return retryResult;
     }
   }
 
@@ -2902,92 +2987,47 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         ...state.queuedOccurrenceIntentsById,
         id: remainingQueue,
       },
-      occurrences: [
-        for (final candidate in state.occurrences)
-          if (candidate.id != id) candidate,
-        intent.attemptedRecord,
-      ],
+    );
+
+    // Evaluate transition from current effective state
+    final currentRecord =
+        state.occurrences.where((e) => e.id == id).firstOrNull;
+    final transition = RoutineTransitionPolicy.evaluate(
+      existingRecord: currentRecord,
+      requestedAction: intent.action,
+    );
+
+    if (!transition.isAllowed) {
+      final invalidResult = RoutineWriteResult.validationFailed(
+        RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.missingData,
+          userSafeMessage: transition.message ?? 'Invalid state transition.',
+        ),
+        message: transition.message,
+        failureCategory: transition.failureCategory,
+        resultingStatus: currentRecord?.status ?? RoutineStatus.planned,
+      );
+      if (intent.completer != null && !intent.completer!.isCompleted) {
+        intent.completer!.complete(invalidResult);
+      }
+      await _processNextQueuedOccurrence(uid, id);
+      return;
+    }
+
+    final isDelete =
+        intent.mutationType == RoutineOccurrenceMutationType.deleteRecord;
+    state = state.copyWith(
+      occurrences: isDelete
+          ? state.occurrences.where((e) => e.id != id).toList()
+          : [
+              for (final candidate in state.occurrences)
+                if (candidate.id != id) candidate,
+              intent.attemptedRecord,
+            ],
       error: null,
     );
 
-    try {
-      await _transactionRepository.commitWrite(
-        uid: uid,
-        setOccurrence: intent.attemptedRecord,
-        addEvent: intent.event,
-      );
-      _logRoutineActionWrite(
-        action: intent.attemptedRecord.action,
-        occurrenceSource: intent.attemptedRecord.source,
-        actionSource: intent.event?.source ?? intent.attemptedRecord.source,
-        existing: intent.previousRecord != null,
-        result: 'success',
-      );
-      if (!mounted) {
-        intent.completer?.complete(_supersededWriteResult(intent.operationId));
-        return;
-      }
-      if (_ownerUid != uid) {
-        intent.completer?.complete(_supersededWriteResult(intent.operationId));
-        return;
-      }
-
-      state = state.copyWith(
-        failedOccurrenceIntentsById: {...state.failedOccurrenceIntentsById}
-          ..remove(id),
-      );
-      intent.completer?.complete(
-        RoutineWriteResult.saved(
-          operationId: intent.operationId,
-          resultingStatus: intent.attemptedRecord.status,
-        ),
-      );
-      await _processNextQueuedOccurrence(uid, id);
-    } catch (error) {
-      if (!mounted) {
-        intent.completer?.complete(_supersededWriteResult(intent.operationId));
-        return;
-      }
-      if (_ownerUid != uid) {
-        intent.completer?.complete(_supersededWriteResult(intent.operationId));
-        return;
-      }
-      final failureCat = classifyRoutineWriteFailure(error);
-      _logRoutineActionWrite(
-        action: intent.attemptedRecord.action,
-        occurrenceSource: intent.attemptedRecord.source,
-        actionSource: intent.event?.source ?? intent.attemptedRecord.source,
-        existing: intent.previousRecord != null,
-        result: 'failure',
-        error: error,
-      );
-      state = state.copyWith(
-        failedOccurrenceIntentsById: {
-          ...state.failedOccurrenceIntentsById,
-          id: intent,
-        },
-        occurrences: [
-          for (final candidate in state.occurrences)
-            if (candidate.id != id) candidate,
-          if (intent.previousRecord != null) intent.previousRecord!,
-        ],
-        error: failureCat == RoutineFailureCategory.offlineOrUnavailable
-            ? 'Offline / sync pending.'
-            : 'Could not update routine. Please try again.',
-      );
-      intent.completer?.complete(
-        RoutineWriteResult.retryRequired(
-          message: failureCat == RoutineFailureCategory.offlineOrUnavailable
-              ? 'Offline / sync pending.'
-              : 'Could not update routine. Please try again.',
-          operationId: intent.operationId,
-          failureCategory: failureCat,
-          resultingStatus:
-              intent.previousRecord?.status ?? RoutineStatus.planned,
-        ),
-      );
-      await _processNextQueuedOccurrence(uid, id);
-    }
+    await _commitOccurrenceIntentWithRecovery(intent, isQueued: true);
   }
 
   Future<RoutineWriteResult> undoOccurrenceAction(
@@ -3061,21 +3101,11 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       itemSnapshot: snapshot,
     );
 
-    final intent = RoutineOccurrenceWriteIntent(
-      action: RoutineOccurrenceAction.undo,
-      ownerUid: uid,
-      occurrenceId: id,
-      operationId: operationId,
-      attemptedRecord: undoRecord, // attempted to revert
-      previousRecord: undoRecord,
-      createdAt: DateTime.now().toUtc(),
-      event: event,
-    );
-
     final restoredRecord = undoRecord.previousStatus == RoutineStatus.moved
         ? undoRecord.copyWith(
             status: RoutineStatus.moved,
             action: undoRecord.previousAction ?? 'move',
+            operationKey: operationId,
             previousStatus: null,
             previousAction: null,
             undoToPlannedAllowed: true,
@@ -3083,9 +3113,24 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           )
         : null;
 
+    final isRestoringMoved = restoredRecord != null;
+    final intent = RoutineOccurrenceWriteIntent(
+      action: RoutineOccurrenceAction.undo,
+      mutationType: isRestoringMoved
+          ? RoutineOccurrenceMutationType.setRecord
+          : RoutineOccurrenceMutationType.deleteRecord,
+      ownerUid: uid,
+      occurrenceId: id,
+      operationId: operationId,
+      attemptedRecord: restoredRecord ?? undoRecord,
+      previousRecord: undoRecord,
+      createdAt: DateTime.now().toUtc(),
+      event: event,
+    );
+
     state = state.copyWith(
       pendingOccurrenceIds: {...state.pendingOccurrenceIds, id},
-      occurrences: restoredRecord != null
+      occurrences: isRestoringMoved
           ? [
               for (final occ in state.occurrences)
                 if (occ.id == id) restoredRecord else occ,
@@ -3094,66 +3139,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       error: null,
     );
 
-    try {
-      if (restoredRecord != null) {
-        await _transactionRepository.commitWrite(
-          uid: uid,
-          setOccurrence: restoredRecord,
-          addEvent: event,
-        );
-      } else {
-        await _transactionRepository.commitWrite(
-          uid: uid,
-          deleteOccurrenceId: id,
-          addEvent: event,
-        );
-      }
-      if (!mounted) return _supersededWriteResult(operationId);
-      if (_ownerUid != uid) return _supersededWriteResult(operationId);
-
-      state = state.copyWith(
-        pendingOccurrenceIds: state.pendingOccurrenceIds
-            .where((e) => e != id)
-            .toSet(),
-        failedOccurrenceIntentsById: {...state.failedOccurrenceIntentsById}
-          ..remove(id),
-      );
-      return RoutineWriteResult.saved(
-        operationId: operationId,
-        resultingStatus: restoredRecord != null
-            ? RoutineStatus.moved
-            : RoutineStatus.planned,
-      );
-    } catch (error) {
-      if (!mounted) return _supersededWriteResult(operationId);
-      if (_ownerUid != uid) return _supersededWriteResult(operationId);
-      final failureCat = classifyRoutineWriteFailure(error);
-      state = state.copyWith(
-        pendingOccurrenceIds: state.pendingOccurrenceIds
-            .where((e) => e != id)
-            .toSet(),
-        occurrences: [
-          for (final occ in state.occurrences)
-            if (occ.id != id) occ,
-          undoRecord,
-        ],
-        failedOccurrenceIntentsById: {
-          ...state.failedOccurrenceIntentsById,
-          id: intent,
-        },
-        error: failureCat == RoutineFailureCategory.offlineOrUnavailable
-            ? 'Offline / sync pending.'
-            : 'Could not update routine. Please try again.',
-      );
-      return RoutineWriteResult.retryRequired(
-        operationId: operationId,
-        message: failureCat == RoutineFailureCategory.offlineOrUnavailable
-            ? 'Offline / sync pending.'
-            : 'Could not update routine. Please try again.',
-        failureCategory: failureCat,
-        resultingStatus: undoRecord.status,
-      );
-    }
+    return await _commitOccurrenceIntentWithRecovery(intent);
   }
 
   Future<RoutineWriteResult> retryFailedOccurrenceAction(
@@ -3171,182 +3157,25 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       return _supersededWriteResult(intent.operationId);
     }
 
-    if (intent.action == RoutineOccurrenceAction.undo) {
-      state = state.copyWith(
-        pendingOccurrenceIds: {...state.pendingOccurrenceIds, occurrenceId},
-        occurrences: state.occurrences
-            .where((e) => e.id != occurrenceId)
-            .toList(),
-        error: null,
-      );
-
-      try {
-        await _transactionRepository.commitWrite(
-          uid: uid,
-          deleteOccurrenceId: occurrenceId,
-          addEvent: intent.event,
-        );
-        if (!mounted) return _supersededWriteResult(intent.operationId);
-        if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
-
-        state = state.copyWith(
-          pendingOccurrenceIds: state.pendingOccurrenceIds
-              .where((e) => e != occurrenceId)
-              .toSet(),
-          failedOccurrenceIntentsById: {...state.failedOccurrenceIntentsById}
-            ..remove(occurrenceId),
-        );
-        return RoutineWriteResult.saved(
-          operationId: intent.operationId,
-          resultingStatus: RoutineStatus.planned,
-        );
-      } catch (error) {
-        if (!mounted) return _supersededWriteResult(intent.operationId);
-        if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
-        final failureCat = classifyRoutineWriteFailure(error);
-        state = state.copyWith(
-          pendingOccurrenceIds: state.pendingOccurrenceIds
-              .where((e) => e != occurrenceId)
-              .toSet(),
-          occurrences: [...state.occurrences, intent.previousRecord!],
-          failedOccurrenceIntentsById: {
-            ...state.failedOccurrenceIntentsById,
-            occurrenceId: intent,
-          },
-          error: failureCat == RoutineFailureCategory.offlineOrUnavailable
-              ? 'Offline / sync pending.'
-              : 'Could not update routine. Please try again.',
-        );
-        return RoutineWriteResult.retryRequired(
-          operationId: intent.operationId,
-          message: failureCat == RoutineFailureCategory.offlineOrUnavailable
-              ? 'Offline / sync pending.'
-              : 'Could not update routine. Please try again.',
-          failureCategory: failureCat,
-          resultingStatus: intent.previousRecord?.status,
-        );
-      }
-    }
-
-    final retryIntent = _normalizeOccurrenceIntentForRetry(intent);
-    final record = retryIntent.attemptedRecord;
+    final isDelete =
+        intent.mutationType == RoutineOccurrenceMutationType.deleteRecord;
+    final retryIntent = isDelete
+        ? intent
+        : _normalizeOccurrenceIntentForRetry(intent);
 
     state = state.copyWith(
       pendingOccurrenceIds: {...state.pendingOccurrenceIds, occurrenceId},
-      occurrences: [
-        for (final candidate in state.occurrences)
-          if (candidate.id != occurrenceId) candidate,
-        record,
-      ],
+      occurrences: isDelete
+          ? state.occurrences.where((e) => e.id != occurrenceId).toList()
+          : [
+              for (final candidate in state.occurrences)
+                if (candidate.id != occurrenceId) candidate,
+              retryIntent.attemptedRecord,
+            ],
       error: null,
     );
 
-    try {
-      await _transactionRepository.commitWrite(
-        uid: uid,
-        setOccurrence: record,
-        addEvent: retryIntent.event,
-      );
-      _logRoutineActionWrite(
-        action: record.action,
-        occurrenceSource: record.source,
-        actionSource: retryIntent.event?.source ?? record.source,
-        existing: retryIntent.previousRecord != null,
-        result: 'success',
-      );
-      if (!mounted) return _supersededWriteResult(intent.operationId);
-      if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
-
-      state = state.copyWith(
-        pendingOccurrenceIds: state.pendingOccurrenceIds
-            .where((e) => e != occurrenceId)
-            .toSet(),
-        failedOccurrenceIntentsById: {...state.failedOccurrenceIntentsById}
-          ..remove(occurrenceId),
-      );
-      return RoutineWriteResult.saved(
-        operationId: intent.operationId,
-        resultingStatus: record.status,
-      );
-    } catch (error) {
-      if (!mounted) return _supersededWriteResult(intent.operationId);
-      if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
-
-      bool isAmbiguitySuccess = false;
-      RoutineOccurrenceRecord? recoveredRecord;
-      try {
-        final history = await _historyRepository.fetchHistory(uid);
-        for (final occ in history) {
-          if (occ.id == occurrenceId && occ.operationKey == intent.operationId) {
-            isAmbiguitySuccess = true;
-            recoveredRecord = occ;
-            break;
-          }
-        }
-      } catch (_) {}
-
-      if (isAmbiguitySuccess && recoveredRecord != null) {
-        _logRoutineActionWrite(
-          action: record.action,
-          occurrenceSource: record.source,
-          actionSource: retryIntent.event?.source ?? record.source,
-          existing: retryIntent.previousRecord != null,
-          result: 'success',
-        );
-        state = state.copyWith(
-          pendingOccurrenceIds: state.pendingOccurrenceIds
-              .where((e) => e != occurrenceId)
-              .toSet(),
-          failedOccurrenceIntentsById: {...state.failedOccurrenceIntentsById}
-            ..remove(occurrenceId),
-          occurrences: [
-            for (final candidate in state.occurrences)
-              if (candidate.id != occurrenceId) candidate,
-            recoveredRecord,
-          ],
-        );
-        return RoutineWriteResult.saved(
-          operationId: intent.operationId,
-          resultingStatus: recoveredRecord.status,
-        );
-      }
-
-      _logRoutineActionWrite(
-        action: record.action,
-        occurrenceSource: record.source,
-        actionSource: retryIntent.event?.source ?? record.source,
-        existing: retryIntent.previousRecord != null,
-        result: 'failure',
-        error: error,
-      );
-      final failureCat = classifyRoutineWriteFailure(error);
-      state = state.copyWith(
-        pendingOccurrenceIds: state.pendingOccurrenceIds
-            .where((e) => e != occurrenceId)
-            .toSet(),
-        occurrences:
-            state.occurrences.where((e) => e.id != occurrenceId).toList()
-              ..addAll(
-                intent.previousRecord != null ? [intent.previousRecord!] : [],
-              ),
-        failedOccurrenceIntentsById: {
-          ...state.failedOccurrenceIntentsById,
-          occurrenceId: retryIntent,
-        },
-        error: failureCat == RoutineFailureCategory.offlineOrUnavailable
-            ? 'Offline / sync pending.'
-            : 'Could not update routine. Please try again.',
-      );
-      return RoutineWriteResult.retryRequired(
-        operationId: intent.operationId,
-        message: failureCat == RoutineFailureCategory.offlineOrUnavailable
-            ? 'Offline / sync pending.'
-            : 'Could not update routine. Please try again.',
-        failureCategory: failureCat,
-        resultingStatus:
-            retryIntent.previousRecord?.status ?? RoutineStatus.planned,
-      );
-    }
+    return await _commitOccurrenceIntentWithRecovery(retryIntent);
   }
 
   DateTime _occurrenceAnchorDate(String itemId, DateTime selectedDay) {
@@ -3407,11 +3236,19 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         );
       }
       if (item.blockType == RoutineBlockType.moneyTask) {
-        return await _writeOccurrence(
+        if (!hasConfirmedMoneySaveForRoutine(itemId, date: occurrenceDate)) {
+          return RoutineWriteResult.validationFailed(
+            const RoutineValidationResult.invalid(
+              errorType: RoutineValidationErrorType.missingData,
+              userSafeMessage:
+                  'Please save money via UPI or Tracker to complete this task.',
+            ),
+            message: 'Money task requires a confirmed save.',
+            failureCategory: RoutineFailureCategory.validation,
+          );
+        }
+        return await recordMoneySavedAndComplete(
           itemId,
-          status: RoutineStatus.completed,
-          actionSource: 'money',
-          action: 'complete',
           occurrenceDate: occurrenceDate,
         );
       }
@@ -3608,19 +3445,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
               routineTaskId: itemId,
             );
       }
-    } else {
-      if (!hasConfirmedMoneySaveForRoutine(itemId, date: occurrenceDate)) {
-        return RoutineWriteResult.validationFailed(
-          const RoutineValidationResult.invalid(
-            errorType: RoutineValidationErrorType.missingData,
-            userSafeMessage:
-                'Please save money via UPI or Tracker to complete this task.',
-          ),
-          message: 'Money task requires a confirmed save.',
-          failureCategory: RoutineFailureCategory.validation,
-        );
-      }
     }
+    // In Firebase mode (!fakeAllowed), we do NOT mutate unbacked mock tracker state (preserving isolation),
+    // and write the completed occurrence directly as the user explicitly declared their save.
     return await _writeOccurrence(
       itemId,
       status: RoutineStatus.completed,
@@ -3707,6 +3534,38 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
 
     _ref.read(appNavigationProvider.notifier).goToTracker();
     return result;
+  }
+
+  void openTrackerSession(
+    String itemId, {
+    DateTime? occurrenceDate,
+  }) {
+    final anchor = occurrenceDate ??
+        _occurrenceAnchorDate(itemId, state.selectedDay);
+    final occurrenceDateKey = routineLocalDateKey(anchor);
+    final existing = _occurrenceFor(itemId, anchor);
+    final item = state.items.where((e) => e.id == itemId).firstOrNull;
+    final trackerType = (item?.trackerType != null &&
+            item!.trackerType != TrackerType.none)
+        ? item.trackerType
+        : TrackerType.values.firstWhere(
+            (t) => t.name == existing?.trackerType,
+            orElse: () => TrackerType.none,
+          );
+    final sessionId = existing?.trackerSessionId ??
+        'recovered_${itemId}_$occurrenceDateKey';
+
+    state = state.copyWith(
+      activeTrackerLaunchIntent: TrackerLaunchIntent(
+        trackerType: trackerType,
+        routineTaskId: itemId,
+        occurrenceDateKey: occurrenceDateKey,
+        sessionId: sessionId,
+        startedAt: existing?.startedAt ?? DateTime.now(),
+      ),
+    );
+
+    _ref.read(appNavigationProvider.notifier).goToTracker();
   }
 
   Future<RoutineWriteResult> completeTrackerSession(

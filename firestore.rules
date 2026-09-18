@@ -675,6 +675,10 @@ service cloud.firestore {
           "sourceFingerprint",
           "startedAt",
           "countdownDurationSeconds",
+          "previousStatus",
+          "previousAction",
+          "trackerSessionId",
+          "trackerType",
           "createdAt",
           "updatedAt",
           "schemaVersion"
@@ -783,6 +787,14 @@ service cloud.firestore {
             && data.movedEndMinute != data.movedStartMinute
             && data.movedEndMinute <= 1440
           : true)
+        && (!data.keys().hasAny(["previousStatus"])
+          || validRoutineOccurrenceStatus(data.previousStatus))
+        && (!data.keys().hasAny(["previousAction"])
+          || (data.previousAction is string && data.previousAction.size() > 0 && data.previousAction.size() <= 64))
+        && (!data.keys().hasAny(["trackerSessionId"])
+          || (data.trackerSessionId is string && data.trackerSessionId.size() > 0 && data.trackerSessionId.size() <= 128))
+        && (!data.keys().hasAny(["trackerType"])
+          || (data.trackerType is string && data.trackerType.size() > 0 && data.trackerType.size() <= 64))
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }

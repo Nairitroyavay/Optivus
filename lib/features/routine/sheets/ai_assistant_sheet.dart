@@ -185,8 +185,10 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
                   item.id,
                   occurrenceDate: actionContext.occurrenceDate,
                 );
-            if (!undoResult.isSuccessful) return undoResult;
-            if (context.mounted) {
+            if (!undoResult.isSuccessful) {
+              return undoResult.message ?? 'Failed to reschedule routine.';
+            }
+            if (mounted) {
               showRoutineMoveSheet(
                 context,
                 ref,
@@ -204,7 +206,7 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
                   occurrenceDate: actionContext.occurrenceDate,
                 );
             if (!undoResult.isSuccessful) return;
-            if (context.mounted) {
+            if (mounted) {
               showRoutineMoveSheet(
                 context,
                 ref,

@@ -151,7 +151,8 @@ class RoutineCardPresentation {
     // 1. First test whether all actions fit in a single horizontal row
     final totalGaps = (actionCount - 1) * actionGap;
     final buttonWidth = (availableWidth - totalGaps) / actionCount.toDouble();
-    final maxInnerWidth = buttonWidth -
+    final maxInnerWidth =
+        buttonWidth -
         (2 * actionButtonPaddingHorizontal) -
         (2 * actionButtonBorderWidth);
 
@@ -179,7 +180,8 @@ class RoutineCardPresentation {
     // 2. For 4 actions, test if they fit in a clean 2x2 grid
     if (actionCount == 4) {
       final gridButtonWidth = (availableWidth - actionGap) / 2.0;
-      final maxInnerWidthGrid = gridButtonWidth -
+      final maxInnerWidthGrid =
+          gridButtonWidth -
           (2 * actionButtonPaddingHorizontal) -
           (2 * actionButtonBorderWidth);
 
@@ -217,13 +219,13 @@ class RoutineCardPresentation {
     bool canUndo = false,
     double singleButtonHeight = RoutineCardPresentation.actionButtonMinHeight,
   }) {
-    if (isTerminal) {
+    if (isTerminal || canUndo) {
       if (!canUndo) {
         return singleButtonHeight;
       }
       return switch (actionLayout) {
-        RoutineCardActionLayout.horizontal => singleButtonHeight,
-        RoutineCardActionLayout.grid2x2 ||
+        RoutineCardActionLayout.horizontal ||
+        RoutineCardActionLayout.grid2x2 => singleButtonHeight,
         RoutineCardActionLayout.stacked =>
           (singleButtonHeight * 2) + RoutineCardPresentation.actionGap,
       };
@@ -236,9 +238,8 @@ class RoutineCardPresentation {
       RoutineCardActionLayout.grid2x2 =>
         (singleButtonHeight * 2) + RoutineCardPresentation.actionGap,
       RoutineCardActionLayout.stacked =>
-        actionCount == 4
-            ? (singleButtonHeight * 4) + (RoutineCardPresentation.actionGap * 3)
-            : (singleButtonHeight * 2) + RoutineCardPresentation.actionGap,
+        (actionCount * singleButtonHeight) +
+            (RoutineCardPresentation.actionGap * (actionCount - 1)),
     };
   }
 
@@ -349,7 +350,8 @@ class RoutineCardActionSet {
     required bool hasGenericCountdown,
     required bool canUndo,
   }) {
-    final isTerminal = effectiveStatus == RoutineStatus.completed ||
+    final isTerminal =
+        effectiveStatus == RoutineStatus.completed ||
         effectiveStatus == RoutineStatus.skipped ||
         effectiveStatus == RoutineStatus.missed ||
         item.isCompleted;
@@ -489,18 +491,9 @@ class RoutineCardActionSet {
         type: RoutineCardActionType.start,
         isPrimary: true,
       ),
-      RoutineCardActionConfig(
-        label: 'Done',
-        type: RoutineCardActionType.done,
-      ),
-      RoutineCardActionConfig(
-        label: 'Move',
-        type: RoutineCardActionType.move,
-      ),
-      RoutineCardActionConfig(
-        label: 'Skip',
-        type: RoutineCardActionType.skip,
-      ),
+      RoutineCardActionConfig(label: 'Done', type: RoutineCardActionType.done),
+      RoutineCardActionConfig(label: 'Move', type: RoutineCardActionType.move),
+      RoutineCardActionConfig(label: 'Skip', type: RoutineCardActionType.skip),
     ]);
   }
 }

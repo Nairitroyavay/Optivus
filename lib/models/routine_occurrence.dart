@@ -62,6 +62,8 @@ class RoutineOccurrenceRecord {
     this.trackerType,
   });
 
+  static const Object _sentinel = Object();
+
   RoutineOccurrenceRecord copyWith({
     RoutineStatus? status,
     String? source,
@@ -69,22 +71,22 @@ class RoutineOccurrenceRecord {
     String? operationKey,
     DateTime? createdAt,
     DateTime? updatedAt,
-    String? movedToDateKey,
-    int? movedStartMinute,
-    int? movedEndMinute,
+    Object? movedToDateKey = _sentinel,
+    Object? movedStartMinute = _sentinel,
+    Object? movedEndMinute = _sentinel,
     List<int>? completedSubtaskIndexes,
-    String? note,
-    String? displayTitleOverride,
+    Object? note = _sentinel,
+    Object? displayTitleOverride = _sentinel,
     bool? undoToPlannedAllowed,
-    String? onboardingProjectionId,
-    String? onboardingSourceItemId,
-    String? sourceFingerprint,
-    DateTime? startedAt,
-    int? countdownDurationSeconds,
-    RoutineStatus? previousStatus,
-    String? previousAction,
-    String? trackerSessionId,
-    String? trackerType,
+    Object? onboardingProjectionId = _sentinel,
+    Object? onboardingSourceItemId = _sentinel,
+    Object? sourceFingerprint = _sentinel,
+    Object? startedAt = _sentinel,
+    Object? countdownDurationSeconds = _sentinel,
+    Object? previousStatus = _sentinel,
+    Object? previousAction = _sentinel,
+    Object? trackerSessionId = _sentinel,
+    Object? trackerType = _sentinel,
   }) {
     return RoutineOccurrenceRecord(
       id: id,
@@ -98,27 +100,70 @@ class RoutineOccurrenceRecord {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       schemaVersion: schemaVersion,
-      movedToDateKey: movedToDateKey ?? this.movedToDateKey,
-      movedStartMinute: movedStartMinute ?? this.movedStartMinute,
-      movedEndMinute: movedEndMinute ?? this.movedEndMinute,
+      movedToDateKey: identical(movedToDateKey, _sentinel)
+          ? this.movedToDateKey
+          : movedToDateKey as String?,
+      movedStartMinute: identical(movedStartMinute, _sentinel)
+          ? this.movedStartMinute
+          : movedStartMinute as int?,
+      movedEndMinute: identical(movedEndMinute, _sentinel)
+          ? this.movedEndMinute
+          : movedEndMinute as int?,
       completedSubtaskIndexes:
           completedSubtaskIndexes ?? this.completedSubtaskIndexes,
-      note: note ?? this.note,
-      displayTitleOverride: displayTitleOverride ?? this.displayTitleOverride,
+      note: identical(note, _sentinel) ? this.note : note as String?,
+      displayTitleOverride: identical(displayTitleOverride, _sentinel)
+          ? this.displayTitleOverride
+          : displayTitleOverride as String?,
       undoToPlannedAllowed: undoToPlannedAllowed ?? this.undoToPlannedAllowed,
-      onboardingProjectionId:
-          onboardingProjectionId ?? this.onboardingProjectionId,
-      onboardingSourceItemId:
-          onboardingSourceItemId ?? this.onboardingSourceItemId,
-      sourceFingerprint: sourceFingerprint ?? this.sourceFingerprint,
-      startedAt: startedAt ?? this.startedAt,
-      countdownDurationSeconds:
-          countdownDurationSeconds ?? this.countdownDurationSeconds,
-      previousStatus: previousStatus ?? this.previousStatus,
-      previousAction: previousAction ?? this.previousAction,
-      trackerSessionId: trackerSessionId ?? this.trackerSessionId,
-      trackerType: trackerType ?? this.trackerType,
+      onboardingProjectionId: identical(onboardingProjectionId, _sentinel)
+          ? this.onboardingProjectionId
+          : onboardingProjectionId as String?,
+      onboardingSourceItemId: identical(onboardingSourceItemId, _sentinel)
+          ? this.onboardingSourceItemId
+          : onboardingSourceItemId as String?,
+      sourceFingerprint: identical(sourceFingerprint, _sentinel)
+          ? this.sourceFingerprint
+          : sourceFingerprint as String?,
+      startedAt: identical(startedAt, _sentinel)
+          ? this.startedAt
+          : startedAt as DateTime?,
+      countdownDurationSeconds: identical(countdownDurationSeconds, _sentinel)
+          ? this.countdownDurationSeconds
+          : countdownDurationSeconds as int?,
+      previousStatus: identical(previousStatus, _sentinel)
+          ? this.previousStatus
+          : previousStatus as RoutineStatus?,
+      previousAction: identical(previousAction, _sentinel)
+          ? this.previousAction
+          : previousAction as String?,
+      trackerSessionId: identical(trackerSessionId, _sentinel)
+          ? this.trackerSessionId
+          : trackerSessionId as String?,
+      trackerType: identical(trackerType, _sentinel)
+          ? this.trackerType
+          : trackerType as String?,
     );
+  }
+
+  RoutineOccurrenceRecord clearPreviousStatusAndAction() {
+    return copyWith(previousStatus: null, previousAction: null);
+  }
+
+  RoutineOccurrenceRecord clearMoveFields() {
+    return copyWith(
+      movedToDateKey: null,
+      movedStartMinute: null,
+      movedEndMinute: null,
+    );
+  }
+
+  RoutineOccurrenceRecord clearTimer() {
+    return copyWith(startedAt: null, countdownDurationSeconds: null);
+  }
+
+  RoutineOccurrenceRecord clearTracker() {
+    return copyWith(trackerSessionId: null, trackerType: null);
   }
 
   Map<String, dynamic> toMap() => {

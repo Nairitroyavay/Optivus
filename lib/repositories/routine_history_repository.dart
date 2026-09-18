@@ -33,6 +33,10 @@ class RoutineOccurrenceFirestoreCodec {
     'sourceFingerprint',
     'startedAt',
     'countdownDurationSeconds',
+    'previousStatus',
+    'previousAction',
+    'trackerSessionId',
+    'trackerType',
     'createdAt',
     'updatedAt',
     'schemaVersion',
@@ -119,6 +123,14 @@ class RoutineOccurrenceFirestoreCodec {
         'startedAt': Timestamp.fromDate(record.startedAt!.toUtc()),
       if (record.countdownDurationSeconds != null)
         'countdownDurationSeconds': record.countdownDurationSeconds,
+      if (record.previousStatus != null)
+        'previousStatus': record.previousStatus!.name,
+      if (record.previousAction != null)
+        'previousAction': record.previousAction,
+      if (record.trackerSessionId != null)
+        'trackerSessionId': record.trackerSessionId,
+      if (record.trackerType != null)
+        'trackerType': record.trackerType,
       'createdAt': Timestamp.fromDate(record.createdAt.toUtc()),
       'updatedAt': Timestamp.fromDate(record.updatedAt.toUtc()),
       'schemaVersion': record.schemaVersion,
@@ -174,6 +186,15 @@ class RoutineOccurrenceFirestoreCodec {
       startedAt: readRoutineDateTime(data['startedAt']),
       countdownDurationSeconds: (data['countdownDurationSeconds'] as num?)
           ?.toInt(),
+      previousStatus: data['previousStatus'] != null
+          ? RoutineStatus.values.firstWhere(
+              (e) => e.name == data['previousStatus'],
+              orElse: () => RoutineStatus.planned,
+            )
+          : null,
+      previousAction: data['previousAction'] as String?,
+      trackerSessionId: data['trackerSessionId'] as String?,
+      trackerType: data['trackerType'] as String?,
       createdAt:
           readRoutineDateTime(data['createdAt']) ??
           (throw const FormatException(

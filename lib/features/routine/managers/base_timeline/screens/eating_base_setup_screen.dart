@@ -25,6 +25,10 @@ import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/services/nutrition_target_service.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_setup_error_mapper.dart';
+import 'package:optivus/features/routine/managers/base_timeline/models/eating_operation_session.dart';
+import 'package:optivus/features/routine/managers/base_timeline/models/eating_plan_freshness.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/eating_candidate_dish_normalizer.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/eating_source_transition_policy.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_day_summary_bar.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_import_review_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_meal_detail_sheet.dart';
@@ -32,28 +36,6 @@ import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_m
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_plan_settings_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_plan_summary_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_source_selection_view.dart';
-
-List<String> _importedMealDishes(RoutineImportCandidateBlock candidate) {
-  final dishes = <String>{};
-  void add(String value) {
-    final clean = value.replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (clean.length >= 2 &&
-        clean.toLowerCase() != candidate.title.trim().toLowerCase()) {
-      dishes.add(clean);
-    }
-  }
-
-  for (final step in candidate.steps) {
-    add(step);
-  }
-  final sourceText = candidate.sourceTextSnippet;
-  if (dishes.isEmpty && sourceText != null) {
-    for (final value in sourceText.split(RegExp(r'[,;\n|•·]+'))) {
-      add(value);
-    }
-  }
-  return dishes.toList(growable: false);
-}
 
 class EatingBaseSetupScreen extends ConsumerStatefulWidget {
   final VoidCallback onBack;
@@ -109,15 +91,26 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
   String? _editorOwnerUid;
   String? _candidateAssetId;
   String? _candidateR2Key;
+  EatingOperationSession? _currentOperation;
 
   void _cancelAiOperation() {
     _requestGeneration++;
-    final uid = ref.read(userProfileProvider).uid;
-    if (_candidateAssetId != null) {
+    final op = _currentOperation;
+    _currentOperation = null;
+    if (op != null && op.candidateAssetId != null) {
       try {
         final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
         helper.retireUncommittedUpload(
-          uid: uid,
+          uid: op.ownerUid,
+          assetId: op.candidateAssetId!,
+          objectKey: op.candidateR2Key,
+        );
+      } catch (_) {}
+    } else if (_candidateAssetId != null) {
+      try {
+        final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
+        helper.retireUncommittedUpload(
+          uid: ref.read(userProfileProvider).uid,
           assetId: _candidateAssetId,
           objectKey: _candidateR2Key,
         );
@@ -133,32 +126,21 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     }
   }
 
-  bool _isPlanStale(BaseTimelineSetup setup) {
-    if (setup.eatingSetupPath != 'create') return false;
-    final savedFingerprint = setup.eatingGeneratedInputFingerprint;
-    if (savedFingerprint == null || savedFingerprint.isEmpty) return false;
+  EatingPlanFreshness _evaluatePlanFreshness(BaseTimelineSetup setup) {
+    return EatingPlanFreshness.evaluate(
+      setup: setup,
+      profile: ref.read(userProfileProvider),
+      engine: ref.read(eatingDomainEngineProvider),
+    );
+  }
 
-    try {
-      final engine = ref.read(eatingDomainEngineProvider);
-      final profile = ref.read(userProfileProvider);
-      final targets = engine.calculateTargets(
-        profile: profile,
-        setup: setup,
-      );
-      final currentInputs = engine.buildInputs(
-        profile: profile,
-        setup: setup,
-        targets: targets,
-      );
-      return currentInputs.computeFingerprint() != savedFingerprint;
-    } catch (_) {
-      return false;
-    }
+  bool _isPlanStale(BaseTimelineSetup setup) {
+    return _evaluatePlanFreshness(setup) == EatingPlanFreshness.stale;
   }
 
   String _sourceLabelForPath(String? setupPath, bool customized) {
     return switch (setupPath) {
-      'photo' => 'Imported from meal plan',
+      'photo' || 'has_routine' => 'Imported from meal plan',
       'manual' => 'Manual plan',
       'create' => customized ? 'Built for me · Customized' : 'Built for me',
       _ => 'Eating plan',
@@ -326,6 +308,15 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
 
       candidateAssetId = asset.assetId;
       candidateR2Key = asset.r2Key;
+      _candidateAssetId = candidateAssetId;
+      _candidateR2Key = candidateR2Key;
+      _currentOperation = EatingOperationSession(
+        generationId: generation,
+        ownerUid: uid,
+        type: EatingOperationType.extracting,
+        candidateAssetId: candidateAssetId,
+        candidateR2Key: candidateR2Key,
+      );
 
       final reviewDraft = RoutineImportReviewDraft(
         id: 'rev_${asset.assetId}',
@@ -364,14 +355,18 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
           blockType: TimelineBlockDraft.softBlockKey,
           mealCategory: c.mealCategory,
           mealSlot: c.mealSlot,
-          dishes: _importedMealDishes(c),
+          dishes: EatingCandidateDishNormalizer.extractDishes(c),
           calories: c.caloriesEstimate,
           protein: c.proteinEstimate,
           location: c.location,
           notes: c.notes,
           source: c.extractionEngine,
           provenanceSourceIds: [
-            if (c.sourceAssetId?.trim().isNotEmpty == true) c.sourceAssetId!,
+            ?candidateAssetId,
+            if (c.sourceAssetId != null &&
+                c.sourceAssetId!.trim().isNotEmpty &&
+                c.sourceAssetId != candidateAssetId)
+              c.sourceAssetId!,
           ],
         );
       }).toList();
@@ -384,12 +379,16 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
           objectKey: candidateR2Key,
         );
         if (mounted) {
+          final err =
+              result?.warnings.firstOrNull ??
+              'No meals detected in photo. Your existing eating schedule was preserved.';
           setState(() {
             _isExtracting = false;
-            _errorMessage =
-                result?.warnings.firstOrNull ??
-                'No meals detected in photo. Your existing eating schedule was preserved.';
+            _errorMessage = err;
           });
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(err)));
         }
         return;
       }
@@ -426,12 +425,23 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
           } catch (_) {}
         }
 
+        final transition = EatingSourceTransitionPolicy.toPhoto(
+          blocks: reviewed,
+          photoAssetId: candidateAssetId,
+          photoR2Key: candidateR2Key,
+        );
+
         setState(() {
-          _workingAssetId = candidateAssetId;
-          _workingR2Key = candidateR2Key;
-          _workingBlocks = reviewed;
-          _workingSetupPath = 'has_routine';
-          _workingCustomized = false;
+          _workingAssetId = transition.photoAssetId;
+          _workingR2Key = transition.photoR2Key;
+          _workingBlocks = transition.blocks;
+          _workingSetupPath = transition.setupPath;
+          _workingCustomized = transition.customized;
+          _workingGeneratedPlanVersion = transition.planVersion;
+          _workingGeneratedInputFingerprint = transition.inputFingerprint;
+          _workingTargetCalories = transition.targetCalories;
+          _workingTargetProtein = transition.targetProtein;
+          _workingMealsPerDay = transition.mealsPerDay;
           _isEditing = true;
           _isDirty = true;
         });
@@ -461,22 +471,51 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         } catch (_) {}
       }
       if (mounted) {
+        final errText = EatingSetupErrorMapper.mapError(e);
         setState(() {
           _isExtracting = false;
-          _errorMessage =
-              'Upload failed. Your existing schedule was preserved.';
+          _errorMessage = errText;
         });
+      }
+    } finally {
+      if (_currentOperation?.generationId == generation) {
+        _currentOperation = null;
       }
     }
   }
 
   Future<void> _openPlanSettingsSheet({bool isBuildingNew = false}) async {
     final isNew = isBuildingNew || _workingBlocks.isEmpty;
+    final engine = ref.read(eatingDomainEngineProvider);
+    final profile = ref.read(userProfileProvider);
+    final setupAsync = ref.read(baseTimelineSetupNotifierProvider);
+    final currentSetup =
+        setupAsync.value ??
+        BaseTimelineSetup(uid: profile.uid, updatedAt: DateTime.now());
+
+    NutritionTargets? calculatedTargets;
+    try {
+      calculatedTargets = engine.calculateTargets(
+        profile: profile,
+        setup: currentSetup.copyWith(
+          mealPlanningGoal: _workingGoal,
+          mealsPerDay: _workingMealsPerDay,
+          breakfastMinute: _workingBreakfastMinute,
+          lunchMinute: _workingLunchMinute,
+          dinnerMinute: _workingDinnerMinute,
+          snackMinute: _workingSnackMinute,
+          extraSnackMinute: _workingExtraSnackMinute,
+        ),
+      );
+    } catch (_) {}
+
     final result = await EatingPlanSettingsSheet.show(
       context,
       title: isNew ? 'Build Balanced Meal Plan' : 'Plan Settings & Preferences',
-      regenerateActionLabel:
-          isNew ? 'Generate Balanced Plan' : 'Regenerate Plan',
+      regenerateActionLabel: isNew
+          ? 'Generate Balanced Plan'
+          : 'Regenerate Plan',
+      isNew: isNew,
       initialGoal: _workingGoal,
       initialMealsPerDay: _workingMealsPerDay,
       initialEatingMode: _workingEatingMode,
@@ -489,6 +528,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       initialExtraSnackMinute: _workingExtraSnackMinute,
       initialTargetCalories: _workingTargetCalories,
       initialTargetProtein: _workingTargetProtein,
+      calculatedCalories: calculatedTargets?.targetCalories,
+      calculatedProtein: calculatedTargets?.proteinTarget?.round(),
       showRegenerateAction: true,
     );
 
@@ -559,6 +600,12 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       ];
     });
 
+    _currentOperation = EatingOperationSession(
+      generationId: generation,
+      ownerUid: uid,
+      type: EatingOperationType.generating,
+    );
+
     try {
       final targets = engine.calculateTargets(
         profile: profile,
@@ -595,31 +642,51 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
             );
           } catch (_) {}
         }
+
+        final transition = EatingSourceTransitionPolicy.toGenerated(
+          blocks: blocks,
+          goal: _workingGoal,
+          mealsPerDay: _workingMealsPerDay,
+          eatingMode: _workingEatingMode,
+          foodType: _workingFoodType,
+          foodStyleCustomText: _workingFoodStyleCustomText,
+          breakfastMinute: _workingBreakfastMinute,
+          lunchMinute: _workingLunchMinute,
+          dinnerMinute: _workingDinnerMinute,
+          snackMinute: _workingSnackMinute,
+          extraSnackMinute: _workingExtraSnackMinute,
+          targetCalories: targets.targetCalories,
+          targetProtein: targets.proteinTarget?.round(),
+          planVersion: BaseTimelineDraft.currentGate2EatingPlanVersion,
+          inputFingerprint: inputs.computeFingerprint(),
+          customized: false,
+        );
+
         setState(() {
-          _workingBlocks = blocks;
-          _workingTargetCalories = targets.targetCalories;
-          _workingTargetProtein = targets.proteinTarget?.round();
-          _workingGeneratedPlanVersion =
-              BaseTimelineDraft.currentGate2EatingPlanVersion;
-          _workingGeneratedInputFingerprint = inputs.computeFingerprint();
-          _workingCustomized = false;
-          _workingSetupPath = 'create';
-          // Clear photo provenance when switching to generated mode
-          _workingAssetId = null;
-          _workingR2Key = null;
+          _workingBlocks = transition.blocks;
+          _workingTargetCalories = transition.targetCalories;
+          _workingTargetProtein = transition.targetProtein;
+          _workingGeneratedPlanVersion = transition.planVersion;
+          _workingGeneratedInputFingerprint = transition.inputFingerprint;
+          _workingCustomized = transition.customized;
+          _workingSetupPath = transition.setupPath;
+          _workingAssetId = transition.photoAssetId;
+          _workingR2Key = transition.photoR2Key;
           _isDirty = true;
           _isExtracting = false;
         });
       }
     } catch (e) {
       if (mounted) {
+        final errText = EatingSetupErrorMapper.mapError(e);
         setState(() {
           _isExtracting = false;
-          _errorMessage = e
-              .toString()
-              .replaceAll('Exception: ', '')
-              .replaceAll('StateError: ', '');
+          _errorMessage = errText;
         });
+      }
+    } finally {
+      if (_currentOperation?.generationId == generation) {
+        _currentOperation = null;
       }
     }
   }
@@ -689,6 +756,18 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
 
   Future<void> _saveWorkingSetup() async {
     if (_isSaving) return;
+    final uid = ref.read(userProfileProvider).uid;
+    if (uid.trim().isEmpty ||
+        (_editorOwnerUid != null && uid != _editorOwnerUid)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('The active account changed. Reload Eating setup.'),
+          backgroundColor: OptivusColors.danger,
+        ),
+      );
+      return;
+    }
+
     if (_workingBlocks.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -702,11 +781,9 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     }
 
     final setupAsync = ref.read(baseTimelineSetupNotifierProvider);
-    final currentSetup = setupAsync.value ??
-        BaseTimelineSetup(
-          uid: ref.read(userProfileProvider).uid,
-          updatedAt: DateTime.now(),
-        );
+    final currentSetup =
+        setupAsync.value ??
+        BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
     final validationSetup = currentSetup.copyWith(
       eatingBlocks: _workingBlocks,
       eatingSetupPath: _workingSetupPath,
@@ -757,8 +834,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
 
     setState(() => _isSaving = true);
     try {
-      final uid = ref.read(userProfileProvider).uid;
-      if (uid.trim().isEmpty || uid != _editorOwnerUid) {
+      if (uid.trim().isEmpty ||
+          (_editorOwnerUid != null && uid != _editorOwnerUid)) {
         throw StateError('The active account changed. Reload Eating setup.');
       }
       final coordinator = ref.read(baseTimelineTransactionCoordinatorProvider);
@@ -773,7 +850,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
               photoAssetId: _workingAssetId!,
               photoR2Key: _workingR2Key!,
               blocks: _workingBlocks,
-              meals: _workingMealsPerDay,
+              meals: null,
             );
           } else if (_workingSetupPath == 'manual') {
             return current.asEatingManual(
@@ -783,7 +860,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
               targetProtein: _workingTargetProtein,
             );
           } else {
-            return current.asEatingGenerated(
+            return current.replaceEatingGeneratedConfiguration(
               blocks: _workingBlocks,
               goal: _workingGoal,
               meals: _workingMealsPerDay,
@@ -894,7 +971,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     if (confirmed != true || !mounted) return;
 
     final uid = ref.read(userProfileProvider).uid;
-    if (uid.trim().isEmpty || uid != _editorOwnerUid) {
+    final targetUid = _editorOwnerUid ?? currentSetup.uid;
+    if (uid.trim().isEmpty || uid != targetUid) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -950,10 +1028,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       if (mounted) {
         final msg = EatingSetupErrorMapper.mapError(e);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(msg),
-            backgroundColor: OptivusColors.danger,
-          ),
+          SnackBar(content: Text(msg), backgroundColor: OptivusColors.danger),
         );
       }
     }
@@ -1081,11 +1156,20 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                 onTap: () {
                   Navigator.pop(ctx);
                   _initWorkingState(setup);
+                  final manualState = EatingSourceTransitionPolicy.toManual(
+                    blocks: const [],
+                  );
                   setState(() {
-                    _workingSetupPath = 'manual';
-                    _workingBlocks = [];
+                    _workingSetupPath = manualState.setupPath;
+                    _workingBlocks = manualState.blocks;
+                    _workingAssetId = manualState.photoAssetId;
+                    _workingR2Key = manualState.photoR2Key;
+                    _workingGeneratedPlanVersion = manualState.planVersion;
+                    _workingGeneratedInputFingerprint =
+                        manualState.inputFingerprint;
+                    _workingCustomized = manualState.customized;
                     _isEditing = true;
-                    _isDirty = true;
+                    _isDirty = false;
                   });
                   _addMealBlock();
                 },
@@ -1259,11 +1343,12 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                           ),
                           const Spacer(),
                           FilledButton.icon(
-                            key: const Key('base-timeline-edit-add-meal-button'),
+                            key: const Key(
+                              'base-timeline-edit-add-meal-button',
+                            ),
                             style: FilledButton.styleFrom(
-                              backgroundColor: OptivusColors.roseAccent.withValues(
-                                alpha: 0.18,
-                              ),
+                              backgroundColor: OptivusColors.roseAccent
+                                  .withValues(alpha: 0.18),
                               foregroundColor: OptivusColors.roseAccent,
                               side: BorderSide(
                                 color: OptivusColors.roseAccent.withValues(
@@ -1287,7 +1372,9 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                            onPressed: _isExtracting ? null : () => _addMealBlock(),
+                            onPressed: _isExtracting
+                                ? null
+                                : () => _addMealBlock(),
                           ),
                         ],
                       ),
@@ -1476,14 +1563,16 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                                 _isEditing = true;
                                 _isDirty = false;
                               });
-                              _addMealBlock(onCancel: () {
-                                if (mounted && _workingBlocks.isEmpty) {
-                                  setState(() {
-                                    _isEditing = false;
-                                    _isDirty = false;
-                                  });
-                                }
-                              });
+                              _addMealBlock(
+                                onCancel: () {
+                                  if (mounted && _workingBlocks.isEmpty) {
+                                    setState(() {
+                                      _isEditing = false;
+                                      _isDirty = false;
+                                    });
+                                  }
+                                },
+                              );
                             },
                           ),
                         ),
@@ -1527,10 +1616,40 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                   removeLabel: 'Remove Eating Plan',
                 ),
 
+                if (_errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _errorMessage!,
+                            style: const TextStyle(
+                              color: OptivusColors.danger,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            size: 16,
+                            color: OptivusColors.textSecondary,
+                          ),
+                          onPressed: () => setState(() => _errorMessage = null),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 // Plan Summary Card (truthful summary with settings/stale/photo actions)
                 EatingPlanSummaryCard(
                   setup: setup,
                   isStale: _isPlanStale(setup),
+                  freshness: _evaluatePlanFreshness(setup),
                   onOpenSettings: () {
                     _initWorkingState(setup);
                     _openPlanSettingsSheet(isBuildingNew: false);
@@ -1541,9 +1660,9 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                   },
                   onViewPhoto: snapshot.sourceR2Key != null
                       ? () => _showPhotoViewer(
-                            snapshot.sourceR2Key!,
-                            snapshot.sourceAssetId,
-                          )
+                          snapshot.sourceR2Key!,
+                          snapshot.sourceAssetId,
+                        )
                       : null,
                 ),
 
@@ -1565,7 +1684,9 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       TextButton.icon(
-                        key: const Key('base-timeline-configured-add-meal-button'),
+                        key: const Key(
+                          'base-timeline-configured-add-meal-button',
+                        ),
                         style: TextButton.styleFrom(
                           visualDensity: VisualDensity.compact,
                           foregroundColor: OptivusColors.roseAccent,
@@ -1576,11 +1697,13 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                             _isEditing = true;
                             _isDirty = false;
                           });
-                          _addMealBlock(onCancel: () {
-                            if (mounted && !_isDirty) {
-                              setState(() => _isEditing = false);
-                            }
-                          });
+                          _addMealBlock(
+                            onCancel: () {
+                              if (mounted && !_isDirty) {
+                                setState(() => _isEditing = false);
+                              }
+                            },
+                          );
                         },
                         icon: const Icon(Icons.add_rounded, size: 16),
                         label: const Text(
@@ -1636,9 +1759,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                         onTap: () {
                           if (positioned.hasOverlap && !positioned.isFront) {
                             HapticFeedback.lightImpact();
-                            setState(
-                              () => _frontBlockId = positioned.entry.id,
-                            );
+                            setState(() => _frontBlockId = positioned.entry.id);
                           } else {
                             EatingMealDetailSheet.show(
                               context,

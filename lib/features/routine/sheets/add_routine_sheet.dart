@@ -1530,9 +1530,7 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
   }
 
   Future<void> _save() async {
-    // ignore: avoid_print
-    print('DEBUG: ENTERED _save()');
-    if (_saving) return;
+    if (_saving || _saveFailed) return;
 
     if (_draft.type == AddRoutineType.fixed &&
         _draft.fixedState.kind == 'Eating') {
@@ -1558,12 +1556,6 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
     if (validationError != null) {
       setState(() => _error = validationError);
       return;
-    }
-
-    if (_saveFailed) {
-      await ref
-          .read(routineNotifierProvider.notifier)
-          .discardFailedCreate(_draft.id);
     }
 
     final item = AddRoutineMapper.toRoutineItem(currentDraft);

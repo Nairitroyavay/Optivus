@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/config/backend_config.dart';
-import 'package:optivus/features/routine/models/add_routine_draft.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/sheets/add_routine_sheet.dart';
 import 'package:optivus/models/routine_item.dart';

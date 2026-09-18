@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
@@ -70,10 +71,14 @@ abstract class NutritionAiClient {
 class WorkerNutritionAiClient implements NutritionAiClient {
   final String baseUrl;
   final http.Client _client;
+  final Duration timeout;
 
-  WorkerNutritionAiClient({String? baseUrl, http.Client? client})
-    : baseUrl = baseUrl ?? OptivusAiWorkersConfig.nutritionWorkerUrl,
-      _client = client ?? http.Client();
+  WorkerNutritionAiClient({
+    String? baseUrl,
+    http.Client? client,
+    this.timeout = const Duration(seconds: 45),
+  }) : baseUrl = baseUrl ?? OptivusAiWorkersConfig.nutritionWorkerUrl,
+       _client = client ?? http.Client();
 
   @override
   Future<RoutineImportExtractionResult> generateEatingRoutine({
@@ -95,15 +100,17 @@ class WorkerNutritionAiClient implements NutritionAiClient {
     }
 
     try {
-      final response = await _client.post(
-        _workerUri('/v1/eating/generate-routine'),
-        headers: {
-          'Authorization': 'Bearer $idToken',
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode(params),
-      );
+      final response = await _client
+          .post(
+            _workerUri('/v1/eating/generate-routine'),
+            headers: {
+              'Authorization': 'Bearer $idToken',
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode(params),
+          )
+          .timeout(timeout);
       final body = _jsonObject(response.body);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         final errorCode = body['error'] as String? ?? 'provider_request_failed';
@@ -144,6 +151,19 @@ class WorkerNutritionAiClient implements NutritionAiClient {
         engineVersion: 'phase2d',
         candidates: candidates,
         warnings: const [],
+        createdAt: DateTime.now(),
+      );
+    } on TimeoutException {
+      return RoutineImportExtractionResult(
+        id: 'worker-gen-timeout',
+        uid: uid,
+        source: RoutineImportReviewSource.eating,
+        engine: 'worker',
+        engineVersion: 'phase2d',
+        candidates: const [],
+        warnings: const [
+          'The request timed out. Please check your connection and try again.',
+        ],
         createdAt: DateTime.now(),
       );
     } catch (_) {

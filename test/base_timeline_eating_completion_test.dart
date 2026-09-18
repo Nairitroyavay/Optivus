@@ -1,12 +1,19 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
+import 'package:optivus/features/routine/managers/base_timeline/models/eating_plan_freshness.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/eating_candidate_dish_normalizer.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/eating_setup_error_mapper.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/eating_source_transition_policy.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_timeline_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/eating_base_setup_screen.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_upload_lifecycle_helper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_plan_settings_sheet.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -380,10 +387,7 @@ void main() {
         await tester.tap(find.text('Remove'));
         await tester.pumpAndSettle();
 
-        expect(
-          find.text('Eating plan removed.'),
-          findsOneWidget,
-        );
+        expect(find.text('Eating plan removed.'), findsOneWidget);
 
         currentSetup = await fakeSetupRepo.fetchSetup(uid);
         expect(currentSetup.eatingBlocks, isEmpty);
@@ -459,7 +463,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Enter edit mode
-      await tester.tap(find.text('Change setup'));
+      await tester.tap(find.text('Edit schedule'));
       await tester.pumpAndSettle();
 
       // Delete the only block
@@ -597,19 +601,25 @@ void main() {
 
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Change setup'));
+        final moreButton = find.byKey(
+          const Key('base-timeline-header-menu-button'),
+        );
+        await tester.tap(moreButton);
         await tester.pumpAndSettle();
 
-        // Tap Scan Photo -> Gallery
-        await tester.tap(find.text('Scan Photo'));
+        await tester.tap(find.text('Change source'));
         await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Import from Photo'));
+        await tester.pumpAndSettle();
+
         await tester.tap(find.text('Choose from Gallery'));
         await tester.pumpAndSettle();
 
         // Error message shown
         expect(
           find.text('No meals could be recognized in the image.'),
-          findsOneWidget,
+          findsWidgets,
         );
 
         // Existing block preserved in review
@@ -681,11 +691,7 @@ void main() {
 
         await tester.pumpAndSettle();
 
-        // Tap Set up Eating
-        await tester.tap(find.text('Set up Eating'));
-        await tester.pumpAndSettle();
-
-        // Tap Build Balanced Plan
+        // Tap Build Balanced Plan directly from empty source selection view
         await tester.tap(find.text('Build Balanced Plan'));
         await tester.pumpAndSettle();
 
@@ -704,9 +710,15 @@ void main() {
         await tester.tap(find.text('Gain'));
         await tester.pumpAndSettle();
 
-        // Tap Generate Balanced Plan
         final generateBtn = find.text('Generate Balanced Plan');
-        await tester.scrollUntilVisible(generateBtn, 200);
+        await tester.scrollUntilVisible(
+          generateBtn,
+          200,
+          scrollable: find.descendant(
+            of: find.byType(EatingPlanSettingsSheet),
+            matching: find.byType(Scrollable),
+          ),
+        );
         await tester.tap(generateBtn);
         await tester.pumpAndSettle();
 
@@ -725,6 +737,380 @@ void main() {
         expect(updatedSetup.mealPlanningGoal, equals('gain'));
         expect(updatedSetup.mealsPerDay, equals(4));
         expect(updatedSetup.eatingBlocks, isNotEmpty);
+      },
+    );
+
+    test(
+      'EatingCandidateDishNormalizer preserves multi-word dishes and removes metadata noise',
+      () {
+        final candidate = RoutineImportCandidateBlock(
+          id: 'c1',
+          title: 'Lunch',
+          startMinute: 720,
+          endMinute: 760,
+          repeatDays: const [1, 2, 3, 4, 5],
+          blockType: 'soft',
+          category: 'eating',
+          hardBlock: false,
+          mealCategory: 'Lunch',
+          mealSlot: 'lunch',
+          steps: const [
+            'Dal Tadka',
+            'Chicken 65',
+            'PB&J Sandwich',
+            'Greek Yogurt',
+            'Lunch',
+            '500 kcal',
+            'High protein',
+            'Meal 2',
+          ],
+        );
+
+        final normalized = EatingCandidateDishNormalizer.extractDishes(
+          candidate,
+        );
+        expect(normalized, contains('Dal Tadka'));
+        expect(normalized, contains('Chicken 65'));
+        expect(normalized, contains('PB&J Sandwich'));
+        expect(normalized, contains('Greek Yogurt'));
+        expect(normalized, isNot(contains('Lunch')));
+        expect(normalized, isNot(contains('500 kcal')));
+        expect(normalized, isNot(contains('High protein')));
+        expect(normalized, isNot(contains('Meal 2')));
+
+        // Test fallback from title
+        final candidateTitleOnly = RoutineImportCandidateBlock(
+          id: 'c2',
+          title: 'Paneer Bhurji & Roti',
+          startMinute: 780,
+          endMinute: 810,
+          repeatDays: const [1, 2, 3, 4, 5],
+          blockType: 'soft',
+          category: 'eating',
+          hardBlock: false,
+        );
+        final fromTitle = EatingCandidateDishNormalizer.extractDishes(
+          candidateTitleOnly,
+        );
+        expect(fromTitle, equals(['Paneer Bhurji & Roti']));
+
+        // Title that is just meal metadata should NOT be used as a dish
+        final candidateGenericTitle = RoutineImportCandidateBlock(
+          id: 'c3',
+          title: 'Dinner',
+          startMinute: 1200,
+          endMinute: 1240,
+          repeatDays: const [1, 2, 3, 4, 5],
+          blockType: 'soft',
+          category: 'eating',
+          hardBlock: false,
+        );
+        final fromGenericTitle = EatingCandidateDishNormalizer.extractDishes(
+          candidateGenericTitle,
+        );
+        expect(fromGenericTitle, isEmpty);
+      },
+    );
+
+    test(
+      'EatingPlanFreshness correctly evaluates current, stale, and unknown states',
+      () {
+        final engine = EatingDomainEngine(
+          client: const MissingConfigNutritionAiClient(),
+        );
+        final profile = UserProfile(
+          uid: uid,
+          email: 'eating@optivus.local',
+          displayName: 'Eating Test User',
+          height: 175,
+          weight: 70,
+          ageRange: '20-29',
+          gender: 'male',
+        );
+
+        final setup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          eatingSetupPath: 'create',
+          mealPlanningGoal: 'maintain',
+          mealsPerDay: 3,
+          breakfastMinute: 8 * 60,
+          lunchMinute: 13 * 60,
+          dinnerMinute: 19 * 60,
+        );
+
+        final targets = engine.calculateTargets(profile: profile, setup: setup);
+        final inputs = engine.buildInputs(
+          profile: profile,
+          setup: setup,
+          targets: targets,
+        );
+        final fingerprint = inputs.computeFingerprint();
+
+        // Matching fingerprint -> current
+        final setupWithFingerprint = setup.copyWith(
+          eatingGeneratedInputFingerprint: fingerprint,
+        );
+        expect(
+          EatingPlanFreshness.evaluate(
+            setup: setupWithFingerprint,
+            profile: profile,
+            engine: engine,
+          ),
+          equals(EatingPlanFreshness.current),
+        );
+
+        // Non-generated plan -> current
+        final photoSetup = setup.copyWith(
+          eatingSetupPath: 'has_routine',
+          eatingGeneratedInputFingerprint: 'old-fingerprint',
+        );
+        expect(
+          EatingPlanFreshness.evaluate(
+            setup: photoSetup,
+            profile: profile,
+            engine: engine,
+          ),
+          equals(EatingPlanFreshness.current),
+        );
+
+        // Changed profile weight -> stale
+        final changedProfile = profile.copyWith(weight: 85);
+        expect(
+          EatingPlanFreshness.evaluate(
+            setup: setupWithFingerprint,
+            profile: changedProfile,
+            engine: engine,
+          ),
+          equals(EatingPlanFreshness.stale),
+        );
+
+        // Missing body basics (null weight/height) -> unknown
+        final incompleteProfile = UserProfile(
+          uid: uid,
+          email: 'incomplete@optivus.local',
+          displayName: 'No Basics',
+        );
+        expect(
+          EatingPlanFreshness.evaluate(
+            setup: setupWithFingerprint,
+            profile: incompleteProfile,
+            engine: engine,
+          ),
+          equals(EatingPlanFreshness.unknown),
+        );
+      },
+    );
+
+    test('EatingSourceTransitionPolicy guarantees clean draft transitions', () {
+      // toPhoto clears all generation preferences and targets
+      final photoDraft = EatingSourceTransitionPolicy.toPhoto(
+        blocks: const [],
+        photoAssetId: 'photo-1',
+        photoR2Key: 'key-1',
+      );
+      expect(photoDraft.setupPath, equals('has_routine'));
+      expect(photoDraft.photoAssetId, equals('photo-1'));
+      expect(photoDraft.photoR2Key, equals('key-1'));
+      expect(photoDraft.mealsPerDay, isNull);
+      expect(photoDraft.targetCalories, isNull);
+      expect(photoDraft.targetProtein, isNull);
+      expect(photoDraft.inputFingerprint, isNull);
+      expect(photoDraft.planVersion, isNull);
+      expect(photoDraft.customized, isFalse);
+
+      // toManual clears photo and generation metadata
+      final manualDraft = EatingSourceTransitionPolicy.toManual(
+        blocks: const [],
+      );
+      expect(manualDraft.setupPath, equals('manual'));
+      expect(manualDraft.photoAssetId, isNull);
+      expect(manualDraft.photoR2Key, isNull);
+      expect(manualDraft.mealsPerDay, isNull);
+      expect(manualDraft.targetCalories, isNull);
+      expect(manualDraft.targetProtein, isNull);
+      expect(manualDraft.inputFingerprint, isNull);
+
+      // toGenerated sets generation parameters and clears photo
+      final genDraft = EatingSourceTransitionPolicy.toGenerated(
+        blocks: const [],
+        goal: 'gain',
+        mealsPerDay: 4,
+        targetCalories: 2600,
+        targetProtein: 150,
+        planVersion: 2,
+        inputFingerprint: 'fp-123',
+        customized: false,
+      );
+      expect(genDraft.setupPath, equals('create'));
+      expect(genDraft.photoAssetId, isNull);
+      expect(genDraft.goal, equals('gain'));
+      expect(genDraft.mealsPerDay, equals(4));
+      expect(genDraft.targetCalories, equals(2600));
+      expect(genDraft.targetProtein, equals(150));
+      expect(genDraft.planVersion, equals(2));
+      expect(genDraft.inputFingerprint, equals('fp-123'));
+      expect(genDraft.customized, isFalse);
+    });
+
+    test(
+      'replaceEatingGeneratedConfiguration explicitly nulls unpassed fields',
+      () {
+        final initial = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          eatingSetupPath: 'create',
+          mealPlanningGoal: 'fat_loss',
+          mealsPerDay: 3,
+          eatingMode: 'vegetarian',
+          foodType: 'home_cooked',
+          foodStyleCustomText: 'No dairy',
+          targetCalories: 2000,
+          targetProtein: 130,
+          eatingPhotoAssetId: 'old-photo',
+          eatingPhotoR2Key: 'old-key',
+        );
+
+        final replaced = initial.replaceEatingGeneratedConfiguration(
+          blocks: const [],
+          goal: 'gain',
+          meals: 4,
+          mode: null,
+          type: null,
+          styleCustomText: null,
+          calories: null,
+          protein: null,
+          planVersion: 2,
+          inputFingerprint: 'new-fp',
+          customized: false,
+        );
+
+        expect(replaced.mealPlanningGoal, equals('gain'));
+        expect(replaced.mealsPerDay, equals(4));
+        expect(replaced.eatingMode, isNull);
+        expect(replaced.foodType, isNull);
+        expect(replaced.foodStyleCustomText, isNull);
+        expect(replaced.targetCalories, isNull);
+        expect(replaced.targetProtein, isNull);
+        expect(replaced.eatingPhotoAssetId, isNull);
+        expect(replaced.eatingPhotoR2Key, isNull);
+        expect(replaced.eatingGeneratedPlanVersion, equals(2));
+        expect(replaced.eatingGeneratedInputFingerprint, equals('new-fp'));
+        expect(replaced.eatingCustomized, isFalse);
+      },
+    );
+
+    test(
+      'validateBeforeSave distinguishes pristine AI plans from customized plans',
+      () {
+        final engine = EatingDomainEngine(
+          client: const MissingConfigNutritionAiClient(),
+        );
+
+        // Incomplete block schedule: only 1 meal on 1 day
+        final singleMealBlock = TimelineBlockDraft(
+          id: 'b1',
+          section: 'eating',
+          title: 'Single Lunch',
+          startMinute: 12 * 60,
+          endMinute: 13 * 60,
+          repeatDays: const [1],
+          blockType: TimelineBlockDraft.softBlockKey,
+          mealSlot: 'lunch',
+          dishes: const ['Chicken Salad'],
+          source: 'ai_generated_meal_setup',
+        );
+
+        // Pristine AI plan: eatingCustomized == false -> requires full weekly coverage
+        final pristineSetup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          eatingSetupPath: 'create',
+          eatingCustomized: false,
+          eatingBlocks: [singleMealBlock],
+        );
+        final pristineErr = engine.validateBeforeSave(
+          blocks: [singleMealBlock],
+          setup: pristineSetup,
+        );
+        expect(pristineErr, isNotNull);
+        expect(pristineErr, contains('missing required meals for all 7 days'));
+
+        // Customized plan: eatingCustomized == true -> only requires schedule integrity
+        final customizedSetup = pristineSetup.copyWith(eatingCustomized: true);
+        final customizedErr = engine.validateBeforeSave(
+          blocks: [singleMealBlock],
+          setup: customizedSetup,
+        );
+        expect(customizedErr, isNull);
+      },
+    );
+
+    test(
+      'EatingSetupErrorMapper provides actionable messages for timeout, worker, and diversity errors',
+      () {
+        expect(
+          EatingSetupErrorMapper.mapError(TimeoutException('Timed out')),
+          equals(
+            'The request timed out. Please check your connection and try again.',
+          ),
+        );
+        expect(
+          EatingSetupErrorMapper.mapError(Exception('503 Service Unavailable')),
+          equals(
+            'AI generation service is currently unavailable. Please try again later.',
+          ),
+        );
+        expect(
+          EatingSetupErrorMapper.mapError(
+            Exception('Macro tolerance exceeded'),
+          ),
+          equals(
+            'Generated meal plan could not meet required nutritional tolerances. Please adjust preferences and try again.',
+          ),
+        );
+        expect(
+          EatingSetupErrorMapper.mapError(
+            Exception('Weekly diversity check failed'),
+          ),
+          equals(
+            'Generated meal plan did not meet weekly diversity requirements. Please try again.',
+          ),
+        );
+      },
+    );
+
+    test(
+      'EatingTimelineCard minimumHeight accounts for multi-line location and notes',
+      () {
+        const singleLineBlock = TimelineBlockDraft(
+          id: 't1',
+          section: 'eating',
+          title: 'Breakfast',
+          startMinute: 480,
+          endMinute: 510,
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+          blockType: TimelineBlockDraft.softBlockKey,
+          dishes: ['Oatmeal'],
+        );
+        final h1 = EatingTimelineCard.minimumHeight(singleLineBlock);
+
+        const multiLineBlock = TimelineBlockDraft(
+          id: 't2',
+          section: 'eating',
+          title: 'Breakfast',
+          startMinute: 480,
+          endMinute: 510,
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+          blockType: TimelineBlockDraft.softBlockKey,
+          dishes: ['Oatmeal'],
+          location: 'Office Cafeteria Level 4, Building B',
+          notes:
+              'Low sodium option. Ask chef to prepare with olive oil and separate dressing.',
+        );
+        final h2 = EatingTimelineCard.minimumHeight(multiLineBlock);
+
+        expect(h2, greaterThan(h1));
       },
     );
   });

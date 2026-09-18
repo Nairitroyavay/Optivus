@@ -440,7 +440,7 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
   final BaseTimelineSetupRepository? _setupRepository;
   final Map<String, List<RoutineEventRecord>> _events = {};
   final Map<String, StreamController<RoutineEventFeed>> _controllers = {};
-  Future<void> _mutex = Future.value();
+  Future<void>? _activeLock;
 
   /// Test hook: if set, called before mutations. Throw to simulate pre-mutation failure.
   Future<void> Function()? onBeforeMutation;
@@ -507,11 +507,13 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
     List<ConflictAcceptance>? setConflictAcceptances,
   }) async {
     final completer = Completer<void>();
-    final previousMutex = _mutex;
-    _mutex = completer.future;
+    final previousLock = _activeLock;
+    _activeLock = completer.future;
 
     try {
-      await previousMutex;
+      if (previousLock != null) {
+        await previousLock;
+      }
 
       final itemsToWrite = [?setItem, ...?setItems];
       final eventsToWrite = [?addEvent, ...?addEvents];
@@ -673,6 +675,9 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
         rethrow;
       }
     } finally {
+      if (identical(_activeLock, completer.future)) {
+        _activeLock = null;
+      }
       completer.complete();
     }
   }
@@ -685,11 +690,13 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
     required List<RoutineEventRecord> addEvents,
   }) async {
     final completer = Completer<void>();
-    final previousMutex = _mutex;
-    _mutex = completer.future;
+    final previousLock = _activeLock;
+    _activeLock = completer.future;
 
     try {
-      await previousMutex;
+      if (previousLock != null) {
+        await previousLock;
+      }
       validateOwnerUid(uid);
       const receiptCodec = RoutineProjectionReceiptFirestoreCodec();
       receiptCodec.toFirestore(fromReceipt);
@@ -757,6 +764,9 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
         rethrow;
       }
     } finally {
+      if (identical(_activeLock, completer.future)) {
+        _activeLock = null;
+      }
       completer.complete();
     }
   }
@@ -772,11 +782,13 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
     buildUpdatedSetup,
   }) async {
     final completer = Completer<void>();
-    final previousMutex = _mutex;
-    _mutex = completer.future;
+    final previousLock = _activeLock;
+    _activeLock = completer.future;
 
     try {
-      await previousMutex;
+      if (previousLock != null) {
+        await previousLock;
+      }
       validateOwnerUid(uid);
 
       final initialSetup = _setupRepository != null
@@ -858,6 +870,9 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
         rethrow;
       }
     } finally {
+      if (identical(_activeLock, completer.future)) {
+        _activeLock = null;
+      }
       completer.complete();
     }
   }

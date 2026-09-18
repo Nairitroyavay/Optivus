@@ -277,7 +277,7 @@ void main() {
       await waitForPending();
       await notifier.startRoutineItem('t_tracker', occurrenceDate: date);
       await waitForPending();
-      await notifier.completeRoutineItem('t_money', occurrenceDate: date);
+      await notifier.recordMoneySavedAndComplete('t_money', occurrenceDate: date);
       await waitForPending();
       await notifier.checkIn('t_checkin', 'Avoided', occurrenceDate: date);
       await waitForPending();

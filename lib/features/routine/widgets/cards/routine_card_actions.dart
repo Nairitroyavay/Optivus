@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/features/routine/models/routine_action_context.dart';
@@ -154,7 +153,8 @@ class RoutineCardActions extends ConsumerWidget {
                 isActiveTrackerOccurrence);
 
         final isMoney = item.blockType == RoutineBlockType.moneyTask;
-        final isBadHabit = item.blockType == RoutineBlockType.checkIn &&
+        final isBadHabit =
+            item.blockType == RoutineBlockType.checkIn &&
             item.category == RoutineCategory.badHabit;
         final isTrackerPlanned =
             item.blockType == RoutineBlockType.trackerTask && !isTrackerActive;
@@ -233,11 +233,7 @@ class RoutineCardActions extends ConsumerWidget {
             );
           }
 
-          return Row(
-            children: [
-              Expanded(child: completedBadge),
-            ],
-          );
+          return Row(children: [Expanded(child: completedBadge)]);
         }
 
         if (effectiveStatus == RoutineStatus.skipped) {
@@ -295,11 +291,7 @@ class RoutineCardActions extends ConsumerWidget {
             );
           }
 
-          return Row(
-            children: [
-              Expanded(child: skippedBadge),
-            ],
-          );
+          return Row(children: [Expanded(child: skippedBadge)]);
         }
 
         if (effectiveStatus == RoutineStatus.missed) {
@@ -357,43 +349,43 @@ class RoutineCardActions extends ConsumerWidget {
             );
           }
 
-          return Row(
-            children: [
-              Expanded(child: missedBadge),
-            ],
-          );
+          return Row(children: [Expanded(child: missedBadge)]);
         }
 
         final String? startLabel = hasGenericCountdown
             ? null
             : (isMoney
-                ? 'Save money'
-                : (isBadHabit
-                    ? 'Check in'
-                    : (isTrackerActive
-                        ? 'Open Tracker'
-                        : (isTrackerPlanned ? 'Start Tracker' : 'Start'))));
+                  ? 'Save money'
+                  : (isBadHabit
+                        ? 'Check in'
+                        : (isTrackerActive
+                              ? 'Open Tracker'
+                              : (isTrackerPlanned
+                                    ? 'Start Tracker'
+                                    : 'Start'))));
 
         final IconData startIcon = isMoney
             ? Icons.savings_outlined
             : (isBadHabit
-                ? Icons.fact_check_outlined
-                : (isTrackerActive
-                    ? Icons.open_in_new_rounded
-                    : Icons.play_arrow_rounded));
+                  ? Icons.fact_check_outlined
+                  : (isTrackerActive
+                        ? Icons.open_in_new_rounded
+                        : Icons.play_arrow_rounded));
 
         final startAction = _ActionButton(
           key: ValueKey('routine-action-start-${item.id}'),
           label: startLabel,
-          semanticLabel:
-              startLabel != null ? '$startLabel ${item.title}' : null,
+          semanticLabel: startLabel != null
+              ? '$startLabel ${item.title}'
+              : null,
           countdownStartedAt: hasGenericCountdown ? item.startedAt : null,
           countdownDurationSeconds: hasGenericCountdown
               ? item.countdownDurationSeconds
               : null,
           color: OptivusColors.routineAccent,
           icon: startIcon,
-          isPrimary: !hasGenericCountdown &&
+          isPrimary:
+              !hasGenericCountdown &&
               (effectiveStatus == RoutineStatus.planned || isTrackerActive),
           isDisabled:
               isPending ||
@@ -448,7 +440,12 @@ class RoutineCardActions extends ConsumerWidget {
                   } else if (item.blockType == RoutineBlockType.trackerTask &&
                       (effectiveStatus == RoutineStatus.inTracker ||
                           isActiveTrackerOccurrence)) {
-                    ref.read(appNavigationProvider.notifier).goToTracker();
+                    ref
+                        .read(routineNotifierProvider.notifier)
+                        .openTrackerSession(
+                          item.id,
+                          occurrenceDate: effectiveOccurrenceDate,
+                        );
                   } else if (item.blockType == RoutineBlockType.trackerTask) {
                     _executeRoutineAction(
                       context,
@@ -519,14 +516,15 @@ class RoutineCardActions extends ConsumerWidget {
                 perform: () => Future.value(
                   completeDecision.isNoOp
                       ? RoutineWriteResult.noOp(
-                          message: completeDecision.message ??
-                              'Already completed.',
+                          message:
+                              completeDecision.message ?? 'Already completed.',
                           failureCategory: completeDecision.failureCategory,
                         )
                       : RoutineWriteResult.validationFailed(
                           RoutineValidationResult.invalid(
                             errorType: RoutineValidationErrorType.invalidTime,
-                            userSafeMessage: completeDecision.message ??
+                            userSafeMessage:
+                                completeDecision.message ??
                                 'Cannot complete routine.',
                           ),
                           message: completeDecision.message,
@@ -569,7 +567,8 @@ class RoutineCardActions extends ConsumerWidget {
                   RoutineWriteResult.validationFailed(
                     RoutineValidationResult.invalid(
                       errorType: RoutineValidationErrorType.invalidTime,
-                      userSafeMessage: moveDecision.message ??
+                      userSafeMessage:
+                          moveDecision.message ??
                           'Completed routine cannot be moved.',
                     ),
                     message: moveDecision.message,
@@ -615,8 +614,8 @@ class RoutineCardActions extends ConsumerWidget {
                       : RoutineWriteResult.validationFailed(
                           RoutineValidationResult.invalid(
                             errorType: RoutineValidationErrorType.invalidTime,
-                            userSafeMessage: skipDecision.message ??
-                                'Cannot skip routine.',
+                            userSafeMessage:
+                                skipDecision.message ?? 'Cannot skip routine.',
                           ),
                           message: skipDecision.message,
                           failureCategory: skipDecision.failureCategory,
@@ -643,6 +642,7 @@ class RoutineCardActions extends ConsumerWidget {
         if (hasGenericCountdown) {
           if (actionLayout == RoutineCardActionLayout.stacked) {
             return Column(
+              key: const ValueKey('routine-action-column-stacked'),
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -659,6 +659,7 @@ class RoutineCardActions extends ConsumerWidget {
             );
           }
           return Row(
+            key: const ValueKey('routine-action-row-horizontal'),
             children: [
               Expanded(flex: 3, child: startAction),
               const SizedBox(width: RoutineCardPresentation.actionGap),
@@ -673,6 +674,7 @@ class RoutineCardActions extends ConsumerWidget {
         if (isTrackerActive) {
           if (actionLayout == RoutineCardActionLayout.stacked) {
             return Column(
+              key: const ValueKey('routine-action-column-stacked'),
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -683,6 +685,7 @@ class RoutineCardActions extends ConsumerWidget {
             );
           }
           return Row(
+            key: const ValueKey('routine-action-row-horizontal'),
             children: [
               Expanded(flex: 3, child: startAction),
               const SizedBox(width: RoutineCardPresentation.actionGap),
@@ -696,6 +699,7 @@ class RoutineCardActions extends ConsumerWidget {
         if (isMoney || isBadHabit || isTrackerPlanned) {
           if (actionLayout == RoutineCardActionLayout.stacked) {
             return Column(
+              key: const ValueKey('routine-action-column-stacked'),
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -708,6 +712,7 @@ class RoutineCardActions extends ConsumerWidget {
             );
           }
           return Row(
+            key: const ValueKey('routine-action-row-horizontal'),
             children: [
               Expanded(flex: 3, child: startAction),
               const SizedBox(width: RoutineCardPresentation.actionGap),
@@ -721,6 +726,7 @@ class RoutineCardActions extends ConsumerWidget {
         // Normal 4-Action Planned Cards: Start | Done | Move | Skip
         if (actionLayout == RoutineCardActionLayout.grid2x2) {
           return Column(
+            key: const ValueKey('routine-action-grid-2x2'),
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -745,6 +751,7 @@ class RoutineCardActions extends ConsumerWidget {
 
         if (actionLayout == RoutineCardActionLayout.stacked) {
           return Column(
+            key: const ValueKey('routine-action-column-stacked'),
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -760,6 +767,7 @@ class RoutineCardActions extends ConsumerWidget {
         }
 
         return Row(
+          key: const ValueKey('routine-action-row-horizontal'),
           children: [
             Expanded(child: startAction),
             const SizedBox(width: RoutineCardPresentation.actionGap),
@@ -959,13 +967,13 @@ class _ActionButton extends StatelessWidget {
     final effectiveBgColor = isSelected
         ? color.withValues(alpha: 0.28)
         : isPrimary
-            ? color.withValues(alpha: 0.22)
-            : color.withValues(alpha: 0.08);
+        ? color.withValues(alpha: 0.22)
+        : color.withValues(alpha: 0.08);
     final effectiveBorderColor = isSelected
         ? color.withValues(alpha: 0.55)
         : isPrimary
-            ? color.withValues(alpha: 0.50)
-            : color.withValues(alpha: 0.20);
+        ? color.withValues(alpha: 0.50)
+        : color.withValues(alpha: 0.20);
     final effectiveTextColor = color;
 
     final scaler = MediaQuery.textScalerOf(context);
