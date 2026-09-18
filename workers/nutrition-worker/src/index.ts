@@ -23,6 +23,9 @@ const firebaseJwks = createRemoteJWKSet(
   new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com")
 );
 
+const DEFAULT_AI_MODEL = "gemini-3.8-flash";
+const DEFAULT_AI_FALLBACK_MODEL = "gemini-3.7-flash";
+
 function corsHeaders(request: Request, env: Env): Headers {
   const headers = new Headers();
   const origin = request.headers.get("Origin");
@@ -314,8 +317,8 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
 
     if (provider === "gemini") {
       const apiKey = requiredEnv(env.GEMINI_API_KEY, "GEMINI_API_KEY");
-      const primaryModel = env.AI_MODEL?.trim() || "gemini-2.5-flash-lite";
-      const fallbackModel = env.AI_FALLBACK_MODEL?.trim() || "gemini-2.5-flash";
+      const primaryModel = env.AI_MODEL?.trim() || DEFAULT_AI_MODEL;
+      const fallbackModel = env.AI_FALLBACK_MODEL?.trim() || DEFAULT_AI_FALLBACK_MODEL;
 
       const fetchGemini = async (model: string) => {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.replace(/^models\//, "")}:generateContent?key=${apiKey}`;
@@ -729,7 +732,9 @@ export default {
           ok: true,
           service: "nutrition-worker",
           projectId: env.FIREBASE_PROJECT_ID,
-          aiProvider: env.AI_PROVIDER,
+          aiProvider: env.AI_PROVIDER || "gemini",
+          aiModel: env.AI_MODEL?.trim() || DEFAULT_AI_MODEL,
+          aiFallbackModel: env.AI_FALLBACK_MODEL?.trim() || DEFAULT_AI_FALLBACK_MODEL,
         });
       }
 

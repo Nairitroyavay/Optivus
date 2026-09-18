@@ -7,8 +7,8 @@ workers_dev = true
 [vars]
 FIREBASE_PROJECT_ID = "optivus-lifeos"
 AI_PROVIDER = "gemini"
-AI_MODEL = "gemini-2.5-flash-lite"
-AI_FALLBACK_MODEL = "gemini-2.5-flash"
+AI_MODEL = "gemini-3.8-flash"
+AI_FALLBACK_MODEL = "gemini-3.7-flash"
 ALLOWED_ORIGINS = ""
 
 [secrets]
@@ -28,8 +28,8 @@ workers_dev = true
 [env.staging.vars]
 FIREBASE_PROJECT_ID = "required-approved-staging-project"
 AI_PROVIDER = "gemini"
-AI_MODEL = "gemini-2.5-flash-lite"
-AI_FALLBACK_MODEL = "gemini-2.5-flash"
+AI_MODEL = "gemini-3.8-flash"
+AI_FALLBACK_MODEL = "gemini-3.7-flash"
 ALLOWED_ORIGINS = "https://staging-origin.invalid"
 
 [env.staging.secrets]

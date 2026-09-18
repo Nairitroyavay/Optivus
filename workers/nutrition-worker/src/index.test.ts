@@ -328,6 +328,26 @@ describe("Nutrition Worker request boundary", () => {
       service: "nutrition-worker",
       projectId: "test-project",
       aiProvider: "gemini",
+      aiModel: "gemini-test",
+      aiFallbackModel: "gemini-test",
+    });
+  });
+
+  test("health endpoint defaults to gemini-3.8-flash and gemini-3.7-flash when model env vars are absent", async () => {
+    const response = await worker.fetch(
+      new Request("https://nutrition-worker.test/health"),
+      makeEnv({ AI_MODEL: undefined, AI_FALLBACK_MODEL: undefined }) as never,
+    );
+    const json = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(200);
+    expect(json).toMatchObject({
+      ok: true,
+      service: "nutrition-worker",
+      projectId: "test-project",
+      aiProvider: "gemini",
+      aiModel: "gemini-3.8-flash",
+      aiFallbackModel: "gemini-3.7-flash",
     });
   });
 
@@ -978,5 +998,81 @@ describe("Nutrition Worker request boundary", () => {
     expect(json.message).toContain("deviated from target (2100)");
     expect(json).not.toHaveProperty("candidates");
     expect(callCount).toBe(2);
+  });
+
+  test("uses default gemini-3.8-flash primary and gemini-3.7-flash fallback when model env vars are absent", async () => {
+    const fetchCalls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        fetchCalls.push(url);
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({
+                        candidates: buildWeeklyCandidates(3),
+                      }),
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }),
+    );
+
+    const response = await worker.fetch(
+      request(validRequestBody()),
+      makeEnv({ AI_MODEL: undefined, AI_FALLBACK_MODEL: undefined }) as never,
+    );
+    expect(response.status).toBe(200);
+    expect(fetchCalls.length).toBeGreaterThanOrEqual(1);
+    expect(fetchCalls[0]).toContain("/models/gemini-3.8-flash:generateContent");
+  });
+
+  test("falls back to default gemini-3.7-flash when primary model fails without env vars", async () => {
+    const fetchCalls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        fetchCalls.push(url);
+        if (url.includes("gemini-3.8-flash")) {
+          return new Response(JSON.stringify({ error: "server error" }), { status: 500 });
+        }
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({
+                        candidates: buildWeeklyCandidates(3),
+                      }),
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }),
+    );
+
+    const response = await worker.fetch(
+      request(validRequestBody()),
+      makeEnv({ AI_MODEL: undefined, AI_FALLBACK_MODEL: undefined }) as never,
+    );
+    expect(response.status).toBe(200);
+    expect(fetchCalls.length).toBe(2);
+    expect(fetchCalls[0]).toContain("/models/gemini-3.8-flash:generateContent");
+    expect(fetchCalls[1]).toContain("/models/gemini-3.7-flash:generateContent");
   });
 });
