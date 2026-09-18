@@ -7,6 +7,7 @@ import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.da
 import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/class_detail_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/class_timeline_card.dart';
@@ -19,10 +20,13 @@ class ClassesCurrentSetupView extends StatefulWidget {
   final ValueChanged<int> onDayChanged;
   final VoidCallback onBack;
   final VoidCallback onChangeSetup;
+  final VoidCallback? onEditSchedule;
+  final VoidCallback? onChangeSource;
   final VoidCallback? onRemoveSetup;
   final bool routineRefreshPending;
   final String? routineRefreshMessage;
   final VoidCallback? onRetryRefresh;
+  final String? primaryButtonLabel;
 
   const ClassesCurrentSetupView({
     super.key,
@@ -32,10 +36,13 @@ class ClassesCurrentSetupView extends StatefulWidget {
     required this.onDayChanged,
     required this.onBack,
     required this.onChangeSetup,
+    this.onEditSchedule,
+    this.onChangeSource,
     this.onRemoveSetup,
     this.routineRefreshPending = false,
     this.routineRefreshMessage,
     this.onRetryRefresh,
+    this.primaryButtonLabel,
   });
 
   @override
@@ -51,128 +58,6 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
   void dispose() {
     _scrollController.dispose();
     super.dispose();
-  }
-
-  Widget _buildHeader(
-    BuildContext context,
-    BaseTimelineSectionSnapshot snapshot,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final textScaler = MediaQuery.textScalerOf(context);
-          final isVeryNarrow = constraints.maxWidth < 320;
-          final hasLargeText = textScaler.scale(18) > 24;
-
-          final changeButton = FilledButton.icon(
-            icon: const Icon(Icons.edit_calendar_rounded, size: 16),
-            label: Text(
-              snapshot.isConfigured ? 'Change setup' : 'Set up Classes',
-            ),
-            style: FilledButton.styleFrom(
-              backgroundColor: OptivusColors.blueAccent,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            onPressed: widget.onChangeSetup,
-          );
-
-          if (isVeryNarrow || (constraints.maxWidth < 350 && hasLargeText)) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(
-                        Icons.arrow_back_rounded,
-                        color: OptivusColors.textPrimary,
-                      ),
-                      onPressed: widget.onBack,
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.white.withValues(alpha: 0.1),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Classes',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: OptivusColors.textPrimary,
-                            ),
-                          ),
-                          Text(
-                            snapshot.summary,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: OptivusColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Align(alignment: Alignment.centerRight, child: changeButton),
-              ],
-            );
-          }
-
-          return Row(
-            children: [
-              IconButton(
-                icon: const Icon(
-                  Icons.arrow_back_rounded,
-                  color: OptivusColors.textPrimary,
-                ),
-                onPressed: widget.onBack,
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.white.withValues(alpha: 0.1),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Classes',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: OptivusColors.textPrimary,
-                      ),
-                    ),
-                    Text(
-                      snapshot.summary,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: OptivusColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              changeButton,
-            ],
-          );
-        },
-      ),
-    );
   }
 
   Widget _buildRefreshPendingBanner(BuildContext context) {
@@ -243,7 +128,25 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // 1. Top Nav Header matching Work/Eating/Skin Care/Fixed
-          _buildHeader(context, snapshot),
+          BaseTimelineCurrentSetupHeader(
+            title: 'Classes',
+            summary: snapshot.summary,
+            accent: OptivusColors.blueAccent,
+            onBack: widget.onBack,
+            primaryButtonLabel:
+                widget.primaryButtonLabel ??
+                (snapshot.isConfigured ? 'Change setup' : 'Set up Classes'),
+            primaryButtonKey: const Key(
+              'base-timeline-header-change-setup-button',
+            ),
+            onPrimaryAction: widget.onChangeSetup,
+            changeSourceLabel: 'Change source',
+            onChangeSource: snapshot.isConfigured
+                ? widget.onChangeSource
+                : null,
+            removeLabel: 'Remove setup',
+            onRemove: snapshot.isConfigured ? widget.onRemoveSetup : null,
+          ),
 
           // Routine Refresh Pending Banner
           if (widget.routineRefreshPending) _buildRefreshPendingBanner(context),

@@ -82,8 +82,8 @@ class EatingMealDetailSheet extends StatelessWidget {
     final durationMin = block.endMinute - block.startMinute;
     final durationStr = durationMin > 0
         ? (durationMin >= 60
-            ? '${durationMin ~/ 60}h${durationMin % 60 > 0 ? ' ${durationMin % 60}m' : ''}'
-            : '${durationMin}m')
+              ? '${durationMin ~/ 60}h${durationMin % 60 > 0 ? ' ${durationMin % 60}m' : ''}'
+              : '${durationMin}m')
         : '';
 
     return SafeArea(
@@ -151,10 +151,14 @@ class EatingMealDetailSheet extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: OptivusColors.roseAccent.withValues(alpha: 0.12),
+                            color: OptivusColors.roseAccent.withValues(
+                              alpha: 0.12,
+                            ),
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(
-                              color: OptivusColors.roseAccent.withValues(alpha: 0.25),
+                              color: OptivusColors.roseAccent.withValues(
+                                alpha: 0.25,
+                              ),
                               width: 0.8,
                             ),
                           ),
@@ -250,7 +254,10 @@ class EatingMealDetailSheet extends StatelessWidget {
               const SizedBox(height: 18),
 
               // Dishes
-              _buildSectionHeader('Dishes & Food Items', Icons.menu_book_rounded),
+              _buildSectionHeader(
+                'Dishes & Food Items',
+                Icons.menu_book_rounded,
+              ),
               const SizedBox(height: 8),
               Container(
                 width: double.infinity,
@@ -266,35 +273,39 @@ class EatingMealDetailSheet extends StatelessWidget {
                 child: dishes.isNotEmpty
                     ? Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: dishes.map(
-                          (d) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 3),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  '• ',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: OptivusColors.roseAccent,
-                                  ),
+                        children: dishes
+                            .map(
+                              (d) => Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 3,
                                 ),
-                                Expanded(
-                                  child: Text(
-                                    d,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: OptivusColors.textPrimary,
-                                      height: 1.3,
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      '• ',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        color: OptivusColors.roseAccent,
+                                      ),
                                     ),
-                                  ),
+                                    Expanded(
+                                      child: Text(
+                                        d,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: OptivusColors.textPrimary,
+                                          height: 1.3,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ),
-                        ).toList(),
+                              ),
+                            )
+                            .toList(),
                       )
                     : const Text(
                         'No specific dishes listed.',
@@ -334,10 +345,14 @@ class EatingMealDetailSheet extends StatelessWidget {
                                 vertical: 5,
                               ),
                               decoration: BoxDecoration(
-                                color: OptivusColors.roseAccent.withValues(alpha: 0.12),
+                                color: OptivusColors.roseAccent.withValues(
+                                  alpha: 0.12,
+                                ),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                  color: OptivusColors.roseAccent.withValues(alpha: 0.3),
+                                  color: OptivusColors.roseAccent.withValues(
+                                    alpha: 0.3,
+                                  ),
                                   width: 0.8,
                                 ),
                               ),
@@ -359,10 +374,14 @@ class EatingMealDetailSheet extends StatelessWidget {
                                 vertical: 5,
                               ),
                               decoration: BoxDecoration(
-                                color: OptivusColors.blueAccent.withValues(alpha: 0.12),
+                                color: OptivusColors.blueAccent.withValues(
+                                  alpha: 0.12,
+                                ),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                  color: OptivusColors.blueAccent.withValues(alpha: 0.3),
+                                  color: OptivusColors.blueAccent.withValues(
+                                    alpha: 0.3,
+                                  ),
                                   width: 0.8,
                                 ),
                               ),

@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
@@ -18,6 +17,7 @@ import 'package:optivus/features/routine/managers/base_timeline/services/work_se
 import 'package:optivus/features/routine/managers/base_timeline/services/work_setup_error_mapper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_timeline_adapter.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_ai_thinking_view.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_save_success_view.dart';
 import 'package:optivus/repositories/base_timeline_setup_repository.dart';
 import 'package:optivus/state/app_state.dart';
 
@@ -612,8 +612,10 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
         return _buildErrorView(setup, state, uid);
 
       case WorkSetupStage.saveSuccess:
-        return _WorkSaveSuccessView(
-          lifeRole: lifeRole,
+        return BaseTimelineSaveSuccessView(
+          title: WorkPresentationUtils.saveSuccessTitle(lifeRole),
+          subtitle: 'Your Base Timeline has been updated.',
+          accent: OptivusColors.warning,
           onComplete: () {
             if (!mounted) return;
             controller.dismissSuccess();
@@ -1253,146 +1255,6 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _WorkSaveSuccessView extends StatefulWidget {
-  final VoidCallback onComplete;
-  final String? lifeRole;
-
-  const _WorkSaveSuccessView({required this.onComplete, this.lifeRole});
-
-  @override
-  State<_WorkSaveSuccessView> createState() => _WorkSaveSuccessViewState();
-}
-
-class _WorkSaveSuccessViewState extends State<_WorkSaveSuccessView>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _scaleAnimation;
-  late final Animation<double> _fadeAnimation;
-  bool _didCompleteImmediately = false;
-
-  @override
-  void initState() {
-    super.initState();
-    HapticFeedback.mediumImpact();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
-    _scaleAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.0, 0.6, curve: Curves.easeOutBack),
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.0, 0.4, curve: Curves.easeIn),
-    );
-
-    _controller.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        widget.onComplete();
-      }
-    });
-
-    _controller.forward();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final disableAnimations =
-        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
-    if (disableAnimations && !_didCompleteImmediately) {
-      _didCompleteImmediately = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          widget.onComplete();
-        }
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final disableAnimations =
-        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
-
-    final content = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(OptivusRadii.surfaceLarge),
-        border: Border.all(
-          color: OptivusColors.warning.withValues(alpha: 0.35),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: OptivusColors.warning.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: OptivusColors.warning.withValues(alpha: 0.5),
-                width: 2,
-              ),
-            ),
-            child: const Icon(
-              Icons.check_rounded,
-              color: OptivusColors.warning,
-              size: 32,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            WorkPresentationUtils.saveSuccessTitle(widget.lifeRole),
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: OptivusColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Your Base Timeline has been updated.',
-            style: TextStyle(fontSize: 13, color: OptivusColors.textSecondary),
-          ),
-        ],
-      ),
-    );
-
-    if (disableAnimations) {
-      return SafeArea(child: Center(child: content));
-    }
-
-    return SafeArea(
-      child: Center(
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: ScaleTransition(scale: _scaleAnimation, child: content),
         ),
       ),
     );

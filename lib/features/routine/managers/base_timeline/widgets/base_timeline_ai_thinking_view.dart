@@ -133,12 +133,19 @@ class _BaseTimelineAiThinkingViewState
                     onPressed: widget.onCancel,
                     style: OutlinedButton.styleFrom(
                       side: BorderSide(
-                        color: OptivusColors.textSecondary.withValues(alpha: 0.3),
+                        color: OptivusColors.textSecondary.withValues(
+                          alpha: 0.3,
+                        ),
                       ),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(OptivusRadii.controlCompact),
+                        borderRadius: BorderRadius.circular(
+                          OptivusRadii.controlCompact,
+                        ),
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
                     ),
                     child: const Text(
                       'Cancel',

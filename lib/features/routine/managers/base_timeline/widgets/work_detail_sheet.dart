@@ -30,11 +30,8 @@ class WorkDetailSheet extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) => WorkDetailSheet(
-        block: block,
-        onEdit: onEdit,
-        editLabel: editLabel,
-      ),
+      builder: (ctx) =>
+          WorkDetailSheet(block: block, onEdit: onEdit, editLabel: editLabel),
     );
   }
 

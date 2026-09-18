@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
@@ -17,6 +16,7 @@ import 'package:optivus/features/routine/managers/base_timeline/services/class_s
 import 'package:optivus/features/routine/managers/base_timeline/services/class_setup_error_mapper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/classes_setup_controller.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_ai_thinking_view.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_save_success_view.dart';
 import 'package:optivus/repositories/base_timeline_setup_repository.dart';
 import 'package:optivus/state/app_state.dart';
 
@@ -465,7 +465,10 @@ class _ClassesBaseSetupScreenState
         return _buildErrorView(setup, state, uid);
 
       case ClassesSetupStage.saveSuccess:
-        return _ClassesSaveSuccessView(
+        return BaseTimelineSaveSuccessView(
+          title: 'Classes updated',
+          subtitle: 'Your new timetable is now active.',
+          accent: OptivusColors.routineAccent,
           onComplete: () {
             if (!mounted) return;
             controller.dismissSuccess();
@@ -514,6 +517,8 @@ class _ClassesBaseSetupScreenState
           selectedDay: state.selectedDay,
           onDayChanged: (d) => controller.selectDay(d),
           onBack: () => _handleClassesBack(setup, state, uid),
+          onEditSchedule: () => controller.editCurrentTimetable(setup),
+          onChangeSource: () => controller.chooseSource(setup, uid: uid),
           onChangeSetup: () => controller.chooseSource(setup, uid: uid),
           onRemoveSetup: () => _handleRemoveSetup(setup, uid),
           routineRefreshPending: state.routineRefreshPending,
@@ -1076,123 +1081,6 @@ class _ClassesBaseSetupScreenState
                         color: OptivusColors.textSecondary,
                         fontWeight: FontWeight.w600,
                       ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ClassesSaveSuccessView extends StatefulWidget {
-  final VoidCallback onComplete;
-
-  const _ClassesSaveSuccessView({required this.onComplete});
-
-  @override
-  State<_ClassesSaveSuccessView> createState() =>
-      _ClassesSaveSuccessViewState();
-}
-
-class _ClassesSaveSuccessViewState extends State<_ClassesSaveSuccessView>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _scaleAnimation;
-  late final Animation<double> _fadeAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    HapticFeedback.mediumImpact();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
-    _scaleAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.0, 0.6, curve: Curves.easeOutBack),
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.0, 0.4, curve: Curves.easeIn),
-    );
-
-    _controller.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        widget.onComplete();
-      }
-    });
-
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Center(
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: ScaleTransition(
-            scale: _scaleAnimation,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
-              margin: const EdgeInsets.symmetric(horizontal: 24),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: OptivusColors.routineAccent.withValues(
-                        alpha: 0.15,
-                      ),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.check_rounded,
-                      color: OptivusColors.routineAccent,
-                      size: 32,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Classes updated',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: OptivusColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Your new timetable is now active.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: OptivusColors.textSecondary,
                     ),
                   ),
                 ],

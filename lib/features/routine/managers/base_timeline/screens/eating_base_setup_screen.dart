@@ -1,44 +1,38 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/features/onboarding/timeline/adapters/meal_timeline_adapter.dart';
-import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
-import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
+import 'package:optivus/core/theme/optivus_radii.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/views/eating_current_setup_view.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/views/eating_review_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
-import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_upload_lifecycle_helper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_domain_engine.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/eating_setup_controller.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_ai_thinking_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
-import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
-import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
-import 'package:optivus/models/onboarding_draft.dart';
-import 'package:optivus/models/routine_import_review.dart';
-import 'package:optivus/models/uploaded_asset.dart';
-import 'package:optivus/repositories/base_timeline_setup_repository.dart';
-import 'package:optivus/state/app_state.dart';
-import 'package:optivus/state/auth_state.dart';
-import 'package:optivus/state/region_settings_provider.dart';
-import 'package:optivus/state/routine_import_ai_state.dart';
-import 'package:optivus/state/upload_state.dart';
-import 'package:optivus/services/nutrition_target_service.dart';
-import 'package:optivus/features/routine/managers/base_timeline/services/eating_setup_error_mapper.dart';
-import 'package:optivus/features/routine/managers/base_timeline/models/eating_operation_session.dart';
-import 'package:optivus/features/routine/managers/base_timeline/models/eating_plan_freshness.dart';
-import 'package:optivus/features/routine/managers/base_timeline/services/eating_candidate_dish_normalizer.dart';
-import 'package:optivus/features/routine/managers/base_timeline/services/eating_source_transition_policy.dart';
-import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_day_summary_bar.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_save_success_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_import_review_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_meal_edit_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_plan_settings_sheet.dart';
-import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_plan_summary_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_source_selection_view.dart';
+import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/repositories/base_timeline_setup_repository.dart';
+import 'package:optivus/services/nutrition_target_service.dart';
+import 'package:optivus/state/app_state.dart';
 
+/// Host coordinator screen for Base Timeline Eating setup.
+///
+/// Refactored to delegate state mutations and transactions to
+/// [EatingSetupController], presenting clean subviews for:
+/// - Current Setup ([EatingCurrentSetupView])
+/// - Source Selection ([EatingSourceSelectionView])
+/// - Review & Edit ([EatingReviewView])
+/// - AI & Upload Progress ([BaseTimelineAiThinkingView])
+/// - Save Confirmation ([BaseTimelineSaveSuccessView])
 class EatingBaseSetupScreen extends ConsumerStatefulWidget {
   final VoidCallback onBack;
 
@@ -50,172 +44,31 @@ class EatingBaseSetupScreen extends ConsumerStatefulWidget {
 }
 
 class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
-  bool _isEditing = false;
-  int _selectedDay = 1;
-  bool _isSaving = false;
-  bool _isDirty = false;
-  bool _isExtracting = false;
-  String? _errorMessage;
-  String _aiActionTitle = 'Processing meal plan...';
-  List<String> _aiProgressMessages = const [
-    'Analyzing nutritional targets...',
-    'Distributing meal timing and macros...',
-    'Balancing weekly variety...',
-  ];
-
-  // Working setup state
-  late List<TimelineBlockDraft> _workingBlocks;
-  String? _workingGoal;
-  int? _workingMealsPerDay;
-  String? _workingEatingMode;
-  String? _workingFoodType;
-  String? _workingFoodStyleCustomText;
-  List<String> _workingFoodsToAvoid = const [];
-  int? _workingBreakfastMinute;
-  int? _workingLunchMinute;
-  int? _workingDinnerMinute;
-  int? _workingSnackMinute;
-  int? _workingExtraSnackMinute;
-  int? _workingTargetCalories;
-  int? _workingTargetProtein;
-  int? _workingTargetCaloriesOverride;
-  int? _workingTargetProteinOverride;
-  String? _workingAssetId;
-  String? _workingR2Key;
-  String? _workingSetupPath;
-  int? _workingGeneratedPlanVersion;
-  String? _workingGeneratedInputFingerprint;
-  bool _workingCustomized = false;
-  String? _initialAssetId;
-  String? _initialR2Key;
-  int? _editorBaseRevision;
-  int? _refreshPendingRevision;
-  String? _refreshPendingMessage;
-  String? _frontBlockId;
-  int _requestGeneration = 0;
-  String? _editorOwnerUid;
-  EatingOperationSession? _currentOperation;
-  http.Client? _activeHttpClient;
-
-  void _applyEatingDraftState(EatingDraftState state, {bool markDirty = true}) {
-    setState(() {
-      _workingBlocks = List.from(state.blocks);
-      _workingSetupPath = state.setupPath;
-      _workingAssetId = state.photoAssetId;
-      _workingR2Key = state.photoR2Key;
-      _workingGeneratedPlanVersion = state.planVersion;
-      _workingGeneratedInputFingerprint = state.inputFingerprint;
-      _workingCustomized = state.customized;
-      _workingGoal = state.goal;
-      _workingMealsPerDay = state.mealsPerDay;
-      _workingEatingMode = state.eatingMode;
-      _workingFoodType = state.foodType;
-      _workingFoodStyleCustomText = state.foodStyleCustomText;
-      _workingFoodsToAvoid = List.from(state.foodsToAvoid);
-      _workingBreakfastMinute = state.breakfastMinute;
-      _workingLunchMinute = state.lunchMinute;
-      _workingDinnerMinute = state.dinnerMinute;
-      _workingSnackMinute = state.snackMinute;
-      _workingExtraSnackMinute = state.extraSnackMinute;
-      _workingTargetCalories = state.targetCalories;
-      _workingTargetProtein = state.targetProtein;
-      _workingTargetCaloriesOverride = state.targetCaloriesOverride;
-      _workingTargetProteinOverride = state.targetProteinOverride;
-      _isEditing = true;
-      if (markDirty) {
-        _isDirty = true;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final setup = ref.read(baseTimelineSetupNotifierProvider).valueOrNull;
+      if (setup != null) {
+        final uid = ref.read(userProfileProvider).uid;
+        ref
+            .read(eatingSetupControllerProvider.notifier)
+            .performStartupCleanup(setup, uid: uid);
+        ref.read(eatingSetupControllerProvider.notifier).initDayIfNeeded(setup);
       }
     });
   }
 
-  Future<void> _cancelEatingOperation() async {
-    _requestGeneration++;
-    final op = _currentOperation;
-    _currentOperation = null;
-    _activeHttpClient?.close();
-    _activeHttpClient = null;
-
-    try {
-      ref
-          .read(routineImportAiControllerProvider.notifier)
-          .cancelCurrentExtraction();
-    } catch (_) {}
-
-    if (op != null && op.candidateAssetId != null) {
-      try {
-        final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
-        await helper.retireUncommittedUpload(
-          uid: op.ownerUid,
-          assetId: op.candidateAssetId!,
-          objectKey: op.candidateR2Key,
-        );
-      } catch (_) {}
+  Future<bool> _confirmDiscard(EatingSetupState state) async {
+    final hasUnsavedPhoto =
+        (state.workingAssetId != null &&
+            state.workingAssetId != state.baseCommittedAssetId) ||
+        (state.candidateAssetId != null &&
+            state.candidateAssetId != state.baseCommittedAssetId);
+    if (!state.isDirty && !hasUnsavedPhoto) {
+      return true;
     }
-    if (mounted) {
-      setState(() {
-        _isExtracting = false;
-        _errorMessage = null;
-      });
-    }
-  }
-
-  void _cancelAiOperation() {
-    unawaited(_cancelEatingOperation());
-  }
-
-  EatingPlanFreshness _evaluatePlanFreshness(BaseTimelineSetup setup) {
-    return EatingPlanFreshness.evaluate(
-      setup: setup,
-      profile: ref.read(userProfileProvider),
-      engine: ref.read(eatingDomainEngineProvider),
-    );
-  }
-
-  bool _isPlanStale(BaseTimelineSetup setup) {
-    return _evaluatePlanFreshness(setup) == EatingPlanFreshness.stale;
-  }
-
-  String _sourceLabelForPath(String? setupPath, bool customized) {
-    return switch (setupPath) {
-      'photo' || 'has_routine' => 'Imported from meal plan',
-      'manual' => 'Manual plan',
-      'create' => customized ? 'Built for me · Customized' : 'Built for me',
-      _ => 'Eating plan',
-    };
-  }
-
-  void _initWorkingState(dynamic setup) {
-    _workingBlocks = List.from(setup.eatingBlocks);
-    _workingGoal = setup.mealPlanningGoal;
-    _workingMealsPerDay = setup.mealsPerDay;
-    _workingEatingMode = setup.eatingMode;
-    _workingFoodType = setup.foodType;
-    _workingFoodStyleCustomText = setup.foodStyleCustomText;
-    _workingFoodsToAvoid = List<String>.from(setup.foodsToAvoid);
-    _workingBreakfastMinute = setup.breakfastMinute;
-    _workingLunchMinute = setup.lunchMinute;
-    _workingDinnerMinute = setup.dinnerMinute;
-    _workingSnackMinute = setup.snackMinute;
-    _workingExtraSnackMinute = setup.extraSnackMinute;
-    _workingTargetCalories = setup.targetCalories;
-    _workingTargetProtein = setup.targetProtein;
-    _workingTargetCaloriesOverride = setup.targetCaloriesOverride;
-    _workingTargetProteinOverride = setup.targetProteinOverride;
-    _workingSetupPath = setup.eatingSetupPath;
-    _workingGeneratedPlanVersion = setup.eatingGeneratedPlanVersion;
-    _workingGeneratedInputFingerprint = setup.eatingGeneratedInputFingerprint;
-    _workingCustomized = setup.eatingCustomized ?? false;
-    _workingAssetId = setup.eatingPhotoAssetId;
-    _workingR2Key = setup.eatingPhotoR2Key;
-    _initialAssetId = setup.eatingPhotoAssetId;
-    _initialR2Key = setup.eatingPhotoR2Key;
-    _editorBaseRevision = setup.revision;
-    _editorOwnerUid = setup.uid;
-    _isDirty = false;
-  }
-
-  Future<bool> _confirmDiscard() async {
-    if (!_isDirty) return true;
     final res = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -247,24 +100,67 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         ],
       ),
     );
-    final confirmed = res ?? false;
-    if (confirmed) {
-      if (_workingAssetId != null && _workingAssetId != _initialAssetId) {
-        try {
-          final uid = _editorOwnerUid ?? ref.read(userProfileProvider).uid;
-          final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
-          await helper.retireUncommittedUpload(
-            uid: uid,
-            assetId: _workingAssetId,
-            objectKey: _workingR2Key,
-          );
-        } catch (_) {}
-      }
-    }
-    return confirmed;
+    return res ?? false;
   }
 
-  void _showPhotoSourceSheet() {
+  Future<void> _handleEatingBack(
+    BaseTimelineSetup? setup,
+    EatingSetupState state,
+    String uid,
+  ) async {
+    final controller = ref.read(eatingSetupControllerProvider.notifier);
+
+    if (state.stage == EatingSetupStage.saving ||
+        state.stage == EatingSetupStage.saveSuccess) {
+      return;
+    }
+
+    if (state.stage == EatingSetupStage.uploading ||
+        state.stage == EatingSetupStage.extracting ||
+        state.stage == EatingSetupStage.generating) {
+      await controller.cancelCurrentOperation(setup, uid: uid);
+      return;
+    }
+
+    if (state.stage == EatingSetupStage.chooseSource) {
+      final snapshot = setup?.snapshotFor(BaseTimelineSection.eating);
+      if (snapshot != null && snapshot.isConfigured) {
+        controller.cancelChooseSource();
+      } else {
+        widget.onBack();
+      }
+      return;
+    }
+
+    if (state.stage == EatingSetupStage.error) {
+      if (state.workingBlocks.isNotEmpty) {
+        controller.keepPreviousDraft(setup, uid: uid);
+      } else {
+        await controller.resetWorkingDraft(setup, uid: uid);
+      }
+      return;
+    }
+
+    if (state.stage == EatingSetupStage.review ||
+        state.stage == EatingSetupStage.editingBlock) {
+      final canDiscard = await _confirmDiscard(state);
+      if (!canDiscard || !mounted) return;
+      final snapshot = setup?.snapshotFor(BaseTimelineSection.eating);
+      if (snapshot != null && snapshot.isConfigured) {
+        await controller.resetWorkingDraft(setup, uid: uid);
+      } else {
+        await controller.resetWorkingDraft(setup, uid: uid);
+        widget.onBack();
+      }
+      return;
+    }
+
+    if (state.stage == EatingSetupStage.currentSetup) {
+      widget.onBack();
+    }
+  }
+
+  void _showPhotoSourceSheet(String uid) {
     showModalBottomSheet(
       context: context,
       backgroundColor: OptivusColors.backgroundBottom,
@@ -288,7 +184,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _pickAndUploadPhoto(ImageSource.camera);
+                  _pickAndExtractPhoto(uid: uid, source: ImageSource.camera);
                 },
               ),
               ListTile(
@@ -302,7 +198,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _pickAndUploadPhoto(ImageSource.gallery);
+                  _pickAndExtractPhoto(uid: uid, source: ImageSource.gallery);
                 },
               ),
             ],
@@ -312,228 +208,44 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     );
   }
 
-  Future<void> _pickAndUploadPhoto(ImageSource source) async {
-    final uid = ref.read(userProfileProvider).uid;
-    if (uid.trim().isEmpty) return;
-    final generation = ++_requestGeneration;
-    final lifecycleHelper = ref.read(baseTimelineUploadLifecycleHelperProvider);
-    final uploadNotifier = ref.read(uploadControllerProvider.notifier);
-
-    setState(() {
-      _isExtracting = true;
-      _errorMessage = null;
-      _aiActionTitle = 'Analyzing meal plan photo...';
-      _aiProgressMessages = const [
-        'Uploading high-resolution image...',
-        'Extracting meals and schedule timings...',
-        'Formatting timeline entries...',
-      ];
-    });
-
-    String? candidateAssetId;
-    String? candidateR2Key;
-
-    _currentOperation = EatingOperationSession(
-      generationId: generation,
-      ownerUid: uid,
-      type: EatingOperationType.uploading,
+  Future<void> _pickAndExtractPhoto({
+    required String uid,
+    required ImageSource source,
+  }) async {
+    final controller = ref.read(eatingSetupControllerProvider.notifier);
+    final candidates = await controller.pickAndUploadPhoto(
+      uid: uid,
+      source: source,
     );
 
-    try {
-      final asset = await uploadNotifier.startUpload(
-        uid: uid,
-        sourceFeature: 'routine_base_timeline',
-        purpose: UploadedAssetPurpose.eatingMenu,
-        source: source,
-      );
+    if (!mounted || candidates == null || candidates.isEmpty) return;
 
-      if (asset == null) {
-        if (_currentOperation?.generationId == generation) {
-          _currentOperation = null;
-        }
-        if (mounted) setState(() => _isExtracting = false);
-        return;
-      }
+    final candidateAssetId = ref
+        .read(eatingSetupControllerProvider)
+        .candidateAssetId;
+    final candidateR2Key = ref
+        .read(eatingSetupControllerProvider)
+        .candidateR2Key;
 
-      if (_requestGeneration != generation) {
-        try {
-          await lifecycleHelper.retireUncommittedUpload(
-            uid: uid,
-            assetId: asset.assetId,
-            objectKey: asset.r2Key,
-          );
-        } catch (_) {}
-        return;
-      }
+    final reviewed = await EatingImportReviewSheet.show(
+      context,
+      candidates: candidates,
+    );
 
-      candidateAssetId = asset.assetId;
-      candidateR2Key = asset.r2Key;
-      _currentOperation = EatingOperationSession(
-        generationId: generation,
-        ownerUid: uid,
-        type: EatingOperationType.extracting,
-        candidateAssetId: candidateAssetId,
-        candidateR2Key: candidateR2Key,
-      );
+    if (!mounted) return;
 
-      final reviewDraft = RoutineImportReviewDraft(
-        id: 'rev_${asset.assetId}',
-        uid: uid,
-        source: RoutineImportReviewSource.eating,
-        status: RoutineImportReviewStatus.draft,
-        sourceLabel: 'Eating',
-        uploadedAssetId: asset.assetId,
-        uploadedAssetR2Key: asset.r2Key,
-        uploadedAssetStatus: 'uploaded',
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-
-      final aiController = ref.read(routineImportAiControllerProvider.notifier);
-      final result = await aiController.runExtraction(reviewDraft);
-      if (!mounted ||
-          generation != _requestGeneration ||
-          ref.read(userProfileProvider).uid != uid) {
-        await lifecycleHelper.retireUncommittedUpload(
-          uid: uid,
-          assetId: candidateAssetId,
-          objectKey: candidateR2Key,
-        );
-        return;
-      }
-
-      final candidateBlocks = (result?.candidates ?? []).map((c) {
-        final blockId = c.id.trim().isNotEmpty
-            ? c.id.trim()
-            : 'meal_${DateTime.now().millisecondsSinceEpoch}_${c.startMinute}';
-        return TimelineBlockDraft(
-          id: blockId,
-          title: c.title,
-          startMinute: c.startMinute,
-          endMinute: c.endMinute,
-          repeatDays: c.repeatDays,
-          section: 'eating',
-          blockType: TimelineBlockDraft.softBlockKey,
-          mealCategory: c.mealCategory,
-          mealSlot: c.mealSlot,
-          dishes: EatingCandidateDishNormalizer.extractDishes(c),
-          calories: c.caloriesEstimate,
-          protein: c.proteinEstimate,
-          location: c.location,
-          notes: c.notes,
-          source: c.extractionEngine,
-          provenanceSourceIds: [
-            ?candidateAssetId,
-            if (c.sourceAssetId != null &&
-                c.sourceAssetId!.trim().isNotEmpty &&
-                c.sourceAssetId != candidateAssetId)
-              c.sourceAssetId!,
-          ],
-        );
-      }).toList();
-
-      if (candidateBlocks.isEmpty) {
-        // Cleaning candidate asset while preserving existing schedule intact!
-        await lifecycleHelper.retireUncommittedUpload(
-          uid: uid,
-          assetId: candidateAssetId,
-          objectKey: candidateR2Key,
-        );
-        if (mounted) {
-          final err =
-              result?.warnings.firstOrNull ??
-              'No meals detected in photo. Your existing eating schedule was preserved.';
-          setState(() {
-            _isExtracting = false;
-            _errorMessage = err;
-          });
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(err)));
-        }
-        return;
-      }
-
-      if (mounted) {
-        setState(() => _isExtracting = false);
-      }
-
-      final reviewed = await EatingImportReviewSheet.show(
-        context,
-        candidates: candidateBlocks,
-      );
-
-      if (!mounted ||
-          generation != _requestGeneration ||
-          ref.read(userProfileProvider).uid != uid) {
-        await lifecycleHelper.retireUncommittedUpload(
-          uid: uid,
-          assetId: candidateAssetId,
-          objectKey: candidateR2Key,
-        );
-        return;
-      }
-
-      if (reviewed != null && reviewed.isNotEmpty) {
-        // Extraction and review succeeded: retire previous uncommitted upload if different from initial
-        if (_workingAssetId != null && _workingAssetId != _initialAssetId) {
-          try {
-            await lifecycleHelper.retireUncommittedUpload(
-              uid: uid,
-              assetId: _workingAssetId,
-              objectKey: _workingR2Key,
-            );
-          } catch (_) {}
-        }
-
-        final transition = EatingSourceTransitionPolicy.toPhoto(
-          blocks: reviewed,
-          photoAssetId: candidateAssetId,
-          photoR2Key: candidateR2Key,
-        );
-
-        _applyEatingDraftState(transition, markDirty: true);
-      } else {
-        // Cancelled review: retire candidate asset while preserving existing schedule intact!
-        await lifecycleHelper.retireUncommittedUpload(
-          uid: uid,
-          assetId: candidateAssetId,
-          objectKey: candidateR2Key,
-        );
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Meal import cancelled. Schedule preserved.'),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (candidateAssetId != null) {
-        try {
-          await lifecycleHelper.retireUncommittedUpload(
-            uid: uid,
-            assetId: candidateAssetId,
-            objectKey: candidateR2Key,
-          );
-        } catch (_) {}
-      }
-      if (mounted) {
-        final errText = EatingSetupErrorMapper.mapError(e);
-        setState(() {
-          _isExtracting = false;
-          _errorMessage = errText;
-        });
-      }
-    } finally {
-      if (_currentOperation?.generationId == generation) {
-        _currentOperation = null;
-      }
-    }
+    await controller.applyReviewedCandidates(
+      uid: uid,
+      reviewed: reviewed,
+      candidateAssetId: candidateAssetId,
+      candidateR2Key: candidateR2Key,
+    );
   }
 
   Future<void> _openPlanSettingsSheet({bool isBuildingNew = false}) async {
-    final isNew = isBuildingNew || _workingBlocks.isEmpty;
+    final state = ref.read(eatingSetupControllerProvider);
+    final controller = ref.read(eatingSetupControllerProvider.notifier);
+    final isNew = isBuildingNew || state.workingBlocks.isEmpty;
     final engine = ref.read(eatingDomainEngineProvider);
     final profile = ref.read(userProfileProvider);
     final setupAsync = ref.read(baseTimelineSetupNotifierProvider);
@@ -546,13 +258,13 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       calculatedTargets = engine.calculateTargets(
         profile: profile,
         setup: currentSetup.copyWith(
-          mealPlanningGoal: _workingGoal,
-          mealsPerDay: _workingMealsPerDay,
-          breakfastMinute: _workingBreakfastMinute,
-          lunchMinute: _workingLunchMinute,
-          dinnerMinute: _workingDinnerMinute,
-          snackMinute: _workingSnackMinute,
-          extraSnackMinute: _workingExtraSnackMinute,
+          mealPlanningGoal: state.workingGoal,
+          mealsPerDay: state.workingMealsPerDay,
+          breakfastMinute: state.workingBreakfastMinute,
+          lunchMinute: state.workingLunchMinute,
+          dinnerMinute: state.workingDinnerMinute,
+          snackMinute: state.workingSnackMinute,
+          extraSnackMinute: state.workingExtraSnackMinute,
         ),
       );
     } catch (_) {}
@@ -564,21 +276,21 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
           ? 'Generate Balanced Plan'
           : 'Regenerate Plan',
       isNew: isNew,
-      initialGoal: _workingGoal,
-      initialMealsPerDay: _workingMealsPerDay,
-      initialEatingMode: _workingEatingMode,
-      initialFoodType: _workingFoodType,
-      initialFoodStyleCustomText: _workingFoodStyleCustomText,
-      initialFoodsToAvoid: _workingFoodsToAvoid,
-      initialBreakfastMinute: _workingBreakfastMinute,
-      initialLunchMinute: _workingLunchMinute,
-      initialDinnerMinute: _workingDinnerMinute,
-      initialSnackMinute: _workingSnackMinute,
-      initialExtraSnackMinute: _workingExtraSnackMinute,
-      initialTargetCalories: _workingTargetCalories,
-      initialTargetProtein: _workingTargetProtein,
-      initialTargetCaloriesOverride: _workingTargetCaloriesOverride,
-      initialTargetProteinOverride: _workingTargetProteinOverride,
+      initialGoal: state.workingGoal,
+      initialMealsPerDay: state.workingMealsPerDay,
+      initialEatingMode: state.workingEatingMode,
+      initialFoodType: state.workingFoodType,
+      initialFoodStyleCustomText: state.workingFoodStyleCustomText,
+      initialFoodsToAvoid: state.workingFoodsToAvoid,
+      initialBreakfastMinute: state.workingBreakfastMinute,
+      initialLunchMinute: state.workingLunchMinute,
+      initialDinnerMinute: state.workingDinnerMinute,
+      initialSnackMinute: state.workingSnackMinute,
+      initialExtraSnackMinute: state.workingExtraSnackMinute,
+      initialTargetCalories: state.workingTargetCalories,
+      initialTargetProtein: state.workingTargetProtein,
+      initialTargetCaloriesOverride: state.workingTargetCaloriesOverride,
+      initialTargetProteinOverride: state.workingTargetProteinOverride,
       calculatedCalories: calculatedTargets?.targetCalories,
       calculatedProtein: calculatedTargets?.proteinTarget?.round(),
       showRegenerateAction: true,
@@ -586,196 +298,65 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
 
     if (result == null || !mounted) return;
 
-    setState(() {
-      _workingGoal = result.goal;
-      _workingMealsPerDay = result.mealsPerDay;
-      _workingEatingMode = result.eatingMode;
-      _workingFoodType = result.foodType;
-      _workingFoodStyleCustomText = result.foodStyleCustomText;
-      _workingFoodsToAvoid = List.from(result.foodsToAvoid);
-      _workingBreakfastMinute = result.breakfastMinute;
-      _workingLunchMinute = result.lunchMinute;
-      _workingDinnerMinute = result.dinnerMinute;
-      _workingSnackMinute = result.snackMinute;
-      _workingExtraSnackMinute = result.extraSnackMinute;
-      _workingTargetCalories = result.targetCalories;
-      _workingTargetProtein = result.targetProtein;
-      _workingTargetCaloriesOverride = result.targetCaloriesOverride;
-      _workingTargetProteinOverride = result.targetProteinOverride;
-      if (!result.shouldRegenerate) {
-        _isDirty = true;
-        _isEditing = true;
-      }
-    });
+    controller.updateSettingsParameters(
+      goal: result.goal,
+      mealsPerDay: result.mealsPerDay,
+      eatingMode: result.eatingMode,
+      foodType: result.foodType,
+      foodStyleCustomText: result.foodStyleCustomText,
+      foodsToAvoid: result.foodsToAvoid,
+      breakfastMinute: result.breakfastMinute,
+      lunchMinute: result.lunchMinute,
+      dinnerMinute: result.dinnerMinute,
+      snackMinute: result.snackMinute,
+      extraSnackMinute: result.extraSnackMinute,
+      targetCalories: result.targetCalories,
+      targetProtein: result.targetProtein,
+      targetCaloriesOverride: result.targetCaloriesOverride,
+      targetProteinOverride: result.targetProteinOverride,
+    );
 
     if (result.shouldRegenerate) {
-      await _generateBalancedPlan();
+      await _runBalancedPlanGeneration(uid: profile.uid, setup: currentSetup);
     }
   }
 
-  Future<void> _generateBalancedPlan() async {
-    final uid = ref.read(userProfileProvider).uid;
-    if (uid.trim().isEmpty) return;
-    final generation = ++_requestGeneration;
-
-    _activeHttpClient?.close();
-    final client = http.Client();
-    _activeHttpClient = client;
-
-    final idToken =
-        await ref.read(authRepositoryProvider).currentIdToken() ?? '';
-    final engine = ref.read(eatingDomainEngineProvider);
-    final profile = ref.read(userProfileProvider);
-    final setupAsync = ref.read(baseTimelineSetupNotifierProvider);
-    final currentSetup =
-        setupAsync.value ??
-        BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
-
-    final workingSetup = currentSetup.copyWith(
-      mealPlanningGoal: _workingGoal,
-      mealsPerDay: _workingMealsPerDay,
-      eatingMode: _workingEatingMode,
-      foodType: _workingFoodType,
-      foodStyleCustomText: _workingFoodStyleCustomText,
-      foodsToAvoid: _workingFoodsToAvoid,
-      breakfastMinute: _workingBreakfastMinute,
-      lunchMinute: _workingLunchMinute,
-      dinnerMinute: _workingDinnerMinute,
-      snackMinute: _workingSnackMinute,
-      extraSnackMinute: _workingExtraSnackMinute,
-      targetCalories: _workingTargetCalories,
-      targetProtein: _workingTargetProtein,
-      targetCaloriesOverride: _workingTargetCaloriesOverride,
-      targetProteinOverride: _workingTargetProteinOverride,
+  Future<void> _runBalancedPlanGeneration({
+    required String uid,
+    required BaseTimelineSetup setup,
+  }) async {
+    final controller = ref.read(eatingSetupControllerProvider.notifier);
+    final success = await controller.generateBalancedPlan(
+      uid: uid,
+      currentSetup: setup,
     );
 
-    setState(() {
-      _isExtracting = true;
-      _errorMessage = null;
-      _aiActionTitle = 'Generating balanced meal plan...';
-      _aiProgressMessages = const [
-        'Calculating canonical macro targets...',
-        'Structuring breakfast, lunch, and dinner slots...',
-        'Ensuring daily and weekly meal diversity...',
-      ];
-    });
-
-    _currentOperation = EatingOperationSession(
-      generationId: generation,
-      ownerUid: uid,
-      type: EatingOperationType.generating,
-    );
-
-    try {
-      final targets = engine.calculateTargets(
-        profile: profile,
-        setup: workingSetup,
-      );
-      final region = ref.read(regionSettingsProvider);
-      final country = region.countryCode.isNotEmpty ? region.countryCode : null;
-      final inputs = engine.buildInputs(
-        profile: profile,
-        setup: workingSetup,
-        targets: targets,
-        country: country,
-      );
-
-      final blocks = await engine.generateEatingRoutine(
-        uid: uid,
-        idToken: idToken,
-        inputs: inputs,
-        targets: targets,
-        baseTimeline: workingSetup.toBaseTimelineDraft(),
-        client: client,
-      );
-
-      if (!mounted ||
-          generation != _requestGeneration ||
-          ref.read(userProfileProvider).uid != uid) {
-        return;
-      }
-
-      if (mounted) {
-        if (_workingAssetId != null && _workingAssetId != _initialAssetId) {
-          try {
-            final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
-            await helper.retireUncommittedUpload(
-              uid: uid,
-              assetId: _workingAssetId,
-              objectKey: _workingR2Key,
-            );
-          } catch (_) {}
-        }
-
-        final transition = EatingSourceTransitionPolicy.toGenerated(
-          blocks: blocks,
-          goal: _workingGoal,
-          mealsPerDay: _workingMealsPerDay,
-          eatingMode: _workingEatingMode,
-          foodType: _workingFoodType,
-          foodStyleCustomText: _workingFoodStyleCustomText,
-          foodsToAvoid: _workingFoodsToAvoid,
-          breakfastMinute: _workingBreakfastMinute,
-          lunchMinute: _workingLunchMinute,
-          dinnerMinute: _workingDinnerMinute,
-          snackMinute: _workingSnackMinute,
-          extraSnackMinute: _workingExtraSnackMinute,
-          targetCalories: targets.targetCalories,
-          targetProtein: targets.proteinTarget?.round(),
-          targetCaloriesOverride: _workingTargetCaloriesOverride,
-          targetProteinOverride: _workingTargetProteinOverride,
-          planVersion: BaseTimelineDraft.currentGate2EatingPlanVersion,
-          inputFingerprint: inputs.computeFingerprint(),
-          customized: false,
-        );
-
-        _applyEatingDraftState(transition, markDirty: true);
-        setState(() {
-          _isExtracting = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        final errText = EatingSetupErrorMapper.mapError(e);
-        setState(() {
-          _isExtracting = false;
-          if (currentSetup.eatingBlocks.isNotEmpty) {
-            _initWorkingState(currentSetup);
-            _isEditing = false;
-            _isDirty = false;
-            _errorMessage = null;
-          } else {
-            _errorMessage = errText;
-          }
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errText),
-            action: SnackBarAction(
-              label: 'Retry',
-              textColor: OptivusColors.roseAccent,
-              onPressed: () => _generateBalancedPlan(),
-            ),
+    if (!success && mounted) {
+      final err =
+          ref.read(eatingSetupControllerProvider).errorMessage ??
+          'Failed to generate meal plan.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(err),
+          action: SnackBarAction(
+            label: 'Retry',
+            textColor: OptivusColors.roseAccent,
+            onPressed: () => _runBalancedPlanGeneration(uid: uid, setup: setup),
           ),
-        );
-      }
-    } finally {
-      if (_activeHttpClient == client) {
-        _activeHttpClient = null;
-      }
-      if (_currentOperation?.generationId == generation) {
-        _currentOperation = null;
-      }
+        ),
+      );
     }
   }
 
-  void _addMealBlock({VoidCallback? onCancel}) {
+  void _addMealBlock() {
+    final state = ref.read(eatingSetupControllerProvider);
+    final controller = ref.read(eatingSetupControllerProvider.notifier);
     final newBlock = TimelineBlockDraft(
       id: 'meal_${DateTime.now().millisecondsSinceEpoch}',
       title: '',
       startMinute: 12 * 60,
       endMinute: 12 * 60 + 30,
-      repeatDays: [_selectedDay],
+      repeatDays: [state.selectedDay],
       section: 'eating',
       blockType: TimelineBlockDraft.softBlockKey,
       dishes: const [],
@@ -785,252 +366,26 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       context: context,
       block: newBlock,
       onSave: (updated) async {
-        setState(() {
-          _workingBlocks.add(updated);
-          if (_workingSetupPath == null) {
-            _workingSetupPath = 'manual';
-          } else if (_workingSetupPath == 'create') {
-            _workingCustomized = true;
-          }
-          _isDirty = true;
-        });
+        controller.addBlock(updated);
         return true;
       },
-    ).then((saved) {
-      if ((saved == null || !saved) && _workingBlocks.isEmpty) {
-        onCancel?.call();
-      }
-    });
+    );
   }
 
   void _editMealBlock(TimelineBlockDraft block) {
+    final controller = ref.read(eatingSetupControllerProvider.notifier);
     EatingMealEditSheet.show(
       context: context,
       block: block,
       onSave: (updated) async {
-        setState(() {
-          final index = _workingBlocks.indexWhere((b) => b.id == block.id);
-          if (index != -1) {
-            _workingBlocks[index] = updated;
-            if (_workingSetupPath == 'create') {
-              _workingCustomized = true;
-            }
-            _isDirty = true;
-          }
-        });
+        controller.updateBlock(updated);
         return true;
       },
-      onDelete: () => _deleteMealBlock(block.id),
+      onDelete: () => controller.deleteBlock(block.id),
     );
   }
 
-  void _deleteMealBlock(String id) {
-    setState(() {
-      _workingBlocks.removeWhere((block) => block.id == id);
-      if (_frontBlockId == id) _frontBlockId = null;
-      _isDirty = true;
-    });
-  }
-
-  Future<void> _saveWorkingSetup() async {
-    if (_isSaving) return;
-    final uid = ref.read(userProfileProvider).uid;
-    if (uid.trim().isEmpty ||
-        (_editorOwnerUid != null && uid != _editorOwnerUid)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('The active account changed. Reload Eating setup.'),
-          backgroundColor: OptivusColors.danger,
-        ),
-      );
-      return;
-    }
-
-    if (_workingBlocks.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Cannot save an empty eating schedule. Add meals or build a plan.',
-          ),
-          backgroundColor: OptivusColors.danger,
-        ),
-      );
-      return;
-    }
-
-    final setupAsync = ref.read(baseTimelineSetupNotifierProvider);
-    final currentSetup =
-        setupAsync.value ??
-        BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
-    final validationSetup = currentSetup.copyWith(
-      eatingBlocks: _workingBlocks,
-      eatingSetupPath: _workingSetupPath,
-      mealPlanningGoal: _workingGoal,
-      mealsPerDay: _workingMealsPerDay,
-      eatingMode: _workingEatingMode,
-      foodType: _workingFoodType,
-      foodStyleCustomText: _workingFoodStyleCustomText,
-      foodsToAvoid: _workingFoodsToAvoid,
-      breakfastMinute: _workingBreakfastMinute,
-      lunchMinute: _workingLunchMinute,
-      dinnerMinute: _workingDinnerMinute,
-      snackMinute: _workingSnackMinute,
-      extraSnackMinute: _workingExtraSnackMinute,
-      targetCalories: _workingTargetCalories,
-      targetProtein: _workingTargetProtein,
-      targetCaloriesOverride: _workingTargetCaloriesOverride,
-      targetProteinOverride: _workingTargetProteinOverride,
-      eatingGeneratedPlanVersion: _workingGeneratedPlanVersion,
-      eatingGeneratedInputFingerprint: _workingGeneratedInputFingerprint,
-      eatingCustomized: _workingCustomized,
-      eatingPhotoAssetId: _workingAssetId,
-      eatingPhotoR2Key: _workingR2Key,
-    );
-    final engine = ref.read(eatingDomainEngineProvider);
-    NutritionTargets? targets;
-    if (_workingSetupPath == 'create') {
-      try {
-        final profile = ref.read(userProfileProvider);
-        targets = engine.calculateTargets(
-          profile: profile,
-          setup: validationSetup,
-        );
-      } catch (_) {}
-    }
-    final validationErr = engine.validateBeforeSave(
-      blocks: _workingBlocks,
-      setup: validationSetup,
-      targets: targets,
-    );
-    if (validationErr != null) {
-      setState(() => _errorMessage = validationErr);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(validationErr),
-          backgroundColor: OptivusColors.danger,
-        ),
-      );
-      return;
-    }
-
-    setState(() => _isSaving = true);
-    try {
-      if (uid.trim().isEmpty ||
-          (_editorOwnerUid != null && uid != _editorOwnerUid)) {
-        throw StateError('The active account changed. Reload Eating setup.');
-      }
-      final coordinator = ref.read(baseTimelineTransactionCoordinatorProvider);
-      final result = await coordinator.replaceSection(
-        uid: uid,
-        section: BaseTimelineSection.eating,
-        newBlocks: _workingBlocks,
-        expectedRevision: _editorBaseRevision,
-        updateSetup: (current) {
-          if (_workingSetupPath == 'has_routine' ||
-              _workingSetupPath == 'photo') {
-            assert(
-              _workingAssetId != null && _workingR2Key != null,
-              'Eating photo setup requires valid assetId and r2Key',
-            );
-            return current.asEatingPhoto(
-              photoAssetId: _workingAssetId!,
-              photoR2Key: _workingR2Key!,
-              blocks: _workingBlocks,
-              meals: _workingMealsPerDay,
-            );
-          } else if (_workingSetupPath == 'manual') {
-            return current.asEatingManual(
-              blocks: _workingBlocks,
-              meals: _workingMealsPerDay,
-              targetCalories: _workingTargetCalories,
-              targetProtein: _workingTargetProtein,
-              targetCaloriesOverride: _workingTargetCaloriesOverride,
-              targetProteinOverride: _workingTargetProteinOverride,
-            );
-          } else if (_workingSetupPath == 'create') {
-            return current.replaceEatingGeneratedConfiguration(
-              blocks: _workingBlocks,
-              goal: _workingGoal,
-              meals: _workingMealsPerDay,
-              mode: _workingEatingMode,
-              type: _workingFoodType,
-              styleCustomText: _workingFoodStyleCustomText,
-              foodsToAvoid: _workingFoodsToAvoid,
-              breakfast: _workingBreakfastMinute,
-              lunch: _workingLunchMinute,
-              dinner: _workingDinnerMinute,
-              snack: _workingSnackMinute,
-              extraSnack: _workingExtraSnackMinute,
-              calories: _workingTargetCalories,
-              protein: _workingTargetProtein,
-              caloriesOverride: _workingTargetCaloriesOverride,
-              proteinOverride: _workingTargetProteinOverride,
-              planVersion: _workingGeneratedPlanVersion,
-              inputFingerprint: _workingGeneratedInputFingerprint,
-              customized: _workingCustomized,
-            );
-          } else {
-            throw StateError(
-              'Cannot save eating setup with unknown path: $_workingSetupPath',
-            );
-          }
-        },
-      );
-
-      // Retire replaced asset if photo changed
-      if (_initialAssetId != null && _initialAssetId != _workingAssetId) {
-        try {
-          final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
-          await helper.retireReplacedAsset(
-            uid: uid,
-            oldAssetId: _initialAssetId!,
-            oldObjectKey: _initialR2Key,
-          );
-        } catch (_) {}
-      }
-
-      if (mounted) {
-        _initialAssetId = _workingAssetId;
-        _initialR2Key = _workingR2Key;
-        setState(() {
-          _isSaving = false;
-          _isEditing = false;
-          _isDirty = false;
-          _editorBaseRevision = result.revision;
-          _refreshPendingRevision = result.routineRefreshPending
-              ? result.revision
-              : null;
-          _refreshPendingMessage = result.routineRefreshMessage;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              result.routineRefreshPending
-                  ? 'Saved. Routine needs to refresh.'
-                  : 'Eating schedule updated successfully',
-            ),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        final errorText = EatingSetupErrorMapper.mapError(e);
-        setState(() {
-          _isSaving = false;
-          _errorMessage = errorText;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorText),
-            backgroundColor: OptivusColors.danger,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _resetEatingSetup(BaseTimelineSetup currentSetup) async {
+  Future<void> _handleRemoveSetup(BaseTimelineSetup setup, String uid) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1065,67 +420,16 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
 
     if (confirmed != true || !mounted) return;
 
-    final uid = ref.read(userProfileProvider).uid;
-    final targetUid = _editorOwnerUid ?? currentSetup.uid;
-    if (uid.trim().isEmpty || uid != targetUid) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('The active account changed. Reload Eating setup.'),
-            backgroundColor: OptivusColors.danger,
-          ),
-        );
-      }
-      return;
-    }
+    final controller = ref.read(eatingSetupControllerProvider.notifier);
+    final success = await controller.removeSetup(uid: uid, currentSetup: setup);
 
-    try {
-      final coordinator = ref.read(baseTimelineTransactionCoordinatorProvider);
-      final result = await coordinator.replaceSection(
-        uid: uid,
-        section: BaseTimelineSection.eating,
-        newBlocks: const [],
-        expectedRevision: currentSetup.revision,
-        updateSetup: (current) => current.asEatingReset(),
+    if (mounted && success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Eating plan removed.'),
+          duration: Duration(seconds: 2),
+        ),
       );
-
-      if (currentSetup.eatingPhotoAssetId != null) {
-        try {
-          final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
-          await helper.retireReplacedAsset(
-            uid: uid,
-            oldAssetId: currentSetup.eatingPhotoAssetId!,
-            oldObjectKey: currentSetup.eatingPhotoR2Key,
-          );
-        } catch (_) {}
-      }
-
-      if (mounted) {
-        setState(() {
-          _isEditing = false;
-          _isDirty = false;
-          _refreshPendingRevision = result.routineRefreshPending
-              ? result.revision
-              : null;
-          _refreshPendingMessage = result.routineRefreshMessage;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              result.routineRefreshPending
-                  ? 'Eating plan removed. Routine needs to refresh.'
-                  : 'Eating plan removed.',
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        final msg = EatingSetupErrorMapper.mapError(e);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: OptivusColors.danger),
-        );
-      }
     }
   }
 
@@ -1163,162 +467,69 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     );
   }
 
-  void _showChangeSourceSheet(BaseTimelineSetup setup) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: OptivusColors.backgroundBottom,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                child: Text(
-                  'Change Eating Source',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: OptivusColors.textPrimary,
-                  ),
-                ),
+  Widget _buildTopCancelBar({required VoidCallback onCancel, String? title}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Cancel',
+            icon: const Icon(
+              Icons.close_rounded,
+              color: OptivusColors.textPrimary,
+            ),
+            onPressed: onCancel,
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: 0.12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(OptivusRadii.md),
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
               ),
-              ListTile(
-                leading: const Icon(
-                  Icons.auto_awesome_rounded,
-                  color: OptivusColors.roseAccent,
-                ),
-                title: const Text(
-                  'Build with AI',
-                  style: TextStyle(color: OptivusColors.textPrimary),
-                ),
-                subtitle: const Text(
-                  'Generate a personalized meal plan based on your targets',
-                  style: TextStyle(
-                    color: OptivusColors.textSecondary,
-                    fontSize: 12,
-                  ),
-                ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _initWorkingState(setup);
-                  _openPlanSettingsSheet(isBuildingNew: true);
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.document_scanner_rounded,
-                  color: OptivusColors.roseAccent,
-                ),
-                title: const Text(
-                  'Import from Photo',
-                  style: TextStyle(color: OptivusColors.textPrimary),
-                ),
-                subtitle: const Text(
-                  'Scan a meal timetable or diet chart',
-                  style: TextStyle(
-                    color: OptivusColors.textSecondary,
-                    fontSize: 12,
-                  ),
-                ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _initWorkingState(setup);
-                  _showPhotoSourceSheet();
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.edit_note_rounded,
-                  color: OptivusColors.roseAccent,
-                ),
-                title: const Text(
-                  'Create Manually',
-                  style: TextStyle(color: OptivusColors.textPrimary),
-                ),
-                subtitle: const Text(
-                  'Add and configure meals by hand',
-                  style: TextStyle(
-                    color: OptivusColors.textSecondary,
-                    fontSize: 12,
-                  ),
-                ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _initWorkingState(setup);
-                  final manualState = EatingSourceTransitionPolicy.toManual(
-                    blocks: const [],
-                  );
-                  _applyEatingDraftState(manualState, markDirty: false);
-                  setState(() {
-                    _isEditing = true;
-                  });
-                  _addMealBlock(
-                    onCancel: () {
-                      if (mounted && _workingBlocks.isEmpty) {
-                        _initWorkingState(setup);
-                        setState(() {
-                          _isEditing = false;
-                          _isDirty = false;
-                        });
-                      }
-                    },
-                  );
-                },
-              ),
-            ],
+            ),
           ),
-        ),
+          if (title != null) ...[
+            const SizedBox(width: 12),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: OptivusColors.textPrimary,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
 
   @override
-  void dispose() {
-    _requestGeneration++;
-    final op = _currentOperation;
-    _currentOperation = null;
-    _activeHttpClient?.close();
-    _activeHttpClient = null;
-    if (op != null) {
-      if (op.type == EatingOperationType.extracting) {
-        try {
-          ref
-              .read(routineImportAiControllerProvider.notifier)
-              .cancelCurrentExtraction();
-        } catch (_) {}
-      }
-      if (op.candidateAssetId != null &&
-          op.candidateAssetId != _initialAssetId) {
-        try {
-          ref
-              .read(baseTimelineUploadLifecycleHelperProvider)
-              .retireUncommittedUpload(
-                uid: op.ownerUid,
-                assetId: op.candidateAssetId,
-                objectKey: op.candidateR2Key,
-              );
-        } catch (_) {}
-      }
-    }
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final setupAsync = ref.watch(baseTimelineSetupNotifierProvider);
+    final state = ref.watch(eatingSetupControllerProvider);
+    final controller = ref.read(eatingSetupControllerProvider.notifier);
+    final uid = ref.watch(userProfileProvider).uid;
 
-    return setupAsync.when(
-      loading: () => const Scaffold(
+    ref.listen<AsyncValue<BaseTimelineSetup>>(
+      baseTimelineSetupNotifierProvider,
+      (prev, next) {
+        final setup = next.valueOrNull;
+        if (setup != null) {
+          controller.performStartupCleanup(setup, uid: uid);
+          controller.initDayIfNeeded(setup);
+        }
+      },
+    );
+
+    if (setupAsync.isLoading && !setupAsync.hasValue) {
+      return const Scaffold(
         backgroundColor: Colors.transparent,
         body: Center(child: CircularProgressIndicator()),
-      ),
-      error: (e, _) => Scaffold(
+      );
+    }
+
+    if (setupAsync.hasError && !setupAsync.hasValue) {
+      return Scaffold(
         backgroundColor: Colors.transparent,
         body: Center(
           child: Column(
@@ -1337,529 +548,258 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
             ],
           ),
         ),
+      );
+    }
+
+    final setup = setupAsync.valueOrNull;
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _handleEatingBack(setup, state, uid);
+      },
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Builder(
+          builder: (context) {
+            final disableAnimations =
+                MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+            final isTest = WidgetsBinding.instance.runtimeType
+                .toString()
+                .contains('Test');
+            final transitionDuration = (disableAnimations || isTest)
+                ? Duration.zero
+                : const Duration(milliseconds: 250);
+
+            return AnimatedSwitcher(
+              duration: transitionDuration,
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(opacity: animation, child: child);
+              },
+              child: _buildStageContent(context, state, setup, uid),
+            );
+          },
+        ),
       ),
-      data: (setup) {
-        final snapshot = setup.snapshotFor(BaseTimelineSection.eating);
-        const adapter = MealTimelineAdapter(accent: OptivusColors.roseAccent);
+    );
+  }
 
-        if (_isEditing) {
-          final entries = _workingBlocks
-              .expand((b) => adapter.toEntries(b))
-              .toList();
-          final workingMap = {
-            for (final block in _workingBlocks) block.id: block,
-          };
+  Widget _buildStageContent(
+    BuildContext context,
+    EatingSetupState state,
+    BaseTimelineSetup? setup,
+    String uid,
+  ) {
+    final controller = ref.read(eatingSetupControllerProvider.notifier);
 
-          return PopScope(
-            canPop: !_isDirty && !_isSaving && !_isExtracting,
-            onPopInvokedWithResult: (didPop, _) async {
-              if (didPop || _isSaving || _isExtracting) return;
-              if (await _confirmDiscard()) {
-                setState(() => _isEditing = false);
-              }
-            },
-            child: Scaffold(
-              backgroundColor: Colors.transparent,
-              body: SafeArea(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Top Bar
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(
-                              Icons.close_rounded,
-                              color: OptivusColors.textPrimary,
-                            ),
-                            onPressed: (_isSaving || _isExtracting)
-                                ? null
-                                : () async {
-                                    if (await _confirmDiscard()) {
-                                      setState(() => _isEditing = false);
-                                    }
-                                  },
-                            style: IconButton.styleFrom(
-                              backgroundColor: Colors.white.withValues(
-                                alpha: 0.1,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          const Expanded(
-                            child: Text(
-                              'Edit Eating Schedule',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                color: OptivusColors.textPrimary,
-                              ),
-                            ),
-                          ),
-                          FilledButton(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: OptivusColors.roseAccent,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            onPressed: (!_isDirty || _isSaving || _isExtracting)
-                                ? null
-                                : _saveWorkingSetup,
-                            child: _isSaving
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Text(
-                                    'Save',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                          ),
-                        ],
-                      ),
-                    ),
+    // AI & Upload progress stages
+    if (state.stage == EatingSetupStage.uploading ||
+        state.stage == EatingSetupStage.extracting ||
+        state.stage == EatingSetupStage.generating) {
+      return SafeArea(
+        child: BaseTimelineAiThinkingView(
+          key: const ValueKey('eating-ai-thinking'),
+          initialMessage: state.aiActionTitle,
+          progressMessages: state.aiProgressMessages,
+          onCancel: () => controller.cancelCurrentOperation(setup, uid: uid),
+        ),
+      );
+    }
 
-                    // Source label & Add Meal action
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 6,
-                      ),
-                      child: Row(
-                        children: [
-                          const Text(
-                            'Source: ',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: OptivusColors.textSecondary,
-                            ),
-                          ),
-                          Text(
-                            _sourceLabelForPath(
-                              _workingSetupPath,
-                              _workingCustomized,
-                            ),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: OptivusColors.textPrimary,
-                            ),
-                          ),
-                          const Spacer(),
-                          FilledButton.icon(
-                            key: const Key(
-                              'base-timeline-edit-add-meal-button',
-                            ),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: OptivusColors.roseAccent
-                                  .withValues(alpha: 0.18),
-                              foregroundColor: OptivusColors.roseAccent,
-                              side: BorderSide(
-                                color: OptivusColors.roseAccent.withValues(
-                                  alpha: 0.35,
-                                ),
-                                width: 0.8,
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            icon: const Icon(Icons.add_rounded, size: 16),
-                            label: const Text(
-                              'Add meal',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            onPressed: _isExtracting
-                                ? null
-                                : () => _addMealBlock(),
-                          ),
-                        ],
-                      ),
-                    ),
+    // Save success celebration stage
+    if (state.stage == EatingSetupStage.saveSuccess) {
+      return BaseTimelineSaveSuccessView(
+        key: const ValueKey('eating-save-success'),
+        title: 'Eating schedule updated successfully',
+        subtitle: state.routineRefreshPending
+            ? 'Setup saved. Routine projection update pending.'
+            : 'Your meal plan has been saved to your Base Timeline.',
+        accent: OptivusColors.roseAccent,
+        onComplete: () => controller.reloadFromCanonical(
+          setup ?? BaseTimelineSetup(uid: uid, updatedAt: DateTime.now()),
+        ),
+      );
+    }
 
-                    if (_errorMessage != null)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 4,
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _errorMessage!,
-                                style: const TextStyle(
-                                  color: OptivusColors.danger,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                            if (_errorMessage!.contains('changed elsewhere'))
-                              TextButton(
-                                onPressed: () async {
-                                  await ref
-                                      .read(
-                                        baseTimelineSetupNotifierProvider
-                                            .notifier,
-                                      )
-                                      .load();
-                                  if (mounted) {
-                                    setState(() => _isEditing = false);
-                                  }
-                                },
-                                child: const Text('Reload latest'),
-                              ),
-                          ],
-                        ),
-                      ),
-
-                    // Day summary bar
-                    EatingDaySummaryBar(
-                      blocks: _workingBlocks,
-                      selectedDay: _selectedDay,
-                      targetCalories: _workingTargetCalories,
-                      targetProtein: _workingTargetProtein,
-                    ),
-
-                    // Interactive Timeline View
-                    Expanded(
-                      child: _isExtracting
-                          ? BaseTimelineAiThinkingView(
-                              initialMessage: _aiActionTitle,
-                              progressMessages: _aiProgressMessages,
-                              onCancel: _cancelAiOperation,
-                            )
-                          : FullScreenTimelineScaffold(
-                              entries: entries,
-                              selectedDay: _selectedDay,
-                              onDayChanged: (day) =>
-                                  setState(() => _selectedDay = day),
-                              styleBuilder: (entry) =>
-                                  adapter.styleForEntry(entry),
-                              overlapPresentation:
-                                  TimelineOverlapPresentation.frontAndExposed,
-                              frontEntryId: _frontBlockId,
-                              onFrontSelected: (id) =>
-                                  setState(() => _frontBlockId = id),
-                              blockBuilder: (context, positioned) {
-                                final block =
-                                    workingMap[positioned.entry.sourceId];
-                                if (block == null) {
-                                  return const SizedBox.shrink();
-                                }
-                                return BaseTimelineDomainCard(
-                                  positioned: positioned,
-                                  block: block,
-                                  domain: BaseTimelineCardDomain.eating,
-                                  accent: OptivusColors.roseAccent,
-                                  isEditable: true,
-                                  onTap: () {
-                                    if (positioned.hasOverlap &&
-                                        !positioned.isFront) {
-                                      HapticFeedback.lightImpact();
-                                      setState(
-                                        () =>
-                                            _frontBlockId = positioned.entry.id,
-                                      );
-                                    } else {
-                                      _editMealBlock(block);
-                                    }
-                                  },
-                                  onDelete: () => _deleteMealBlock(block.id),
-                                );
-                              },
-                              accent: OptivusColors.roseAccent,
-                              onEntryTapped: null,
-                              visibleRangePolicy:
-                                  TimelineVisibleRangePolicy.contentAdaptive,
-                              stretchPolicy:
-                                  TimelineStretchPolicy.constraintBased,
-                              emptyDayMessage: 'No meals on this day.',
-                            ),
-                    ),
-                  ],
-                ),
+    // Source selection stage
+    if (state.stage == EatingSetupStage.chooseSource) {
+      return SafeArea(
+        key: const ValueKey('eating-choose-source'),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildTopCancelBar(
+              onCancel: () => controller.cancelChooseSource(),
+              title: 'Change Eating Source',
+            ),
+            Expanded(
+              child: EatingSourceSelectionView(
+                onBuildPersonalized: () {
+                  if (setup != null) controller.editCurrentMealPlan(setup);
+                  _openPlanSettingsSheet(isBuildingNew: true);
+                },
+                onImportPhoto: () {
+                  if (setup != null) controller.editCurrentMealPlan(setup);
+                  _showPhotoSourceSheet(uid);
+                },
+                onCreateManually: () {
+                  if (setup != null) {
+                    controller.startManualSetup(setup);
+                    _addMealBlock();
+                  }
+                },
               ),
             ),
+          ],
+        ),
+      );
+    }
+
+    // Review & editing block stage
+    if (state.stage == EatingSetupStage.review ||
+        state.stage == EatingSetupStage.editingBlock) {
+      final isNew =
+          setup == null ||
+          !setup.snapshotFor(BaseTimelineSection.eating).isConfigured;
+      return EatingReviewView(
+        key: const ValueKey('eating-review'),
+        workingBlocks: state.workingBlocks,
+        workingAssetId: state.workingAssetId,
+        workingR2Key: state.workingR2Key,
+        workingSetupPath: state.workingSetupPath,
+        workingCustomized: state.workingCustomized,
+        targetCalories: state.workingTargetCalories,
+        targetProtein: state.workingTargetProtein,
+        selectedDay: state.selectedDay,
+        onDayChanged: (d) => controller.selectDay(d),
+        errorMessage: state.errorMessage,
+        onClearError: () => controller.clearError(),
+        isSaving: state.isSaving,
+        onCancel: () => _handleEatingBack(setup, state, uid),
+        onAddMeal: _addMealBlock,
+        onEditBlock: _editMealBlock,
+        onSave: () async {
+          final effectiveSetup =
+              setup ?? BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
+          await controller.saveWorkingSetup(
+            uid: uid,
+            currentSetup: effectiveSetup,
           );
-        }
+        },
+        onOpenSettings: () => _openPlanSettingsSheet(isBuildingNew: false),
+        onChangePhoto: () => _showPhotoSourceSheet(uid),
+        frontBlockId: state.frontBlockId,
+        onFrontSelected: (id) => controller.setFrontBlockId(id),
+        isNew: isNew,
+      );
+    }
 
-        if (!snapshot.isConfigured) {
-          return Scaffold(
-            backgroundColor: Colors.transparent,
-            body: SafeArea(
-              child: _isExtracting
-                  ? BaseTimelineAiThinkingView(
-                      initialMessage: _aiActionTitle,
-                      progressMessages: _aiProgressMessages,
-                      onCancel: _cancelAiOperation,
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          child: Row(
-                            children: [
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.arrow_back_rounded,
-                                  color: OptivusColors.textPrimary,
-                                ),
-                                onPressed: widget.onBack,
-                                style: IconButton.styleFrom(
-                                  backgroundColor: Colors.white.withValues(
-                                    alpha: 0.1,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              const Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Eating',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w800,
-                                        color: OptivusColors.textPrimary,
-                                      ),
-                                    ),
-                                    Text(
-                                      'Choose how to set up your meal plan',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: OptivusColors.textSecondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                          child: EatingSourceSelectionView(
-                            onBuildPersonalized: () {
-                              _initWorkingState(setup);
-                              _openPlanSettingsSheet(isBuildingNew: true);
-                            },
-                            onImportPhoto: () {
-                              _initWorkingState(setup);
-                              _showPhotoSourceSheet();
-                            },
-                            onCreateManually: () {
-                              _initWorkingState(setup);
-                              final manualState =
-                                  EatingSourceTransitionPolicy.toManual(
-                                    blocks: const [],
-                                  );
-                              _applyEatingDraftState(
-                                manualState,
-                                markDirty: false,
-                              );
-                              setState(() {
-                                _isEditing = true;
-                              });
-                              _addMealBlock(
-                                onCancel: () {
-                                  if (mounted && _workingBlocks.isEmpty) {
-                                    _initWorkingState(setup);
-                                    setState(() {
-                                      _isEditing = false;
-                                      _isDirty = false;
-                                    });
-                                  }
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                      ],
+    // Default Current Setup stage
+    if (setup == null ||
+        !setup.snapshotFor(BaseTimelineSection.eating).isConfigured) {
+      // Unconfigured state shows initial Source Selection with Back button
+      return SafeArea(
+        key: const ValueKey('eating-unconfigured'),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(
+                      Icons.arrow_back_rounded,
+                      color: OptivusColors.textPrimary,
                     ),
-            ),
-          );
-        }
-
-        // Current Setup View (Configured)
-        final entries = setup.eatingBlocks
-            .expand((b) => adapter.toEntries(b))
-            .toList();
-        final blockMap = {
-          for (final block in setup.eatingBlocks) block.id: block,
-        };
-
-        return Scaffold(
-          backgroundColor: Colors.transparent,
-          body: SafeArea(
-            bottom: false,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                BaseTimelineCurrentSetupHeader(
-                  title: 'Eating',
-                  summary: snapshot.summary,
-                  accent: OptivusColors.roseAccent,
-                  onBack: widget.onBack,
-                  primaryButtonLabel: 'Edit schedule',
-                  onPrimaryAction: () {
-                    _initWorkingState(setup);
-                    setState(() {
-                      _isEditing = true;
-                      _isDirty = false;
-                    });
-                  },
-                  onChangeSource: () => _showChangeSourceSheet(setup),
-                  changeSourceLabel: 'Change source',
-                  onRemove: () => _resetEatingSetup(setup),
-                  removeLabel: 'Remove Eating Plan',
-                ),
-
-                if (_errorMessage != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 4,
+                    onPressed: widget.onBack,
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white.withValues(alpha: 0.1),
                     ),
-                    child: Row(
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Text(
-                            _errorMessage!,
-                            style: const TextStyle(
-                              color: OptivusColors.danger,
-                              fontSize: 12,
-                            ),
+                        Text(
+                          'Eating',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: OptivusColors.textPrimary,
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(
-                            Icons.close_rounded,
-                            size: 16,
+                        Text(
+                          'Choose how to set up your meal plan',
+                          style: TextStyle(
+                            fontSize: 12,
                             color: OptivusColors.textSecondary,
                           ),
-                          onPressed: () => setState(() => _errorMessage = null),
                         ),
                       ],
                     ),
                   ),
-
-                // Plan Summary Card (truthful summary with settings/stale/photo actions)
-                EatingPlanSummaryCard(
-                  setup: setup,
-                  isStale: _isPlanStale(setup),
-                  freshness: _evaluatePlanFreshness(setup),
-                  onOpenSettings: () {
-                    _initWorkingState(setup);
-                    _openPlanSettingsSheet(isBuildingNew: false);
-                  },
-                  onRegenerate: () {
-                    _initWorkingState(setup);
-                    _openPlanSettingsSheet(isBuildingNew: false);
-                  },
-                  onViewPhoto: snapshot.sourceR2Key != null
-                      ? () => _showPhotoViewer(
-                          snapshot.sourceR2Key!,
-                          snapshot.sourceAssetId,
-                        )
-                      : null,
-                ),
-
-                // Day summary bar
-                EatingDaySummaryBar(
-                  blocks: setup.eatingBlocks,
-                  selectedDay: _selectedDay,
-                  targetCalories: setup.targetCalories,
-                  targetProtein: setup.targetProtein,
-                ),
-
-                // Timeline View
-                if (_refreshPendingRevision != null)
-                  BaseTimelineRefreshPendingBanner(
-                    message: _refreshPendingMessage,
-                    onRetry: () async {
-                      final result = await ref
-                          .read(baseTimelineTransactionCoordinatorProvider)
-                          .retryRoutineRefresh(
-                            uid: ref.read(userProfileProvider).uid,
-                            targetRevision: _refreshPendingRevision,
-                          );
-                      if (mounted && result.isRefreshed) {
-                        setState(() {
-                          _refreshPendingRevision = null;
-                          _refreshPendingMessage = null;
-                        });
-                      }
-                    },
-                  ),
-                Expanded(
-                  child: FullScreenTimelineScaffold(
-                    entries: entries,
-                    selectedDay: _selectedDay,
-                    onDayChanged: (day) => setState(() => _selectedDay = day),
-                    styleBuilder: (entry) => adapter.styleForEntry(entry),
-                    overlapPresentation:
-                        TimelineOverlapPresentation.frontAndExposed,
-                    frontEntryId: _frontBlockId,
-                    onFrontSelected: (id) => setState(() => _frontBlockId = id),
-                    blockBuilder: (context, positioned) {
-                      final block = blockMap[positioned.entry.sourceId];
-                      if (block == null) return const SizedBox.shrink();
-                      return BaseTimelineDomainCard(
-                        positioned: positioned,
-                        block: block,
-                        domain: BaseTimelineCardDomain.eating,
-                        accent: OptivusColors.roseAccent,
-                        isEditable: false,
-                        onTap: () {
-                          if (positioned.hasOverlap && !positioned.isFront) {
-                            HapticFeedback.lightImpact();
-                            setState(() => _frontBlockId = positioned.entry.id);
-                          }
-                        },
-                      );
-                    },
-                    accent: OptivusColors.roseAccent,
-                    mode: TimelineMode.previewReadOnly,
-                    visibleRangePolicy:
-                        TimelineVisibleRangePolicy.contentAdaptive,
-                    stretchPolicy: TimelineStretchPolicy.constraintBased,
-                    emptyDayMessage: 'No meals scheduled.',
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
+            Expanded(
+              child: EatingSourceSelectionView(
+                onBuildPersonalized: () {
+                  if (setup != null) controller.editCurrentMealPlan(setup);
+                  _openPlanSettingsSheet(isBuildingNew: true);
+                },
+                onImportPhoto: () {
+                  if (setup != null) controller.editCurrentMealPlan(setup);
+                  _showPhotoSourceSheet(uid);
+                },
+                onCreateManually: () {
+                  final effectiveSetup =
+                      setup ??
+                      BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
+                  controller.startManualSetup(effectiveSetup);
+                  _addMealBlock();
+                },
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return EatingCurrentSetupView(
+      key: const ValueKey('eating-current-setup'),
+      setup: setup,
+      selectedDay: state.selectedDay,
+      onDayChanged: (d) => controller.selectDay(d),
+      onBack: widget.onBack,
+      onEditSchedule: () => controller.editCurrentMealPlan(setup),
+      onChangeSource: () => controller.startChooseSource(),
+      onRemoveSetup: () => _handleRemoveSetup(setup, uid),
+      onOpenSettings: () {
+        controller.editCurrentMealPlan(setup);
+        _openPlanSettingsSheet(isBuildingNew: false);
+      },
+      onRegenerate: () {
+        controller.editCurrentMealPlan(setup);
+        _openPlanSettingsSheet(isBuildingNew: false);
+      },
+      onViewPhoto: _showPhotoViewer,
+      routineRefreshPending: state.routineRefreshPending,
+      routineRefreshMessage: state.routineRefreshMessage,
+      onRetryRefresh: () async {
+        final result = await ref
+            .read(baseTimelineTransactionCoordinatorProvider)
+            .retryRoutineRefresh(
+              uid: uid,
+              targetRevision: state.committedRevision,
+            );
+        if (mounted && result.isRefreshed) {
+          controller.reloadFromCanonical(setup);
+        }
       },
     );
   }

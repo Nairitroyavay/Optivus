@@ -3,11 +3,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_radii.dart';
 import 'package:optivus/core/widgets/liquid_section_header.dart';
-import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_presentation_utils.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_source_action_card.dart';
 
 /// Source selection stage for Work / Business Base Timeline setup.
 class WorkSourceSelectionView extends StatelessWidget {
@@ -193,7 +193,7 @@ class WorkSourceSelectionView extends StatelessWidget {
                         ? 'USE A NEW PHOTO'
                         : 'USE A SCHEDULE PHOTO',
                   ),
-                  _buildSourceActionCard(
+                  BaseTimelineSourceActionCard(
                     icon: Icons.camera_alt_rounded,
                     title: 'Take a Photo',
                     subtitle: WorkPresentationUtils.sourceCameraSubtitle(
@@ -203,7 +203,7 @@ class WorkSourceSelectionView extends StatelessWidget {
                     onTap: () => onPickPhoto(ImageSource.camera),
                   ),
                   const SizedBox(height: 12),
-                  _buildSourceActionCard(
+                  BaseTimelineSourceActionCard(
                     icon: Icons.photo_library_rounded,
                     title: 'Choose from Gallery',
                     subtitle: 'Upload a photo or screenshot from your device',
@@ -213,7 +213,7 @@ class WorkSourceSelectionView extends StatelessWidget {
                   const SizedBox(height: 16),
                   const LiquidSectionHeader(title: 'OR SET UP MANUALLY'),
                   if (snapshot.isConfigured || setup.workBlocks.isNotEmpty)
-                    _buildSourceActionCard(
+                    BaseTimelineSourceActionCard(
                       icon: Icons.edit_calendar_rounded,
                       title: WorkPresentationUtils.sourceEditCurrentTitle(
                         lifeRole,
@@ -228,7 +228,7 @@ class WorkSourceSelectionView extends StatelessWidget {
                       onTap: onEditCurrent ?? onManualSetup,
                     )
                   else
-                    _buildSourceActionCard(
+                    BaseTimelineSourceActionCard(
                       icon: Icons.edit_calendar_rounded,
                       title: WorkPresentationUtils.sourceManualTitle(lifeRole),
                       subtitle: WorkPresentationUtils.sourceManualSubtitle(
@@ -243,76 +243,6 @@ class WorkSourceSelectionView extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSourceActionCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color accent,
-    required VoidCallback onTap,
-  }) {
-    return OnboardingGlassCard(
-      radius: OptivusRadii.cardStandard,
-      padding: EdgeInsets.zero,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(OptivusRadii.cardStandard),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(
-                      OptivusRadii.controlCompact,
-                    ),
-                    color: accent.withValues(alpha: 0.15),
-                    border: Border.all(
-                      color: accent.withValues(alpha: 0.35),
-                      width: 1,
-                    ),
-                  ),
-                  child: Icon(icon, color: accent, size: 22),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: OptivusColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: OptivusColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: OptivusColors.textSecondary,
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

@@ -3,10 +3,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_radii.dart';
 import 'package:optivus/core/widgets/liquid_section_header.dart';
-import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_source_action_card.dart';
 
 /// Source selection stage for Classes Base Timeline setup.
 class ClassesSourceSelectionView extends StatelessWidget {
@@ -149,7 +149,7 @@ class ClassesSourceSelectionView extends StatelessWidget {
                         ? 'USE A NEW TIMETABLE PHOTO'
                         : 'USE A TIMETABLE PHOTO',
                   ),
-                  _buildSourceActionCard(
+                  BaseTimelineSourceActionCard(
                     icon: Icons.camera_alt_rounded,
                     title: 'Take a Photo',
                     subtitle: 'Capture a printed timetable or screen',
@@ -157,7 +157,7 @@ class ClassesSourceSelectionView extends StatelessWidget {
                     onTap: () => onPickPhoto(ImageSource.camera),
                   ),
                   const SizedBox(height: 12),
-                  _buildSourceActionCard(
+                  BaseTimelineSourceActionCard(
                     icon: Icons.photo_library_rounded,
                     title: 'Choose from Gallery',
                     subtitle: 'Upload a photo or screenshot from your device',
@@ -169,7 +169,7 @@ class ClassesSourceSelectionView extends StatelessWidget {
                   if ((snapshot.sourceR2Key != null ||
                           snapshot.sourceAssetId != null) &&
                       onEditCurrent != null)
-                    _buildSourceActionCard(
+                    BaseTimelineSourceActionCard(
                       icon: Icons.edit_calendar_rounded,
                       title: 'Edit current timetable',
                       subtitle: 'Keep timetable photo and adjust classes',
@@ -177,7 +177,7 @@ class ClassesSourceSelectionView extends StatelessWidget {
                       onTap: onEditCurrent!,
                     )
                   else
-                    _buildSourceActionCard(
+                    BaseTimelineSourceActionCard(
                       icon: Icons.edit_calendar_rounded,
                       title: 'Set up manually',
                       subtitle: 'Add or adjust classes day by day',
@@ -189,76 +189,6 @@ class ClassesSourceSelectionView extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSourceActionCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color accent,
-    required VoidCallback onTap,
-  }) {
-    return OnboardingGlassCard(
-      radius: OptivusRadii.cardStandard,
-      padding: EdgeInsets.zero,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(OptivusRadii.cardStandard),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(
-                      OptivusRadii.controlCompact,
-                    ),
-                    color: accent.withValues(alpha: 0.15),
-                    border: Border.all(
-                      color: accent.withValues(alpha: 0.35),
-                      width: 1,
-                    ),
-                  ),
-                  child: Icon(icon, color: accent, size: 22),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: OptivusColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: OptivusColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: OptivusColors.textSecondary,
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

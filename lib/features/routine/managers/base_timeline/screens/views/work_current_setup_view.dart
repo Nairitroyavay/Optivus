@@ -66,18 +66,12 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
     super.dispose();
   }
 
-  void _showPhotoDialog(
-    BuildContext context,
-    String? r2Key,
-    String? assetId,
-  ) {
+  void _showPhotoDialog(BuildContext context, String? r2Key, String? assetId) {
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
         backgroundColor: OptivusColors.backgroundBottom,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -216,7 +210,8 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
     );
     final showProfileCard =
         snapshot.isConfigured || widget.routineBlocks.isNotEmpty;
-    final summary = (!showProfileCard &&
+    final summary =
+        (!showProfileCard &&
             secondarySummary != null &&
             secondarySummary.isNotEmpty)
         ? '$primarySummary\n$secondarySummary'
@@ -250,7 +245,9 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
                   isConfigured: snapshot.isConfigured,
                   lifeRole: widget.lifeRole,
                 ),
-            onChangeSource: snapshot.isConfigured ? widget.onChangeSource : null,
+            onChangeSource: snapshot.isConfigured
+                ? widget.onChangeSource
+                : null,
             removeLabel: WorkPresentationUtils.removeSetupLabel(
               widget.lifeRole,
             ),
@@ -276,10 +273,10 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
                 ),
                 onViewPhoto: hasSourcePhoto
                     ? () => _showPhotoDialog(
-                          context,
-                          snapshot.sourceR2Key,
-                          snapshot.sourceAssetId,
-                        )
+                        context,
+                        snapshot.sourceR2Key,
+                        snapshot.sourceAssetId,
+                      )
                     : null,
                 onChangeSource: widget.onChangeSource,
               ),
@@ -324,27 +321,39 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
                         onFrontSelected: (id) =>
                             setState(() => _frontBlockId = id),
                         styleBuilder: (entry) => adapter.styleForEntry(entry),
-                        bottomAction: (widget.onAddBlock != null && snapshot.isConfigured)
+                        bottomAction:
+                            (widget.onAddBlock != null && snapshot.isConfigured)
                             ? Padding(
                                 padding: const EdgeInsets.only(bottom: 12),
                                 child: Center(
                                   child: FilledButton.tonalIcon(
-                                    key: const Key('work-current-setup-add-block-button'),
-                                    icon: const Icon(Icons.add_rounded, size: 16),
+                                    key: const Key(
+                                      'work-current-setup-add-block-button',
+                                    ),
+                                    icon: const Icon(
+                                      Icons.add_rounded,
+                                      size: 16,
+                                    ),
                                     label: Text(
-                                      WorkPresentationUtils.isBusinessProfile(widget.lifeRole)
+                                      WorkPresentationUtils.isBusinessProfile(
+                                            widget.lifeRole,
+                                          )
                                           ? 'Add Business Block'
                                           : 'Add Work Block',
                                     ),
                                     style: FilledButton.styleFrom(
-                                      backgroundColor:
-                                          Colors.white.withValues(alpha: 0.12),
+                                      backgroundColor: Colors.white.withValues(
+                                        alpha: 0.12,
+                                      ),
                                       foregroundColor:
                                           OptivusColors.textPrimary,
                                       side: const BorderSide(
                                         color: OptivusColors.borderStandard,
                                       ),
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 10,
+                                      ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(20),
                                       ),

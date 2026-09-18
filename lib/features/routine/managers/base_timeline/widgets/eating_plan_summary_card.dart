@@ -303,40 +303,12 @@ class EatingPlanSummaryCard extends StatelessWidget {
         ? _formatGoal(setup.mealPlanningGoal!)
         : 'Not set';
 
-    final prefMeals = setup.mealsPerDay != null
-        ? '${setup.mealsPerDay} meals/day'
-        : 'Not set';
-
-    final diet = EatingPresentationUtils.formatDiet(setup.foodType);
-    final foodStyle = EatingPresentationUtils.formatFoodStyle(
-      setup.eatingMode,
-      setup.foodStyleCustomText,
-    );
-
-    final preferredTimes = EatingPresentationUtils.formatPreferredMealTimes(
-      breakfast: setup.breakfastMinute,
-      morningSnack: setup.extraSnackMinute,
-      lunch: setup.lunchMinute,
-      afternoonSnack: setup.snackMinute,
-      dinner: setup.dinnerMinute,
-    );
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildInfoRow('Goal', goalStr),
         const SizedBox(height: 6),
         _buildInfoRow('Daily targets', targetDisplay),
-        const SizedBox(height: 6),
-        _buildInfoRow('Meal preference', prefMeals),
-        const SizedBox(height: 6),
-        _buildInfoRow('Diet', diet),
-        const SizedBox(height: 6),
-        _buildInfoRow('Food style', foodStyle),
-        if (preferredTimes.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          _buildInfoRow('Preferred times', preferredTimes),
-        ],
       ],
     );
   }

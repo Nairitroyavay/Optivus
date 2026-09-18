@@ -15,6 +15,7 @@ import 'package:optivus/features/routine/managers/base_timeline/screens/eating_b
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_upload_lifecycle_helper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_plan_settings_sheet.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_meal_detail_sheet.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -499,12 +500,20 @@ void main() {
       await tester.tap(find.text('Edit schedule'));
       await tester.pumpAndSettle();
 
-      // Delete the only block
-      await tester.tap(find.byIcon(Icons.delete_outline_rounded));
+      // Delete the only block via EatingMealEditSheet
+      await tester.tap(find.text('Breakfast').first);
       await tester.pumpAndSettle();
 
-      // Tap Save
-      await tester.tap(find.text('Save'));
+      await tester.tap(find.text('Delete this Meal'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      // Tap Save bottom CTA
+      await tester.tap(
+        find.byKey(const Key('base-timeline-eating-save-button')),
+      );
       await tester.pumpAndSettle();
 
       // Verify guard error message is shown and save is prevented
@@ -762,8 +771,8 @@ void main() {
         expect(find.text('Lunch'), findsWidgets);
         expect(find.text('Dinner'), findsWidgets);
 
-        // Tap Save
-        await tester.tap(find.text('Save'));
+        // Tap Use this meal plan bottom CTA
+        await tester.tap(find.text('Use this meal plan'));
         await tester.pumpAndSettle();
 
         // Setup in repository now has generated eating setup path
@@ -1818,7 +1827,7 @@ void main() {
     );
 
     testWidgets(
-      'Configured view tap behavior: tapping card does not open EatingMealDetailSheet and Edit schedule is available',
+      'Configured view tap behavior: tapping card opens EatingMealDetailSheet and Edit schedule is available',
       (tester) async {
         tester.view.physicalSize = const Size(400, 900);
         tester.view.devicePixelRatio = 1.0;
@@ -1903,8 +1912,15 @@ void main() {
         await tester.tap(cardFinder.first);
         await tester.pumpAndSettle();
 
-        // EatingMealDetailSheet must NOT be present
-        expect(find.text('Meal Details'), findsNothing);
+        // EatingMealDetailSheet must be present with meal details
+        expect(find.byType(EatingMealDetailSheet), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(EatingMealDetailSheet),
+            matching: find.text('Oatmeal'),
+          ),
+          findsOneWidget,
+        );
       },
     );
 

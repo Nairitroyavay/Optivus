@@ -30,8 +30,10 @@ class EatingDaySummaryBar extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final textScaler = MediaQuery.textScalerOf(context);
-        final isNarrow = constraints.maxWidth < 340 || textScaler.scale(14) > 18;
-        final hasChip = targetCalories != null &&
+        final isNarrow =
+            constraints.maxWidth < 340 || textScaler.scale(14) > 18;
+        final hasChip =
+            targetCalories != null &&
             summary.mealCount > 0 &&
             summary.totalCalories != null;
 
@@ -56,8 +58,8 @@ class EatingDaySummaryBar extends StatelessWidget {
                 fontWeight: FontWeight.w500,
                 color: summary.mealCount > 0
                     ? (summary.isPartial
-                        ? OptivusColors.warning
-                        : OptivusColors.textSecondary)
+                          ? OptivusColors.warning
+                          : OptivusColors.textSecondary)
                     : OptivusColors.textSecondary.withValues(alpha: 0.7),
               ),
               maxLines: 2,
@@ -67,38 +69,38 @@ class EatingDaySummaryBar extends StatelessWidget {
         );
 
         Widget chipWidget() => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: OptivusColors.roseAccent.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: OptivusColors.roseAccent.withValues(alpha: 0.25),
-                  width: 0.8,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: OptivusColors.roseAccent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: OptivusColors.roseAccent.withValues(alpha: 0.25),
+              width: 0.8,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Target: $targetCalories',
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: OptivusColors.roseAccent,
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Target: $targetCalories',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: OptivusColors.roseAccent,
-                    ),
-                  ),
-                  Text(
-                    'Actual: ~${summary.totalCalories}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: OptivusColors.textPrimary,
-                    ),
-                  ),
-                ],
+              Text(
+                'Actual: ~${summary.totalCalories}',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: OptivusColors.textPrimary,
+                ),
               ),
-            );
+            ],
+          ),
+        );
 
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -123,10 +125,7 @@ class EatingDaySummaryBar extends StatelessWidget {
               : Row(
                   children: [
                     Expanded(child: infoColumn),
-                    if (hasChip) ...[
-                      const SizedBox(width: 8),
-                      chipWidget(),
-                    ],
+                    if (hasChip) ...[const SizedBox(width: 8), chipWidget()],
                   ],
                 ),
         );

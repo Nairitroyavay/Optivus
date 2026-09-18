@@ -29,9 +29,7 @@ class EatingMealEditSheet {
     final locationController = TextEditingController(
       text: block.location ?? '',
     );
-    final notesController = TextEditingController(
-      text: block.notes ?? '',
-    );
+    final notesController = TextEditingController(text: block.notes ?? '');
 
     var startMinute = block.startMinute;
     var endMinute = block.endMinute;
@@ -292,7 +290,15 @@ class EatingMealEditSheet {
                 for (var day = 1; day <= 7; day++)
                   FilterChip(
                     label: Text(
-                      const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][day - 1],
+                      const [
+                        'Mon',
+                        'Tue',
+                        'Wed',
+                        'Thu',
+                        'Fri',
+                        'Sat',
+                        'Sun',
+                      ][day - 1],
                     ),
                     selected: selectedDays.contains(day),
                     selectedColor: accent.withValues(alpha: 0.18),

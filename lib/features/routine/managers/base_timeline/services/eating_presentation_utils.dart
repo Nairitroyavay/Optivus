@@ -145,8 +145,8 @@ class EatingPresentationUtils {
     final raw = (slot != null && slot.trim().isNotEmpty)
         ? slot.trim()
         : (category != null && category.trim().isNotEmpty
-            ? category.trim()
-            : '');
+              ? category.trim()
+              : '');
     if (raw.isEmpty) return 'Meal';
 
     return switch (raw.toLowerCase()) {
@@ -157,10 +157,13 @@ class EatingPresentationUtils {
       'snack' => 'Snack',
       'dinner' => 'Dinner',
       'extra_snack' => 'Extra Snack',
-      _ => raw
-          .split('_')
-          .map((w) => w.isEmpty ? '' : '${w[0].toUpperCase()}${w.substring(1)}')
-          .join(' '),
+      _ =>
+        raw
+            .split('_')
+            .map(
+              (w) => w.isEmpty ? '' : '${w[0].toUpperCase()}${w.substring(1)}',
+            )
+            .join(' '),
     };
   }
 
@@ -216,11 +219,21 @@ class EatingPresentationUtils {
     int? dinner,
   }) {
     final parts = <String>[];
-    if (breakfast != null) parts.add('Breakfast ${formatTime(breakfast)}');
-    if (morningSnack != null) parts.add('Snack ${formatTime(morningSnack)}');
-    if (lunch != null) parts.add('Lunch ${formatTime(lunch)}');
-    if (afternoonSnack != null) parts.add('Snack ${formatTime(afternoonSnack)}');
-    if (dinner != null) parts.add('Dinner ${formatTime(dinner)}');
+    if (breakfast != null) {
+      parts.add('Breakfast ${formatTime(breakfast)}');
+    }
+    if (morningSnack != null) {
+      parts.add('Snack ${formatTime(morningSnack)}');
+    }
+    if (lunch != null) {
+      parts.add('Lunch ${formatTime(lunch)}');
+    }
+    if (afternoonSnack != null) {
+      parts.add('Snack ${formatTime(afternoonSnack)}');
+    }
+    if (dinner != null) {
+      parts.add('Dinner ${formatTime(dinner)}');
+    }
     return parts.join(' · ');
   }
 }

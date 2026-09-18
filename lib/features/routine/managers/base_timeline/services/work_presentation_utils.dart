@@ -353,7 +353,10 @@ class WorkPresentationUtils {
   }
 
   /// Bottom CTA label in Review view.
-  static String useScheduleCtaLabel(String? lifeRole, {bool isEditing = false}) {
+  static String useScheduleCtaLabel(
+    String? lifeRole, {
+    bool isEditing = false,
+  }) {
     if (isEditing) {
       return 'Save changes';
     }
@@ -679,7 +682,9 @@ class WorkPresentationUtils {
   static String emptyDraftExplanation(String? lifeRole) {
     final isBusiness = isBusinessProfile(lifeRole);
     final blockWord = isBusiness ? 'business block' : 'work block';
-    final setupName = isBusiness ? 'Remove Business Setup' : 'Remove Work Setup';
+    final setupName = isBusiness
+        ? 'Remove Business Setup'
+        : 'Remove Work Setup';
     return 'No blocks in this draft. Add a $blockWord, or cancel and use "$setupName" from the current schedule.';
   }
 
@@ -937,8 +942,9 @@ class WorkPresentationUtils {
     required bool hasSourcePhoto,
   }) {
     final isBusiness = isBusinessProfile(lifeRole);
-    final sourceLabel =
-        hasSourcePhoto ? photoCardTitle(lifeRole) : 'Manual setup';
+    final sourceLabel = hasSourcePhoto
+        ? photoCardTitle(lifeRole)
+        : 'Manual setup';
 
     if (blocks.isEmpty) {
       return WorkProfileSummary(

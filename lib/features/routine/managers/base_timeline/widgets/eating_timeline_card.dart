@@ -309,25 +309,6 @@ class EatingTimelineCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (isEditable && onDelete != null)
-                      IconButton(
-                        key: ValueKey(
-                          'base-timeline-delete-${b?.id ?? entry.id}',
-                        ),
-                        visualDensity: VisualDensity.compact,
-                        constraints: const BoxConstraints.tightFor(
-                          width: 26,
-                          height: 26,
-                        ),
-                        padding: EdgeInsets.zero,
-                        tooltip: 'Delete meal',
-                        onPressed: onDelete,
-                        icon: const Icon(
-                          Icons.delete_outline_rounded,
-                          size: 15,
-                          color: OptivusColors.danger,
-                        ),
-                      ),
                     if (isEditable)
                       Padding(
                         padding: const EdgeInsets.only(left: 4),
