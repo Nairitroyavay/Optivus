@@ -162,6 +162,26 @@ class OnboardingUploadSourceReconciler {
       return raw == null || raw.status == UploadedAssetStatus.deleted;
     }
 
+    bool hasReplacementAsset(
+      Set<UploadedAssetPurpose> purposes,
+      String? currentAssetId,
+    ) {
+      final trimmedCurrentId = currentAssetId?.trim() ?? '';
+      for (final purpose in purposes) {
+        final restored = restoredUploads.forPurpose(purpose);
+        if (restored != null) {
+          final asset = restored.asset;
+          if (asset.status == UploadedAssetStatus.uploaded &&
+              asset.ownerUid == ownerUid &&
+              asset.assetId.trim().isNotEmpty &&
+              asset.assetId.trim() != trimmedCurrentId) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
     final lifeRoleKey = draft.lifeRole.lifeRole;
     final classesRequired =
         lifeRoleKey == LifeRoleDraft.studentKey ||
@@ -263,11 +283,16 @@ class OnboardingUploadSourceReconciler {
       final isClassLogicalSourceCurrent =
           matchingClassAsset != null && classBlocksMatch;
 
+      final classUploadPurpose =
+          rawExactAsset(classLogicalId)?.purpose ??
+          UploadedAssetPurpose.classTimetable;
+
       if (!isClassLogicalSourceCurrent &&
           (hasClassAiBlocks ||
               (classLogicalId != null && classLogicalId.trim().isNotEmpty))) {
         if (isConfirmedAndClean(OnboardingStepId.classesJob.index) &&
-            exactSourceIsUnavailable(classLogicalId)) {
+            exactSourceIsUnavailable(classLogicalId) &&
+            !hasReplacementAsset({classUploadPurpose}, classLogicalId)) {
           reasonCodes.add('step4_class_media_unavailable');
         } else {
           step4Affected = true;
@@ -331,11 +356,16 @@ class OnboardingUploadSourceReconciler {
       final isWorkLogicalSourceCurrent =
           matchingWorkAsset != null && workBlocksMatch;
 
+      final workUploadPurpose =
+          rawExactAsset(workLogicalId)?.purpose ??
+          UploadedAssetPurpose.workSchedule;
+
       if (!isWorkLogicalSourceCurrent &&
           (hasWorkAiBlocks ||
               (workLogicalId != null && workLogicalId.trim().isNotEmpty))) {
         if (isConfirmedAndClean(OnboardingStepId.classesJob.index) &&
-            exactSourceIsUnavailable(workLogicalId)) {
+            exactSourceIsUnavailable(workLogicalId) &&
+            !hasReplacementAsset({workUploadPurpose}, workLogicalId)) {
           reasonCodes.add('step4_work_media_unavailable');
         } else {
           step4Affected = true;
@@ -415,8 +445,12 @@ class OnboardingUploadSourceReconciler {
 
       if (!eatingSetupIsCurrent &&
           (eatingAiBlocks.isNotEmpty || eatingImport != null)) {
+        final eatingAssetId = eatingImport?.uploadedAssetId;
         if (isConfirmedAndClean(OnboardingStepId.eating.index) &&
-            exactSourceIsUnavailable(eatingImport?.uploadedAssetId)) {
+            exactSourceIsUnavailable(eatingAssetId) &&
+            !hasReplacementAsset({
+              UploadedAssetPurpose.eatingMenu,
+            }, eatingAssetId)) {
           reasonCodes.add('step5_eating_media_unavailable');
         } else {
           step5Affected = true;
@@ -472,7 +506,11 @@ class OnboardingUploadSourceReconciler {
             );
         if (!matchesRestored) {
           if (isConfirmedAndClean(OnboardingStepId.skinCare.index) &&
-              exactSourceIsUnavailable(productAssetId)) {
+              exactSourceIsUnavailable(productAssetId) &&
+              !hasReplacementAsset({
+                UploadedAssetPurpose.skinProducts,
+                UploadedAssetPurpose.skinCare,
+              }, productAssetId)) {
             reasonCodes.add('step7_product_media_unavailable');
           } else {
             step7Affected = true;
@@ -519,7 +557,11 @@ class OnboardingUploadSourceReconciler {
             );
         if (!matchesRestored) {
           if (isConfirmedAndClean(OnboardingStepId.skinCare.index) &&
-              exactSourceIsUnavailable(faceAssetId)) {
+              exactSourceIsUnavailable(faceAssetId) &&
+              !hasReplacementAsset({
+                UploadedAssetPurpose.skinFace,
+                UploadedAssetPurpose.skinCare,
+              }, faceAssetId)) {
             reasonCodes.add('step7_face_media_unavailable');
           } else {
             step7Affected = true;

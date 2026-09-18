@@ -74,7 +74,7 @@ void main() {
         : UploadedAssetPurpose.skinFace;
     for (final first in [true, false]) {
       test(
-        '$path ${first ? "unacknowledged newer upload is ignored" : "confirmed acknowledged source survives missing media"} and reconciliation is idempotent',
+        '$path ${first ? "unacknowledged newer upload is ignored" : "missing acknowledged source is cleared"} and reconciliation is idempotent',
         () {
           final a = createAsset(id: 'A', purpose: purpose);
           final b = createAsset(id: 'B', purpose: purpose);
@@ -136,13 +136,13 @@ void main() {
             product
                 ? base.skinCareProductPhotoAssetId
                 : base.skinCareFacePhotoAssetId,
-            first ? isNull : a.assetId,
+            isNull,
           );
           expect(
             product
                 ? base.skinCareProductPhotoR2Key
                 : base.skinCareFacePhotoR2Key,
-            first ? isNull : a.r2Key,
+            isNull,
           );
           expect(
             product
@@ -150,26 +150,38 @@ void main() {
                 : base.skinCareFacePhotoCreatedAt,
             isNull,
           );
-          expect(base.skinCareReviewedProducts, product ? isNotEmpty : isEmpty);
-          expect(base.skinCareSpecialCareNotes, isNotEmpty);
-          expect(base.skinCareSuggestedProducts, isNotEmpty);
-          expect(base.skinCareRoutineFingerprint, 'A');
-          expect(base.blocks, isNotEmpty);
+          expect(
+            base.skinCareReviewedProducts,
+            first && product ? isNotEmpty : isEmpty,
+          );
+          expect(base.skinCareSpecialCareNotes, first ? isNotEmpty : isEmpty);
+          expect(base.skinCareSuggestedProducts, first ? isNotEmpty : isEmpty);
+          expect(base.skinCareRoutineFingerprint, first ? 'A' : isNull);
+          expect(base.blocks, first ? isNotEmpty : isEmpty);
           expect(base.skinCareProductNames, 'Editable text');
           expect(
             result.reconciledDraft.stepCompleted[OnboardingStepId
                 .skinCare
                 .index],
-            isTrue,
+            first ? isTrue : isFalse,
           );
           expect(
             result.reconciledDraft.stepDirty[OnboardingStepId.skinCare.index],
-            isFalse,
+            first ? isFalse : isTrue,
           );
           if (!product) {
-            expect(base.skinCareProductRecommendations, isNotEmpty);
-            expect(base.skinCareSelectedProductNames, isNotEmpty);
-            expect(base.skinCareRecommendationFingerprint, 'A');
+            expect(
+              base.skinCareProductRecommendations,
+              first ? isNotEmpty : isEmpty,
+            );
+            expect(
+              base.skinCareSelectedProductNames,
+              first ? isNotEmpty : isEmpty,
+            );
+            expect(
+              base.skinCareRecommendationFingerprint,
+              first ? 'A' : isNull,
+            );
           }
           expect(
             OnboardingUploadSourceReconciler.reconcile(
@@ -581,36 +593,33 @@ void main() {
           restoredUploads: restored,
         );
 
-        expect(result.changed, isFalse);
-        expect(result.earliestAffectedStep, isNull);
-        expect(result.reasonCodes, contains('step4_class_media_unavailable'));
+        expect(result.changed, isTrue);
+        expect(
+          result.earliestAffectedStep,
+          equals(OnboardingStepId.classesJob.index),
+        );
+        expect(result.reasonCodes, contains('step4_class_source_stale'));
 
         final reconciled = result.reconciledDraft;
         expect(
           reconciled.currentStep,
-          equals(OnboardingStepId.badHabits.index),
+          equals(OnboardingStepId.classesJob.index),
         );
         expect(
           reconciled.stepCompleted[OnboardingStepId.classesJob.index],
-          isTrue,
-        );
-        expect(
-          reconciled.stepDirty[OnboardingStepId.classesJob.index],
           isFalse,
         );
+        expect(reconciled.stepDirty[OnboardingStepId.classesJob.index], isTrue);
         expect(
           reconciled.stepCompleted[OnboardingStepId.todayReady.index],
           isFalse,
         );
-        expect(
-          reconciled.stepDirty[OnboardingStepId.todayReady.index],
-          isFalse,
-        );
+        expect(reconciled.stepDirty[OnboardingStepId.todayReady.index], isTrue);
 
         // Class AI blocks removed
         expect(
           reconciled.baseTimeline.blocks.any((b) => b.section == 'classes'),
-          isTrue,
+          isFalse,
         );
         // Work AI blocks preserved
         expect(
@@ -619,12 +628,27 @@ void main() {
           ),
           isTrue,
         );
-        // Newer classB is not an acknowledged replacement.
-        expect(reconciled.baseTimeline.classLogicalAssetId, classA.assetId);
+        // Persisted classLogicalAsset cleared
+        expect(reconciled.baseTimeline.classLogicalAssetId, isNull);
+        expect(reconciled.baseTimeline.classLogicalAssetR2Key, isNull);
+        // Persisted workLogicalAsset preserved
         expect(
           reconciled.baseTimeline.workLogicalAssetId,
           equals(workW.assetId),
         );
+        expect(
+          reconciled.baseTimeline.workLogicalAssetR2Key,
+          equals(workW.r2Key),
+        );
+
+        // Idempotency
+        final second = OnboardingUploadSourceReconciler.reconcile(
+          ownerUid: uid,
+          draft: reconciled,
+          restoredUploads: restored,
+        );
+        expect(second.changed, isFalse);
+        expect(second.reconciledDraft, equals(reconciled));
       },
     );
 
@@ -710,9 +734,12 @@ void main() {
           restoredUploads: restored,
         );
 
-        expect(result.changed, isFalse);
-        expect(result.earliestAffectedStep, isNull);
-        expect(result.reasonCodes, contains('step4_work_media_unavailable'));
+        expect(result.changed, isTrue);
+        expect(
+          result.earliestAffectedStep,
+          equals(OnboardingStepId.classesJob.index),
+        );
+        expect(result.reasonCodes, contains('step4_work_source_stale'));
 
         final reconciled = result.reconciledDraft;
         expect(
@@ -723,7 +750,7 @@ void main() {
           reconciled.baseTimeline.blocks.any(
             (b) => b.section == 'job_work_business',
           ),
-          isTrue,
+          isFalse,
         );
       },
     );
@@ -923,7 +950,7 @@ void main() {
     );
 
     test(
-      '11. Step5 confirmed Menu A survives when only newer Menu B is restored',
+      '11. Step5 has_routine: draft Menu A + current Menu B -> Eating AI invalidated',
       () {
         final menuA = createAsset(
           id: 'menu_A',
@@ -990,29 +1017,32 @@ void main() {
           restoredUploads: restored,
         );
 
-        expect(result.changed, isFalse);
-        expect(result.earliestAffectedStep, isNull);
-        expect(result.reasonCodes, contains('step5_eating_media_unavailable'));
+        expect(result.changed, isTrue);
+        expect(
+          result.earliestAffectedStep,
+          equals(OnboardingStepId.eating.index),
+        );
+        expect(result.reasonCodes, contains('step5_eating_source_stale'));
 
         final reconciled = result.reconciledDraft;
+        expect(reconciled.currentStep, equals(OnboardingStepId.eating.index));
         expect(
-          reconciled.currentStep,
-          equals(OnboardingStepId.badHabits.index),
+          reconciled.stepCompleted[OnboardingStepId.eating.index],
+          isFalse,
         );
-        expect(reconciled.stepCompleted[OnboardingStepId.eating.index], isTrue);
-        expect(reconciled.stepDirty[OnboardingStepId.eating.index], isFalse);
+        expect(reconciled.stepDirty[OnboardingStepId.eating.index], isTrue);
 
         // Old Eating AI block removed
         expect(
           reconciled.baseTimeline.blocks.any((b) => b.section == 'eating'),
-          isTrue,
+          isFalse,
         );
 
         // No applied import is fabricated before Menu B is analyzed.
         final importB = reconciled.baseTimeline.latestImportForSection(
           'Eating',
         );
-        expect(importB?.uploadedAssetId, menuA.assetId);
+        expect(importB, isNull);
         expect(reconciled.baseTimeline.eatingSetupPath, 'has_routine');
         expect(
           reconciled.stepCompleted[OnboardingStepId.todayReady.index],
@@ -1020,9 +1050,9 @@ void main() {
         );
         expect(
           reconciled.stepDirty[OnboardingStepId.todayReady.index],
-          isFalse,
+          isTrue,
         );
-        expect(reconciled.baseTimeline.validateEatingSetup(), isNull);
+        expect(reconciled.baseTimeline.validateEatingSetup(), isNotNull);
 
         final second = OnboardingUploadSourceReconciler.reconcile(
           ownerUid: uid,
@@ -1541,10 +1571,6 @@ void main() {
           id: 'skin_face_A',
           purpose: UploadedAssetPurpose.skinFace,
         );
-        final faceB = createAsset(
-          id: 'skin_face_B',
-          purpose: UploadedAssetPurpose.skinFace,
-        );
         final completed = List<bool>.filled(OnboardingDraft.stepCount, true);
         final draft = OnboardingDraft(
           uid: uid,
@@ -1578,7 +1604,7 @@ void main() {
         final result = OnboardingUploadSourceReconciler.reconcile(
           ownerUid: uid,
           draft: draft,
-          restoredUploads: createRestoredUploads(skinFaceAsset: faceB),
+          restoredUploads: createRestoredUploads(),
         );
 
         expect(result.changed, isFalse);

@@ -1834,6 +1834,7 @@ class _EatingTimelineSection extends ConsumerWidget {
             emptyDayMessage: emptyLabel,
             accent: OptivusColors.roseAccent,
             styleBuilder: adapter.styleForEntry,
+            stretchPolicy: TimelineStretchPolicy.constraintBased,
             blockBuilder: (context, positioned) {
               final block = blocksById[positioned.entry.sourceId];
               if (block == null) return const SizedBox.shrink();
@@ -2168,35 +2169,37 @@ class _EatingTimelineBlock extends StatelessWidget {
                                   children.add(OnboardingInfoChip(labels[i]));
                                 }
                                 final remaining = labels.length - toShow;
-                                children.add(
-                                  GestureDetector(
-                                    onTap: () =>
-                                        _showEatingBlockDetails(context, block),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: OptivusColors.roseAccent
-                                            .withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: OptivusColors.roseAccent
-                                              .withValues(alpha: 0.5),
+                                if (remaining > 0) {
+                                  children.add(
+                                    GestureDetector(
+                                      onTap: () =>
+                                          _showEatingBlockDetails(context, block),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
                                         ),
-                                      ),
-                                      child: Text(
-                                        '+$remaining more',
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w900,
-                                          color: OptivusColors.roseAccent,
+                                        decoration: BoxDecoration(
+                                          color: OptivusColors.roseAccent
+                                              .withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: OptivusColors.roseAccent
+                                                .withValues(alpha: 0.5),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '+$remaining more',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w900,
+                                            color: OptivusColors.roseAccent,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                );
+                                  );
+                                }
                               } else {
                                 for (final label in labels) {
                                   children.add(OnboardingInfoChip(label));

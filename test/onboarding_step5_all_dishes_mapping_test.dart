@@ -212,13 +212,13 @@ void main() {
 
         expect(tester.takeException(), isNull);
 
-        // Check that +8 more is shown
-        expect(find.text('+8 more'), findsOneWidget);
+        // Check that +7 more is shown
+        expect(find.text('+7 more'), findsOneWidget);
 
         // Tap the +N more block to open details
-        await tester.ensureVisible(find.text('+8 more'));
+        await tester.ensureVisible(find.text('+7 more'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('+8 more'));
+        await tester.tap(find.text('+7 more'));
         await tester.pumpAndSettle();
 
         // Now all dishes should be fully visible in the details modal

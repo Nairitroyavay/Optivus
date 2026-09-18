@@ -211,7 +211,8 @@ class RoutineCardPresentation {
   }
 
   /// Calculates the exact height of the routine action footer.
-  /// Shared identically between rendering and height measurement.
+  /// Deprecated: Production layout and height measurement now consume [RoutineCardActionLayoutPlan.totalHeight].
+  @Deprecated('Use RoutineCardActionLayoutPlan.totalHeight() instead')
   static double actionFooterHeight(
     RoutineCardActionLayout actionLayout, {
     int actionCount = 4,
@@ -234,8 +235,7 @@ class RoutineCardPresentation {
     if (hasGenericCountdown) {
       return switch (actionLayout) {
         RoutineCardActionLayout.horizontal => singleButtonHeight,
-        RoutineCardActionLayout.grid2x2 ||
-        RoutineCardActionLayout.stacked =>
+        RoutineCardActionLayout.grid2x2 || RoutineCardActionLayout.stacked =>
           (singleButtonHeight * 2) + RoutineCardPresentation.actionGap,
       };
     }
@@ -335,11 +335,13 @@ class RoutineCardActionConfig {
   final String label;
   final RoutineCardActionType type;
   final bool isPrimary;
+  final int flex;
 
   const RoutineCardActionConfig({
     required this.label,
     required this.type,
     this.isPrimary = false,
+    this.flex = 1,
   });
 }
 
@@ -375,10 +377,12 @@ class RoutineCardActionSet {
             label: terminalLabel,
             type: RoutineCardActionType.terminalBadge,
             isPrimary: true,
+            flex: 3,
           ),
           const RoutineCardActionConfig(
             label: 'Undo',
             type: RoutineCardActionType.undo,
+            flex: 2,
           ),
         ]);
       }
@@ -387,6 +391,7 @@ class RoutineCardActionSet {
           label: terminalLabel,
           type: RoutineCardActionType.terminalBadge,
           isPrimary: true,
+          flex: 1,
         ),
       ]);
     }
@@ -396,15 +401,18 @@ class RoutineCardActionSet {
         RoutineCardActionConfig(
           label: '00:00:00',
           type: RoutineCardActionType.countdown,
+          flex: 3,
         ),
         RoutineCardActionConfig(
           label: 'Done',
           type: RoutineCardActionType.done,
           isPrimary: true,
+          flex: 2,
         ),
         RoutineCardActionConfig(
           label: 'Stop',
           type: RoutineCardActionType.stop,
+          flex: 2,
         ),
       ]);
     }
@@ -415,14 +423,17 @@ class RoutineCardActionSet {
           label: 'Save money',
           type: RoutineCardActionType.saveMoney,
           isPrimary: true,
+          flex: 3,
         ),
         RoutineCardActionConfig(
           label: 'Move',
           type: RoutineCardActionType.move,
+          flex: 2,
         ),
         RoutineCardActionConfig(
           label: 'Skip',
           type: RoutineCardActionType.skip,
+          flex: 2,
         ),
       ]);
     }
@@ -434,14 +445,17 @@ class RoutineCardActionSet {
           label: 'Check in',
           type: RoutineCardActionType.checkIn,
           isPrimary: true,
+          flex: 3,
         ),
         RoutineCardActionConfig(
           label: 'Move',
           type: RoutineCardActionType.move,
+          flex: 2,
         ),
         RoutineCardActionConfig(
           label: 'Skip',
           type: RoutineCardActionType.skip,
+          flex: 2,
         ),
       ]);
     }
@@ -453,10 +467,12 @@ class RoutineCardActionSet {
             label: 'Open Tracker',
             type: RoutineCardActionType.openTracker,
             isPrimary: true,
+            flex: 3,
           ),
           RoutineCardActionConfig(
             label: 'Done',
             type: RoutineCardActionType.done,
+            flex: 2,
           ),
         ]);
       } else {
@@ -465,14 +481,17 @@ class RoutineCardActionSet {
             label: 'Start Tracker',
             type: RoutineCardActionType.startTracker,
             isPrimary: true,
+            flex: 3,
           ),
           RoutineCardActionConfig(
             label: 'Move',
             type: RoutineCardActionType.move,
+            flex: 2,
           ),
           RoutineCardActionConfig(
             label: 'Skip',
             type: RoutineCardActionType.skip,
+            flex: 2,
           ),
         ]);
       }
@@ -486,10 +505,12 @@ class RoutineCardActionSet {
           label: 'Done',
           type: RoutineCardActionType.done,
           isPrimary: true,
+          flex: 1,
         ),
         RoutineCardActionConfig(
           label: 'Stop',
           type: RoutineCardActionType.stop,
+          flex: 1,
         ),
       ]);
     }
@@ -499,10 +520,23 @@ class RoutineCardActionSet {
         label: 'Start',
         type: RoutineCardActionType.start,
         isPrimary: true,
+        flex: 1,
       ),
-      RoutineCardActionConfig(label: 'Done', type: RoutineCardActionType.done),
-      RoutineCardActionConfig(label: 'Move', type: RoutineCardActionType.move),
-      RoutineCardActionConfig(label: 'Skip', type: RoutineCardActionType.skip),
+      RoutineCardActionConfig(
+        label: 'Done',
+        type: RoutineCardActionType.done,
+        flex: 1,
+      ),
+      RoutineCardActionConfig(
+        label: 'Move',
+        type: RoutineCardActionType.move,
+        flex: 1,
+      ),
+      RoutineCardActionConfig(
+        label: 'Skip',
+        type: RoutineCardActionType.skip,
+        flex: 1,
+      ),
     ]);
   }
 
@@ -539,7 +573,8 @@ class RoutineCardActionSet {
     }
 
     // Stacked layout branching by semantic action set
-    final hasCountdown = actions.isNotEmpty &&
+    final hasCountdown =
+        actions.isNotEmpty &&
         actions.first.type == RoutineCardActionType.countdown;
     if (hasCountdown && actions.length == 3) {
       // Row 1: Countdown
@@ -554,9 +589,7 @@ class RoutineCardActionSet {
       );
     }
 
-    if (actions.length == 2 &&
-        (actions.first.type == RoutineCardActionType.terminalBadge ||
-            actions.first.type == RoutineCardActionType.openTracker)) {
+    if (actions.length == 2) {
       return RoutineCardActionLayoutPlan(
         layout: RoutineCardActionLayout.stacked,
         geometry: RoutineCardActionRowGeometry.vertical2,

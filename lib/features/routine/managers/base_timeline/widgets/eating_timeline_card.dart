@@ -117,7 +117,7 @@ class EatingTimelineCard extends StatelessWidget {
           maxWidth: innerWidth,
           textScale: textScale,
         );
-        totalHeight += math.max(14.0, dishHeight) + 2.0;
+        totalHeight += math.max(20.0, dishHeight + 6.0);
       }
     }
 

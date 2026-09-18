@@ -521,7 +521,8 @@ class RoutineCardFactory {
 
     final resolvedStatus =
         effectiveStatus ?? existingRecord?.status ?? item.status;
-    final resolvedTrackerActive = isTrackerActive ??
+    final resolvedTrackerActive =
+        isTrackerActive ??
         (item.blockType == RoutineBlockType.trackerTask &&
             resolvedStatus == RoutineStatus.inTracker);
     final resolvedCanUndo =
@@ -531,7 +532,8 @@ class RoutineCardFactory {
       item: item,
       effectiveStatus: resolvedStatus,
       isTrackerActive: resolvedTrackerActive,
-      hasGenericCountdown: resolvedStatus == RoutineStatus.active &&
+      hasGenericCountdown:
+          resolvedStatus == RoutineStatus.active &&
           item.blockType != RoutineBlockType.trackerTask &&
           item.blockType != RoutineBlockType.checkIn &&
           item.blockType != RoutineBlockType.moneyTask &&
@@ -540,33 +542,13 @@ class RoutineCardFactory {
       canUndo: resolvedCanUndo,
     );
 
-    final actionLayout = RoutineCardPresentation.resolveRoutineCardActionLayout(
+    final actionPlan = actionSet.resolveLayoutPlan(
       availableWidth: contentWidth,
       textScaler: scaler,
       textDirection: textDirection,
-      labels: actionSet.labels,
-      actionCount: actionSet.count,
     );
 
-    final isTerminal =
-        item.isCompleted ||
-        resolvedStatus == RoutineStatus.completed ||
-        resolvedStatus == RoutineStatus.skipped ||
-        resolvedStatus == RoutineStatus.missed;
-
-    final hasGenericCountdown = resolvedStatus == RoutineStatus.active &&
-        item.blockType != RoutineBlockType.trackerTask &&
-        item.blockType != RoutineBlockType.checkIn &&
-        item.blockType != RoutineBlockType.moneyTask &&
-        item.startedAt != null &&
-        item.countdownDurationSeconds != null;
-
-    final actionFooter = actionFooterHeight(
-      actionLayout,
-      actionCount: actionSet.count,
-      isTerminal: isTerminal,
-      canUndo: resolvedCanUndo,
-      hasGenericCountdown: hasGenericCountdown,
+    final actionFooter = actionPlan.totalHeight(
       singleButtonHeight: singleButtonHeight,
     );
     height += RoutineCardPresentation.actionsFooterGap + actionFooter;
@@ -580,6 +562,9 @@ class RoutineCardFactory {
     );
   }
 
+  /// Calculates the exact height of the routine action footer.
+  /// Deprecated: Production layout and height measurement now consume [RoutineCardActionLayoutPlan.totalHeight].
+  @Deprecated('Use RoutineCardActionLayoutPlan.totalHeight() instead')
   static double actionFooterHeight(
     RoutineCardActionLayout actionLayout, {
     int actionCount = 4,

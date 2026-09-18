@@ -152,249 +152,202 @@ class RoutineCardActions extends ConsumerWidget {
             (effectiveStatus == RoutineStatus.inTracker ||
                 isActiveTrackerOccurrence);
 
-        final isMoney = item.blockType == RoutineBlockType.moneyTask;
-        final isBadHabit =
-            item.blockType == RoutineBlockType.checkIn &&
-            item.category == RoutineCategory.badHabit;
-        final isTrackerPlanned =
-            item.blockType == RoutineBlockType.trackerTask && !isTrackerActive;
+        final canUndo =
+            availability.canUndo ||
+            (existingRecord == null &&
+                (item.undoToPlannedAllowed ||
+                    effectiveStatus == RoutineStatus.skipped));
 
         final actionSet = RoutineCardActionSet.resolve(
           item: item,
           effectiveStatus: effectiveStatus,
           isTrackerActive: isTrackerActive,
           hasGenericCountdown: hasGenericCountdown,
-          canUndo: availability.canUndo,
+          canUndo: canUndo,
         );
 
-        final actionLayout =
-            RoutineCardPresentation.resolveRoutineCardActionLayout(
-              availableWidth: availableWidth,
-              textScaler: textScaler,
-              textDirection: textDirection,
-              labels: actionSet.labels,
-              actionCount: actionSet.count,
-            );
+        final actionPlan = actionSet.resolveLayoutPlan(
+          availableWidth: availableWidth,
+          textScaler: textScaler,
+          textDirection: textDirection,
+        );
 
-        // Contextual terminal states (Part L): show clear state and optional Undo,
-        // without wasting card space on dead Start and dead Move controls.
-        if (isCompleted || effectiveStatus == RoutineStatus.completed) {
-          final completedBadge = _ActionButton(
-            key: ValueKey('routine-action-done-${item.id}'),
-            label: 'Completed',
-            color: OptivusColors.success,
-            icon: Icons.check_circle_rounded,
-            isSelected: true,
-            isPrimary: true,
-            isDisabled: true,
-            onTap: null,
-          );
+        Widget buildActionButton(RoutineCardActionConfig config) {
+          switch (config.type) {
+            case RoutineCardActionType.terminalBadge:
+              final terminalColor = effectiveStatus == RoutineStatus.skipped
+                  ? OptivusColors.warning
+                  : (effectiveStatus == RoutineStatus.missed
+                        ? OptivusColors.danger
+                        : OptivusColors.success);
+              final terminalIcon = effectiveStatus == RoutineStatus.skipped
+                  ? Icons.skip_next_rounded
+                  : (effectiveStatus == RoutineStatus.missed
+                        ? Icons.cancel_outlined
+                        : Icons.check_circle_rounded);
+              final terminalKey = effectiveStatus == RoutineStatus.skipped
+                  ? ValueKey('routine-action-skip-${item.id}')
+                  : (effectiveStatus == RoutineStatus.missed
+                        ? ValueKey('routine-action-miss-${item.id}')
+                        : ValueKey('routine-action-done-${item.id}'));
+              return _ActionButton(
+                key: terminalKey,
+                label: config.label,
+                color: terminalColor,
+                icon: terminalIcon,
+                isSelected: true,
+                isPrimary: effectiveStatus == RoutineStatus.completed,
+                isDisabled: true,
+                onTap: null,
+              );
 
-          if (availability.canUndo) {
-            final undoAction = _ActionButton(
-              key: ValueKey('routine-action-undo-${item.id}'),
-              label: 'Undo',
-              color: OptivusColors.textSecondary,
-              icon: Icons.undo_rounded,
-              isPrimary: false,
-              isDisabled: isPending,
-              onTap: () {
-                if (!hasScope) return;
-                _executeRoutineAction(
-                  context,
-                  ref,
-                  action: RoutineOccurrenceAction.undo,
-                  perform: () => ref
+            case RoutineCardActionType.undo:
+              return _ActionButton(
+                key: ValueKey('routine-action-undo-${item.id}'),
+                label: 'Undo',
+                color: OptivusColors.textSecondary,
+                icon: Icons.undo_rounded,
+                isPrimary: false,
+                isDisabled: isPending,
+                onTap: () {
+                  if (!hasScope) return;
+                  _executeRoutineAction(
+                    context,
+                    ref,
+                    action: RoutineOccurrenceAction.undo,
+                    perform: () => ref
+                        .read(routineNotifierProvider.notifier)
+                        .undoOccurrenceAction(
+                          item.id,
+                          occurrenceDate: effectiveOccurrenceDate,
+                        ),
+                  );
+                },
+              );
+
+            case RoutineCardActionType.countdown:
+              return _ActionButton(
+                key: ValueKey('routine-action-start-${item.id}'),
+                label: null,
+                countdownStartedAt: item.startedAt,
+                countdownDurationSeconds: item.countdownDurationSeconds,
+                color: OptivusColors.routineAccent,
+                icon: Icons.play_arrow_rounded,
+                isPrimary: false,
+                isDisabled: isPending,
+                onTap: null,
+              );
+
+            case RoutineCardActionType.saveMoney:
+              return _ActionButton(
+                key: ValueKey('routine-action-start-${item.id}'),
+                label: 'Save money',
+                semanticLabel: 'Save money ${item.title}',
+                color: OptivusColors.routineAccent,
+                icon: Icons.savings_outlined,
+                isPrimary: true,
+                isDisabled:
+                    isPending ||
+                    (!startDecision.isAllowed &&
+                        effectiveStatus != RoutineStatus.inTracker),
+                onTap: () {
+                  if (!hasScope) return;
+                  showSaveViaUpiFlow(
+                    context,
+                    ref,
+                    source: MoneyEntrySource.routineTask,
+                    routineTaskId: item.id,
+                    onSaved: () => _executeRoutineAction(
+                      context,
+                      ref,
+                      action: RoutineOccurrenceAction.complete,
+                      perform: () => ref
+                          .read(routineNotifierProvider.notifier)
+                          .recordMoneySavedAndComplete(
+                            item.id,
+                            occurrenceDate: effectiveOccurrenceDate,
+                          ),
+                    ),
+                  );
+                },
+              );
+
+            case RoutineCardActionType.checkIn:
+              return _ActionButton(
+                key: ValueKey('routine-action-start-${item.id}'),
+                label: 'Check in',
+                semanticLabel: 'Check in ${item.title}',
+                color: OptivusColors.routineAccent,
+                icon: Icons.fact_check_outlined,
+                isPrimary: true,
+                isDisabled:
+                    isPending ||
+                    (!startDecision.isAllowed &&
+                        effectiveStatus != RoutineStatus.inTracker),
+                onTap: () {
+                  if (!hasScope) return;
+                  _showBadHabitCheckInSheet(context, ref, item);
+                },
+              );
+
+            case RoutineCardActionType.openTracker:
+              return _ActionButton(
+                key: ValueKey('routine-action-start-${item.id}'),
+                label: 'Open Tracker',
+                semanticLabel: 'Open Tracker ${item.title}',
+                color: OptivusColors.routineAccent,
+                icon: Icons.open_in_new_rounded,
+                isPrimary: true,
+                isDisabled: isPending,
+                onTap: () {
+                  if (!hasScope) return;
+                  ref
                       .read(routineNotifierProvider.notifier)
-                      .undoOccurrenceAction(
+                      .openTrackerSession(
                         item.id,
                         occurrenceDate: effectiveOccurrenceDate,
-                      ),
-                );
-              },
-            );
-            if (actionLayout == RoutineCardActionLayout.stacked) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  completedBadge,
-                  const SizedBox(height: RoutineCardPresentation.actionGap),
-                  undoAction,
-                ],
+                      );
+                },
               );
-            }
-            return Row(
-              children: [
-                Expanded(flex: 3, child: completedBadge),
-                const SizedBox(width: RoutineCardPresentation.actionGap),
-                Expanded(flex: 2, child: undoAction),
-              ],
-            );
-          }
 
-          return Row(children: [Expanded(child: completedBadge)]);
-        }
-
-        if (effectiveStatus == RoutineStatus.skipped) {
-          final skippedBadge = _ActionButton(
-            key: ValueKey('routine-action-skip-${item.id}'),
-            label: 'Skipped',
-            color: OptivusColors.warning,
-            icon: Icons.skip_next_rounded,
-            isSelected: true,
-            isPrimary: false,
-            isDisabled: true,
-            onTap: null,
-          );
-
-          if (availability.canUndo) {
-            final undoAction = _ActionButton(
-              key: ValueKey('routine-action-undo-${item.id}'),
-              label: 'Undo',
-              color: OptivusColors.textSecondary,
-              icon: Icons.undo_rounded,
-              isPrimary: false,
-              isDisabled: isPending,
-              onTap: () {
-                if (!hasScope) return;
-                _executeRoutineAction(
-                  context,
-                  ref,
-                  action: RoutineOccurrenceAction.undo,
-                  perform: () => ref
-                      .read(routineNotifierProvider.notifier)
-                      .undoOccurrenceAction(
-                        item.id,
-                        occurrenceDate: effectiveOccurrenceDate,
-                      ),
-                );
-              },
-            );
-            if (actionLayout == RoutineCardActionLayout.stacked) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  skippedBadge,
-                  const SizedBox(height: RoutineCardPresentation.actionGap),
-                  undoAction,
-                ],
+            case RoutineCardActionType.startTracker:
+              return _ActionButton(
+                key: ValueKey('routine-action-start-${item.id}'),
+                label: 'Start Tracker',
+                semanticLabel: 'Start Tracker ${item.title}',
+                color: OptivusColors.routineAccent,
+                icon: Icons.play_arrow_rounded,
+                isPrimary: true,
+                isDisabled: isPending || !startDecision.isAllowed,
+                onTap: () {
+                  if (!hasScope) return;
+                  _executeRoutineAction(
+                    context,
+                    ref,
+                    action: RoutineOccurrenceAction.startTracker,
+                    perform: () => ref
+                        .read(routineNotifierProvider.notifier)
+                        .startRoutineItem(
+                          item.id,
+                          occurrenceDate: effectiveOccurrenceDate,
+                        ),
+                  );
+                },
               );
-            }
-            return Row(
-              children: [
-                Expanded(flex: 3, child: skippedBadge),
-                const SizedBox(width: RoutineCardPresentation.actionGap),
-                Expanded(flex: 2, child: undoAction),
-              ],
-            );
-          }
 
-          return Row(children: [Expanded(child: skippedBadge)]);
-        }
-
-        if (effectiveStatus == RoutineStatus.missed) {
-          final missedBadge = _ActionButton(
-            key: ValueKey('routine-action-miss-${item.id}'),
-            label: 'Missed',
-            color: OptivusColors.danger,
-            icon: Icons.cancel_outlined,
-            isSelected: true,
-            isPrimary: false,
-            isDisabled: true,
-            onTap: null,
-          );
-
-          if (availability.canUndo) {
-            final undoAction = _ActionButton(
-              key: ValueKey('routine-action-undo-${item.id}'),
-              label: 'Undo',
-              color: OptivusColors.textSecondary,
-              icon: Icons.undo_rounded,
-              isPrimary: false,
-              isDisabled: isPending,
-              onTap: () {
-                if (!hasScope) return;
-                _executeRoutineAction(
-                  context,
-                  ref,
-                  action: RoutineOccurrenceAction.undo,
-                  perform: () => ref
-                      .read(routineNotifierProvider.notifier)
-                      .undoOccurrenceAction(
-                        item.id,
-                        occurrenceDate: effectiveOccurrenceDate,
-                      ),
-                );
-              },
-            );
-            if (actionLayout == RoutineCardActionLayout.stacked) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  missedBadge,
-                  const SizedBox(height: RoutineCardPresentation.actionGap),
-                  undoAction,
-                ],
-              );
-            }
-            return Row(
-              children: [
-                Expanded(flex: 3, child: missedBadge),
-                const SizedBox(width: RoutineCardPresentation.actionGap),
-                Expanded(flex: 2, child: undoAction),
-              ],
-            );
-          }
-
-          return Row(children: [Expanded(child: missedBadge)]);
-        }
-
-        final String? startLabel = hasGenericCountdown
-            ? null
-            : (isMoney
-                  ? 'Save money'
-                  : (isBadHabit
-                        ? 'Check in'
-                        : (isTrackerActive
-                              ? 'Open Tracker'
-                              : (isTrackerPlanned
-                                    ? 'Start Tracker'
-                                    : 'Start'))));
-
-        final IconData startIcon = isMoney
-            ? Icons.savings_outlined
-            : (isBadHabit
-                  ? Icons.fact_check_outlined
-                  : (isTrackerActive
-                        ? Icons.open_in_new_rounded
-                        : Icons.play_arrow_rounded));
-
-        final startAction = _ActionButton(
-          key: ValueKey('routine-action-start-${item.id}'),
-          label: startLabel,
-          semanticLabel: startLabel != null
-              ? '$startLabel ${item.title}'
-              : null,
-          countdownStartedAt: hasGenericCountdown ? item.startedAt : null,
-          countdownDurationSeconds: hasGenericCountdown
-              ? item.countdownDurationSeconds
-              : null,
-          color: OptivusColors.routineAccent,
-          icon: startIcon,
-          isPrimary:
-              !hasGenericCountdown &&
-              (effectiveStatus == RoutineStatus.planned || isTrackerActive),
-          isDisabled:
-              isPending ||
-              (!startDecision.isAllowed &&
-                  effectiveStatus != RoutineStatus.inTracker &&
-                  !hasGenericCountdown),
-          onTap: hasGenericCountdown
-              ? null
-              : () {
+            case RoutineCardActionType.start:
+              return _ActionButton(
+                key: ValueKey('routine-action-start-${item.id}'),
+                label: 'Start',
+                semanticLabel: 'Start ${item.title}',
+                color: OptivusColors.routineAccent,
+                icon: Icons.play_arrow_rounded,
+                isPrimary: effectiveStatus == RoutineStatus.planned,
+                isDisabled:
+                    isPending ||
+                    (!startDecision.isAllowed &&
+                        effectiveStatus != RoutineStatus.inTracker),
+                onTap: () {
                   if (!hasScope) return;
                   if (isCompleted) {
                     _executeRoutineAction(
@@ -416,366 +369,260 @@ class RoutineCardActions extends ConsumerWidget {
                     );
                     return;
                   }
-                  if (item.blockType == RoutineBlockType.moneyTask) {
-                    showSaveViaUpiFlow(
-                      context,
-                      ref,
-                      source: MoneyEntrySource.routineTask,
-                      routineTaskId: item.id,
-                      onSaved: () => _executeRoutineAction(
-                        context,
-                        ref,
-                        action: RoutineOccurrenceAction.complete,
-                        perform: () => ref
-                            .read(routineNotifierProvider.notifier)
-                            .recordMoneySavedAndComplete(
-                              item.id,
-                              occurrenceDate: effectiveOccurrenceDate,
-                            ),
-                      ),
-                    );
-                  } else if (item.blockType == RoutineBlockType.checkIn &&
-                      item.category == RoutineCategory.badHabit) {
-                    _showBadHabitCheckInSheet(context, ref, item);
-                  } else if (item.blockType == RoutineBlockType.trackerTask &&
-                      (effectiveStatus == RoutineStatus.inTracker ||
-                          isActiveTrackerOccurrence)) {
-                    ref
+                  _executeRoutineAction(
+                    context,
+                    ref,
+                    action: RoutineOccurrenceAction.start,
+                    perform: () => ref
                         .read(routineNotifierProvider.notifier)
-                        .openTrackerSession(
+                        .startRoutineItem(
                           item.id,
                           occurrenceDate: effectiveOccurrenceDate,
-                        );
-                  } else if (item.blockType == RoutineBlockType.trackerTask) {
-                    _executeRoutineAction(
-                      context,
-                      ref,
-                      action: RoutineOccurrenceAction.startTracker,
-                      perform: () => ref
-                          .read(routineNotifierProvider.notifier)
-                          .startRoutineItem(
-                            item.id,
-                            occurrenceDate: effectiveOccurrenceDate,
-                          ),
-                    );
-                  } else {
-                    _executeRoutineAction(
-                      context,
-                      ref,
-                      action: RoutineOccurrenceAction.start,
-                      perform: () => ref
-                          .read(routineNotifierProvider.notifier)
-                          .startRoutineItem(
-                            item.id,
-                            occurrenceDate: effectiveOccurrenceDate,
-                          ),
-                    );
-                  }
+                        ),
+                  );
                 },
-        );
+              );
 
-        final stopAction = _ActionButton(
-          key: ValueKey('routine-action-stop-${item.id}'),
-          label: 'Stop',
-          color: OptivusColors.danger,
-          icon: Icons.stop_rounded,
-          isPrimary: false,
-          isDisabled: isPending,
-          onTap: () {
-            if (!hasScope) return;
-            _executeRoutineAction(
-              context,
-              ref,
-              action: RoutineOccurrenceAction.undo,
-              perform: () => ref
-                  .read(routineNotifierProvider.notifier)
-                  .undoOccurrenceAction(
-                    item.id,
-                    occurrenceDate: effectiveOccurrenceDate,
-                  ),
-            );
-          },
-        );
+            case RoutineCardActionType.done:
+              return _ActionButton(
+                key: ValueKey('routine-action-done-${item.id}'),
+                label: 'Done',
+                semanticLabel: 'Mark ${item.title} as done',
+                color: OptivusColors.success,
+                icon: Icons.check_rounded,
+                isSelected: false,
+                isPrimary: effectiveStatus == RoutineStatus.active,
+                isDisabled: isPending || !completeDecision.isAllowed,
+                onTap: () {
+                  if (!hasScope) return;
+                  if (!completeDecision.isAllowed) {
+                    _executeRoutineAction(
+                      context,
+                      ref,
+                      action: RoutineOccurrenceAction.complete,
+                      perform: () => Future.value(
+                        completeDecision.isNoOp
+                            ? RoutineWriteResult.noOp(
+                                message:
+                                    completeDecision.message ??
+                                    'Already completed.',
+                                failureCategory:
+                                    completeDecision.failureCategory,
+                              )
+                            : RoutineWriteResult.validationFailed(
+                                RoutineValidationResult.invalid(
+                                  errorType:
+                                      RoutineValidationErrorType.invalidTime,
+                                  userSafeMessage:
+                                      completeDecision.message ??
+                                      'Cannot complete routine.',
+                                ),
+                                message: completeDecision.message,
+                                failureCategory:
+                                    completeDecision.failureCategory,
+                              ),
+                      ),
+                    );
+                    return;
+                  }
+                  _executeRoutineAction(
+                    context,
+                    ref,
+                    action: RoutineOccurrenceAction.complete,
+                    perform: () => ref
+                        .read(routineNotifierProvider.notifier)
+                        .completeRoutineItem(
+                          item.id,
+                          occurrenceDate: effectiveOccurrenceDate,
+                        ),
+                  );
+                },
+              );
 
-        final doneAction = _ActionButton(
-          key: ValueKey('routine-action-done-${item.id}'),
-          label: 'Done',
-          semanticLabel: 'Mark ${item.title} as done',
-          color: OptivusColors.success,
-          icon: Icons.check_rounded,
-          isSelected: false,
-          isPrimary: effectiveStatus == RoutineStatus.active,
-          isDisabled: isPending || !completeDecision.isAllowed,
-          onTap: () {
-            if (!hasScope) return;
-            if (!completeDecision.isAllowed) {
-              _executeRoutineAction(
-                context,
-                ref,
-                action: RoutineOccurrenceAction.complete,
-                perform: () => Future.value(
-                  completeDecision.isNoOp
-                      ? RoutineWriteResult.noOp(
-                          message:
-                              completeDecision.message ?? 'Already completed.',
-                          failureCategory: completeDecision.failureCategory,
-                        )
-                      : RoutineWriteResult.validationFailed(
+            case RoutineCardActionType.move:
+              return _ActionButton(
+                key: ValueKey('routine-action-move-${item.id}'),
+                label: 'Move',
+                semanticLabel: 'Move ${item.title} to another time or day',
+                color: OptivusColors.textSecondary,
+                icon: Icons.schedule_rounded,
+                isPrimary: false,
+                isDisabled: isPending || !moveDecision.isAllowed,
+                onTap: () {
+                  if (!hasScope) return;
+                  if (!moveDecision.isAllowed) {
+                    _executeRoutineAction(
+                      context,
+                      ref,
+                      action: RoutineOccurrenceAction.move,
+                      perform: () => Future.value(
+                        RoutineWriteResult.validationFailed(
                           RoutineValidationResult.invalid(
                             errorType: RoutineValidationErrorType.invalidTime,
                             userSafeMessage:
-                                completeDecision.message ??
-                                'Cannot complete routine.',
+                                moveDecision.message ??
+                                'Completed routine cannot be moved.',
                           ),
-                          message: completeDecision.message,
-                          failureCategory: completeDecision.failureCategory,
+                          message: moveDecision.message,
+                          failureCategory: moveDecision.failureCategory,
                         ),
-                ),
-              );
-              return;
-            }
-            _executeRoutineAction(
-              context,
-              ref,
-              action: RoutineOccurrenceAction.complete,
-              perform: () => ref
-                  .read(routineNotifierProvider.notifier)
-                  .completeRoutineItem(
-                    item.id,
+                      ),
+                    );
+                    return;
+                  }
+                  showRoutineMoveSheet(
+                    context,
+                    ref,
+                    item,
                     occurrenceDate: effectiveOccurrenceDate,
-                  ),
-            );
-          },
-        );
-
-        final moveAction = _ActionButton(
-          key: ValueKey('routine-action-move-${item.id}'),
-          label: 'Move',
-          semanticLabel: 'Move ${item.title} to another time or day',
-          color: OptivusColors.textSecondary,
-          icon: Icons.schedule_rounded,
-          isPrimary: false,
-          isDisabled: isPending || !moveDecision.isAllowed,
-          onTap: () {
-            if (!hasScope) return;
-            if (!moveDecision.isAllowed) {
-              _executeRoutineAction(
-                context,
-                ref,
-                action: RoutineOccurrenceAction.move,
-                perform: () => Future.value(
-                  RoutineWriteResult.validationFailed(
-                    RoutineValidationResult.invalid(
-                      errorType: RoutineValidationErrorType.invalidTime,
-                      userSafeMessage:
-                          moveDecision.message ??
-                          'Completed routine cannot be moved.',
-                    ),
-                    message: moveDecision.message,
-                    failureCategory: moveDecision.failureCategory,
-                  ),
-                ),
+                    displayDate: actionContext?.displayDate,
+                    actionContext: actionContext,
+                  );
+                },
               );
-              return;
-            }
-            showRoutineMoveSheet(
-              context,
-              ref,
-              item,
-              occurrenceDate: effectiveOccurrenceDate,
-              displayDate: actionContext?.displayDate,
-              actionContext: actionContext,
-            );
-          },
-        );
 
-        final skipDecision = availability.skipDecision;
-        final skipAction = _ActionButton(
-          key: ValueKey('routine-action-skip-${item.id}'),
-          label: 'Skip',
-          semanticLabel: 'Skip ${item.title}',
-          color: OptivusColors.warning,
-          icon: Icons.skip_next_rounded,
-          isPrimary: false,
-          isDisabled: isPending || !skipDecision.isAllowed,
-          onTap: () {
-            if (!hasScope) return;
-            if (!skipDecision.isAllowed) {
-              _executeRoutineAction(
-                context,
-                ref,
-                action: RoutineOccurrenceAction.skip,
-                perform: () => Future.value(
-                  skipDecision.isNoOp
-                      ? RoutineWriteResult.noOp(
-                          message: skipDecision.message ?? 'Already skipped.',
-                          failureCategory: skipDecision.failureCategory,
-                        )
-                      : RoutineWriteResult.validationFailed(
-                          RoutineValidationResult.invalid(
-                            errorType: RoutineValidationErrorType.invalidTime,
-                            userSafeMessage:
-                                skipDecision.message ?? 'Cannot skip routine.',
-                          ),
-                          message: skipDecision.message,
-                          failureCategory: skipDecision.failureCategory,
+            case RoutineCardActionType.skip:
+              final skipDecision = availability.skipDecision;
+              return _ActionButton(
+                key: ValueKey('routine-action-skip-${item.id}'),
+                label: 'Skip',
+                semanticLabel: 'Skip ${item.title}',
+                color: OptivusColors.warning,
+                icon: Icons.skip_next_rounded,
+                isPrimary: false,
+                isDisabled: isPending || !skipDecision.isAllowed,
+                onTap: () {
+                  if (!hasScope) return;
+                  if (!skipDecision.isAllowed) {
+                    _executeRoutineAction(
+                      context,
+                      ref,
+                      action: RoutineOccurrenceAction.skip,
+                      perform: () => Future.value(
+                        skipDecision.isNoOp
+                            ? RoutineWriteResult.noOp(
+                                message:
+                                    skipDecision.message ?? 'Already skipped.',
+                                failureCategory: skipDecision.failureCategory,
+                              )
+                            : RoutineWriteResult.validationFailed(
+                                RoutineValidationResult.invalid(
+                                  errorType:
+                                      RoutineValidationErrorType.invalidTime,
+                                  userSafeMessage:
+                                      skipDecision.message ??
+                                      'Cannot skip routine.',
+                                ),
+                                message: skipDecision.message,
+                                failureCategory: skipDecision.failureCategory,
+                              ),
+                      ),
+                    );
+                    return;
+                  }
+                  _executeRoutineAction(
+                    context,
+                    ref,
+                    action: RoutineOccurrenceAction.skip,
+                    perform: () => ref
+                        .read(routineNotifierProvider.notifier)
+                        .markSkipped(
+                          item.id,
+                          occurrenceDate: effectiveOccurrenceDate,
                         ),
-                ),
+                  );
+                },
               );
-              return;
-            }
-            _executeRoutineAction(
-              context,
-              ref,
-              action: RoutineOccurrenceAction.skip,
-              perform: () => ref
-                  .read(routineNotifierProvider.notifier)
-                  .markSkipped(
-                    item.id,
-                    occurrenceDate: effectiveOccurrenceDate,
-                  ),
-            );
-          },
-        );
 
-        // Active generic task layout: Countdown + Done (primary) + Stop (secondary), Move and Skip hidden.
-        if (hasGenericCountdown) {
-          if (actionLayout == RoutineCardActionLayout.stacked) {
-            return Column(
-              key: const ValueKey('routine-action-column-stacked'),
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
+            case RoutineCardActionType.stop:
+              return _ActionButton(
+                key: ValueKey('routine-action-stop-${item.id}'),
+                label: 'Stop',
+                color: OptivusColors.danger,
+                icon: Icons.stop_rounded,
+                isPrimary: false,
+                isDisabled: isPending,
+                onTap: () {
+                  if (!hasScope) return;
+                  _executeRoutineAction(
+                    context,
+                    ref,
+                    action: RoutineOccurrenceAction.undo,
+                    perform: () => ref
+                        .read(routineNotifierProvider.notifier)
+                        .undoOccurrenceAction(
+                          item.id,
+                          occurrenceDate: effectiveOccurrenceDate,
+                        ),
+                  );
+                },
+              );
+          }
+        }
+
+        Widget buildRow(
+          int rowIndex,
+          List<RoutineCardActionConfig> rowActions,
+        ) {
+          if (rowActions.isEmpty) return const SizedBox.shrink();
+          if (rowActions.length == 1) {
+            return KeyedSubtree(
+              key: ValueKey('routine-action-row-$rowIndex'),
+              child: buildActionButton(rowActions[0]),
+            );
+          }
+          return KeyedSubtree(
+            key: ValueKey('routine-action-row-$rowIndex'),
+            child: Row(
               children: [
-                startAction,
-                const SizedBox(height: RoutineCardPresentation.actionGap),
-                Row(
-                  children: [
-                    Expanded(child: doneAction),
+                for (int i = 0; i < rowActions.length; i++) ...[
+                  if (i > 0)
                     const SizedBox(width: RoutineCardPresentation.actionGap),
-                    Expanded(child: stopAction),
-                  ],
-                ),
-              ],
-            );
-          }
-          return Row(
-            key: const ValueKey('routine-action-row-horizontal'),
-            children: [
-              Expanded(flex: 3, child: startAction),
-              const SizedBox(width: RoutineCardPresentation.actionGap),
-              Expanded(flex: 2, child: doneAction),
-              const SizedBox(width: RoutineCardPresentation.actionGap),
-              Expanded(flex: 2, child: stopAction),
-            ],
-          );
-        }
-
-        // Active tracker layout: Open Tracker (primary) + Done (secondary), Move and Skip hidden.
-        if (isTrackerActive) {
-          if (actionLayout == RoutineCardActionLayout.stacked) {
-            return Column(
-              key: const ValueKey('routine-action-column-stacked'),
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                startAction,
-                const SizedBox(height: RoutineCardPresentation.actionGap),
-                doneAction,
-              ],
-            );
-          }
-          return Row(
-            key: const ValueKey('routine-action-row-horizontal'),
-            children: [
-              Expanded(flex: 3, child: startAction),
-              const SizedBox(width: RoutineCardPresentation.actionGap),
-              Expanded(flex: 2, child: doneAction),
-            ],
-          );
-        }
-
-        // 3-Action Cards: Money ('Save money' + 'Move' + 'Skip'), Bad Habit ('Check in' + 'Move' + 'Skip'), Planned Tracker ('Start Tracker' + 'Move' + 'Skip').
-        // Done is NEVER shown.
-        if (isMoney || isBadHabit || isTrackerPlanned) {
-          if (actionLayout == RoutineCardActionLayout.stacked) {
-            return Column(
-              key: const ValueKey('routine-action-column-stacked'),
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                startAction,
-                const SizedBox(height: RoutineCardPresentation.actionGap),
-                moveAction,
-                const SizedBox(height: RoutineCardPresentation.actionGap),
-                skipAction,
-              ],
-            );
-          }
-          return Row(
-            key: const ValueKey('routine-action-row-horizontal'),
-            children: [
-              Expanded(flex: 3, child: startAction),
-              const SizedBox(width: RoutineCardPresentation.actionGap),
-              Expanded(flex: 2, child: moveAction),
-              const SizedBox(width: RoutineCardPresentation.actionGap),
-              Expanded(flex: 2, child: skipAction),
-            ],
-          );
-        }
-
-        // Normal 4-Action Planned Cards: Start | Done | Move | Skip
-        if (actionLayout == RoutineCardActionLayout.grid2x2) {
-          return Column(
-            key: const ValueKey('routine-action-grid-2x2'),
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Expanded(child: startAction),
-                  const SizedBox(width: RoutineCardPresentation.actionGap),
-                  Expanded(child: doneAction),
+                  Expanded(
+                    flex: rowActions[i].flex,
+                    child: buildActionButton(rowActions[i]),
+                  ),
                 ],
-              ),
-              const SizedBox(height: RoutineCardPresentation.actionGap),
-              Row(
-                children: [
-                  Expanded(child: moveAction),
-                  const SizedBox(width: RoutineCardPresentation.actionGap),
-                  Expanded(child: skipAction),
+              ],
+            ),
+          );
+        }
+
+        if (actionPlan.rows.length == 1) {
+          final singleRow = actionPlan.rows[0];
+          return KeyedSubtree(
+            key: const ValueKey('routine-action-row-0'),
+            child: Row(
+              key: const ValueKey('routine-action-row-horizontal'),
+              children: [
+                for (int i = 0; i < singleRow.length; i++) ...[
+                  if (i > 0)
+                    const SizedBox(width: RoutineCardPresentation.actionGap),
+                  Expanded(
+                    flex: singleRow[i].flex,
+                    child: buildActionButton(singleRow[i]),
+                  ),
                 ],
-              ),
-            ],
+              ],
+            ),
           );
         }
 
-        if (actionLayout == RoutineCardActionLayout.stacked) {
-          return Column(
-            key: const ValueKey('routine-action-column-stacked'),
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              startAction,
-              const SizedBox(height: RoutineCardPresentation.actionGap),
-              doneAction,
-              const SizedBox(height: RoutineCardPresentation.actionGap),
-              moveAction,
-              const SizedBox(height: RoutineCardPresentation.actionGap),
-              skipAction,
-            ],
-          );
-        }
+        final containerKey =
+            actionPlan.geometry == RoutineCardActionRowGeometry.grid2x2
+            ? const ValueKey('routine-action-grid-2x2')
+            : const ValueKey('routine-action-column-stacked');
 
-        return Row(
-          key: const ValueKey('routine-action-row-horizontal'),
+        return Column(
+          key: containerKey,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(child: startAction),
-            const SizedBox(width: RoutineCardPresentation.actionGap),
-            Expanded(child: doneAction),
-            const SizedBox(width: RoutineCardPresentation.actionGap),
-            Expanded(child: moveAction),
-            const SizedBox(width: RoutineCardPresentation.actionGap),
-            Expanded(child: skipAction),
+            for (int r = 0; r < actionPlan.rows.length; r++) ...[
+              if (r > 0)
+                const SizedBox(height: RoutineCardPresentation.actionGap),
+              buildRow(r, actionPlan.rows[r]),
+            ],
           ],
         );
       },

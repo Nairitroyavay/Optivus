@@ -17,6 +17,7 @@ void main() {
       endMinute: 450, // 07:30
       blockType: RoutineBlockType.hardBlock,
       category: RoutineCategory.sleep,
+      source: RoutineSource.baseTimeline,
       crossesMidnight: true,
       endsNextDay: true,
       hardBlock: true,
