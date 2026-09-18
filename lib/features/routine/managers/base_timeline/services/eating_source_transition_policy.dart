@@ -20,6 +20,7 @@ class EatingDraftState {
   final int? targetProtein;
   final int? targetCaloriesOverride;
   final int? targetProteinOverride;
+  final List<String> foodsToAvoid;
   final int? planVersion;
   final String? inputFingerprint;
   final bool customized;
@@ -43,6 +44,7 @@ class EatingDraftState {
     this.targetProtein,
     this.targetCaloriesOverride,
     this.targetProteinOverride,
+    this.foodsToAvoid = const [],
     this.planVersion,
     this.inputFingerprint,
     this.customized = false,
@@ -148,6 +150,7 @@ class EatingSourceTransitionPolicy {
     int? targetProtein,
     int? targetCaloriesOverride,
     int? targetProteinOverride,
+    List<String>? foodsToAvoid,
     int? planVersion,
     String? inputFingerprint,
     bool customized = false,
@@ -171,6 +174,7 @@ class EatingSourceTransitionPolicy {
       targetProtein: targetProtein,
       targetCaloriesOverride: targetCaloriesOverride,
       targetProteinOverride: targetProteinOverride,
+      foodsToAvoid: foodsToAvoid ?? const [],
       planVersion: planVersion,
       inputFingerprint: inputFingerprint,
       customized: customized,

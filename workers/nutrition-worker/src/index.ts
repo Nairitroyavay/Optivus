@@ -25,8 +25,9 @@ const firebaseJwks = createRemoteJWKSet(
 
 const DEFAULT_AI_MODEL = "gemini-3.8-flash";
 const DEFAULT_AI_FALLBACK_MODEL = "gemini-3.7-flash";
+const WORKER_VERSION = "0.2.0";
 
-function corsHeaders(request: Request, env: Env): Headers {
+function corsHeaders(request: Request, env: Env, requestId?: string): Headers {
   const headers = new Headers();
   const origin = request.headers.get("Origin");
   const allowedOrigins = (env.ALLOWED_ORIGINS ?? "")
@@ -41,15 +42,18 @@ function corsHeaders(request: Request, env: Env): Headers {
     headers.set("Vary", "Origin");
   }
   headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-request-id");
   headers.set("Access-Control-Max-Age", "86400");
+  if (requestId) {
+    headers.set("x-request-id", requestId);
+  }
   return headers;
 }
 
-function jsonResponse(request: Request, env: Env, body: unknown, status = 200): Response {
+function jsonResponse(request: Request, env: Env, body: unknown, status = 200, requestId?: string): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...Object.fromEntries(corsHeaders(request, env)), "Content-Type": "application/json" },
+    headers: { ...Object.fromEntries(corsHeaders(request, env, requestId)), "Content-Type": "application/json" },
   });
 }
 
@@ -126,7 +130,7 @@ function parseAiJsonText(text: string): any {
   }
 }
 
-type MealSlot = {
+export type MealSlot = {
   slot: string;
   category: "breakfast" | "lunch" | "snack" | "dinner";
   title: string;
@@ -134,7 +138,7 @@ type MealSlot = {
   durationMinutes: number;
 };
 
-function expectedMealSlots(context: any): MealSlot[] {
+export function expectedMealSlots(context: any): MealSlot[] {
   const slots: MealSlot[] = [
     {
       slot: "breakfast",
@@ -179,14 +183,75 @@ function expectedMealSlots(context: any): MealSlot[] {
   return slots;
 }
 
-function buildEatingGeneratePrompt(context: any): string {
+export function buildResponseSchema(slots: MealSlot[]): Record<string, unknown> {
+  return {
+    type: "OBJECT",
+    properties: {
+      candidates: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: {
+            day: { type: "INTEGER" },
+            mealSlot: {
+              type: "STRING",
+              enum: slots.map((s) => s.slot),
+            },
+            items: {
+              type: "ARRAY",
+              items: {
+                type: "OBJECT",
+                properties: {
+                  name: { type: "STRING" },
+                  quantity: { type: "NUMBER" },
+                  unit: {
+                    type: "STRING",
+                    enum: [
+                      "g",
+                      "ml",
+                      "piece",
+                      "pieces",
+                      "slice",
+                      "slices",
+                      "cup",
+                      "cups",
+                      "bowl",
+                      "bowls",
+                      "tbsp",
+                      "tsp",
+                      "serving",
+                      "servings",
+                    ],
+                  },
+                  caloriesEstimate: { type: "INTEGER" },
+                  proteinEstimate: { type: "INTEGER" },
+                },
+                required: [
+                  "name",
+                  "quantity",
+                  "unit",
+                  "caloriesEstimate",
+                  "proteinEstimate",
+                ],
+              },
+            },
+          },
+          required: ["day", "mealSlot", "items"],
+        },
+      },
+    },
+    required: ["candidates"],
+  };
+}
+
+export function buildEatingGeneratePrompt(context: any): string {
   const slots = expectedMealSlots(context);
   const slotLines = slots
     .map((slot) => `- ${slot.slot}: title "${slot.title}", mealCategory "${slot.category}", startMinute ${slot.startMinute}, duration ${slot.durationMinutes} min`)
     .join("\n");
   const totalMeals = 7 * slots.length;
 
-  return `You are a nutrition expert generating a personalized, highly diverse, 7-day meal routine JSON.
+  return `You are an expert clinical dietitian generating a personalized, highly diverse, 7-day meal routine JSON.
 User Context:
 - Height: ${context.heightCm ? context.heightCm + " cm" : "Unknown"}
 - Weight: ${context.weightKg ? context.weightKg + " kg" : "Unknown"}
@@ -202,57 +267,155 @@ User Context:
 - Diet Type: ${context.foodType}.
 - Style: ${context.eatingMode} ${context.foodStyleCustomText ? `(${context.foodStyleCustomText})` : ""}.
 - Meals Per Day: ${context.mealsPerDay}.
-- Lifestyle: ${context.lifestyle ?? "Unknown"}
-- Country: ${context.country ?? "Unknown"}
-
+- Exercise Level: ${context.exerciseLevel ?? "Unknown"}
+- Life Role: ${context.lifeRole ?? context.lifestyle ?? "Unknown"}
+- Country / Region: ${context.country ?? "Unknown"}
+${context.foodsToAvoid ? `- Foods to Avoid: ${context.foodsToAvoid}\n` : ""}
 Meal Slots Per Day (${slots.length} slots):
 ${slotLines}
 
 Generation Requirements:
 1. You MUST generate meals for ALL 7 DAYS of the week (day 1=Monday, day 2=Tuesday, day 3=Wednesday, day 4=Thursday, day 5=Friday, day 6=Saturday, day 7=Sunday).
 2. For EACH day (1 to 7), you MUST provide every required meal slot listed above. Exactly ${totalMeals} meal objects total (${slots.length} meals × 7 days).
-3. ALL 7 days must have distinct complete daily menus. For each meal slot, the full dish combination must differ from that same meal slot on every other day. Individual ingredients may repeat, but the complete meal composition may not.
+3. ALL 7 days must have distinct complete daily menus. For each meal slot, the dish combination must differ from that same meal slot on every other day.
 4. Each meal block MUST contain:
    - "day": integer from 1 to 7 (1=Monday .. 7=Sunday)
-   - "repeatDays": array with exactly that single day, e.g. [1] or [2]
    - "mealSlot": one of exactly ${slots.map((s) => `"${s.slot}"`).join(", ")}
-   - "title": the canonical title for that slot
-   - "startMinute": integer (the requested startMinute for that slot)
-   - "endMinute": integer (startMinute + durationMinutes)
-   - "mealCategory": category of the slot ("breakfast", "lunch", "snack", or "dinner")
-   - "steps": array of at least 2 specific dish items (e.g. ["Steel Cut Oats with Almond Butter", "Greek Yogurt with Blueberries"]). Do NOT output generic terms like "Food", "Meal", or repeat the meal title.
-   - "caloriesEstimate": realistic integer number of calories for this specific meal.
-   - "proteinEstimate": realistic integer number of grams of protein for this specific meal.
-   - "blockType": "soft_block"
-   - "candidateType": "block"
-   - "confidenceScore": 0.95
-5. Daily Nutrition Target Invariant:
-   - For every single day, the sum of "caloriesEstimate" for all meals of that day MUST be within ±15% of the Daily Target Calories (${context.targetCalories} kcal).
-   ${context.proteinTarget ? `- For every single day, the sum of "proteinEstimate" for all meals of that day MUST be within ±20% of the Daily Protein Target (${context.proteinTarget} g).` : ""}
+   - "items": array of at least 2 distinct food items making up the meal. Each item must specify:
+     - "name": specific food or dish name (e.g. "Steel Cut Oats", "Almond Butter", "Greek Yogurt", "Blueberries"). Do NOT use generic terms like "Food" or "Meal".
+     - "quantity": positive numeric portion size (e.g. 80, 2, 1.5).
+     - "unit": realistic unit ("g", "ml", "piece", "slice", "cup", "bowl", "tbsp", "tsp", "serving").
+     - "caloriesEstimate": realistic estimated integer calories for this item portion.
+     - "proteinEstimate": realistic estimated integer grams of protein for this item portion.
+5. Dietary Rule Compliance:
+   - Strictly adhere to Diet Type: ${context.foodType}.
+   ${context.foodType === 'vegetarian' ? '   - Vegetarian: NO meat, poultry, fish, seafood, or eggs.' : ''}
+   ${context.foodType === 'eggetarian' ? '   - Eggetarian: Eggs and dairy are allowed. NO meat, poultry, fish, or seafood.' : ''}
+   ${context.foodType === 'vegan' ? '   - Vegan: 100% plant-based. NO meat, poultry, fish, seafood, eggs, dairy (milk, paneer, curd, cheese, butter, ghee), or honey.' : ''}
+   ${context.foodsToAvoid ? `   - Strictly avoid: ${context.foodsToAvoid}.` : ''}
+6. Daily Nutrition Target Invariant:
+   - For every single day, the sum of all item calories across all meals of that day MUST be within ±15% of the Daily Target Calories (${context.targetCalories} kcal).
+   ${context.proteinTarget ? `- For every single day, the sum of all item protein across all meals of that day MUST be within ±20% of the Daily Protein Target (${context.proteinTarget} g).` : ""}
 
-Return ONLY valid JSON matching this schema:
-{
-  "candidates": [
-    {
-      "day": 1,
-      "repeatDays": [1],
-      "mealSlot": "breakfast",
-      "title": "Breakfast",
-      "startMinute": ${slots[0].startMinute},
-      "endMinute": ${slots[0].startMinute + slots[0].durationMinutes},
-      "mealCategory": "${slots[0].category}",
-      "steps": ["Dish 1", "Dish 2"],
-      "caloriesEstimate": 450,
-      "proteinEstimate": 25,
-      "blockType": "soft_block",
-      "candidateType": "block",
-      "confidenceScore": 0.95
-    }
-  ]
-}`;
+Output ONLY valid JSON according to the schema.`;
 }
 
-async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<Response> {
+export interface DietaryViolation {
+  item: string;
+  reason: string;
+}
+
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function checkDietaryCompliance(
+  itemName: string,
+  foodType: string,
+  foodsToAvoid?: string | string[],
+): DietaryViolation | null {
+  const norm = itemName.trim().toLowerCase();
+  const cleanType = foodType.trim().toLowerCase();
+
+  // 1. User-specified avoidance constraints
+  if (foodsToAvoid) {
+    const avoidList = Array.isArray(foodsToAvoid)
+      ? foodsToAvoid
+      : foodsToAvoid.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean);
+    for (const avoid of avoidList) {
+      const avoidNorm = avoid.toLowerCase();
+      if (avoidNorm.length >= 2) {
+        const singular = avoidNorm.endsWith('s') && !avoidNorm.endsWith('ss')
+          ? avoidNorm.slice(0, -1)
+          : avoidNorm;
+        const pattern = singular !== avoidNorm
+          ? `\\b(${escapeRegExp(avoidNorm)}|${escapeRegExp(singular)})\\b`
+          : `\\b${escapeRegExp(avoidNorm)}\\b`;
+        if (new RegExp(pattern, 'i').test(norm)) {
+          return { item: itemName, reason: `Contains avoided ingredient "${avoid}"` };
+        }
+      }
+    }
+  }
+
+  // 2. Mixed / Non-vegetarian has no restrictions
+  if (cleanType === "mixed" || cleanType === "non_vegetarian" || cleanType === "non-vegetarian") {
+    return null;
+  }
+
+  const meatSeafoodTokens = [
+    "chicken", "mutton", "lamb", "beef", "pork", "turkey", "duck", "bacon", "ham",
+    "sausage", "salami", "pepperoni", "veal", "venison", "meat", "steak", "prosciutto",
+    "fish", "salmon", "tuna", "trout", "cod", "tilapia", "mackerel", "sardine",
+    "anchovy", "bass", "halibut", "snapper", "catfish", "haddock",
+    "shrimp", "prawn", "prawns", "crab", "lobster", "oyster", "oysters", "clam", "clams",
+    "mussel", "mussels", "squid", "calamari", "octopus", "scallop", "scallops", "seafood",
+    "gelatin", "lard"
+  ];
+
+  const eggTokens = [
+    "egg", "eggs", "egg white", "egg whites", "egg yolk", "omelet", "omelette",
+    "frittata", "scrambled egg", "boiled egg", "poached egg"
+  ];
+
+  const dairyTokens = [
+    "milk", "cheese", "butter", "ghee", "yogurt", "curd", "paneer", "cream", "whey", "casein"
+  ];
+
+  const hasToken = (token: string): boolean => {
+    // False-positive guards:
+    if (token === "egg" || token === "eggs") {
+      if (norm.includes("eggplant")) return false;
+    }
+    if (token === "chicken") {
+      if (norm.includes("chickpea") || norm.includes("chick pea")) return false;
+    }
+    if (token === "meat") {
+      if (norm.includes("sweetmeats") || norm.includes("plant meat") || norm.includes("vegan meat")) return false;
+    }
+    return new RegExp(`\\b${escapeRegExp(token)}\\b`, 'i').test(norm);
+  };
+
+  if (cleanType === "vegetarian" || cleanType === "eggetarian" || cleanType === "vegan") {
+    for (const token of meatSeafoodTokens) {
+      if (hasToken(token)) {
+        return { item: itemName, reason: `Contains meat/seafood "${token}" which violates ${cleanType} diet rules` };
+      }
+    }
+  }
+
+  if (cleanType === "vegetarian") {
+    for (const token of eggTokens) {
+      if (hasToken(token)) {
+        return { item: itemName, reason: `Contains egg ("${token}") which violates vegetarian diet rules (choose eggetarian to include eggs)` };
+      }
+    }
+  }
+
+  if (cleanType === "vegan") {
+    for (const token of eggTokens) {
+      if (hasToken(token)) {
+        return { item: itemName, reason: `Contains egg ("${token}") which violates vegan diet rules` };
+      }
+    }
+    for (const token of dairyTokens) {
+      const isPlantBased = /\b(almond|soy|oat|coconut|cashew|plant|vegan|dairy-free)\b/i.test(norm);
+      if (!isPlantBased && hasToken(token)) {
+        if (token === "butter" && /\b(peanut|almond|cashew|apple|cocoa|shea|sunflower)\s+butter\b/i.test(norm)) {
+          continue;
+        }
+        return { item: itemName, reason: `Contains dairy "${token}" which violates vegan diet rules` };
+      }
+    }
+    if (hasToken("honey")) {
+      return { item: itemName, reason: `Contains honey which violates vegan diet rules` };
+    }
+  }
+
+  return null;
+}
+
+async function handleEatingGenerateRoutine(request: Request, env: Env, requestId: string): Promise<Response> {
   const user = await requireVerifiedFirebaseUser(request, env);
   const body = await readSmallJson(request);
   const mealTimes = (body.mealTimes && typeof body.mealTimes === "object") ? body.mealTimes as Record<string, unknown> : undefined;
@@ -288,8 +451,11 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
     estimatedMaintenanceCalories: typeof body.estimatedMaintenanceCalories === "number" ? body.estimatedMaintenanceCalories : undefined,
     proteinTarget: typeof body.proteinTarget === "number" ? body.proteinTarget : undefined,
     targetMode: readOptionalString(body, "targetMode"),
+    exerciseLevel: readOptionalString(body, "exerciseLevel"),
+    lifeRole: readOptionalString(body, "lifeRole"),
     lifestyle: readOptionalString(body, "lifestyle"),
     country: readOptionalString(body, "country"),
+    foodsToAvoid: readOptionalString(body, "foodsToAvoid") ?? (Array.isArray(body.foodsToAvoid) ? body.foodsToAvoid.join(", ") : undefined),
   };
 
   if (!Number.isInteger(context.mealsPerDay) || context.mealsPerDay < 3 || context.mealsPerDay > 5) {
@@ -314,21 +480,30 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
 
   while (attempt <= MAX_GENERATION_ATTEMPTS) {
     let text = "";
+    const startTime = Date.now();
+    let usedModel = "";
+    let fallbackUsed = false;
 
     if (provider === "gemini") {
       const apiKey = requiredEnv(env.GEMINI_API_KEY, "GEMINI_API_KEY");
       const primaryModel = env.AI_MODEL?.trim() || DEFAULT_AI_MODEL;
       const fallbackModel = env.AI_FALLBACK_MODEL?.trim() || DEFAULT_AI_FALLBACK_MODEL;
+      const thinkingLevel = attempt === 1 ? "medium" : "high";
 
       const fetchGemini = async (model: string) => {
+        usedModel = model;
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.replace(/^models\//, "")}:generateContent?key=${apiKey}`;
         const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [{ role: "user", parts: [{ text: currentPrompt }] }],
-            generationConfig: { responseMimeType: "application/json" }
-          })
+            generationConfig: {
+              responseMimeType: "application/json",
+              responseSchema: buildResponseSchema(slots),
+              thinkingConfig: { thinkingLevel },
+            },
+          }),
         });
         if (!res.ok) {
           let errJson: any = {};
@@ -366,7 +541,8 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
           throw err; // DO NOT fallback on quota exceeded
         }
         if (fallbackModel && fallbackModel !== primaryModel) {
-          console.warn(`[NutritionWorker] Primary model ${primaryModel} failed. Attempting fallback ${fallbackModel}.`);
+          console.warn(`[NutritionWorker] [${requestId}] Primary model ${primaryModel} failed. Attempting fallback ${fallbackModel}.`);
+          fallbackUsed = true;
           try {
             text = await fetchGemini(fallbackModel);
           } catch (fallbackErr) {
@@ -390,13 +566,35 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
       .filter((block: Record<string, unknown> | null): block is Record<string, unknown> => block !== null);
 
     const validation = validateWeeklyCandidates(validBlocks, slots, context);
+    const latencyMs = Date.now() - startTime;
+
     if (validation.ok) {
       candidateBlocks = validation.blocks;
+      console.log(JSON.stringify({
+        service: "nutrition-worker",
+        requestId,
+        model: usedModel,
+        fallbackUsed,
+        semanticAttempt: attempt,
+        candidateCount: candidateBlocks.length,
+        latencyMs,
+        success: true,
+      }));
       break;
     }
 
     lastValidation = validation;
-    console.warn(`[NutritionWorker] Attempt ${attempt} failed validation: ${validation.errorCode} - ${validation.message}`);
+    console.warn(JSON.stringify({
+      service: "nutrition-worker",
+      requestId,
+      model: usedModel,
+      fallbackUsed,
+      semanticAttempt: attempt,
+      errorCode: validation.errorCode,
+      message: validation.message,
+      latencyMs,
+      success: false,
+    }));
 
     attempt++;
     if (attempt <= MAX_GENERATION_ATTEMPTS) {
@@ -413,9 +611,10 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
 
   return jsonResponse(request, env, { 
     id: `eat-gen-${Date.now()}`,
+    requestId,
     uid: user.uid,
     candidates: candidateBlocks
-  });
+  }, 200, requestId);
 }
 
 export type ValidationResult =
@@ -469,6 +668,23 @@ export function validateWeeklyCandidates(
           errorCode: "provider_incomplete_week",
           message: `AI missed required meal slot "${slot.slot}" on day ${day}.`,
           repairFeedback: `Your previous response was missing required (day, mealSlot) entries, such as day ${day} slot "${slot.slot}". You MUST return meals for all 7 days with all ${slots.length} slots every day (exactly ${7 * slots.length} meal blocks total).`,
+        };
+      }
+    }
+  }
+
+  // Dietary and avoidance validation
+  for (const block of validBlocks) {
+    const dishes = Array.isArray(block.steps) ? (block.steps as string[]) : [];
+    for (const dish of dishes) {
+      const cleanName = dish.split(/[—–-]/)[0].trim();
+      const violation = checkDietaryCompliance(cleanName, context.foodType, context.foodsToAvoid);
+      if (violation) {
+        return {
+          ok: false,
+          errorCode: "provider_diet_violation",
+          message: `AI generated meal violating ${context.foodType} diet: ${violation.reason} in "${violation.item}".`,
+          repairFeedback: `Diet violation detected: "${violation.item}" (${violation.reason}). Strictly follow ${context.foodType} diet rules! Do NOT include any prohibited foods${context.foodsToAvoid ? ` and strictly avoid: ${context.foodsToAvoid}` : ''}. Replace this with a compliant option.`,
         };
       }
     }
@@ -572,6 +788,7 @@ Ensure:
 1. Exactly 7 days × required slots are present.
 2. Every day's calories are strictly within ±15% of ${context.targetCalories} kcal.${context.proteinTarget ? `\n3. Every day's protein is strictly within ±20% of ${context.proteinTarget} g.` : ""}
 4. All dish combinations are 100% unique per slot across days.
+5. Strictly adhere to ${context.foodType} diet rules and all avoidance constraints.
 Output ONLY the corrected JSON.`;
 }
 
@@ -619,59 +836,85 @@ function sanitizeMealCandidate(
     return null;
   }
 
-  const cleanSteps = Array.isArray(block.steps)
-    ? block.steps
-        .map((step) => typeof step === "string" ? step.trim() : "")
-        .filter((step) => step !== "" && !genericTerms.has(step.toLowerCase()))
-        .slice(0, 12)
-    : [];
-
   const inferredSlot = inferMealSlot(rawMealSlot || mealCategory || title, block.startMinute, expectedSlots);
   if (!inferredSlot) {
     console.warn("[NutritionWorker] Dropping meal candidate without stable slot identity.");
     return null;
   }
 
-  const validCategory = inferredSlot.category === mealCategory ||
-    (inferredSlot.category === "snack" && (mealCategory === "snack" || mealCategory === "snacks"));
-
-  if (
-    title === "" ||
-    title.length > 120 ||
-    !validCategory ||
-    cleanSteps.length < 2
-  ) {
-    console.warn("[NutritionWorker] Dropping invalid meal candidate.");
-    return null;
-  }
-
+  // Check items array first (Structured Output Contract)
+  let cleanSteps: string[] = [];
   let caloriesEstimate: number | null = null;
-  if (typeof block.caloriesEstimate === "number" && Number.isFinite(block.caloriesEstimate) && block.caloriesEstimate > 0) {
-    caloriesEstimate = Math.round(block.caloriesEstimate);
-  } else if (typeof block.calories === "number" && Number.isFinite(block.calories) && block.calories > 0) {
-    caloriesEstimate = Math.round(block.calories);
-  }
-
   let proteinEstimate: number | null = null;
-  if (typeof block.proteinEstimate === "number" && Number.isFinite(block.proteinEstimate) && block.proteinEstimate > 0) {
-    proteinEstimate = Math.round(block.proteinEstimate);
-  } else if (typeof block.protein === "number" && Number.isFinite(block.protein) && block.protein > 0) {
-    proteinEstimate = Math.round(block.protein);
+  const rawItems: Record<string, unknown>[] = [];
+
+  if (Array.isArray(block.items) && block.items.length > 0) {
+    let sumCal = 0;
+    let sumProt = 0;
+    for (const rawItem of block.items) {
+      if (!rawItem || typeof rawItem !== "object") continue;
+      const item = rawItem as Record<string, unknown>;
+      const name = typeof item.name === "string" ? item.name.trim() : "";
+      const quantity = typeof item.quantity === "number" && Number.isFinite(item.quantity) && item.quantity > 0
+        ? item.quantity
+        : null;
+      const unit = typeof item.unit === "string" && item.unit.trim() ? item.unit.trim() : "";
+      const itemCal = typeof item.caloriesEstimate === "number" && Number.isFinite(item.caloriesEstimate) && item.caloriesEstimate >= 0
+        ? Math.round(item.caloriesEstimate)
+        : null;
+      const itemProt = typeof item.proteinEstimate === "number" && Number.isFinite(item.proteinEstimate) && item.proteinEstimate >= 0
+        ? Math.round(item.proteinEstimate)
+        : null;
+
+      if (!name || genericTerms.has(name.toLowerCase()) || quantity === null || !unit || itemCal === null || itemProt === null) {
+        continue;
+      }
+      cleanSteps.push(`${name} — ${quantity} ${unit}`);
+      sumCal += itemCal;
+      sumProt += itemProt;
+      rawItems.push({
+        name,
+        quantity,
+        unit,
+        caloriesEstimate: itemCal,
+        proteinEstimate: itemProt,
+      });
+    }
+    if (cleanSteps.length >= 2 && sumCal > 0 && sumProt > 0) {
+      caloriesEstimate = sumCal;
+      proteinEstimate = sumProt;
+    }
   }
 
-  if (caloriesEstimate === null) {
-    console.warn("[NutritionWorker] Dropping candidate without valid positive caloriesEstimate.");
-    return null;
+  // Fallback if steps were provided directly (legacy / mock mode)
+  if (cleanSteps.length === 0 && Array.isArray(block.steps)) {
+    cleanSteps = block.steps
+      .map((step) => typeof step === "string" ? step.trim() : "")
+      .filter((step) => step !== "" && !genericTerms.has(step.toLowerCase()))
+      .slice(0, 12);
+
+    if (typeof block.caloriesEstimate === "number" && Number.isFinite(block.caloriesEstimate) && block.caloriesEstimate > 0) {
+      caloriesEstimate = Math.round(block.caloriesEstimate);
+    } else if (typeof block.calories === "number" && Number.isFinite(block.calories) && block.calories > 0) {
+      caloriesEstimate = Math.round(block.calories);
+    }
+
+    if (typeof block.proteinEstimate === "number" && Number.isFinite(block.proteinEstimate) && block.proteinEstimate > 0) {
+      proteinEstimate = Math.round(block.proteinEstimate);
+    } else if (typeof block.protein === "number" && Number.isFinite(block.protein) && block.protein > 0) {
+      proteinEstimate = Math.round(block.protein);
+    }
   }
-  if (proteinEstimate === null) {
-    console.warn("[NutritionWorker] Dropping candidate without valid positive proteinEstimate.");
+
+  if (cleanSteps.length < 2 || caloriesEstimate === null || proteinEstimate === null) {
+    console.warn("[NutritionWorker] Dropping invalid candidate (insufficient steps or invalid estimates).");
     return null;
   }
 
   const confidence = typeof block.confidenceScore === "number" &&
       Number.isFinite(block.confidenceScore)
     ? Math.max(0, Math.min(1, block.confidenceScore))
-    : 0.8;
+    : 0.95;
 
   return {
     id: `meal_${inferredSlot.slot}_d${day}`,
@@ -683,6 +926,7 @@ function sanitizeMealCandidate(
     repeatDays: [day],
     mealCategory: inferredSlot.category,
     steps: cleanSteps,
+    items: rawItems.length > 0 ? rawItems : undefined,
     caloriesEstimate,
     proteinEstimate,
     blockType: "soft_block",
@@ -720,35 +964,38 @@ function inferMealSlot(raw: string, startMinute: unknown, expectedSlots: MealSlo
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const requestId = request.headers.get("x-request-id") || `req-eat-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: corsHeaders(request, env) });
+      return new Response(null, { status: 204, headers: corsHeaders(request, env, requestId) });
     }
 
     try {
       const url = new URL(request.url);
-      
+
       if (request.method === "GET" && url.pathname === "/health") {
         return jsonResponse(request, env, {
           ok: true,
           service: "nutrition-worker",
+          version: WORKER_VERSION,
           projectId: env.FIREBASE_PROJECT_ID,
           aiProvider: env.AI_PROVIDER || "gemini",
           aiModel: env.AI_MODEL?.trim() || DEFAULT_AI_MODEL,
           aiFallbackModel: env.AI_FALLBACK_MODEL?.trim() || DEFAULT_AI_FALLBACK_MODEL,
-        });
+        }, 200, requestId);
       }
 
       if (request.method === "POST" && url.pathname === "/v1/eating/generate-routine") {
-        return await handleEatingGenerateRoutine(request, env);
+        return await handleEatingGenerateRoutine(request, env, requestId);
       }
 
-      return jsonResponse(request, env, { error: "not_found" }, 404);
+      return jsonResponse(request, env, { error: "not_found", requestId }, 404, requestId);
     } catch (error) {
       const httpError = error instanceof HttpError ? error : null;
       if (httpError) {
-        return jsonResponse(request, env, { error: httpError.errorCode, message: httpError.message }, httpError.status);
+        return jsonResponse(request, env, { error: httpError.errorCode, message: httpError.message, requestId }, httpError.status, requestId);
       }
-      return jsonResponse(request, env, { error: "internal_error", message: "An unexpected error occurred" }, 500);
+      return jsonResponse(request, env, { error: "internal_error", message: "An unexpected error occurred", requestId }, 500, requestId);
     }
   }
 };

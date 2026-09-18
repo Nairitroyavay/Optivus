@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:optivus/features/onboarding/onboarding_flow.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
@@ -2198,6 +2199,7 @@ class _FakeDelayedNutritionAiClient implements NutritionAiClient {
     required String uid,
     required String idToken,
     required Map<String, dynamic> params,
+    http.Client? client,
   }) async {
     return Completer<RoutineImportExtractionResult>().future;
   }
@@ -2209,6 +2211,7 @@ class _FakeFailingNutritionAiClient implements NutritionAiClient {
     required String uid,
     required String idToken,
     required Map<String, dynamic> params,
+    http.Client? client,
   }) async {
     throw Exception('Nutrition worker unavailable');
   }

@@ -4044,6 +4044,7 @@ class EatingGenerationInputs {
   final int? afternoonSnackMinute;
   final int dinnerMinute;
   final String? country;
+  final List<String> foodsToAvoid;
 
   const EatingGenerationInputs({
     required this.contractVersion,
@@ -4070,11 +4071,13 @@ class EatingGenerationInputs {
     required this.afternoonSnackMinute,
     required this.dinnerMinute,
     required this.country,
+    this.foodsToAvoid = const [],
   });
 
   factory EatingGenerationInputs.fromDraft(
     OnboardingDraft draft, {
     NutritionTargets? targets,
+    List<String>? foodsToAvoid,
   }) {
     final t = targets ?? draft.canonicalNutritionTargets();
     final base = draft.baseTimeline;
@@ -4122,6 +4125,7 @@ class EatingGenerationInputs {
           : null,
       dinnerMinute: base.dinnerMinute ?? 1230,
       country: null,
+      foodsToAvoid: foodsToAvoid ?? const [],
     );
   }
 
@@ -4130,6 +4134,7 @@ class EatingGenerationInputs {
     NutritionTargets? targets,
     String? lifeRole,
     String? country,
+    List<String>? foodsToAvoid,
   }) {
     final t = targets ?? NutritionTargets.empty;
     final meals = normalizeMealsPerDay(base.mealsPerDay);
@@ -4176,6 +4181,7 @@ class EatingGenerationInputs {
           : null,
       dinnerMinute: base.dinnerMinute ?? 1230,
       country: country,
+      foodsToAvoid: foodsToAvoid ?? const [],
     );
   }
 
@@ -4204,6 +4210,7 @@ class EatingGenerationInputs {
     int? afternoonSnackMinute,
     int? dinnerMinute,
     String? country,
+    List<String>? foodsToAvoid,
   }) {
     return EatingGenerationInputs(
       contractVersion: contractVersion ?? this.contractVersion,
@@ -4231,6 +4238,7 @@ class EatingGenerationInputs {
       afternoonSnackMinute: afternoonSnackMinute ?? this.afternoonSnackMinute,
       dinnerMinute: dinnerMinute ?? this.dinnerMinute,
       country: country ?? this.country,
+      foodsToAvoid: foodsToAvoid ?? this.foodsToAvoid,
     );
   }
 
@@ -4266,7 +4274,10 @@ class EatingGenerationInputs {
       'estimatedMaintenanceCalories': estimatedMaintenanceCalories,
       'targetMode': targetMode,
       'lifestyle': lifeRole,
+      'exerciseLevel': exerciseLevel,
+      'lifeRole': lifeRole,
       'country': country,
+      'foodsToAvoid': foodsToAvoid,
     };
   }
 
@@ -4280,6 +4291,10 @@ class EatingGenerationInputs {
     final normType = (foodType ?? '').trim().toLowerCase();
     final normMode = (eatingMode ?? '').trim().toLowerCase();
     final normCustom = (foodStyleCustomText ?? '').trim().toLowerCase();
+    final normAvoid = (List<String>.from(foodsToAvoid)..sort())
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .join(',');
 
     return 'v$contractVersion'
         '|h:${heightCm != null ? heightCm!.toStringAsFixed(1) : "none"}'
@@ -4304,7 +4319,8 @@ class EatingGenerationInputs {
         '|l:$lunchMinute'
         '|as:${afternoonSnackMinute ?? 0}'
         '|d:$dinnerMinute'
-        '|c:$normCountry';
+        '|c:$normCountry'
+        '|avoid:$normAvoid';
   }
 }
 

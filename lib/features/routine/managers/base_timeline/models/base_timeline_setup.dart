@@ -46,9 +46,11 @@ class BaseTimelineSetup {
   final String? eatingMode;
   final String? foodType;
   final String? foodStyleCustomText;
+
   /// Legacy/backward-compatible metadata preserved for schema fidelity.
   /// Not passed to current nutrition worker generator.
   final String? mealBudget;
+
   /// Legacy/backward-compatible metadata preserved for schema fidelity.
   /// Not passed to current nutrition worker generator.
   final String? cookingAbility;
@@ -61,6 +63,7 @@ class BaseTimelineSetup {
   final int? targetProtein;
   final int? targetCaloriesOverride;
   final int? targetProteinOverride;
+  final List<String> foodsToAvoid;
   final String? eatingPhotoAssetId;
   final String? eatingPhotoR2Key;
   final int? eatingGeneratedPlanVersion;
@@ -131,6 +134,7 @@ class BaseTimelineSetup {
     this.targetProtein,
     this.targetCaloriesOverride,
     this.targetProteinOverride,
+    this.foodsToAvoid = const [],
     this.eatingPhotoAssetId,
     this.eatingPhotoR2Key,
     this.eatingGeneratedPlanVersion,
@@ -272,10 +276,12 @@ class BaseTimelineSetup {
     } else if (origin == BaseSetupOrigin.manual) {
       summary = 'Manual plan · $actualScheduleSummary';
     } else {
-      final prefix =
-          eatingCustomized ? 'Built for me · Customized' : 'Built for me';
-      final countSummary =
-          mealsPerDay != null ? '$mealsPerDay meals/day' : actualScheduleSummary;
+      final prefix = eatingCustomized
+          ? 'Built for me · Customized'
+          : 'Built for me';
+      final countSummary = mealsPerDay != null
+          ? '$mealsPerDay meals/day'
+          : actualScheduleSummary;
       summary = '$prefix · $countSummary';
     }
 
@@ -304,6 +310,7 @@ class BaseTimelineSetup {
           'targetCaloriesOverride': targetCaloriesOverride,
         if (targetProteinOverride != null)
           'targetProteinOverride': targetProteinOverride,
+        if (foodsToAvoid.isNotEmpty) 'foodsToAvoid': foodsToAvoid,
         if (eatingGeneratedPlanVersion != null)
           'planVersion': eatingGeneratedPlanVersion,
         if (eatingGeneratedInputFingerprint != null)
@@ -636,11 +643,12 @@ class BaseTimelineSetup {
     bool customized = false,
   }) {
     final effectiveMeals = meals ?? mealsPerDay;
-    final shouldClearExtraSnack = clearExtraSnackMinute ||
-        (effectiveMeals != null && effectiveMeals < 5);
-    final shouldClearSnack = clearSnackMinute ||
-        (effectiveMeals != null && effectiveMeals < 4);
-    final shouldClearCustomText = clearFoodStyleCustomText ||
+    final shouldClearExtraSnack =
+        clearExtraSnackMinute || (effectiveMeals != null && effectiveMeals < 5);
+    final shouldClearSnack =
+        clearSnackMinute || (effectiveMeals != null && effectiveMeals < 4);
+    final shouldClearCustomText =
+        clearFoodStyleCustomText ||
         (mode != null && mode.trim().toLowerCase() != 'custom');
 
     return copyWith(
@@ -663,14 +671,13 @@ class BaseTimelineSetup {
       dinnerMinute: dinner ?? dinnerMinute,
       snackMinute: shouldClearSnack ? null : (snack ?? snackMinute),
       clearSnackMinute: shouldClearSnack,
-      extraSnackMinute:
-          shouldClearExtraSnack ? null : (extraSnack ?? extraSnackMinute),
+      extraSnackMinute: shouldClearExtraSnack
+          ? null
+          : (extraSnack ?? extraSnackMinute),
       clearExtraSnackMinute: shouldClearExtraSnack,
-      targetCalories:
-          clearTargetCalories ? null : (calories ?? targetCalories),
+      targetCalories: clearTargetCalories ? null : (calories ?? targetCalories),
       clearTargetCalories: clearTargetCalories,
-      targetProtein:
-          clearTargetProtein ? null : (protein ?? targetProtein),
+      targetProtein: clearTargetProtein ? null : (protein ?? targetProtein),
       clearTargetProtein: clearTargetProtein,
       eatingGeneratedPlanVersion: planVersion ?? eatingGeneratedPlanVersion,
       eatingGeneratedInputFingerprint:
@@ -687,6 +694,7 @@ class BaseTimelineSetup {
     String? mode,
     String? type,
     String? styleCustomText,
+    List<String>? foodsToAvoid,
     String? budget,
     String? ability,
     int? breakfast,
@@ -710,6 +718,7 @@ class BaseTimelineSetup {
     return copyWith(
       eatingSetupPath: 'create',
       eatingBlocks: blocks,
+      foodsToAvoid: foodsToAvoid,
       clearEatingPhotoAssetId: true,
       clearEatingPhotoR2Key: true,
       mealPlanningGoal: goal,
@@ -764,6 +773,7 @@ class BaseTimelineSetup {
       eatingPhotoAssetId: photoAssetId,
       eatingPhotoR2Key: photoR2Key,
       eatingBlocks: blocks ?? eatingBlocks,
+      foodsToAvoid: const [],
       mealsPerDay: meals,
       clearMealsPerDay: meals == null,
       clearMealPlanningGoal: true,
@@ -824,12 +834,14 @@ class BaseTimelineSetup {
       clearTargetCalories: clearTargetCalories || targetCalories == null,
       targetProtein: clearTargetProtein ? null : targetProtein,
       clearTargetProtein: clearTargetProtein || targetProtein == null,
-      targetCaloriesOverride:
-          clearTargetCaloriesOverride ? null : targetCaloriesOverride,
+      targetCaloriesOverride: clearTargetCaloriesOverride
+          ? null
+          : targetCaloriesOverride,
       clearTargetCaloriesOverride:
           clearTargetCaloriesOverride || targetCaloriesOverride == null,
-      targetProteinOverride:
-          clearTargetProteinOverride ? null : targetProteinOverride,
+      targetProteinOverride: clearTargetProteinOverride
+          ? null
+          : targetProteinOverride,
       clearTargetProteinOverride:
           clearTargetProteinOverride || targetProteinOverride == null,
       eatingCustomized: false,
@@ -862,6 +874,7 @@ class BaseTimelineSetup {
       clearEatingPhotoR2Key: true,
       clearEatingGeneratedPlanVersion: true,
       clearEatingGeneratedInputFingerprint: true,
+      foodsToAvoid: const [],
       eatingCustomized: false,
     );
   }
@@ -894,6 +907,7 @@ class BaseTimelineSetup {
     String? eatingSetupPath,
     bool clearEatingSetupPath = false,
     List<TimelineBlockDraft>? eatingBlocks,
+    List<String>? foodsToAvoid,
     String? mealPlanningGoal,
     bool clearMealPlanningGoal = false,
     int? mealsPerDay,
@@ -1033,6 +1047,7 @@ class BaseTimelineSetup {
       targetProteinOverride: clearTargetProteinOverride
           ? null
           : (targetProteinOverride ?? this.targetProteinOverride),
+      foodsToAvoid: foodsToAvoid ?? this.foodsToAvoid,
       eatingPhotoAssetId: clearEatingPhotoAssetId
           ? null
           : (eatingPhotoAssetId ?? this.eatingPhotoAssetId),
@@ -1045,7 +1060,7 @@ class BaseTimelineSetup {
       eatingGeneratedInputFingerprint: clearEatingGeneratedInputFingerprint
           ? null
           : (eatingGeneratedInputFingerprint ??
-              this.eatingGeneratedInputFingerprint),
+                this.eatingGeneratedInputFingerprint),
       eatingCustomized: eatingCustomized ?? this.eatingCustomized,
       fixedBlocks: fixedBlocks ?? this.fixedBlocks,
       skinCareSetupPath: clearSkinCareSetupPath
@@ -1123,6 +1138,7 @@ class BaseTimelineSetup {
       (eatingRoutineItemIds, 'eatingRoutineItemIds'),
       (fixedRoutineItemIds, 'fixedRoutineItemIds'),
       (skinCareRoutineItemIds, 'skinCareRoutineItemIds'),
+      (foodsToAvoid, 'foodsToAvoid'),
       (skinCareProblems, 'skinCareProblems'),
       (skinCareSelectedProductNames, 'skinCareSelectedProductNames'),
       (skinCareSpecialCareNotes, 'skinCareSpecialCareNotes'),
@@ -1272,6 +1288,7 @@ class BaseTimelineSetup {
       'targetProtein': targetProtein,
       'targetCaloriesOverride': targetCaloriesOverride,
       'targetProteinOverride': targetProteinOverride,
+      'foodsToAvoid': foodsToAvoid,
       'eatingPhotoAssetId': eatingPhotoAssetId,
       'eatingPhotoR2Key': eatingPhotoR2Key,
       'eatingGeneratedPlanVersion': eatingGeneratedPlanVersion,
@@ -1410,10 +1427,11 @@ class BaseTimelineSetup {
       targetProteinOverride:
           (map['targetProteinOverride'] as num?)?.toInt() ??
           (map['eatingTargetProteinOverride'] as num?)?.toInt(),
+      foodsToAvoid: parseStrings(map['foodsToAvoid'], 'foodsToAvoid'),
       eatingPhotoAssetId: map['eatingPhotoAssetId'] as String?,
       eatingPhotoR2Key: map['eatingPhotoR2Key'] as String?,
-      eatingGeneratedPlanVersion:
-          (map['eatingGeneratedPlanVersion'] as num?)?.toInt(),
+      eatingGeneratedPlanVersion: (map['eatingGeneratedPlanVersion'] as num?)
+          ?.toInt(),
       eatingGeneratedInputFingerprint:
           map['eatingGeneratedInputFingerprint'] as String?,
       eatingCustomized: map['eatingCustomized'] as bool? ?? false,
@@ -1562,6 +1580,7 @@ class BaseTimelineSetup {
       extraSnackMinute: base.extraSnackMinute,
       targetCalories: targets.targetCalories,
       targetProtein: targets.proteinTarget?.round(),
+      foodsToAvoid: const [],
       eatingPhotoAssetId: eatingAssetId,
       eatingPhotoR2Key: eatingR2Key,
       eatingGeneratedPlanVersion: base.eatingGeneratedPlanVersion,
@@ -1758,6 +1777,7 @@ class BaseTimelineSetup {
       extraSnackMinute: base.extraSnackMinute,
       targetCalories: targets.targetCalories,
       targetProtein: targets.proteinTarget?.round(),
+      foodsToAvoid: const [],
       eatingPhotoAssetId: eatingAssetId,
       eatingPhotoR2Key: eatingR2Key,
       eatingGeneratedPlanVersion: base.eatingGeneratedPlanVersion,

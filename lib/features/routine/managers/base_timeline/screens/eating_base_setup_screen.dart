@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/meal_timeline_adapter.dart';
@@ -22,6 +23,7 @@ import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/repositories/base_timeline_setup_repository.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
+import 'package:optivus/state/region_settings_provider.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/services/nutrition_target_service.dart';
@@ -32,7 +34,6 @@ import 'package:optivus/features/routine/managers/base_timeline/services/eating_
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_source_transition_policy.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_day_summary_bar.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_import_review_sheet.dart';
-import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_meal_detail_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_meal_edit_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_plan_settings_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_plan_summary_card.dart';
@@ -69,6 +70,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
   String? _workingEatingMode;
   String? _workingFoodType;
   String? _workingFoodStyleCustomText;
+  List<String> _workingFoodsToAvoid = const [];
   int? _workingBreakfastMinute;
   int? _workingLunchMinute;
   int? _workingDinnerMinute;
@@ -93,11 +95,9 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
   int _requestGeneration = 0;
   String? _editorOwnerUid;
   EatingOperationSession? _currentOperation;
+  http.Client? _activeHttpClient;
 
-  void _applyEatingDraftState(
-    EatingDraftState state, {
-    bool markDirty = true,
-  }) {
+  void _applyEatingDraftState(EatingDraftState state, {bool markDirty = true}) {
     setState(() {
       _workingBlocks = List.from(state.blocks);
       _workingSetupPath = state.setupPath;
@@ -111,6 +111,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       _workingEatingMode = state.eatingMode;
       _workingFoodType = state.foodType;
       _workingFoodStyleCustomText = state.foodStyleCustomText;
+      _workingFoodsToAvoid = List.from(state.foodsToAvoid);
       _workingBreakfastMinute = state.breakfastMinute;
       _workingLunchMinute = state.lunchMinute;
       _workingDinnerMinute = state.dinnerMinute;
@@ -131,6 +132,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     _requestGeneration++;
     final op = _currentOperation;
     _currentOperation = null;
+    _activeHttpClient?.close();
+    _activeHttpClient = null;
 
     try {
       ref
@@ -188,6 +191,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     _workingEatingMode = setup.eatingMode;
     _workingFoodType = setup.foodType;
     _workingFoodStyleCustomText = setup.foodStyleCustomText;
+    _workingFoodsToAvoid = List<String>.from(setup.foodsToAvoid);
     _workingBreakfastMinute = setup.breakfastMinute;
     _workingLunchMinute = setup.lunchMinute;
     _workingDinnerMinute = setup.dinnerMinute;
@@ -565,6 +569,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       initialEatingMode: _workingEatingMode,
       initialFoodType: _workingFoodType,
       initialFoodStyleCustomText: _workingFoodStyleCustomText,
+      initialFoodsToAvoid: _workingFoodsToAvoid,
       initialBreakfastMinute: _workingBreakfastMinute,
       initialLunchMinute: _workingLunchMinute,
       initialDinnerMinute: _workingDinnerMinute,
@@ -587,6 +592,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       _workingEatingMode = result.eatingMode;
       _workingFoodType = result.foodType;
       _workingFoodStyleCustomText = result.foodStyleCustomText;
+      _workingFoodsToAvoid = List.from(result.foodsToAvoid);
       _workingBreakfastMinute = result.breakfastMinute;
       _workingLunchMinute = result.lunchMinute;
       _workingDinnerMinute = result.dinnerMinute;
@@ -603,7 +609,6 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     });
 
     if (result.shouldRegenerate) {
-      setState(() => _isEditing = true);
       await _generateBalancedPlan();
     }
   }
@@ -612,6 +617,10 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     final uid = ref.read(userProfileProvider).uid;
     if (uid.trim().isEmpty) return;
     final generation = ++_requestGeneration;
+
+    _activeHttpClient?.close();
+    final client = http.Client();
+    _activeHttpClient = client;
 
     final idToken =
         await ref.read(authRepositoryProvider).currentIdToken() ?? '';
@@ -628,6 +637,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       eatingMode: _workingEatingMode,
       foodType: _workingFoodType,
       foodStyleCustomText: _workingFoodStyleCustomText,
+      foodsToAvoid: _workingFoodsToAvoid,
       breakfastMinute: _workingBreakfastMinute,
       lunchMinute: _workingLunchMinute,
       dinnerMinute: _workingDinnerMinute,
@@ -661,10 +671,13 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         profile: profile,
         setup: workingSetup,
       );
+      final region = ref.read(regionSettingsProvider);
+      final country = region.countryCode.isNotEmpty ? region.countryCode : null;
       final inputs = engine.buildInputs(
         profile: profile,
         setup: workingSetup,
         targets: targets,
+        country: country,
       );
 
       final blocks = await engine.generateEatingRoutine(
@@ -673,6 +686,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         inputs: inputs,
         targets: targets,
         baseTimeline: workingSetup.toBaseTimelineDraft(),
+        client: client,
       );
 
       if (!mounted ||
@@ -700,6 +714,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
           eatingMode: _workingEatingMode,
           foodType: _workingFoodType,
           foodStyleCustomText: _workingFoodStyleCustomText,
+          foodsToAvoid: _workingFoodsToAvoid,
           breakfastMinute: _workingBreakfastMinute,
           lunchMinute: _workingLunchMinute,
           dinnerMinute: _workingDinnerMinute,
@@ -724,10 +739,30 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         final errText = EatingSetupErrorMapper.mapError(e);
         setState(() {
           _isExtracting = false;
-          _errorMessage = errText;
+          if (currentSetup.eatingBlocks.isNotEmpty) {
+            _initWorkingState(currentSetup);
+            _isEditing = false;
+            _isDirty = false;
+            _errorMessage = null;
+          } else {
+            _errorMessage = errText;
+          }
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errText),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: OptivusColors.roseAccent,
+              onPressed: () => _generateBalancedPlan(),
+            ),
+          ),
+        );
       }
     } finally {
+      if (_activeHttpClient == client) {
+        _activeHttpClient = null;
+      }
       if (_currentOperation?.generationId == generation) {
         _currentOperation = null;
       }
@@ -835,6 +870,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       eatingMode: _workingEatingMode,
       foodType: _workingFoodType,
       foodStyleCustomText: _workingFoodStyleCustomText,
+      foodsToAvoid: _workingFoodsToAvoid,
       breakfastMinute: _workingBreakfastMinute,
       lunchMinute: _workingLunchMinute,
       dinnerMinute: _workingDinnerMinute,
@@ -919,6 +955,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
               mode: _workingEatingMode,
               type: _workingFoodType,
               styleCustomText: _workingFoodStyleCustomText,
+              foodsToAvoid: _workingFoodsToAvoid,
               breakfast: _workingBreakfastMinute,
               lunch: _workingLunchMinute,
               dinner: _workingDinnerMinute,
@@ -1246,6 +1283,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     _requestGeneration++;
     final op = _currentOperation;
     _currentOperation = null;
+    _activeHttpClient?.close();
+    _activeHttpClient = null;
     if (op != null) {
       if (op.type == EatingOperationType.extracting) {
         try {
@@ -1642,9 +1681,12 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                               _initWorkingState(setup);
                               final manualState =
                                   EatingSourceTransitionPolicy.toManual(
-                                blocks: const [],
+                                    blocks: const [],
+                                  );
+                              _applyEatingDraftState(
+                                manualState,
+                                markDirty: false,
                               );
-                              _applyEatingDraftState(manualState, markDirty: false);
                               setState(() {
                                 _isEditing = true;
                               });
@@ -1760,50 +1802,6 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                   targetProtein: setup.targetProtein,
                 ),
 
-                // Add Meal quick action
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 2,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton.icon(
-                        key: const Key(
-                          'base-timeline-configured-add-meal-button',
-                        ),
-                        style: TextButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          foregroundColor: OptivusColors.roseAccent,
-                        ),
-                        onPressed: () {
-                          _initWorkingState(setup);
-                          setState(() {
-                            _isEditing = true;
-                            _isDirty = false;
-                          });
-                          _addMealBlock(
-                            onCancel: () {
-                              if (mounted && !_isDirty) {
-                                setState(() => _isEditing = false);
-                              }
-                            },
-                          );
-                        },
-                        icon: const Icon(Icons.add_rounded, size: 16),
-                        label: const Text(
-                          'Add meal',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
                 // Timeline View
                 if (_refreshPendingRevision != null)
                   BaseTimelineRefreshPendingBanner(
@@ -1846,19 +1844,6 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                           if (positioned.hasOverlap && !positioned.isFront) {
                             HapticFeedback.lightImpact();
                             setState(() => _frontBlockId = positioned.entry.id);
-                          } else {
-                            EatingMealDetailSheet.show(
-                              context,
-                              block,
-                              onEdit: () {
-                                _initWorkingState(setup);
-                                setState(() {
-                                  _isEditing = true;
-                                  _isDirty = false;
-                                });
-                                _editMealBlock(block);
-                              },
-                            );
                           }
                         },
                       );

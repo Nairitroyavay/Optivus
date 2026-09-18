@@ -22,56 +22,10 @@ class EatingSourceSelectionView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header hero icon and text
-          Center(
-            child: Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: OptivusColors.roseAccent.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: OptivusColors.roseAccent.withValues(alpha: 0.25),
-                  width: 1.5,
-                ),
-              ),
-              child: const Icon(
-                Icons.restaurant_rounded,
-                color: OptivusColors.roseAccent,
-                size: 32,
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
-          const Center(
-            child: Text(
-              'Set Up Your Eating Plan',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: OptivusColors.textPrimary,
-                letterSpacing: -0.3,
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Center(
-            child: Text(
-              'Choose how you would like to structure your weekly meals',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: OptivusColors.textSecondary,
-              ),
-            ),
-          ),
-          const SizedBox(height: 28),
-
           // Option 1: Build Balanced Plan
           _buildOptionCard(
             context: context,

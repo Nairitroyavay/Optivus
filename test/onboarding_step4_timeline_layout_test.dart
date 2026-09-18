@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/onboarding_flow.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
@@ -3083,6 +3084,7 @@ class _Test7DayNutritionAiClient implements NutritionAiClient {
     required String uid,
     required String idToken,
     required Map<String, dynamic> params,
+    http.Client? client,
   }) async {
     final int mealsPerDay = (params['mealsPerDay'] as num?)?.round() ?? 4;
     final int targetCalories =

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
@@ -1572,6 +1573,7 @@ class _TestNutritionAiClient implements NutritionAiClient {
     required String uid,
     required String idToken,
     required Map<String, dynamic> params,
+    http.Client? client,
   }) async {
     final int mealsPerDay = (params['mealsPerDay'] as num?)?.round() ?? 3;
     final int targetCalories =

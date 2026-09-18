@@ -58,15 +58,15 @@ function buildWeeklyCandidates(
   const candidates: Record<string, unknown>[] = [];
   const breakfastDishes = [
     ["Vegetable poha", "Plain curd"],
-    ["Oatmeal with Almonds", "Boiled egg"],
+    ["Oatmeal with Almonds", "Chia pudding"],
     ["Idli sambar", "Coconut chutney"],
     ["Moong dal cheela", "Mint chutney"],
-    ["Whole wheat toast", "Scrambled eggs"],
+    ["Whole wheat toast", "Avocado spread"],
     ["Besan cheela", "Curd"],
     ["Paneer bhurji", "Roti"],
   ];
   const morningSnackDishes = [
-    ["Apple slices", "Peanut butter"],
+    ["Apple slices", "Walnut butter"],
     ["Mixed nuts", "Green tea"],
     ["Roasted makhana", "Almonds"],
     ["Fruit salad", "Walnuts"],
@@ -96,8 +96,8 @@ function buildWeeklyCandidates(
     ["Whole wheat roti", "Methi paneer", "Tomato soup"],
     ["Lentil soup", "Steamed broccoli", "Tofu stir fry"],
     ["Multigrain roti", "Palak dal", "Salad"],
-    ["Grilled fish", "Steamed asparagus", "Millet"],
-    ["Egg curry", "Roti", "Kachumber"],
+    ["Grilled Paneer", "Steamed asparagus", "Millet"],
+    ["Chickpea curry", "Roti", "Kachumber"],
     ["Mushroom curry", "Whole wheat roti"],
     ["Mixed vegetable stew", "Brown rice"],
   ];
@@ -1075,4 +1075,380 @@ describe("Nutrition Worker request boundary", () => {
     expect(fetchCalls[0]).toContain("/models/gemini-3.8-flash:generateContent");
     expect(fetchCalls[1]).toContain("/models/gemini-3.7-flash:generateContent");
   });
+
+  test("structured output: Gemini request includes responseSchema and thinkingConfig with medium level on attempt 1", async () => {
+    let capturedBody: any = null;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: any) => {
+        capturedBody = JSON.parse(init.body);
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({
+                        candidates: buildWeeklyCandidates(3),
+                      }),
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }),
+    );
+
+    const response = await worker.fetch(
+      request(validRequestBody()),
+      makeEnv() as never,
+    );
+    expect(response.status).toBe(200);
+    expect(capturedBody).toBeDefined();
+    expect(capturedBody.generationConfig).toBeDefined();
+    expect(capturedBody.generationConfig.responseMimeType).toBe("application/json");
+    expect(capturedBody.generationConfig.responseSchema).toBeDefined();
+    expect(capturedBody.generationConfig.responseSchema.type).toBe("OBJECT");
+    expect(capturedBody.generationConfig.responseSchema.properties.candidates.type).toBe("ARRAY");
+    expect(capturedBody.generationConfig.thinkingConfig).toEqual({ thinkingLevel: "medium" });
+  });
+
+  test("semantic repair: uses thinkingLevel high on attempt 2 on primary model", async () => {
+    const invalidCandidates = buildWeeklyCandidates(3).filter(
+      (c) => !(c.day === 7 && c.mealSlot === "dinner"),
+    );
+    const validCandidates = buildWeeklyCandidates(3);
+    const capturedBodies: any[] = [];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: any) => {
+        capturedBodies.push(JSON.parse(init.body));
+        const candidates = capturedBodies.length === 1 ? invalidCandidates : validCandidates;
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({ candidates }),
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }),
+    );
+
+    const response = await worker.fetch(
+      request(validRequestBody()),
+      makeEnv() as never,
+    );
+    expect(response.status).toBe(200);
+    expect(capturedBodies.length).toBe(2);
+    expect(capturedBodies[0].generationConfig.thinkingConfig).toEqual({ thinkingLevel: "medium" });
+    expect(capturedBodies[1].generationConfig.thinkingConfig).toEqual({ thinkingLevel: "high" });
+  });
+
+  test("structured output: items are summed server-side into meal estimates and formatted into portion steps", async () => {
+    const structuredCandidates: Record<string, unknown>[] = [];
+    const baseWeekly = buildWeeklyCandidates(3);
+    for (const base of baseWeekly) {
+      const mainDish = (base.steps as string[])[0];
+      const sideDish = (base.steps as string[])[1] || "Side Salad";
+      structuredCandidates.push({
+        day: base.day,
+        mealSlot: base.mealSlot,
+        items: [
+          { name: mainDish, quantity: 80, unit: "g", caloriesEstimate: 310, proteinEstimate: 11 },
+          { name: sideDish, quantity: 2, unit: "tbsp", caloriesEstimate: Number(base.caloriesEstimate) - 310, proteinEstimate: Number(base.proteinEstimate) - 11 },
+        ],
+      });
+    }
+
+    stubProviderText(JSON.stringify({ candidates: structuredCandidates }));
+
+    const response = await worker.fetch(
+      request(validRequestBody({ mealsPerDay: 3, targetCalories: 2100 })),
+      makeEnv() as never,
+    );
+    expect(response.status).toBe(200);
+    const json = (await response.json()) as { candidates: Array<Record<string, unknown>> };
+    expect(json.candidates).toHaveLength(21);
+    const day1Breakfast = json.candidates[0];
+    expect(day1Breakfast.steps).toEqual([
+      `${(baseWeekly[0].steps as string[])[0]} — 80 g`,
+      `${(baseWeekly[0].steps as string[])[1]} — 2 tbsp`,
+    ]);
+    expect(day1Breakfast.caloriesEstimate).toBe(600);
+    expect(day1Breakfast.proteinEstimate).toBe(20);
+    expect(day1Breakfast.items).toBeDefined();
+  });
+
+  test("dietary validation: vegetarian rejects meat and poultry", async () => {
+    const candidatesWithMeat = buildWeeklyCandidates(3, (d, slot) => {
+      if (d === 1 && slot === "lunch") {
+        return { steps: ["Grilled Chicken Breast", "Steamed Broccoli"] };
+      }
+      return null;
+    });
+
+    stubProviderText(JSON.stringify({ candidates: candidatesWithMeat }));
+
+    const response = await worker.fetch(
+      request(validRequestBody({ foodType: "vegetarian" })),
+      makeEnv() as never,
+    );
+    expect(response.status).toBe(500);
+    const json = (await response.json()) as Record<string, unknown>;
+    expect(json.error).toBe("provider_diet_violation");
+    expect(json.message).toContain("chicken");
+  });
+
+  test("dietary validation: vegetarian rejects eggs (eggetarian allows them)", async () => {
+    const candidatesWithEgg = buildWeeklyCandidates(3, (d, slot) => {
+      if (d === 1 && slot === "breakfast") {
+        return { steps: ["Boiled egg", "Whole wheat toast"] };
+      }
+      return null;
+    });
+
+    // In vegetarian mode -> rejected
+    stubProviderText(JSON.stringify({ candidates: candidatesWithEgg }));
+    const vegResponse = await worker.fetch(
+      request(validRequestBody({ foodType: "vegetarian" })),
+      makeEnv() as never,
+    );
+    expect(vegResponse.status).toBe(500);
+    expect(((await vegResponse.json()) as Record<string, unknown>).error).toBe("provider_diet_violation");
+
+    // In eggetarian mode -> accepted
+    stubProviderText(JSON.stringify({ candidates: candidatesWithEgg }));
+    const eggetResponse = await worker.fetch(
+      request(validRequestBody({ foodType: "eggetarian" })),
+      makeEnv() as never,
+    );
+    expect(eggetResponse.status).toBe(200);
+  });
+
+  test("dietary validation: vegan rejects dairy and eggs", async () => {
+    const candidatesWithDairy = buildWeeklyCandidates(3, (d, slot) => {
+      if (d === 1 && slot === "lunch") {
+        return { steps: ["Paneer Curry", "Brown rice"] };
+      }
+      return {
+        steps: [
+          `Tofu Dish Day ${d} ${slot}`,
+          `Steamed Veggies ${d}`,
+          `Quinoa ${slot}`,
+        ],
+        caloriesEstimate: slot === "breakfast" ? 600 : 750,
+        proteinEstimate: slot === "breakfast" ? 20 : 30,
+      };
+    });
+
+    stubProviderText(JSON.stringify({ candidates: candidatesWithDairy }));
+    const response = await worker.fetch(
+      request(validRequestBody({ foodType: "vegan" })),
+      makeEnv() as never,
+    );
+    expect(response.status).toBe(500);
+    const json = (await response.json()) as Record<string, unknown>;
+    expect(json.error).toBe("provider_diet_violation");
+    expect(json.message).toContain("dairy");
+  });
+
+  test("dietary validation: false-positive protection allows eggplant, chickpeas, and sweet potato", async () => {
+    const candidatesWithVegetables = buildWeeklyCandidates(3, (d, slot) => {
+      if (d === 1 && slot === "lunch") {
+        return { steps: ["Chickpea Curry", "Eggplant Bharta", "Steamed Rice"] };
+      }
+      return null;
+    });
+
+    stubProviderText(JSON.stringify({ candidates: candidatesWithVegetables }));
+    const response = await worker.fetch(
+      request(validRequestBody({ foodType: "vegetarian" })),
+      makeEnv() as never,
+    );
+    expect(response.status).toBe(200);
+  });
+
+  test("dietary validation: vegan allows plant-based milks and nut butters", async () => {
+    const candidatesWithPlantBased = buildWeeklyCandidates(3, (d, slot) => {
+      if (d === 1 && slot === "breakfast") {
+        return { steps: ["Oatmeal with Almond Milk", "Peanut Butter Toast"] };
+      }
+      return {
+        steps: [
+          `Tofu Sauté Day ${d} ${slot}`,
+          `Brown Rice ${d}`,
+          `Greens ${slot}`,
+        ],
+        caloriesEstimate: slot === "breakfast" ? 600 : 750,
+        proteinEstimate: slot === "breakfast" ? 20 : 30,
+      };
+    });
+
+    stubProviderText(JSON.stringify({ candidates: candidatesWithPlantBased }));
+    const response = await worker.fetch(
+      request(validRequestBody({ foodType: "vegan" })),
+      makeEnv() as never,
+    );
+    expect(response.status).toBe(200);
+  });
+
+  test("dietary validation: repair loop recovers from diet violation on attempt 2", async () => {
+    const invalidCandidates = buildWeeklyCandidates(3, (d, slot) => {
+      if (d === 1 && slot === "lunch") {
+        return { steps: ["Grilled Salmon", "Steamed Rice"] };
+      }
+      return null;
+    });
+    const validCandidates = buildWeeklyCandidates(3, (d, slot) => {
+      if (d === 1 && slot === "lunch") {
+        return { steps: ["Paneer Curry", "Brown Rice"] };
+      }
+      return null;
+    });
+
+    let callCount = 0;
+    const prompts: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: any) => {
+        callCount++;
+        const body = JSON.parse(init.body);
+        prompts.push(body.contents[0].parts[0].text);
+        const candidates = callCount === 1 ? invalidCandidates : validCandidates;
+        return new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: JSON.stringify({ candidates }) }] } }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }),
+    );
+
+    const response = await worker.fetch(
+      request(validRequestBody({ foodType: "vegetarian" })),
+      makeEnv() as never,
+    );
+
+    expect(response.status).toBe(200);
+    expect(callCount).toBe(2);
+    expect(prompts[1]).toContain("CRITICAL REPAIR INSTRUCTIONS:");
+    expect(prompts[1]).toContain("Diet violation detected");
+    expect(prompts[1]).toContain("Grilled Salmon");
+  });
+
+  test("foodsToAvoid: user-specified avoided ingredients are rejected and trigger repair", async () => {
+    const candidatesWithPeanuts = buildWeeklyCandidates(3, (d, slot) => {
+      if (d === 1 && slot === "breakfast") {
+        return { steps: ["Peanut Butter Toast", "Banana Slices"] };
+      }
+      return null;
+    });
+
+    stubProviderText(JSON.stringify({ candidates: candidatesWithPeanuts }));
+    const response = await worker.fetch(
+      request(validRequestBody({ foodsToAvoid: "peanuts, mushrooms" })),
+      makeEnv() as never,
+    );
+
+    expect(response.status).toBe(500);
+    const json = (await response.json()) as Record<string, unknown>;
+    expect(json.error).toBe("provider_diet_violation");
+    expect(json.message).toContain("Contains avoided ingredient \"peanuts\"");
+  });
+
+  test("personalization: exerciseLevel, lifeRole, country, and foodsToAvoid are passed in prompt", async () => {
+    let capturedPrompt = "";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: any) => {
+        const body = JSON.parse(init.body);
+        capturedPrompt = body.contents[0].parts[0].text;
+        return new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: JSON.stringify({ candidates: buildWeeklyCandidates(3) }) }] } }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }),
+    );
+
+    const response = await worker.fetch(
+      request(validRequestBody({
+        exerciseLevel: "high_intensity",
+        lifeRole: "software_engineer",
+        country: "India",
+        foodsToAvoid: "shellfish, pork",
+      })),
+      makeEnv() as never,
+    );
+
+    expect(response.status).toBe(200);
+    expect(capturedPrompt).toContain("- Exercise Level: high_intensity");
+    expect(capturedPrompt).toContain("- Life Role: software_engineer");
+    expect(capturedPrompt).toContain("- Country / Region: India");
+    expect(capturedPrompt).toContain("- Foods to Avoid: shellfish, pork");
+  });
+
+  test("429 quota exceeded: does NOT bounce to secondary model and returns provider_quota_exceeded", async () => {
+    let fetchCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        fetchCount++;
+        return new Response(
+          JSON.stringify({ error: { code: 429, message: "RESOURCE_EXHAUSTED" } }),
+          { status: 429, headers: { "Content-Type": "application/json" } },
+        );
+      }),
+    );
+
+    const response = await worker.fetch(
+      request(validRequestBody()),
+      makeEnv({ AI_FALLBACK_MODEL: "gemini-3.7-flash" }) as never,
+    );
+
+    expect(response.status).toBe(429);
+    const json = (await response.json()) as Record<string, unknown>;
+    expect(json.error).toBe("provider_quota_exceeded");
+    expect(fetchCount).toBe(1); // Crucial: must NOT bounce to fallback on 429
+  });
+
+  test("observability: responses include requestId and health endpoint returns version", async () => {
+    stubProviderText(JSON.stringify({ candidates: buildWeeklyCandidates(3) }));
+    const genResponse = await worker.fetch(
+      request(validRequestBody(), {
+        Authorization: "Bearer valid-token",
+        "Content-Type": "application/json",
+        "x-request-id": "client-req-12345",
+      }),
+      makeEnv() as never,
+    );
+
+    expect(genResponse.status).toBe(200);
+    expect(genResponse.headers.get("x-request-id")).toBe("client-req-12345");
+    const genJson = (await genResponse.json()) as Record<string, unknown>;
+    expect(genJson.requestId).toBe("client-req-12345");
+
+    const healthResponse = await worker.fetch(
+      new Request("https://nutrition-worker.test/health"),
+      makeEnv() as never,
+    );
+    const healthJson = (await healthResponse.json()) as Record<string, unknown>;
+    expect(healthJson.version).toBe("0.2.0");
+  });
 });
+

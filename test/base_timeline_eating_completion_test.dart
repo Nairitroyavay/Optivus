@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/eating_plan_freshness.dart';
@@ -36,8 +37,37 @@ import 'package:optivus/services/nutrition_ai_client.dart';
 import 'package:optivus/services/nutrition_target_service.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_plan_summary_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/eating_operation_session.dart';
+import 'package:optivus/features/routine/managers/base_timeline/models/nutrition_ai_failure.dart';
 
 // Test Stubs
+class _FailingHttpClient extends http.BaseClient {
+  final Exception exception;
+  _FailingHttpClient(this.exception);
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    throw exception;
+  }
+}
+
+class _ThrowingEatingDomainEngine extends EatingDomainEngine {
+  final Object errorToThrow;
+  _ThrowingEatingDomainEngine(this.errorToThrow)
+    : super(client: const MissingConfigNutritionAiClient());
+
+  @override
+  Future<List<TimelineBlockDraft>> generateEatingRoutine({
+    required String uid,
+    required String idToken,
+    required EatingGenerationInputs inputs,
+    required NutritionTargets targets,
+    required BaseTimelineDraft baseTimeline,
+    http.Client? client,
+  }) async {
+    throw errorToThrow;
+  }
+}
+
 class _FakeEatingDomainEngine extends EatingDomainEngine {
   _FakeEatingDomainEngine()
     : super(client: const MissingConfigNutritionAiClient());
@@ -49,6 +79,7 @@ class _FakeEatingDomainEngine extends EatingDomainEngine {
     required EatingGenerationInputs inputs,
     required NutritionTargets targets,
     required BaseTimelineDraft baseTimeline,
+    http.Client? client,
   }) async {
     return [
       TimelineBlockDraft(
@@ -716,10 +747,12 @@ void main() {
         await tester.scrollUntilVisible(
           generateBtn,
           200,
-          scrollable: find.descendant(
-            of: find.byType(EatingPlanSettingsSheet),
-            matching: find.byType(Scrollable),
-          ),
+          scrollable: find
+              .descendant(
+                of: find.byType(EatingPlanSettingsSheet),
+                matching: find.byType(Scrollable),
+              )
+              .first,
         );
         await tester.tap(generateBtn);
         await tester.pumpAndSettle();
@@ -1060,7 +1093,7 @@ void main() {
         expect(
           EatingSetupErrorMapper.mapError(Exception('503 Service Unavailable')),
           equals(
-            'AI generation service is currently unavailable. Please try again later.',
+            'The meal planner is temporarily experiencing high demand. Please try again in a moment.',
           ),
         );
         expect(
@@ -1068,7 +1101,7 @@ void main() {
             Exception('Macro tolerance exceeded'),
           ),
           equals(
-            'Generated meal plan could not meet required nutritional tolerances. Please adjust preferences and try again.',
+            'The meal plan could not meet your nutritional targets. Try adjusting your schedule or targets.',
           ),
         );
         expect(
@@ -1076,7 +1109,7 @@ void main() {
             Exception('Weekly diversity check failed'),
           ),
           equals(
-            'Generated meal plan did not meet weekly diversity requirements. Please try again.',
+            'The generated meal plan was not varied enough across the week. Please try again.',
           ),
         );
       },
@@ -1216,13 +1249,14 @@ void main() {
         );
         await tester.pumpWidget(
           MaterialApp(
-            home: Scaffold(
-              body: EatingPlanSummaryCard(setup: customSetup),
-            ),
+            home: Scaffold(body: EatingPlanSummaryCard(setup: customSetup)),
           ),
         );
         expect(find.textContaining('(Custom target)'), findsOneWidget);
-        expect(find.textContaining('(Calculated from Body Basics)'), findsNothing);
+        expect(
+          find.textContaining('(Calculated from Body Basics)'),
+          findsNothing,
+        );
 
         // Case 2: Calculated from Body Basics
         final calculatedSetup = BaseTimelineSetup(
@@ -1235,12 +1269,13 @@ void main() {
         );
         await tester.pumpWidget(
           MaterialApp(
-            home: Scaffold(
-              body: EatingPlanSummaryCard(setup: calculatedSetup),
-            ),
+            home: Scaffold(body: EatingPlanSummaryCard(setup: calculatedSetup)),
           ),
         );
-        expect(find.textContaining('(Calculated from Body Basics)'), findsOneWidget);
+        expect(
+          find.textContaining('(Calculated from Body Basics)'),
+          findsOneWidget,
+        );
         expect(find.textContaining('(Custom target)'), findsNothing);
       },
     );
@@ -1352,7 +1387,12 @@ void main() {
         await tester.pumpAndSettle();
 
         // Validation error is displayed and modal does not dismiss
-        expect(find.textContaining('Please select a meal planning goal before generating.'), findsOneWidget);
+        expect(
+          find.textContaining(
+            'Please select a meal planning goal before generating.',
+          ),
+          findsOneWidget,
+        );
         expect(regenerateResult, isNull);
       },
     );
@@ -1512,7 +1552,7 @@ void main() {
           section: 'eating',
           title: 'Late Dinner',
           startMinute: 23 * 60, // 1380
-          endMinute: 1439,      // 23:59
+          endMinute: 1439, // 23:59
           repeatDays: [1, 2, 3],
           blockType: TimelineBlockDraft.softBlockKey,
           dishes: ['Soup'],
@@ -1669,6 +1709,328 @@ void main() {
         expect(extractingSession.type, equals(EatingOperationType.extracting));
         expect(extractingSession.candidateAssetId, equals('cand-asset-1'));
         expect(extractingSession.candidateR2Key, equals('cand-key-1'));
+      },
+    );
+
+    test(
+      'NutritionAiClient handles cancellation and maps to provider_cancelled failure',
+      () async {
+        final client = WorkerNutritionAiClient(
+          baseUrl: 'https://nutrition-worker.optivus.local',
+          client: _FailingHttpClient(http.ClientException('Connection closed')),
+        );
+
+        final result = await client.generateEatingRoutine(
+          uid: uid,
+          idToken: 'token',
+          params: const {},
+        );
+
+        expect(result.warnings, contains('provider_cancelled'));
+        final failure = NutritionAiFailure.fromObject(result.warnings.first);
+        expect(failure.type, equals(NutritionAiFailureType.cancelled));
+        expect(failure.safeMessage, equals('Meal generation was cancelled.'));
+        expect(failure.canRetry, isFalse);
+      },
+    );
+
+    test(
+      'EatingGenerationInputs propagates personalization parameters to worker params',
+      () {
+        const inputs = EatingGenerationInputs(
+          contractVersion: BaseTimelineDraft.currentGate2EatingPlanVersion,
+          heightCm: 180,
+          weightKg: 75,
+          estimatedAge: 28,
+          gender: 'female',
+          exerciseLevel: 'high',
+          lifeRole: 'software_engineer',
+          bmi: 23.1,
+          estimatedBmr: 1600,
+          estimatedMaintenanceCalories: 2200,
+          bodyGoal: 'gain',
+          targetMode: 'mild_surplus',
+          targetCalories: 2400,
+          proteinTarget: 140,
+          foodType: 'mediterranean',
+          foodStyleCustomText: null,
+          eatingMode: 'balanced',
+          mealsPerDay: 3,
+          breakfastMinute: 480,
+          morningSnackMinute: null,
+          lunchMinute: 780,
+          afternoonSnackMinute: null,
+          dinnerMinute: 1200,
+          country: 'Canada',
+          foodsToAvoid: ['shellfish', 'peanuts'],
+        );
+
+        final params = inputs.toWorkerParams();
+        expect(
+          inputs.contractVersion,
+          equals(BaseTimelineDraft.currentGate2EatingPlanVersion),
+        );
+        expect(params['exerciseLevel'], equals('high'));
+        expect(params['lifeRole'], equals('software_engineer'));
+        expect(params['country'], equals('Canada'));
+        expect(params['foodsToAvoid'], equals(['shellfish', 'peanuts']));
+        expect(params['foodType'], equals('mediterranean'));
+        expect(params['eatingMode'], equals('balanced'));
+      },
+    );
+
+    test(
+      'foodsToAvoid is preserved in EatingPlanSettingsResult and BaseTimelineSetup',
+      () {
+        const result = EatingPlanSettingsResult(
+          goal: 'maintain',
+          mealsPerDay: 3,
+          eatingMode: 'balanced',
+          foodType: 'vegetarian',
+          foodStyleCustomText: null,
+          foodsToAvoid: ['mushrooms', 'gluten'],
+          breakfastMinute: 480,
+          extraSnackMinute: null,
+          lunchMinute: 780,
+          snackMinute: null,
+          dinnerMinute: 1200,
+          targetCalories: 2000,
+          targetProtein: 120,
+          shouldRegenerate: true,
+        );
+        expect(result.foodsToAvoid, equals(['mushrooms', 'gluten']));
+
+        final setup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          foodsToAvoid: const ['mushrooms', 'gluten'],
+        );
+        expect(setup.foodsToAvoid, equals(['mushrooms', 'gluten']));
+
+        final copied = setup.copyWith(foodsToAvoid: const ['dairy']);
+        expect(copied.foodsToAvoid, equals(['dairy']));
+
+        final map = setup.toMap();
+        expect(map['foodsToAvoid'], equals(['mushrooms', 'gluten']));
+        final deserialized = BaseTimelineSetup.fromMap(map, uid: uid);
+        expect(deserialized.foodsToAvoid, equals(['mushrooms', 'gluten']));
+      },
+    );
+
+    testWidgets(
+      'Configured view tap behavior: tapping card does not open EatingMealDetailSheet and Edit schedule is available',
+      (tester) async {
+        tester.view.physicalSize = const Size(400, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+
+        final now = DateTime.now();
+        final setup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: now,
+          mealPlanningGoal: 'maintain',
+          mealsPerDay: 3,
+          eatingMode: 'balanced',
+          foodType: 'mixed',
+          breakfastMinute: 8 * 60,
+          lunchMinute: 13 * 60,
+          dinnerMinute: 20 * 60,
+          eatingBlocks: const [
+            TimelineBlockDraft(
+              id: 'meal-breakfast-1',
+              section: 'eating',
+              title: 'Breakfast',
+              startMinute: 8 * 60,
+              endMinute: 8 * 60 + 30,
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+              blockType: TimelineBlockDraft.softBlockKey,
+              mealSlot: 'breakfast',
+              dishes: ['Oatmeal', 'Berries'],
+            ),
+          ],
+        );
+
+        final fakeOnboardingRepo = FakeOnboardingRepository();
+        final fakeSetupRepo = FakeBaseTimelineSetupRepository(
+          onboardingRepo: fakeOnboardingRepo,
+        );
+        await fakeSetupRepo.saveSetup(uid, setup);
+        final fakeRoutineRepo = FakeRoutineRepository();
+        final fakeTxRepo = FakeRoutineTransactionRepository(
+          routineRepository: fakeRoutineRepo,
+          setupRepository: fakeSetupRepo,
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              userProfileProvider.overrideWith(
+                (ref) => UserProfileNotifier()
+                  ..loadSeedData(
+                    UserProfile(
+                      uid: uid,
+                      email: 'eating@optivus.local',
+                      displayName: 'Eating Test User',
+                    ),
+                  ),
+              ),
+              baseTimelineSetupRepositoryProvider.overrideWithValue(
+                fakeSetupRepo,
+              ),
+              routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
+              routineTransactionRepositoryProvider.overrideWithValue(
+                fakeTxRepo,
+              ),
+            ],
+            child: MaterialApp(
+              theme: ThemeData.dark(),
+              home: EatingBaseSetupScreen(onBack: () {}),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        // Configured view: Edit schedule button is present, Add meal is NOT present
+        expect(find.text('Edit schedule'), findsOneWidget);
+        expect(find.text('Add meal'), findsNothing);
+
+        // Find the meal card
+        final cardFinder = find.text('Breakfast');
+        expect(cardFinder, findsWidgets);
+
+        // Tap the card in configured view
+        await tester.tap(cardFinder.first);
+        await tester.pumpAndSettle();
+
+        // EatingMealDetailSheet must NOT be present
+        expect(find.text('Meal Details'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Rebuild safety: generation failure preserves existing configured plan and leaves editing false',
+      (tester) async {
+        tester.view.physicalSize = const Size(400, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+
+        final now = DateTime.now();
+        final originalBlocks = [
+          const TimelineBlockDraft(
+            id: 'original-breakfast',
+            section: 'eating',
+            title: 'Original Oatmeal',
+            startMinute: 8 * 60,
+            endMinute: 8 * 60 + 30,
+            repeatDays: [1, 2, 3, 4, 5, 6, 7],
+            blockType: TimelineBlockDraft.softBlockKey,
+            mealSlot: 'breakfast',
+            dishes: ['Steel cut oats'],
+          ),
+        ];
+        final setup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: now,
+          eatingSetupPath: 'create',
+          mealPlanningGoal: 'maintain',
+          mealsPerDay: 3,
+          eatingMode: 'balanced',
+          foodType: 'mixed',
+          breakfastMinute: 8 * 60,
+          lunchMinute: 13 * 60,
+          dinnerMinute: 20 * 60,
+          eatingBlocks: originalBlocks,
+        );
+
+        final fakeOnboardingRepo = FakeOnboardingRepository();
+        final fakeSetupRepo = FakeBaseTimelineSetupRepository(
+          onboardingRepo: fakeOnboardingRepo,
+        );
+        await fakeSetupRepo.saveSetup(uid, setup);
+        final fakeRoutineRepo = FakeRoutineRepository();
+        final fakeTxRepo = FakeRoutineTransactionRepository(
+          routineRepository: fakeRoutineRepo,
+          setupRepository: fakeSetupRepo,
+        );
+
+        // Domain engine that always fails generation
+        final failingEngine = _ThrowingEatingDomainEngine(
+          StateError('provider_high_demand'),
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              userProfileProvider.overrideWith(
+                (ref) => UserProfileNotifier()
+                  ..loadSeedData(
+                    UserProfile(
+                      uid: uid,
+                      email: 'eating@optivus.local',
+                      displayName: 'Eating Test User',
+                      height: 175,
+                      weight: 72,
+                      ageRange: '20-29',
+                      gender: 'male',
+                    ),
+                  ),
+              ),
+              baseTimelineSetupRepositoryProvider.overrideWithValue(
+                fakeSetupRepo,
+              ),
+              routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
+              routineTransactionRepositoryProvider.overrideWithValue(
+                fakeTxRepo,
+              ),
+              eatingDomainEngineProvider.overrideWithValue(failingEngine),
+            ],
+            child: MaterialApp(
+              theme: ThemeData.dark(),
+              home: EatingBaseSetupScreen(onBack: () {}),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        // Initial configured view displays original meal
+        expect(find.text('Original Oatmeal'), findsWidgets);
+
+        // Tap Settings action to open sheet
+        await tester.tap(find.byIcon(Icons.tune_rounded));
+        await tester.pumpAndSettle();
+
+        // Sheet is open: tap Regenerate Plan
+        final regenBtn = find.text('Regenerate Plan');
+        await tester.scrollUntilVisible(
+          regenBtn,
+          200,
+          scrollable: find
+              .descendant(
+                of: find.byType(EatingPlanSettingsSheet),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await tester.tap(regenBtn);
+        await tester.pumpAndSettle();
+
+        // Generation failed:
+        // 1. Error snackbar is shown
+        expect(
+          find.text(
+            'The meal planner is temporarily experiencing high demand. Please try again in a moment.',
+          ),
+          findsOneWidget,
+        );
+        // 2. Retry button exists in snackbar
+        expect(find.text('Retry'), findsOneWidget);
+        // 3. Screen stays in configured view (NOT in edit view)
+        expect(find.text('Edit schedule'), findsOneWidget);
+        expect(find.text('Save'), findsNothing);
+        // 4. Original plan is completely intact and still displayed
+        expect(find.text('Original Oatmeal'), findsWidgets);
       },
     );
   });

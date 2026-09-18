@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:optivus/features/onboarding/steps/onboarding_step_5_eating_setup.dart';
 import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
 import 'package:optivus/models/onboarding_draft.dart';
@@ -200,6 +201,7 @@ class FakeDelayedNutritionAiClient implements NutritionAiClient {
     required String uid,
     required String idToken,
     required Map<String, dynamic> params,
+    http.Client? client,
   }) async {
     return Completer<RoutineImportExtractionResult>().future; // Hang forever
   }

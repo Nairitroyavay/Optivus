@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import 'package:optivus/features/onboarding/steps/onboarding_step_5_eating_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/models/onboarding_draft.dart';
@@ -162,10 +163,12 @@ class EatingDomainEngine {
       final draft = setup.toBaseTimelineDraft().copyWith(blocks: blocks);
       final effectiveTargets = (isFreshAiGeneration && targets != null)
           ? targets.copyWith(
-              targetCalories: setup.targetCaloriesOverride ??
+              targetCalories:
+                  setup.targetCaloriesOverride ??
                   setup.targetCalories ??
                   targets.targetCalories,
-              proteinTarget: setup.targetProteinOverride?.toDouble() ??
+              proteinTarget:
+                  setup.targetProteinOverride?.toDouble() ??
                   setup.targetProtein?.toDouble() ??
                   targets.proteinTarget,
             )
@@ -186,6 +189,7 @@ class EatingDomainEngine {
     required UserProfile profile,
     required BaseTimelineSetup setup,
     required NutritionTargets targets,
+    String? country,
   }) {
     final hasHeight =
         (targets.heightCm != null && targets.heightCm! > 0) ||
@@ -256,10 +260,12 @@ class EatingDomainEngine {
         targets.lifeRole ??
         (profile.lifeRole.isNotEmpty ? profile.lifeRole : null);
 
-    final targetCalories = setup.targetCaloriesOverride ??
+    final targetCalories =
+        setup.targetCaloriesOverride ??
         setup.targetCalories ??
         targets.targetCalories;
-    final targetProtein = setup.targetProteinOverride?.toDouble() ??
+    final targetProtein =
+        setup.targetProteinOverride?.toDouble() ??
         setup.targetProtein?.toDouble() ??
         targets.proteinTarget;
 
@@ -292,7 +298,8 @@ class EatingDomainEngine {
       lunchMinute: lMinute,
       afternoonSnackMinute: aSnackMinute,
       dinnerMinute: dMinute,
-      country: null,
+      country: country,
+      foodsToAvoid: setup.foodsToAvoid,
     );
   }
 
@@ -319,11 +326,13 @@ class EatingDomainEngine {
     required EatingGenerationInputs inputs,
     required NutritionTargets targets,
     required BaseTimelineDraft baseTimeline,
+    http.Client? client,
   }) async {
     final result = await _client.generateEatingRoutine(
       uid: uid,
       idToken: idToken,
       params: inputs.toWorkerParams(),
+      client: client,
     );
 
     if (result.id.trim().isEmpty ||

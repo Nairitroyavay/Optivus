@@ -17,6 +17,7 @@ class EatingPlanSettingsResult {
   final int? targetProtein;
   final int? targetCaloriesOverride;
   final int? targetProteinOverride;
+  final List<String> foodsToAvoid;
   final bool shouldRegenerate;
 
   const EatingPlanSettingsResult({
@@ -34,6 +35,7 @@ class EatingPlanSettingsResult {
     required this.targetProtein,
     this.targetCaloriesOverride,
     this.targetProteinOverride,
+    this.foodsToAvoid = const [],
     required this.shouldRegenerate,
   });
 }
@@ -56,6 +58,7 @@ class EatingPlanSettingsSheet extends StatefulWidget {
   final int? initialTargetProtein;
   final int? initialTargetCaloriesOverride;
   final int? initialTargetProteinOverride;
+  final List<String>? initialFoodsToAvoid;
   final int? calculatedCalories;
   final int? calculatedProtein;
   final bool showRegenerateAction;
@@ -79,6 +82,7 @@ class EatingPlanSettingsSheet extends StatefulWidget {
     this.initialTargetProtein,
     this.initialTargetCaloriesOverride,
     this.initialTargetProteinOverride,
+    this.initialFoodsToAvoid,
     this.calculatedCalories,
     this.calculatedProtein,
     this.showRegenerateAction = true,
@@ -103,6 +107,7 @@ class EatingPlanSettingsSheet extends StatefulWidget {
     int? initialTargetProtein,
     int? initialTargetCaloriesOverride,
     int? initialTargetProteinOverride,
+    List<String>? initialFoodsToAvoid,
     int? calculatedCalories,
     int? calculatedProtein,
     bool showRegenerateAction = true,
@@ -132,6 +137,7 @@ class EatingPlanSettingsSheet extends StatefulWidget {
         initialTargetProtein: initialTargetProtein,
         initialTargetCaloriesOverride: initialTargetCaloriesOverride,
         initialTargetProteinOverride: initialTargetProteinOverride,
+        initialFoodsToAvoid: initialFoodsToAvoid,
         calculatedCalories: calculatedCalories,
         calculatedProtein: calculatedProtein,
         showRegenerateAction: showRegenerateAction,
@@ -162,12 +168,14 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
   bool _extraSnackTouched = false;
   late TextEditingController _caloriesController;
   late TextEditingController _proteinController;
+  late List<String> _foodsToAvoid;
   bool _showNutritionOverrides = false;
   String? _validationError;
 
   @override
   void initState() {
     super.initState();
+    _foodsToAvoid = List<String>.from(widget.initialFoodsToAvoid ?? const []);
     _showNutritionOverrides =
         (widget.initialTargetCaloriesOverride != null &&
             widget.initialTargetCaloriesOverride! > 0) ||
@@ -195,15 +203,15 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
       text: widget.initialTargetCaloriesOverride != null
           ? widget.initialTargetCaloriesOverride.toString()
           : (widget.initialTargetCalories != null
-              ? widget.initialTargetCalories.toString()
-              : (widget.calculatedCalories?.toString() ?? '')),
+                ? widget.initialTargetCalories.toString()
+                : (widget.calculatedCalories?.toString() ?? '')),
     );
     _proteinController = TextEditingController(
       text: widget.initialTargetProteinOverride != null
           ? widget.initialTargetProteinOverride.toString()
           : (widget.initialTargetProtein != null
-              ? widget.initialTargetProtein.toString()
-              : (widget.calculatedProtein?.toString() ?? '')),
+                ? widget.initialTargetProtein.toString()
+                : (widget.calculatedProtein?.toString() ?? '')),
     );
     _customStyleController.addListener(_onFieldChanged);
     _caloriesController.addListener(_onFieldChanged);
@@ -278,6 +286,15 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
         (widget.initialTargetProteinOverride != null &&
             widget.initialTargetProteinOverride! > 0);
     if (_showNutritionOverrides != initialHadOverrides) return true;
+
+    final initialAvoid = (widget.initialFoodsToAvoid ?? const [])
+        .map((e) => e.toLowerCase())
+        .toSet();
+    final currentAvoid = _foodsToAvoid.map((e) => e.toLowerCase()).toSet();
+    if (currentAvoid.length != initialAvoid.length ||
+        !currentAvoid.containsAll(initialAvoid)) {
+      return true;
+    }
 
     return false;
   }
@@ -427,6 +444,7 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
       targetProteinOverride: (rawProtOverride != null && rawProtOverride > 0)
           ? rawProtOverride
           : null,
+      foodsToAvoid: List.unmodifiable(_foodsToAvoid),
       shouldRegenerate: regenerate,
     );
 
@@ -696,6 +714,53 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                       ),
                       const SizedBox(height: 16),
 
+                      // Foods to Avoid / Allergies
+                      _buildHeader('Foods to Avoid / Allergies (Optional)'),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children:
+                            [
+                              'Peanuts',
+                              'Tree Nuts',
+                              'Dairy',
+                              'Gluten',
+                              'Shellfish',
+                              'Soy',
+                              'Pork',
+                              'Beef',
+                            ].map((food) {
+                              final key = food.toLowerCase();
+                              final isAvoided = _foodsToAvoid.contains(key);
+                              return FilterChip(
+                                label: Text(food),
+                                selected: isAvoided,
+                                selectedColor: OptivusColors.roseAccent
+                                    .withValues(alpha: 0.18),
+                                labelStyle: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: isAvoided
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  color: isAvoided
+                                      ? OptivusColors.roseAccent
+                                      : OptivusColors.textSecondary,
+                                ),
+                                onSelected: (selected) {
+                                  setState(() {
+                                    if (selected) {
+                                      _foodsToAvoid.add(key);
+                                    } else {
+                                      _foodsToAvoid.remove(key);
+                                    }
+                                  });
+                                },
+                              );
+                            }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+
                       // Preferred Meal Times
                       _buildHeader('Preferred Meal Times (Spacing ≥ 2h)'),
                       const SizedBox(height: 8),
@@ -909,12 +974,14 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                                 color: OptivusColors.textSecondary,
                               ),
                               const SizedBox(width: 8),
-                              Text(
-                                'Calculated targets: ${widget.calculatedCalories ?? '—'} kcal · ${widget.calculatedProtein ?? '—'} g protein',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: OptivusColors.textSecondary,
+                              Expanded(
+                                child: Text(
+                                  'Calculated targets: ${widget.calculatedCalories ?? '—'} kcal · ${widget.calculatedProtein ?? '—'} g protein',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: OptivusColors.textSecondary,
+                                  ),
                                 ),
                               ),
                             ],
@@ -984,26 +1051,29 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                       // Bottom Actions
                       Row(
                         children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              onPressed: isDirty
-                                  ? () => _submit(regenerate: false)
-                                  : null,
-                              child: const Text('Save Settings'),
-                            ),
-                          ),
-                          if (widget.showRegenerateAction) ...[
-                            const SizedBox(width: 10),
+                          if (!widget.isNew) ...[
                             Expanded(
-                              flex: 2,
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                onPressed: isDirty
+                                    ? () => _submit(regenerate: false)
+                                    : null,
+                                child: const Text('Save Settings'),
+                              ),
+                            ),
+                            if (widget.showRegenerateAction)
+                              const SizedBox(width: 10),
+                          ],
+                          if (widget.showRegenerateAction) ...[
+                            Expanded(
+                              flex: widget.isNew ? 1 : 2,
                               child: FilledButton.icon(
                                 style: FilledButton.styleFrom(
                                   backgroundColor: OptivusColors.roseAccent,

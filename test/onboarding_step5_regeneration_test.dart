@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:optivus/features/onboarding/steps/onboarding_step_5_eating_setup.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
@@ -1028,6 +1029,7 @@ class _MockConfigurableNutritionClient implements NutritionAiClient {
     required String uid,
     required String idToken,
     required Map<String, dynamic> params,
+    http.Client? client,
   }) async {
     if (asyncResponder != null) {
       return asyncResponder!(params);
