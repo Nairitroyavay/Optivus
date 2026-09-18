@@ -199,6 +199,10 @@ class RoutineEventFirestoreCodec {
       'trackerTaskType',
       'hardBlock',
       'onboardingProjectionId',
+      'movedToDateKey',
+      'movedStartMinute',
+      'movedEndMinute',
+      'displayTitleOverride',
     };
     const requiredKeys = {
       'id',
@@ -266,6 +270,35 @@ class RoutineEventFirestoreCodec {
       throw const FormatException(
         'itemSnapshot onboardingProjectionId is invalid',
       );
+    }
+
+    final movedToDateKey = snapshot['movedToDateKey'];
+    if (movedToDateKey != null &&
+        (movedToDateKey is! String ||
+            !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(movedToDateKey))) {
+      throw const FormatException('itemSnapshot movedToDateKey is invalid');
+    }
+
+    final movedStartMinute = snapshot['movedStartMinute'];
+    if (movedStartMinute != null &&
+        (movedStartMinute is! int ||
+            movedStartMinute < 0 ||
+            movedStartMinute > 1439)) {
+      throw const FormatException('itemSnapshot movedStartMinute is invalid');
+    }
+
+    final movedEndMinute = snapshot['movedEndMinute'];
+    if (movedEndMinute != null &&
+        (movedEndMinute is! int ||
+            movedEndMinute < 0 ||
+            movedEndMinute > 1440)) {
+      throw const FormatException('itemSnapshot movedEndMinute is invalid');
+    }
+
+    final displayTitleOverride = snapshot['displayTitleOverride'];
+    if (displayTitleOverride != null &&
+        (displayTitleOverride is! String || displayTitleOverride.length > 200)) {
+      throw const FormatException('itemSnapshot displayTitleOverride is invalid');
     }
   }
 

@@ -174,7 +174,10 @@ void main() {
   test('generic Start is idempotent after save', () async {
     final notifier = container.read(routineNotifierProvider.notifier);
     const uid = 'user_1';
-    await repo.createRoutineItem(uid, createTemplate(uid, 't1'));
+    await repo.createRoutineItem(
+      uid,
+      createTemplate(uid, 't1').copyWith(startMinute: 1380, endMinute: 1440),
+    );
     await notifier.loadForOwner(uid);
 
     final first = await notifier.startFlexibleTask('t1');

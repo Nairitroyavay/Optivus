@@ -140,6 +140,9 @@ class RoutineCardFactory {
       item.endsNextDay,
       item.startedAt,
       item.countdownDurationSeconds,
+      item.undoToPlannedAllowed,
+      item.isCompleted,
+      item.isMissed,
       item.workContextType,
       item.workRole,
       item.workOrganization,
@@ -551,11 +554,19 @@ class RoutineCardFactory {
         resolvedStatus == RoutineStatus.skipped ||
         resolvedStatus == RoutineStatus.missed;
 
+    final hasGenericCountdown = resolvedStatus == RoutineStatus.active &&
+        item.blockType != RoutineBlockType.trackerTask &&
+        item.blockType != RoutineBlockType.checkIn &&
+        item.blockType != RoutineBlockType.moneyTask &&
+        item.startedAt != null &&
+        item.countdownDurationSeconds != null;
+
     final actionFooter = actionFooterHeight(
       actionLayout,
       actionCount: actionSet.count,
       isTerminal: isTerminal,
       canUndo: resolvedCanUndo,
+      hasGenericCountdown: hasGenericCountdown,
       singleButtonHeight: singleButtonHeight,
     );
     height += RoutineCardPresentation.actionsFooterGap + actionFooter;
@@ -574,6 +585,7 @@ class RoutineCardFactory {
     int actionCount = 4,
     bool isTerminal = false,
     bool canUndo = false,
+    bool hasGenericCountdown = false,
     double singleButtonHeight = RoutineCardPresentation.actionButtonMinHeight,
   }) {
     return RoutineCardPresentation.actionFooterHeight(
@@ -581,6 +593,7 @@ class RoutineCardFactory {
       actionCount: actionCount,
       isTerminal: isTerminal,
       canUndo: canUndo,
+      hasGenericCountdown: hasGenericCountdown,
       singleButtonHeight: singleButtonHeight,
     );
   }

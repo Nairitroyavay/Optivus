@@ -151,6 +151,50 @@ class RoutineBatchWriteIntent {
   });
 }
 
+class RoutineQueuedOccurrenceAction {
+  final String itemId;
+  final RoutineOccurrenceAction action;
+  final String actionString;
+  final RoutineStatus? targetStatus;
+  final String actionSource;
+  final DateTime? occurrenceDate;
+  final String? note;
+  final String? displayTitleOverride;
+  final String? movedToDateKey;
+  final int? movedStartMinute;
+  final int? movedEndMinute;
+  final List<int>? completedSubtaskIndexes;
+  final DateTime? startedAt;
+  final int? countdownDurationSeconds;
+  final String? trackerSessionId;
+  final String? trackerType;
+  final String? source;
+  final Completer<RoutineWriteResult>? completer;
+  final DateTime queuedAt;
+
+  const RoutineQueuedOccurrenceAction({
+    required this.itemId,
+    required this.action,
+    required this.actionString,
+    this.targetStatus,
+    this.actionSource = 'routine',
+    this.occurrenceDate,
+    this.note,
+    this.displayTitleOverride,
+    this.movedToDateKey,
+    this.movedStartMinute,
+    this.movedEndMinute,
+    this.completedSubtaskIndexes,
+    this.startedAt,
+    this.countdownDurationSeconds,
+    this.trackerSessionId,
+    this.trackerType,
+    this.source,
+    this.completer,
+    required this.queuedAt,
+  });
+}
+
 class RoutineState {
   final List<RoutineItem> items;
   final List<RoutineOccurrenceRecord> occurrences;
@@ -177,9 +221,19 @@ class RoutineState {
   final Set<String> pendingOccurrenceIds;
   final Map<String, RoutineWriteIntent> failedIntentsByItemId;
   final Map<String, RoutineOccurrenceWriteIntent> failedOccurrenceIntentsById;
-  final Map<String, List<RoutineOccurrenceWriteIntent>>
-  queuedOccurrenceIntentsById;
+  final Map<String, List<RoutineQueuedOccurrenceAction>>
+  queuedOccurrenceActionsById;
   final Map<String, RoutineBatchWriteIntent> failedBatchIntentsByOperationId;
+
+  Map<String, List<RoutineOccurrenceWriteIntent>>
+  get queuedOccurrenceIntentsById {
+    if (queuedOccurrenceActionsById.isEmpty) return const {};
+    final map = <String, List<RoutineOccurrenceWriteIntent>>{};
+    for (final entry in queuedOccurrenceActionsById.entries) {
+      map[entry.key] = const [];
+    }
+    return map;
+  }
 
   const RoutineState({
     required this.items,
@@ -207,7 +261,7 @@ class RoutineState {
     this.pendingOccurrenceIds = const {},
     this.failedIntentsByItemId = const {},
     this.failedOccurrenceIntentsById = const {},
-    this.queuedOccurrenceIntentsById = const {},
+    this.queuedOccurrenceActionsById = const {},
     this.failedBatchIntentsByOperationId = const {},
   });
 
@@ -240,6 +294,8 @@ class RoutineState {
     Set<String>? pendingOccurrenceIds,
     Map<String, RoutineWriteIntent>? failedIntentsByItemId,
     Map<String, RoutineOccurrenceWriteIntent>? failedOccurrenceIntentsById,
+    Map<String, List<RoutineQueuedOccurrenceAction>>?
+    queuedOccurrenceActionsById,
     Map<String, List<RoutineOccurrenceWriteIntent>>?
     queuedOccurrenceIntentsById,
     Map<String, RoutineBatchWriteIntent>? failedBatchIntentsByOperationId,
@@ -278,8 +334,8 @@ class RoutineState {
           failedIntentsByItemId ?? this.failedIntentsByItemId,
       failedOccurrenceIntentsById:
           failedOccurrenceIntentsById ?? this.failedOccurrenceIntentsById,
-      queuedOccurrenceIntentsById:
-          queuedOccurrenceIntentsById ?? this.queuedOccurrenceIntentsById,
+      queuedOccurrenceActionsById:
+          queuedOccurrenceActionsById ?? this.queuedOccurrenceActionsById,
       failedBatchIntentsByOperationId:
           failedBatchIntentsByOperationId ??
           this.failedBatchIntentsByOperationId,
@@ -335,6 +391,10 @@ class RoutineTrackerLinksNotifier
     state = state
         .where((link) => link.routineTaskId != routineTaskId)
         .toList(growable: false);
+  }
+
+  void replaceAll(List<TrackerSessionLink> links) {
+    state = List.unmodifiable(links);
   }
 
   void reset() => state = const [];
@@ -1032,6 +1092,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     _eventsSubscription?.cancel();
     _eventsSubscription = null;
     if (isNewOwner) {
+      _ref.read(trackerSessionLinksProvider.notifier).reset();
       state = state.copyWith(
         loading: true,
         eventsLoading: true,
@@ -1042,7 +1103,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         pendingOccurrenceIds: const {},
         failedIntentsByItemId: const {},
         failedOccurrenceIntentsById: const {},
-        queuedOccurrenceIntentsById: const {},
+        queuedOccurrenceActionsById: const {},
         failedBatchIntentsByOperationId: const {},
         items: const [],
         clearError: true,
@@ -1113,6 +1174,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         }
       }
 
+      final activeLinks = <TrackerSessionLink>[];
       TrackerLaunchIntent? restoredTrackerIntent;
       for (final occ in mergedOccurrences) {
         if (occ.status == RoutineStatus.inTracker &&
@@ -1125,7 +1187,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             startedAt: occ.startedAt ?? occ.createdAt,
             status: 'active',
           );
-          _ref.read(trackerSessionLinksProvider.notifier).upsert(link);
+          activeLinks.add(link);
           restoredTrackerIntent ??= TrackerLaunchIntent(
             trackerType: TrackerType.values.firstWhere(
               (t) => t.name == occ.trackerType,
@@ -1138,12 +1200,13 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           );
         }
       }
+      _ref.read(trackerSessionLinksProvider.notifier).replaceAll(activeLinks);
 
       state = state.copyWith(
         items: mergedItems,
         occurrences: mergedOccurrences,
-        activeTrackerLaunchIntent:
-            restoredTrackerIntent ?? state.activeTrackerLaunchIntent,
+        activeTrackerLaunchIntent: restoredTrackerIntent,
+        clearTrackerIntent: restoredTrackerIntent == null,
         loading: false,
         eventsLoading: true,
       );
@@ -1535,7 +1598,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       pendingOccurrenceIds: const {},
       failedIntentsByItemId: const {},
       failedOccurrenceIntentsById: const {},
-      queuedOccurrenceIntentsById: const {},
+      queuedOccurrenceActionsById: const {},
       failedBatchIntentsByOperationId: const {},
     );
   }
@@ -2406,33 +2469,6 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return null;
   }
 
-  bool _isSemanticDuplicate(
-    RoutineOccurrenceRecord a,
-    RoutineOccurrenceRecord b,
-  ) {
-    if (a.status != b.status) return false;
-    if (a.action != b.action) return false;
-    if (a.occurrenceDateKey != b.occurrenceDateKey) return false;
-    if (a.movedToDateKey != b.movedToDateKey) return false;
-    if (a.movedStartMinute != b.movedStartMinute) return false;
-    if (a.movedEndMinute != b.movedEndMinute) return false;
-    if (a.note != b.note) return false;
-    if (a.displayTitleOverride != b.displayTitleOverride) return false;
-    if (a.startedAt != b.startedAt) return false;
-    if (a.countdownDurationSeconds != b.countdownDurationSeconds) {
-      return false;
-    }
-    if (a.completedSubtaskIndexes.length != b.completedSubtaskIndexes.length) {
-      return false;
-    }
-    for (int i = 0; i < a.completedSubtaskIndexes.length; i++) {
-      if (a.completedSubtaskIndexes[i] != b.completedSubtaskIndexes[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
   String _routineActionErrorCategory(Object error) {
     if (error is FirebaseException) return 'firestore_${error.code}';
     if (error is FormatException || error is ArgumentError) {
@@ -2581,6 +2617,68 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           throw ArgumentError('Unsupported occurrence action: $action'),
     );
 
+    if (state.pendingOccurrenceIds.contains(id)) {
+      final queue = state.queuedOccurrenceActionsById[id] ?? const [];
+      final lastAction = queue.isNotEmpty ? queue.last : null;
+      final currentPendingRecord =
+          state.occurrences.where((e) => e.id == id).lastOrNull;
+
+      if (lastAction != null) {
+        if (lastAction.action == occAction &&
+            lastAction.targetStatus == status &&
+            lastAction.movedToDateKey == movedToDateKey &&
+            lastAction.movedStartMinute == movedStartMinute &&
+            lastAction.movedEndMinute == movedEndMinute) {
+          return RoutineWriteResult.noOp(
+            operationId: '',
+            resultingStatus: status,
+          );
+        }
+      } else if (currentPendingRecord != null) {
+        if (currentPendingRecord.status == status &&
+            currentPendingRecord.action == action &&
+            currentPendingRecord.movedToDateKey == movedToDateKey &&
+            currentPendingRecord.movedStartMinute == movedStartMinute &&
+            currentPendingRecord.movedEndMinute == movedEndMinute) {
+          return RoutineWriteResult.noOp(
+            operationId: currentPendingRecord.operationKey,
+            resultingStatus: currentPendingRecord.status,
+          );
+        }
+      }
+
+      final completer = Completer<RoutineWriteResult>();
+      final queuedAction = RoutineQueuedOccurrenceAction(
+        itemId: itemId,
+        action: occAction,
+        actionString: action,
+        targetStatus: status,
+        actionSource: actionSource,
+        occurrenceDate: date,
+        note: note,
+        displayTitleOverride: displayTitleOverride,
+        movedToDateKey: movedToDateKey,
+        movedStartMinute: movedStartMinute,
+        movedEndMinute: movedEndMinute,
+        completedSubtaskIndexes: completedSubtaskIndexes,
+        startedAt: startedAt,
+        countdownDurationSeconds: countdownDurationSeconds,
+        trackerSessionId: trackerSessionId,
+        trackerType: trackerType,
+        source: existing?.source ?? actionSource,
+        completer: completer,
+        queuedAt: now,
+      );
+
+      state = state.copyWith(
+        queuedOccurrenceActionsById: {
+          ...state.queuedOccurrenceActionsById,
+          id: [...queue, queuedAction],
+        },
+      );
+      return await completer.future;
+    }
+
     final decision = RoutineTransitionPolicy.evaluate(
       existingRecord: existing,
       requestedAction: occAction,
@@ -2664,17 +2762,19 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       note: note ?? existing?.note,
       displayTitleOverride:
           displayTitleOverride ?? existing?.displayTitleOverride,
-      undoToPlannedAllowed: action == 'skip' ? true : (existing == null),
+      undoToPlannedAllowed: (action == 'skip' || action == 'start' || action == 'startTracker')
+          ? true
+          : (existing == null),
       onboardingProjectionId: existing?.onboardingProjectionId,
       onboardingSourceItemId: existing?.onboardingSourceItemId,
       sourceFingerprint: existing?.sourceFingerprint,
       startedAt: effectiveStartedAt,
       countdownDurationSeconds: effectiveCountdownDurationSeconds,
-      previousStatus: action == 'skip'
+      previousStatus: (action == 'skip' || action == 'start' || action == 'startTracker')
           ? (existing?.status == RoutineStatus.moved ? RoutineStatus.moved : null)
           : null,
-      previousAction: action == 'skip'
-          ? (existing?.status == RoutineStatus.moved ? existing?.action : null)
+      previousAction: (action == 'skip' || action == 'start' || action == 'startTracker')
+          ? (existing?.status == RoutineStatus.moved ? (existing?.action ?? 'move') : null)
           : null,
       trackerSessionId: trackerSessionId ?? existing?.trackerSessionId,
       trackerType: trackerType ?? existing?.trackerType,
@@ -2709,8 +2809,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     // Capture a snapshot of the template at the moment of the occurrence
     // action so that history rows can render the item's title, time, and type
     // even after the template is edited or deleted.
-    final occurrenceSnapshot = _historySnapshotForItemId(itemId, uid);
-    if (occurrenceSnapshot == null) {
+    final rawOccurrenceSnapshot = _historySnapshotForItemId(itemId, uid);
+    if (rawOccurrenceSnapshot == null) {
       _logRoutineActionWrite(
         action: action,
         occurrenceSource: occurrenceSource,
@@ -2725,6 +2825,24 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           userSafeMessage: 'Item not found.',
         ),
       );
+    }
+
+    final effMovedToDateKey = movedToDateKey ?? existing?.movedToDateKey;
+    final effMovedStart = movedStartMinute ?? existing?.movedStartMinute;
+    final effMovedEnd = movedEndMinute ?? existing?.movedEndMinute;
+    final effDisplayTitle = displayTitleOverride ?? existing?.displayTitleOverride;
+    final occurrenceSnapshot = Map<String, dynamic>.from(rawOccurrenceSnapshot);
+    if (effMovedToDateKey != null) {
+      occurrenceSnapshot['movedToDateKey'] = effMovedToDateKey;
+    }
+    if (effMovedStart != null) {
+      occurrenceSnapshot['movedStartMinute'] = effMovedStart;
+    }
+    if (effMovedEnd != null) {
+      occurrenceSnapshot['movedEndMinute'] = effMovedEnd;
+    }
+    if (effDisplayTitle != null) {
+      occurrenceSnapshot['displayTitleOverride'] = effDisplayTitle;
     }
 
     final event = RoutineEventRecord(
@@ -2744,7 +2862,6 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       itemSnapshot: occurrenceSnapshot,
     );
 
-    final completer = Completer<RoutineWriteResult>();
     final intent = RoutineOccurrenceWriteIntent(
       action: occAction,
       ownerUid: uid,
@@ -2754,31 +2871,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       previousRecord: existing,
       createdAt: now,
       event: event,
-      completer: completer,
     );
-
-    if (state.pendingOccurrenceIds.contains(id)) {
-      final queue = state.queuedOccurrenceIntentsById[id] ?? const [];
-      final lastIntent = queue.isNotEmpty ? queue.last : null;
-      final lastRecord =
-          lastIntent?.attemptedRecord ??
-          state.occurrences.where((e) => e.id == id).lastOrNull;
-
-      if (lastRecord != null && _isSemanticDuplicate(record, lastRecord)) {
-        return RoutineWriteResult.noOp(
-          operationId: operationId,
-          resultingStatus: lastRecord.status,
-        );
-      }
-
-      state = state.copyWith(
-        queuedOccurrenceIntentsById: {
-          ...state.queuedOccurrenceIntentsById,
-          id: [...queue, intent],
-        },
-      );
-      return await completer.future;
-    }
 
     final previous = state.occurrences;
     state = state.copyWith(
@@ -2867,13 +2960,19 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       bool isAmbiguitySuccess = false;
       RoutineOccurrenceRecord? recoveredRecord;
       try {
-        final history = await _historyRepository.fetchHistory(uid);
-        if (isDelete) {
-          final stillExists = history.any((occ) => occ.id == id);
-          if (!stillExists) {
+        if (intent.event != null) {
+          final committedEvent = await _transactionRepository.fetchEventById(
+            uid,
+            intent.event!.eventId,
+          );
+          if (committedEvent != null &&
+              committedEvent.operationKey == operationId) {
             isAmbiguitySuccess = true;
           }
-        } else {
+        }
+
+        final history = await _historyRepository.fetchHistory(uid);
+        if (!isDelete) {
           for (final occ in history) {
             if (occ.id == id && occ.operationKey == operationId) {
               isAmbiguitySuccess = true;
@@ -2969,7 +3068,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   }
 
   Future<void> _processNextQueuedOccurrence(String uid, String id) async {
-    final queue = state.queuedOccurrenceIntentsById[id] ?? const [];
+    final queue = state.queuedOccurrenceActionsById[id] ?? const [];
     if (queue.isEmpty) {
       state = state.copyWith(
         pendingOccurrenceIds: state.pendingOccurrenceIds
@@ -2979,51 +3078,353 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       return;
     }
 
-    final intent = queue.first;
+    final queuedAction = queue.first;
     final remainingQueue = queue.sublist(1);
 
     state = state.copyWith(
-      queuedOccurrenceIntentsById: {
-        ...state.queuedOccurrenceIntentsById,
+      queuedOccurrenceActionsById: {
+        ...state.queuedOccurrenceActionsById,
         id: remainingQueue,
       },
     );
 
-    // Evaluate transition from current effective state
+    // Rebase against CURRENT effective state (after predecessor committed or rolled back)
     final currentRecord =
         state.occurrences.where((e) => e.id == id).firstOrNull;
+
     final transition = RoutineTransitionPolicy.evaluate(
       existingRecord: currentRecord,
-      requestedAction: intent.action,
+      requestedAction: queuedAction.action,
     );
 
     if (!transition.isAllowed) {
-      final invalidResult = RoutineWriteResult.validationFailed(
-        RoutineValidationResult.invalid(
-          errorType: RoutineValidationErrorType.missingData,
-          userSafeMessage: transition.message ?? 'Invalid state transition.',
-        ),
-        message: transition.message,
-        failureCategory: transition.failureCategory,
-        resultingStatus: currentRecord?.status ?? RoutineStatus.planned,
-      );
-      if (intent.completer != null && !intent.completer!.isCompleted) {
-        intent.completer!.complete(invalidResult);
+      final res = transition.isNoOp
+          ? RoutineWriteResult.noOp(
+              message: transition.message,
+              resultingStatus: currentRecord?.status ?? RoutineStatus.planned,
+            )
+          : RoutineWriteResult.validationFailed(
+              RoutineValidationResult.invalid(
+                errorType: RoutineValidationErrorType.missingData,
+                userSafeMessage:
+                    transition.message ?? 'Invalid state transition.',
+              ),
+              message: transition.message,
+              failureCategory: transition.failureCategory,
+              resultingStatus: currentRecord?.status ?? RoutineStatus.planned,
+            );
+      if (queuedAction.completer != null &&
+          !queuedAction.completer!.isCompleted) {
+        queuedAction.completer!.complete(res);
       }
       await _processNextQueuedOccurrence(uid, id);
       return;
     }
 
-    final isDelete =
-        intent.mutationType == RoutineOccurrenceMutationType.deleteRecord;
+    final date = queuedAction.occurrenceDate ??
+        _occurrenceAnchorDate(queuedAction.itemId, state.selectedDay);
+    final dateKey = routineLocalDateKey(date);
+    final now = DateTime.now().toUtc();
+
+    if (queuedAction.action == RoutineOccurrenceAction.undo) {
+      if (currentRecord == null) {
+        final res = const RoutineWriteResult.noOp(
+          message: 'No occurrence action to undo.',
+          resultingStatus: RoutineStatus.planned,
+        );
+        if (queuedAction.completer != null &&
+            !queuedAction.completer!.isCompleted) {
+          queuedAction.completer!.complete(res);
+        }
+        await _processNextQueuedOccurrence(uid, id);
+        return;
+      }
+
+      final operationId = _stableOperationId('occurrence_undo', [
+        uid,
+        queuedAction.itemId,
+        dateKey,
+        currentRecord.operationKey,
+      ]);
+      final rawSnapshot = _historySnapshotForItemId(queuedAction.itemId, uid);
+      if (rawSnapshot == null) {
+        final res = RoutineWriteResult.validationFailed(
+          const RoutineValidationResult.invalid(
+            errorType: RoutineValidationErrorType.missingData,
+            userSafeMessage: 'Item not found.',
+          ),
+        );
+        if (queuedAction.completer != null &&
+            !queuedAction.completer!.isCompleted) {
+          queuedAction.completer!.complete(res);
+        }
+        await _processNextQueuedOccurrence(uid, id);
+        return;
+      }
+
+      final event = RoutineEventRecord(
+        eventId: _stableEventId(
+          operationId: operationId,
+          itemId: queuedAction.itemId,
+          eventType: RoutineEventType.undone,
+        ),
+        ownerUid: uid,
+        routineItemId: queuedAction.itemId,
+        occurrenceId: id,
+        occurrenceDateKey: dateKey,
+        eventType: RoutineEventType.undone,
+        operationKey: operationId,
+        source: 'app',
+        occurredAt: now,
+        itemSnapshot: rawSnapshot,
+      );
+
+      final isRestoringMoved =
+          currentRecord.previousStatus == RoutineStatus.moved;
+      final restoredRecord = isRestoringMoved
+          ? currentRecord.clearTimer().copyWith(
+              status: RoutineStatus.moved,
+              action: currentRecord.previousAction ?? 'move',
+              operationKey: operationId,
+              previousStatus: null,
+              previousAction: null,
+              undoToPlannedAllowed: true,
+              updatedAt: now,
+            )
+          : null;
+
+      final intent = RoutineOccurrenceWriteIntent(
+        action: RoutineOccurrenceAction.undo,
+        mutationType: isRestoringMoved
+            ? RoutineOccurrenceMutationType.setRecord
+            : RoutineOccurrenceMutationType.deleteRecord,
+        ownerUid: uid,
+        occurrenceId: id,
+        operationId: operationId,
+        attemptedRecord: restoredRecord ?? currentRecord,
+        previousRecord: currentRecord,
+        createdAt: now,
+        event: event,
+        completer: queuedAction.completer,
+      );
+
+      state = state.copyWith(
+        occurrences: isRestoringMoved
+            ? [
+                for (final occ in state.occurrences)
+                  if (occ.id == id) restoredRecord! else occ,
+              ]
+            : state.occurrences.where((e) => e.id != id).toList(),
+        error: null,
+      );
+
+      await _commitOccurrenceIntentWithRecovery(intent, isQueued: true);
+      return;
+    }
+
+    final timerAllocation = (queuedAction.actionString == 'start' ||
+            queuedAction.actionString == 'startTracker')
+        ? _allocateCountdownForOccurrence(
+            itemId: queuedAction.itemId,
+            occurrenceDateKey: dateKey,
+            actualStart: queuedAction.startedAt ?? now,
+            existing: currentRecord,
+          )
+        : null;
+
+    final effectiveStartedAt = queuedAction.actionString == 'skip'
+        ? null
+        : ((queuedAction.actionString == 'start' &&
+                currentRecord?.startedAt == null &&
+                timerAllocation != null)
+            ? timerAllocation.startedAt
+            : (queuedAction.startedAt ??
+                (currentRecord?.startedAt ??
+                    (queuedAction.actionString == 'startTracker'
+                        ? (currentRecord?.startedAt ?? now)
+                        : null))));
+
+    final effectiveCountdownDurationSeconds = queuedAction.actionString == 'skip'
+        ? null
+        : ((queuedAction.actionString == 'start' &&
+                currentRecord?.countdownDurationSeconds == null &&
+                timerAllocation != null)
+            ? timerAllocation.durationSeconds
+            : (currentRecord?.countdownDurationSeconds ??
+                queuedAction.countdownDurationSeconds ??
+                timerAllocation?.durationSeconds));
+
+    final operationId = _stableOperationId('occurrence', [
+      uid,
+      queuedAction.itemId,
+      dateKey,
+      queuedAction.actionString,
+      queuedAction.targetStatus?.name ?? '',
+      queuedAction.movedToDateKey ?? '',
+      queuedAction.movedStartMinute ?? '',
+      queuedAction.movedEndMinute ?? '',
+      queuedAction.completedSubtaskIndexes?.join(',') ?? '',
+      queuedAction.note ?? '',
+      queuedAction.displayTitleOverride ?? '',
+      effectiveStartedAt?.toIso8601String() ?? '',
+      effectiveCountdownDurationSeconds ?? '',
+      currentRecord?.operationKey ?? '',
+    ]);
+
+    final occurrenceSource = queuedAction.source ??
+        (currentRecord?.source ?? queuedAction.actionSource);
+
+    final record = RoutineOccurrenceRecord(
+      id: id,
+      ownerUid: uid,
+      routineItemId: queuedAction.itemId,
+      occurrenceDateKey: dateKey,
+      status: queuedAction.targetStatus ?? RoutineStatus.active,
+      source: occurrenceSource,
+      action: queuedAction.actionString,
+      operationKey: operationId,
+      createdAt: currentRecord?.createdAt ?? now,
+      updatedAt: now,
+      movedToDateKey:
+          queuedAction.movedToDateKey ?? currentRecord?.movedToDateKey,
+      movedStartMinute:
+          queuedAction.movedStartMinute ?? currentRecord?.movedStartMinute,
+      movedEndMinute:
+          queuedAction.movedEndMinute ?? currentRecord?.movedEndMinute,
+      completedSubtaskIndexes: queuedAction.completedSubtaskIndexes ??
+          currentRecord?.completedSubtaskIndexes ??
+          const [],
+      note: queuedAction.note ?? currentRecord?.note,
+      displayTitleOverride: queuedAction.displayTitleOverride ??
+          currentRecord?.displayTitleOverride,
+      undoToPlannedAllowed: (queuedAction.actionString == 'skip' ||
+              queuedAction.actionString == 'start' ||
+              queuedAction.actionString == 'startTracker')
+          ? true
+          : (currentRecord == null),
+      onboardingProjectionId: currentRecord?.onboardingProjectionId,
+      onboardingSourceItemId: currentRecord?.onboardingSourceItemId,
+      sourceFingerprint: currentRecord?.sourceFingerprint,
+      startedAt: effectiveStartedAt,
+      countdownDurationSeconds: effectiveCountdownDurationSeconds,
+      previousStatus: (queuedAction.actionString == 'skip' ||
+              queuedAction.actionString == 'start' ||
+              queuedAction.actionString == 'startTracker')
+          ? (currentRecord?.status == RoutineStatus.moved
+              ? RoutineStatus.moved
+              : null)
+          : null,
+      previousAction: (queuedAction.actionString == 'skip' ||
+              queuedAction.actionString == 'start' ||
+              queuedAction.actionString == 'startTracker')
+          ? (currentRecord?.status == RoutineStatus.moved
+              ? (currentRecord?.action ?? 'move')
+              : null)
+          : null,
+      trackerSessionId:
+          queuedAction.trackerSessionId ?? currentRecord?.trackerSessionId,
+      trackerType: queuedAction.trackerType ?? currentRecord?.trackerType,
+    );
+
+    RoutineEventType eventType = RoutineEventType.edited;
+    switch (queuedAction.actionString) {
+      case 'start':
+      case 'startTracker':
+        eventType = RoutineEventType.started;
+        break;
+      case 'complete':
+        eventType = RoutineEventType.completed;
+        break;
+      case 'skip':
+        eventType = RoutineEventType.skipped;
+        break;
+      case 'miss':
+        eventType = RoutineEventType.missed;
+        break;
+      case 'move':
+        eventType = RoutineEventType.moved;
+        break;
+      case 'reschedule':
+        eventType = RoutineEventType.rescheduled;
+        break;
+      case 'undo':
+        eventType = RoutineEventType.undone;
+        break;
+    }
+
+    final rawSnapshot = _historySnapshotForItemId(queuedAction.itemId, uid);
+    if (rawSnapshot == null) {
+      final res = RoutineWriteResult.validationFailed(
+        const RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.missingData,
+          userSafeMessage: 'Item not found.',
+        ),
+      );
+      if (queuedAction.completer != null &&
+          !queuedAction.completer!.isCompleted) {
+        queuedAction.completer!.complete(res);
+      }
+      await _processNextQueuedOccurrence(uid, id);
+      return;
+    }
+
+    final effMovedToDateKey =
+        queuedAction.movedToDateKey ?? currentRecord?.movedToDateKey;
+    final effMovedStart =
+        queuedAction.movedStartMinute ?? currentRecord?.movedStartMinute;
+    final effMovedEnd =
+        queuedAction.movedEndMinute ?? currentRecord?.movedEndMinute;
+    final effDisplayTitle =
+        queuedAction.displayTitleOverride ?? currentRecord?.displayTitleOverride;
+    final occurrenceSnapshot = Map<String, dynamic>.from(rawSnapshot);
+    if (effMovedToDateKey != null) {
+      occurrenceSnapshot['movedToDateKey'] = effMovedToDateKey;
+    }
+    if (effMovedStart != null) {
+      occurrenceSnapshot['movedStartMinute'] = effMovedStart;
+    }
+    if (effMovedEnd != null) {
+      occurrenceSnapshot['movedEndMinute'] = effMovedEnd;
+    }
+    if (effDisplayTitle != null) {
+      occurrenceSnapshot['displayTitleOverride'] = effDisplayTitle;
+    }
+
+    final event = RoutineEventRecord(
+      eventId: _stableEventId(
+        operationId: operationId,
+        itemId: queuedAction.itemId,
+        eventType: eventType,
+      ),
+      ownerUid: uid,
+      routineItemId: queuedAction.itemId,
+      occurrenceId: id,
+      occurrenceDateKey: dateKey,
+      eventType: eventType,
+      operationKey: operationId,
+      source: queuedAction.actionSource,
+      occurredAt: now,
+      itemSnapshot: occurrenceSnapshot,
+    );
+
+    final intent = RoutineOccurrenceWriteIntent(
+      action: queuedAction.action,
+      ownerUid: uid,
+      occurrenceId: id,
+      operationId: operationId,
+      attemptedRecord: record,
+      previousRecord: currentRecord,
+      createdAt: now,
+      event: event,
+      completer: queuedAction.completer,
+    );
+
     state = state.copyWith(
-      occurrences: isDelete
-          ? state.occurrences.where((e) => e.id != id).toList()
-          : [
-              for (final candidate in state.occurrences)
-                if (candidate.id != id) candidate,
-              intent.attemptedRecord,
-            ],
+      occurrences: [
+        for (final candidate in state.occurrences)
+          if (candidate.id != id) candidate,
+        record,
+      ],
       error: null,
     );
 
@@ -3043,6 +3444,26 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       routineItemId: itemId,
       occurrenceDateKey: dateKey,
     );
+
+    if (state.pendingOccurrenceIds.contains(id)) {
+      final queue = state.queuedOccurrenceActionsById[id] ?? const [];
+      final completer = Completer<RoutineWriteResult>();
+      final queuedAction = RoutineQueuedOccurrenceAction(
+        itemId: itemId,
+        action: RoutineOccurrenceAction.undo,
+        actionString: 'undo',
+        occurrenceDate: date,
+        completer: completer,
+        queuedAt: DateTime.now().toUtc(),
+      );
+      state = state.copyWith(
+        queuedOccurrenceActionsById: {
+          ...state.queuedOccurrenceActionsById,
+          id: [...queue, queuedAction],
+        },
+      );
+      return await completer.future;
+    }
 
     final existing = _occurrenceFor(itemId, date);
     final decision = RoutineTransitionPolicy.evaluate(
@@ -3102,7 +3523,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
 
     final restoredRecord = undoRecord.previousStatus == RoutineStatus.moved
-        ? undoRecord.copyWith(
+        ? undoRecord.clearTimer().copyWith(
             status: RoutineStatus.moved,
             action: undoRecord.previousAction ?? 'move',
             operationKey: operationId,
@@ -3552,8 +3973,23 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             (t) => t.name == existing?.trackerType,
             orElse: () => TrackerType.none,
           );
-    final sessionId = existing?.trackerSessionId ??
-        'recovered_${itemId}_$occurrenceDateKey';
+    final links = _ref.read(trackerSessionLinksProvider);
+    TrackerSessionLink? link;
+    for (final candidate in links) {
+      if (candidate.routineTaskId == itemId &&
+          candidate.occurrenceDateKey == occurrenceDateKey) {
+        link = candidate;
+        break;
+      }
+    }
+
+    final sessionId = existing?.trackerSessionId ?? link?.sessionId;
+    if (sessionId == null || sessionId.isEmpty) {
+      state = state.copyWith(
+        error: 'No active tracker session found for this routine task.',
+      );
+      return;
+    }
 
     state = state.copyWith(
       activeTrackerLaunchIntent: TrackerLaunchIntent(
@@ -3561,7 +3997,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         routineTaskId: itemId,
         occurrenceDateKey: occurrenceDateKey,
         sessionId: sessionId,
-        startedAt: existing?.startedAt ?? DateTime.now(),
+        startedAt: existing?.startedAt ?? link?.startedAt ?? DateTime.now(),
       ),
     );
 

@@ -92,6 +92,8 @@ abstract class RoutineTransactionRepository {
     buildUpdatedSetup,
   });
 
+  Future<RoutineEventRecord?> fetchEventById(String uid, String eventId);
+
   Stream<RoutineEventFeed> watchEvents(String uid);
 }
 
@@ -431,6 +433,17 @@ class FirestoreRoutineTransactionRepository
             corruptEvents: corruptEvents,
           );
         });
+  }
+
+  @override
+  Future<RoutineEventRecord?> fetchEventById(String uid, String eventId) async {
+    validateOwnerUid(uid);
+    validateDocumentId(eventId);
+    final doc = await _firestore
+        .doc(FirestoreUserPaths.routineEvent(uid, eventId))
+        .get();
+    if (!doc.exists || doc.data() == null) return null;
+    return RoutineEventFirestoreCodec.fromFirestore(doc.id, doc.data()!);
   }
 }
 
@@ -875,6 +888,18 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
       }
       completer.complete();
     }
+  }
+
+  @override
+  Future<RoutineEventRecord?> fetchEventById(String uid, String eventId) async {
+    validateOwnerUid(uid);
+    validateDocumentId(eventId);
+    final list = _events[uid];
+    if (list == null) return null;
+    for (final event in list) {
+      if (event.eventId == eventId) return event;
+    }
+    return null;
   }
 
   @override

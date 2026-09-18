@@ -217,6 +217,7 @@ class RoutineCardPresentation {
     int actionCount = 4,
     bool isTerminal = false,
     bool canUndo = false,
+    bool hasGenericCountdown = false,
     double singleButtonHeight = RoutineCardPresentation.actionButtonMinHeight,
   }) {
     if (isTerminal || canUndo) {
@@ -226,6 +227,14 @@ class RoutineCardPresentation {
       return switch (actionLayout) {
         RoutineCardActionLayout.horizontal ||
         RoutineCardActionLayout.grid2x2 => singleButtonHeight,
+        RoutineCardActionLayout.stacked =>
+          (singleButtonHeight * 2) + RoutineCardPresentation.actionGap,
+      };
+    }
+    if (hasGenericCountdown) {
+      return switch (actionLayout) {
+        RoutineCardActionLayout.horizontal => singleButtonHeight,
+        RoutineCardActionLayout.grid2x2 ||
         RoutineCardActionLayout.stacked =>
           (singleButtonHeight * 2) + RoutineCardPresentation.actionGap,
       };
@@ -495,5 +504,132 @@ class RoutineCardActionSet {
       RoutineCardActionConfig(label: 'Move', type: RoutineCardActionType.move),
       RoutineCardActionConfig(label: 'Skip', type: RoutineCardActionType.skip),
     ]);
+  }
+
+  RoutineCardActionLayoutPlan resolveLayoutPlan({
+    required double availableWidth,
+    required TextScaler textScaler,
+    required TextDirection textDirection,
+  }) {
+    final layout = RoutineCardPresentation.resolveRoutineCardActionLayout(
+      availableWidth: availableWidth,
+      textScaler: textScaler,
+      textDirection: textDirection,
+      labels: labels,
+      actionCount: count,
+    );
+
+    if (layout == RoutineCardActionLayout.horizontal) {
+      return RoutineCardActionLayoutPlan(
+        layout: layout,
+        geometry: RoutineCardActionRowGeometry.horizontal1Row,
+        rows: [actions],
+      );
+    }
+
+    if (layout == RoutineCardActionLayout.grid2x2 && count == 4) {
+      return RoutineCardActionLayoutPlan(
+        layout: layout,
+        geometry: RoutineCardActionRowGeometry.grid2x2,
+        rows: [
+          [actions[0], actions[1]],
+          [actions[2], actions[3]],
+        ],
+      );
+    }
+
+    // Stacked layout branching by semantic action set
+    final hasCountdown = actions.isNotEmpty &&
+        actions.first.type == RoutineCardActionType.countdown;
+    if (hasCountdown && actions.length == 3) {
+      // Row 1: Countdown
+      // Row 2: Done | Stop
+      return RoutineCardActionLayoutPlan(
+        layout: RoutineCardActionLayout.stacked,
+        geometry: RoutineCardActionRowGeometry.countdownPlusPair,
+        rows: [
+          [actions[0]],
+          [actions[1], actions[2]],
+        ],
+      );
+    }
+
+    if (actions.length == 2 &&
+        (actions.first.type == RoutineCardActionType.terminalBadge ||
+            actions.first.type == RoutineCardActionType.openTracker)) {
+      return RoutineCardActionLayoutPlan(
+        layout: RoutineCardActionLayout.stacked,
+        geometry: RoutineCardActionRowGeometry.vertical2,
+        rows: [
+          [actions[0]],
+          [actions[1]],
+        ],
+      );
+    }
+
+    if (actions.length == 1) {
+      return RoutineCardActionLayoutPlan(
+        layout: RoutineCardActionLayout.stacked,
+        geometry: RoutineCardActionRowGeometry.vertical1,
+        rows: [
+          [actions[0]],
+        ],
+      );
+    }
+
+    if (actions.length == 3) {
+      return RoutineCardActionLayoutPlan(
+        layout: RoutineCardActionLayout.stacked,
+        geometry: RoutineCardActionRowGeometry.vertical3,
+        rows: [
+          [actions[0]],
+          [actions[1]],
+          [actions[2]],
+        ],
+      );
+    }
+
+    return RoutineCardActionLayoutPlan(
+      layout: RoutineCardActionLayout.stacked,
+      geometry: RoutineCardActionRowGeometry.stackedRows,
+      rows: actions.map((a) => [a]).toList(),
+    );
+  }
+}
+
+enum RoutineCardActionRowGeometry {
+  horizontal1Row,
+  grid2x2,
+  countdownPlusPair,
+  vertical3,
+  vertical2,
+  vertical1,
+  stackedRows,
+}
+
+@immutable
+class RoutineCardActionLayoutPlan {
+  final RoutineCardActionLayout layout;
+  final RoutineCardActionRowGeometry geometry;
+  final List<List<RoutineCardActionConfig>> rows;
+  final double horizontalGap;
+  final double verticalGap;
+
+  const RoutineCardActionLayoutPlan({
+    required this.layout,
+    required this.geometry,
+    required this.rows,
+    this.horizontalGap = RoutineCardPresentation.actionGap,
+    this.verticalGap = RoutineCardPresentation.actionGap,
+  });
+
+  int get rowCount => rows.length;
+
+  double totalHeight({
+    double singleButtonHeight = RoutineCardPresentation.actionButtonMinHeight,
+  }) {
+    if (rows.isEmpty) return 0.0;
+    return (rows.length * singleButtonHeight) +
+        ((rows.length - 1) * verticalGap);
   }
 }
