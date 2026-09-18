@@ -34,6 +34,8 @@ import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_domain_engine.dart';
 import 'package:optivus/services/nutrition_ai_client.dart';
 import 'package:optivus/services/nutrition_target_service.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_plan_summary_card.dart';
+import 'package:optivus/features/routine/managers/base_timeline/models/eating_operation_session.dart';
 
 // Test Stubs
 class _FakeEatingDomainEngine extends EatingDomainEngine {
@@ -1111,6 +1113,562 @@ void main() {
         final h2 = EatingTimelineCard.minimumHeight(multiLineBlock);
 
         expect(h2, greaterThan(h1));
+      },
+    );
+
+    test(
+      'Target overrides vs calculated targets: model support and precedence in EatingDomainEngine',
+      () {
+        // 1. Model support and serialization
+        final setupWithOverrides = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          targetCaloriesOverride: 2350,
+          targetProteinOverride: 165,
+        );
+        expect(setupWithOverrides.hasTargetOverrides, isTrue);
+
+        final map = setupWithOverrides.toMap();
+        expect(map['targetCaloriesOverride'], equals(2350));
+        expect(map['targetProteinOverride'], equals(165));
+
+        final reconstructed = BaseTimelineSetup.fromMap(map, uid: uid);
+        expect(reconstructed.targetCaloriesOverride, equals(2350));
+        expect(reconstructed.targetProteinOverride, equals(165));
+        expect(reconstructed.hasTargetOverrides, isTrue);
+
+        // 2. Precedence in buildInputs
+        final engine = EatingDomainEngine(
+          client: const MissingConfigNutritionAiClient(),
+        );
+        final userProfile = UserProfile(
+          uid: uid,
+          email: 'test@example.com',
+          displayName: 'Test User',
+          height: 175.0,
+          weight: 75.0,
+          gender: 'male',
+          ageRange: '20-29',
+        );
+        const calculatedTargets = NutritionTargets(
+          bmi: 24.5,
+          estimatedAge: 30,
+          estimatedBmr: 1700,
+          activityFactor: 1.3,
+          estimatedMaintenanceCalories: 2200,
+          targetCalories: 2200,
+          proteinTarget: 150.0,
+          bodyGoal: 'maintain',
+          hasBodyBasics: true,
+        );
+
+        // Case A: Override is present -> takes absolute precedence
+        final inputsWithOverride = engine.buildInputs(
+          profile: userProfile,
+          setup: setupWithOverrides.copyWith(targetCalories: 2000),
+          targets: calculatedTargets,
+        );
+        expect(inputsWithOverride.targetCalories, equals(2350));
+        expect(inputsWithOverride.proteinTarget, equals(165.0));
+
+        // Case B: No override, setup target is present -> setup target takes precedence over calculated
+        final setupWithoutOverride = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          targetCalories: 2050,
+          targetProtein: 140,
+        );
+        expect(setupWithoutOverride.hasTargetOverrides, isFalse);
+        final inputsWithSetup = engine.buildInputs(
+          profile: userProfile,
+          setup: setupWithoutOverride,
+          targets: calculatedTargets,
+        );
+        expect(inputsWithSetup.targetCalories, equals(2050));
+        expect(inputsWithSetup.proteinTarget, equals(140.0));
+
+        // Case C: Neither override nor setup target -> calculated target is used
+        final setupEmpty = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+        );
+        final inputsCalculated = engine.buildInputs(
+          profile: userProfile,
+          setup: setupEmpty,
+          targets: calculatedTargets,
+        );
+        expect(inputsCalculated.targetCalories, equals(2200));
+        expect(inputsCalculated.proteinTarget, equals(150.0));
+      },
+    );
+
+    testWidgets(
+      'EatingPlanSummaryCard displays truthful target labels (Custom target vs Calculated from Body Basics)',
+      (tester) async {
+        // Case 1: Custom target override
+        final customSetup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          eatingSetupPath: 'create',
+          eatingCustomized: false,
+          targetCaloriesOverride: 2400,
+          targetProteinOverride: 170,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: EatingPlanSummaryCard(setup: customSetup),
+            ),
+          ),
+        );
+        expect(find.textContaining('(Custom target)'), findsOneWidget);
+        expect(find.textContaining('(Calculated from Body Basics)'), findsNothing);
+
+        // Case 2: Calculated from Body Basics
+        final calculatedSetup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          eatingSetupPath: 'create',
+          eatingCustomized: false,
+          targetCalories: 2150,
+          targetProtein: 155,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: EatingPlanSummaryCard(setup: calculatedSetup),
+            ),
+          ),
+        );
+        expect(find.textContaining('(Calculated from Body Basics)'), findsOneWidget);
+        expect(find.textContaining('(Custom target)'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'EatingPlanSettingsSheet preserves null preferred times when untouched and requires explicit selections on regenerate',
+      (tester) async {
+        tester.view.physicalSize = const Size(400, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+
+        EatingPlanSettingsResult? savedResult;
+
+        // 1. Initial state with null preferred times
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) {
+                  return ElevatedButton(
+                    onPressed: () async {
+                      savedResult = await EatingPlanSettingsSheet.show(
+                        context,
+                        isNew: false,
+                        initialGoal: 'maintain',
+                        initialMealsPerDay: 3,
+                        initialEatingMode: 'balanced',
+                        initialFoodType: 'mixed',
+                        initialBreakfastMinute: null, // Legacy null times
+                        initialLunchMinute: null,
+                        initialDinnerMinute: null,
+                      );
+                    },
+                    child: const Text('Open Settings'),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Open Settings'));
+        await tester.pumpAndSettle();
+
+        // Visible default labels are rendered for untouched null times
+        expect(find.text('Default (8:00 AM)'), findsOneWidget);
+        expect(find.text('Default (1:00 PM)'), findsOneWidget);
+        expect(find.text('Default (8:30 PM)'), findsOneWidget);
+
+        // Tap 'Lose' to change goal from maintain -> lose, marking form dirty
+        await tester.tap(find.text('Lose'));
+        await tester.pumpAndSettle();
+
+        // Scroll down to make Save Settings button visible and tap it
+        await tester.scrollUntilVisible(
+          find.text('Save Settings'),
+          100.0,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.tap(find.text('Save Settings'));
+        await tester.pumpAndSettle();
+
+        expect(savedResult, isNotNull);
+        expect(savedResult!.goal, equals('lose'));
+        expect(savedResult!.breakfastMinute, isNull);
+        expect(savedResult!.lunchMinute, isNull);
+        expect(savedResult!.dinnerMinute, isNull);
+
+        // 2. Regeneration requires explicit selections for legacy unconfigured plans
+        EatingPlanSettingsResult? regenerateResult;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) {
+                  return ElevatedButton(
+                    onPressed: () async {
+                      regenerateResult = await EatingPlanSettingsSheet.show(
+                        context,
+                        isNew: false,
+                        regenerateActionLabel: 'Regenerate Plan',
+                        // Null selections
+                        initialGoal: null,
+                        initialMealsPerDay: null,
+                        initialEatingMode: null,
+                        initialFoodType: null,
+                      );
+                    },
+                    child: const Text('Open New Settings'),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Open New Settings'));
+        await tester.pumpAndSettle();
+
+        // Scroll down to make Regenerate Plan button visible
+        await tester.scrollUntilVisible(
+          find.text('Regenerate Plan'),
+          100.0,
+          scrollable: find.byType(Scrollable).first,
+        );
+
+        // Tap Regenerate Plan without making selections
+        await tester.tap(find.text('Regenerate Plan'));
+        await tester.pumpAndSettle();
+
+        // Validation error is displayed and modal does not dismiss
+        expect(find.textContaining('Please select a meal planning goal before generating.'), findsOneWidget);
+        expect(regenerateResult, isNull);
+      },
+    );
+
+    test(
+      'Decoupled settings save from strict AI macro validation (stale plans remain saveable)',
+      () {
+        final engine = EatingDomainEngine(
+          client: const MissingConfigNutritionAiClient(),
+        );
+
+        // Valid 7-day 21-meal schedule structure (each meal has >= 2 dishes)
+        final fullWeekBlocks = <TimelineBlockDraft>[];
+        for (var day = 1; day <= 7; day++) {
+          fullWeekBlocks.addAll([
+            TimelineBlockDraft(
+              id: 'b_b_$day',
+              section: 'eating',
+              title: 'Day $day Breakfast',
+              startMinute: 8 * 60,
+              endMinute: 8 * 60 + 30,
+              repeatDays: [day],
+              blockType: TimelineBlockDraft.softBlockKey,
+              mealSlot: 'breakfast',
+              dishes: ['Oatmeal $day', 'Fruit $day'],
+              calories: 400,
+              protein: 20,
+              source: 'ai_generated_meal_setup',
+            ),
+            TimelineBlockDraft(
+              id: 'b_l_$day',
+              section: 'eating',
+              title: 'Day $day Lunch',
+              startMinute: 13 * 60,
+              endMinute: 13 * 60 + 45,
+              repeatDays: [day],
+              blockType: TimelineBlockDraft.softBlockKey,
+              mealSlot: 'lunch',
+              dishes: ['Chicken Bowl $day', 'Brown Rice $day'],
+              calories: 500,
+              protein: 35,
+              source: 'ai_generated_meal_setup',
+            ),
+            TimelineBlockDraft(
+              id: 'b_d_$day',
+              section: 'eating',
+              title: 'Day $day Dinner',
+              startMinute: 19 * 60,
+              endMinute: 19 * 60 + 45,
+              repeatDays: [day],
+              blockType: TimelineBlockDraft.softBlockKey,
+              mealSlot: 'dinner',
+              dishes: ['Salmon Dinner $day', 'Steamed Broccoli $day'],
+              calories: 600,
+              protein: 45,
+              source: 'ai_generated_meal_setup',
+            ),
+          ]);
+        }
+
+        final pristineSetup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          eatingSetupPath: 'create',
+          eatingCustomized: false,
+          mealsPerDay: 3,
+          targetCalories: 2500,
+          eatingBlocks: fullWeekBlocks,
+        );
+
+        const staleTargets = NutritionTargets(
+          bmi: 22.0,
+          estimatedAge: 25,
+          estimatedBmr: 1600,
+          activityFactor: 1.3,
+          estimatedMaintenanceCalories: 2500,
+          targetCalories: 2500,
+          proteinTarget: 140.0,
+          bodyGoal: 'maintain',
+          hasBodyBasics: true,
+        );
+
+        // 1. Saving an existing plan (isFreshAiGeneration: false) must NOT fail on macro deviation
+        final saveErr = engine.validateBeforeSave(
+          blocks: fullWeekBlocks,
+          setup: pristineSetup,
+          targets: staleTargets,
+          isFreshAiGeneration: false,
+        );
+        expect(saveErr, isNull);
+
+        // 2. Fresh generation validation (isFreshAiGeneration: true) MUST enforce macro tolerance
+        final freshErr = engine.validateBeforeSave(
+          blocks: fullWeekBlocks,
+          setup: pristineSetup,
+          targets: staleTargets,
+          isFreshAiGeneration: true,
+        );
+        expect(freshErr, isNotNull);
+        expect(freshErr, contains('calorie'));
+      },
+    );
+
+    test(
+      'Missing or empty fingerprint on generated plans evaluates to EatingPlanFreshness.unknown',
+      () {
+        final setupNoFingerprint = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          eatingSetupPath: 'create',
+          eatingGeneratedInputFingerprint: null,
+          eatingBlocks: const [
+            TimelineBlockDraft(
+              id: 'm1',
+              section: 'eating',
+              title: 'Meal 1',
+              startMinute: 480,
+              endMinute: 510,
+              repeatDays: [1],
+              blockType: TimelineBlockDraft.softBlockKey,
+            ),
+          ],
+        );
+        final profile = UserProfile(
+          uid: uid,
+          email: 'test@example.com',
+          displayName: 'Test',
+        );
+        final engine = EatingDomainEngine(
+          client: const MissingConfigNutritionAiClient(),
+        );
+
+        final freshness = EatingPlanFreshness.evaluate(
+          setup: setupNoFingerprint,
+          profile: profile,
+          engine: engine,
+        );
+        expect(freshness, equals(EatingPlanFreshness.unknown));
+
+        final setupEmptyFingerprint = setupNoFingerprint.copyWith(
+          eatingGeneratedInputFingerprint: '',
+        );
+        final freshnessEmpty = EatingPlanFreshness.evaluate(
+          setup: setupEmptyFingerprint,
+          profile: profile,
+          engine: engine,
+        );
+        expect(freshnessEmpty, equals(EatingPlanFreshness.unknown));
+      },
+    );
+
+    test(
+      'EatingImportReviewSheet minute validation correctly allows endMinute up to 1439 (23:59)',
+      () {
+        const validLateNightBlock = TimelineBlockDraft(
+          id: 'late_dinner',
+          section: 'eating',
+          title: 'Late Dinner',
+          startMinute: 23 * 60, // 1380
+          endMinute: 1439,      // 23:59
+          repeatDays: [1, 2, 3],
+          blockType: TimelineBlockDraft.softBlockKey,
+          dishes: ['Soup'],
+        );
+
+        const invalidPastMidnightBlock = TimelineBlockDraft(
+          id: 'past_midnight',
+          section: 'eating',
+          title: 'Midnight Snack',
+          startMinute: 23 * 60,
+          endMinute: 1440, // 24:00 -> invalid!
+          repeatDays: [1, 2, 3],
+          blockType: TimelineBlockDraft.softBlockKey,
+          dishes: ['Toast'],
+        );
+
+        final engine = EatingDomainEngine(
+          client: const MissingConfigNutritionAiClient(),
+        );
+        final manualSetup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          eatingSetupPath: 'manual',
+        );
+
+        // Schedule integrity check via validateBeforeSave
+        final validErr = engine.validateBeforeSave(
+          blocks: [validLateNightBlock],
+          setup: manualSetup,
+        );
+        expect(validErr, isNull);
+
+        final invalidErr = engine.validateBeforeSave(
+          blocks: [invalidPastMidnightBlock],
+          setup: manualSetup,
+        );
+        expect(invalidErr, isNotNull);
+        expect(invalidErr, contains('within a valid day range'));
+      },
+    );
+
+    test(
+      'Authoritative save branching in BaseTimelineSetup strictly adheres to setupPath and preserves target overrides',
+      () {
+        final base = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          eatingPhotoAssetId: 'old-asset',
+          eatingPhotoR2Key: 'old-key',
+          mealPlanningGoal: 'maintain',
+          mealsPerDay: 3,
+          eatingMode: 'balanced',
+          foodType: 'mixed',
+          targetCaloriesOverride: 2200,
+          targetProteinOverride: 160,
+        );
+
+        const sampleBlock = TimelineBlockDraft(
+          id: 'b1',
+          section: 'eating',
+          title: 'Lunch',
+          startMinute: 720,
+          endMinute: 765,
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+          blockType: TimelineBlockDraft.softBlockKey,
+          dishes: ['Chicken Bowl', 'Rice'],
+        );
+
+        // 1. Photo path ('has_routine')
+        final photoResult = base.asEatingPhoto(
+          photoAssetId: 'new-asset',
+          photoR2Key: 'new-key',
+          blocks: const [sampleBlock],
+          meals: 3,
+        );
+        expect(photoResult.eatingSetupPath, equals('has_routine'));
+        expect(photoResult.eatingPhotoAssetId, equals('new-asset'));
+        expect(photoResult.eatingPhotoR2Key, equals('new-key'));
+        expect(photoResult.mealPlanningGoal, isNull);
+        expect(photoResult.eatingMode, isNull);
+        expect(photoResult.foodType, isNull);
+        expect(photoResult.targetCaloriesOverride, isNull);
+        expect(photoResult.targetProteinOverride, isNull);
+
+        // 2. Manual path ('manual')
+        final manualResult = base.asEatingManual(
+          blocks: const [sampleBlock],
+          meals: 3,
+          targetCaloriesOverride: 2300,
+          targetProteinOverride: 170,
+        );
+        expect(manualResult.eatingSetupPath, equals('manual'));
+        expect(manualResult.eatingPhotoAssetId, isNull);
+        expect(manualResult.eatingPhotoR2Key, isNull);
+        expect(manualResult.targetCaloriesOverride, equals(2300));
+        expect(manualResult.targetProteinOverride, equals(170));
+        expect(manualResult.hasTargetOverrides, isTrue);
+
+        // 3. Generated path ('create')
+        final generatedResult = base.replaceEatingGeneratedConfiguration(
+          blocks: const [sampleBlock],
+          goal: 'gain',
+          meals: 4,
+          mode: 'balanced',
+          type: 'mixed',
+          breakfast: 480,
+          lunch: 780,
+          dinner: 1200,
+          snack: 960,
+          caloriesOverride: 2500,
+          proteinOverride: 180,
+          planVersion: BaseTimelineDraft.currentGate2EatingPlanVersion,
+          inputFingerprint: 'fp123',
+        );
+        expect(generatedResult.eatingSetupPath, equals('create'));
+        expect(generatedResult.eatingPhotoAssetId, isNull);
+        expect(generatedResult.eatingPhotoR2Key, isNull);
+        expect(generatedResult.mealPlanningGoal, equals('gain'));
+        expect(generatedResult.mealsPerDay, equals(4));
+        expect(generatedResult.targetCaloriesOverride, equals(2500));
+        expect(generatedResult.targetProteinOverride, equals(180));
+        expect(generatedResult.hasTargetOverrides, isTrue);
+        expect(
+          generatedResult.eatingGeneratedPlanVersion,
+          equals(BaseTimelineDraft.currentGate2EatingPlanVersion),
+        );
+        expect(
+          generatedResult.eatingGeneratedInputFingerprint,
+          equals('fp123'),
+        );
+      },
+    );
+
+    test(
+      'EatingOperationSession lifecycle and photo extraction cancel contract',
+      () {
+        // Initial uploading session
+        final uploadSession = EatingOperationSession(
+          generationId: 1,
+          ownerUid: uid,
+          type: EatingOperationType.uploading,
+        );
+        expect(uploadSession.type, equals(EatingOperationType.uploading));
+        expect(uploadSession.candidateAssetId, isNull);
+
+        // Extraction session with candidate asset
+        final extractingSession = EatingOperationSession(
+          generationId: 1,
+          ownerUid: uid,
+          type: EatingOperationType.extracting,
+          candidateAssetId: 'cand-asset-1',
+          candidateR2Key: 'cand-key-1',
+        );
+        expect(extractingSession.type, equals(EatingOperationType.extracting));
+        expect(extractingSession.candidateAssetId, equals('cand-asset-1'));
+        expect(extractingSession.candidateR2Key, equals('cand-key-1'));
       },
     );
   });

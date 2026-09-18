@@ -99,6 +99,7 @@ class EatingDomainEngine {
     required List<TimelineBlockDraft> blocks,
     required BaseTimelineSetup setup,
     NutritionTargets? targets,
+    bool isFreshAiGeneration = false,
   }) {
     if (blocks.isEmpty) {
       return 'Meal plan must contain at least one meal.';
@@ -159,9 +160,19 @@ class EatingDomainEngine {
         !setup.eatingCustomized &&
         hasAiBlocks) {
       final draft = setup.toBaseTimelineDraft().copyWith(blocks: blocks);
+      final effectiveTargets = (isFreshAiGeneration && targets != null)
+          ? targets.copyWith(
+              targetCalories: setup.targetCaloriesOverride ??
+                  setup.targetCalories ??
+                  targets.targetCalories,
+              proteinTarget: setup.targetProteinOverride?.toDouble() ??
+                  setup.targetProtein?.toDouble() ??
+                  targets.proteinTarget,
+            )
+          : NutritionTargets.empty;
       final validationErr = validateGeneratedEatingWeeklyPlan(
         draft,
-        targets: targets ?? NutritionTargets.empty,
+        targets: effectiveTargets,
       );
       if (validationErr != null) {
         return validationErr;
@@ -245,9 +256,12 @@ class EatingDomainEngine {
         targets.lifeRole ??
         (profile.lifeRole.isNotEmpty ? profile.lifeRole : null);
 
-    final targetCalories = setup.targetCalories ?? targets.targetCalories;
-    final targetProtein =
-        setup.targetProtein?.toDouble() ?? targets.proteinTarget;
+    final targetCalories = setup.targetCaloriesOverride ??
+        setup.targetCalories ??
+        targets.targetCalories;
+    final targetProtein = setup.targetProteinOverride?.toDouble() ??
+        setup.targetProtein?.toDouble() ??
+        targets.proteinTarget;
 
     return EatingGenerationInputs(
       contractVersion: BaseTimelineDraft.currentGate2EatingPlanVersion,
@@ -348,9 +362,13 @@ class EatingDomainEngine {
       );
     }
 
+    final effectiveTargets = targets.copyWith(
+      targetCalories: inputs.targetCalories,
+      proteinTarget: inputs.proteinTarget,
+    );
     final validationErr = validateGeneratedEatingWeeklyPlan(
       effectiveTimeline.copyWith(blocks: blocks),
-      targets: targets,
+      targets: effectiveTargets,
     );
     if (validationErr != null) {
       throw StateError(validationErr);

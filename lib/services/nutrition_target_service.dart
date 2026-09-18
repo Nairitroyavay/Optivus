@@ -34,6 +34,41 @@ class NutritionTargets {
     this.lifeRole,
   });
 
+  NutritionTargets copyWith({
+    double? bmi,
+    int? estimatedAge,
+    int? estimatedBmr,
+    double? activityFactor,
+    int? estimatedMaintenanceCalories,
+    int? targetCalories,
+    double? proteinTarget,
+    String? bodyGoal,
+    bool? hasBodyBasics,
+    double? weightKg,
+    double? heightCm,
+    String? gender,
+    String? exerciseLevel,
+    String? lifeRole,
+  }) {
+    return NutritionTargets(
+      bmi: bmi ?? this.bmi,
+      estimatedAge: estimatedAge ?? this.estimatedAge,
+      estimatedBmr: estimatedBmr ?? this.estimatedBmr,
+      activityFactor: activityFactor ?? this.activityFactor,
+      estimatedMaintenanceCalories:
+          estimatedMaintenanceCalories ?? this.estimatedMaintenanceCalories,
+      targetCalories: targetCalories ?? this.targetCalories,
+      proteinTarget: proteinTarget ?? this.proteinTarget,
+      bodyGoal: bodyGoal ?? this.bodyGoal,
+      hasBodyBasics: hasBodyBasics ?? this.hasBodyBasics,
+      weightKg: weightKg ?? this.weightKg,
+      heightCm: heightCm ?? this.heightCm,
+      gender: gender ?? this.gender,
+      exerciseLevel: exerciseLevel ?? this.exerciseLevel,
+      lifeRole: lifeRole ?? this.lifeRole,
+    );
+  }
+
   static const empty = NutritionTargets(
     bmi: null,
     estimatedAge: null,

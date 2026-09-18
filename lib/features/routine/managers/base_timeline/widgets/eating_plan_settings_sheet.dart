@@ -8,13 +8,15 @@ class EatingPlanSettingsResult {
   final String? eatingMode;
   final String? foodType;
   final String? foodStyleCustomText;
-  final int breakfastMinute;
+  final int? breakfastMinute;
   final int? extraSnackMinute;
-  final int lunchMinute;
+  final int? lunchMinute;
   final int? snackMinute;
-  final int dinnerMinute;
+  final int? dinnerMinute;
   final int? targetCalories;
   final int? targetProtein;
+  final int? targetCaloriesOverride;
+  final int? targetProteinOverride;
   final bool shouldRegenerate;
 
   const EatingPlanSettingsResult({
@@ -30,6 +32,8 @@ class EatingPlanSettingsResult {
     required this.dinnerMinute,
     required this.targetCalories,
     required this.targetProtein,
+    this.targetCaloriesOverride,
+    this.targetProteinOverride,
     required this.shouldRegenerate,
   });
 }
@@ -50,6 +54,8 @@ class EatingPlanSettingsSheet extends StatefulWidget {
   final int? initialExtraSnackMinute;
   final int? initialTargetCalories;
   final int? initialTargetProtein;
+  final int? initialTargetCaloriesOverride;
+  final int? initialTargetProteinOverride;
   final int? calculatedCalories;
   final int? calculatedProtein;
   final bool showRegenerateAction;
@@ -71,6 +77,8 @@ class EatingPlanSettingsSheet extends StatefulWidget {
     this.initialExtraSnackMinute,
     this.initialTargetCalories,
     this.initialTargetProtein,
+    this.initialTargetCaloriesOverride,
+    this.initialTargetProteinOverride,
     this.calculatedCalories,
     this.calculatedProtein,
     this.showRegenerateAction = true,
@@ -93,6 +101,8 @@ class EatingPlanSettingsSheet extends StatefulWidget {
     int? initialExtraSnackMinute,
     int? initialTargetCalories,
     int? initialTargetProtein,
+    int? initialTargetCaloriesOverride,
+    int? initialTargetProteinOverride,
     int? calculatedCalories,
     int? calculatedProtein,
     bool showRegenerateAction = true,
@@ -120,6 +130,8 @@ class EatingPlanSettingsSheet extends StatefulWidget {
         initialExtraSnackMinute: initialExtraSnackMinute,
         initialTargetCalories: initialTargetCalories,
         initialTargetProtein: initialTargetProtein,
+        initialTargetCaloriesOverride: initialTargetCaloriesOverride,
+        initialTargetProteinOverride: initialTargetProteinOverride,
         calculatedCalories: calculatedCalories,
         calculatedProtein: calculatedProtein,
         showRegenerateAction: showRegenerateAction,
@@ -143,6 +155,11 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
   late int _dinnerMinute;
   late int _snackMinute;
   late int _extraSnackMinute;
+  bool _breakfastTouched = false;
+  bool _lunchTouched = false;
+  bool _dinnerTouched = false;
+  bool _snackTouched = false;
+  bool _extraSnackTouched = false;
   late TextEditingController _caloriesController;
   late TextEditingController _proteinController;
   bool _showNutritionOverrides = false;
@@ -152,10 +169,10 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
   void initState() {
     super.initState();
     _showNutritionOverrides =
-        (widget.initialTargetCalories != null &&
-            widget.initialTargetCalories! > 0) ||
-        (widget.initialTargetProtein != null &&
-            widget.initialTargetProtein! > 0);
+        (widget.initialTargetCaloriesOverride != null &&
+            widget.initialTargetCaloriesOverride! > 0) ||
+        (widget.initialTargetProteinOverride != null &&
+            widget.initialTargetProteinOverride! > 0);
     _goal = (widget.initialGoal?.isNotEmpty == true)
         ? widget.initialGoal!.toLowerCase()
         : (widget.isNew ? 'maintain' : null);
@@ -175,14 +192,18 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
     _snackMinute = widget.initialSnackMinute ?? 1020;
     _extraSnackMinute = widget.initialExtraSnackMinute ?? 660;
     _caloriesController = TextEditingController(
-      text: widget.initialTargetCalories != null
-          ? widget.initialTargetCalories.toString()
-          : '',
+      text: widget.initialTargetCaloriesOverride != null
+          ? widget.initialTargetCaloriesOverride.toString()
+          : (widget.initialTargetCalories != null
+              ? widget.initialTargetCalories.toString()
+              : (widget.calculatedCalories?.toString() ?? '')),
     );
     _proteinController = TextEditingController(
-      text: widget.initialTargetProtein != null
-          ? widget.initialTargetProtein.toString()
-          : '',
+      text: widget.initialTargetProteinOverride != null
+          ? widget.initialTargetProteinOverride.toString()
+          : (widget.initialTargetProtein != null
+              ? widget.initialTargetProtein.toString()
+              : (widget.calculatedProtein?.toString() ?? '')),
     );
     _customStyleController.addListener(_onFieldChanged);
     _caloriesController.addListener(_onFieldChanged);
@@ -227,44 +248,56 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
     final initialCustomText = (widget.initialFoodStyleCustomText ?? '').trim();
     if (currentCustomText != initialCustomText) return true;
 
-    final initBf = widget.initialBreakfastMinute ?? 480;
-    if (_breakfastMinute != initBf) return true;
+    if (_breakfastTouched &&
+        _breakfastMinute != widget.initialBreakfastMinute) {
+      return true;
+    }
+    if (_lunchTouched && _lunchMinute != widget.initialLunchMinute) return true;
+    if (_dinnerTouched && _dinnerMinute != widget.initialDinnerMinute) {
+      return true;
+    }
+    if (_snackTouched && _snackMinute != widget.initialSnackMinute) return true;
+    if (_extraSnackTouched &&
+        _extraSnackMinute != widget.initialExtraSnackMinute) {
+      return true;
+    }
 
-    final initLunch = widget.initialLunchMinute ?? 780;
-    if (_lunchMinute != initLunch) return true;
-
-    final initDinner = widget.initialDinnerMinute ?? 1230;
-    if (_dinnerMinute != initDinner) return true;
-
-    final initSnack = widget.initialSnackMinute ?? 1020;
-    if (_snackMinute != initSnack) return true;
-
-    final initExtra = widget.initialExtraSnackMinute ?? 660;
-    if (_extraSnackMinute != initExtra) return true;
-
-    final rawCal = _showNutritionOverrides
+    final rawCalOverride = _showNutritionOverrides
         ? int.tryParse(_caloriesController.text.trim())
         : null;
-    final initialCal = widget.initialTargetCalories;
-    if (rawCal != initialCal) return true;
+    if (rawCalOverride != widget.initialTargetCaloriesOverride) return true;
 
-    final rawProt = _showNutritionOverrides
+    final rawProtOverride = _showNutritionOverrides
         ? int.tryParse(_proteinController.text.trim())
         : null;
-    final initialProt = widget.initialTargetProtein;
-    if (rawProt != initialProt) return true;
+    if (rawProtOverride != widget.initialTargetProteinOverride) return true;
 
     final initialHadOverrides =
-        (widget.initialTargetCalories != null &&
-            widget.initialTargetCalories! > 0) ||
-        (widget.initialTargetProtein != null &&
-            widget.initialTargetProtein! > 0);
+        (widget.initialTargetCaloriesOverride != null &&
+            widget.initialTargetCaloriesOverride! > 0) ||
+        (widget.initialTargetProteinOverride != null &&
+            widget.initialTargetProteinOverride! > 0);
     if (_showNutritionOverrides != initialHadOverrides) return true;
 
     return false;
   }
 
-  String? _validate() {
+  String? _validate({required bool regenerate}) {
+    if (regenerate) {
+      if (_goal == null) {
+        return 'Please select a meal planning goal before generating.';
+      }
+      if (_mealsPerDay == null) {
+        return 'Please select the number of meals per day before generating.';
+      }
+      if (_eatingMode == null) {
+        return 'Please select a food culture & style before generating.';
+      }
+      if (_foodType == null) {
+        return 'Please select a dietary preference before generating.';
+      }
+    }
+
     if (_eatingMode == 'custom' && _customStyleController.text.trim().isEmpty) {
       return 'Please describe your custom food style.';
     }
@@ -325,7 +358,7 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
   }
 
   void _submit({required bool regenerate}) {
-    final err = _validate();
+    final err = _validate(regenerate: regenerate);
     if (err != null) {
       setState(() {
         _validationError = err;
@@ -333,14 +366,45 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
       return;
     }
 
-    final rawCal = _showNutritionOverrides
+    final rawCalOverride = _showNutritionOverrides
         ? int.tryParse(_caloriesController.text.trim())
         : null;
-    final rawProt = _showNutritionOverrides
+    final rawProtOverride = _showNutritionOverrides
         ? int.tryParse(_proteinController.text.trim())
         : null;
 
     final effectiveMeals = _mealsPerDay ?? (regenerate ? 3 : null);
+
+    final resBreakfast = regenerate
+        ? _breakfastMinute
+        : (_breakfastTouched
+              ? _breakfastMinute
+              : widget.initialBreakfastMinute);
+    final resLunch = regenerate
+        ? _lunchMinute
+        : (_lunchTouched ? _lunchMinute : widget.initialLunchMinute);
+    final resDinner = regenerate
+        ? _dinnerMinute
+        : (_dinnerTouched ? _dinnerMinute : widget.initialDinnerMinute);
+    final resSnack = (effectiveMeals == 4 || effectiveMeals == 5)
+        ? (regenerate
+              ? _snackMinute
+              : (_snackTouched ? _snackMinute : widget.initialSnackMinute))
+        : null;
+    final resExtraSnack = effectiveMeals == 5
+        ? (regenerate
+              ? _extraSnackMinute
+              : (_extraSnackTouched
+                    ? _extraSnackMinute
+                    : widget.initialExtraSnackMinute))
+        : null;
+
+    final effectiveTargetCal = (rawCalOverride != null && rawCalOverride > 0)
+        ? rawCalOverride
+        : (widget.initialTargetCalories ?? widget.calculatedCalories);
+    final effectiveTargetProt = (rawProtOverride != null && rawProtOverride > 0)
+        ? rawProtOverride
+        : (widget.initialTargetProtein ?? widget.calculatedProtein);
 
     final result = EatingPlanSettingsResult(
       goal: regenerate ? (_goal ?? 'maintain') : _goal,
@@ -350,15 +414,19 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
       foodStyleCustomText: _eatingMode == 'custom'
           ? _customStyleController.text.trim()
           : null,
-      breakfastMinute: _breakfastMinute,
-      extraSnackMinute: effectiveMeals == 5 ? _extraSnackMinute : null,
-      lunchMinute: _lunchMinute,
-      snackMinute: (effectiveMeals == 4 || effectiveMeals == 5)
-          ? _snackMinute
+      breakfastMinute: resBreakfast,
+      extraSnackMinute: resExtraSnack,
+      lunchMinute: resLunch,
+      snackMinute: resSnack,
+      dinnerMinute: resDinner,
+      targetCalories: effectiveTargetCal,
+      targetProtein: effectiveTargetProt,
+      targetCaloriesOverride: (rawCalOverride != null && rawCalOverride > 0)
+          ? rawCalOverride
           : null,
-      dinnerMinute: _dinnerMinute,
-      targetCalories: (rawCal != null && rawCal > 0) ? rawCal : null,
-      targetProtein: (rawProt != null && rawProt > 0) ? rawProt : null,
+      targetProteinOverride: (rawProtOverride != null && rawProtOverride > 0)
+          ? rawProtOverride
+          : null,
       shouldRegenerate: regenerate,
     );
 
@@ -642,7 +710,12 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                         ),
                         title: const Text('Breakfast'),
                         trailing: Text(
-                          EatingPresentationUtils.formatTime(_breakfastMinute),
+                          _breakfastTouched ||
+                                  widget.initialBreakfastMinute != null
+                              ? EatingPresentationUtils.formatTime(
+                                  _breakfastMinute,
+                                )
+                              : 'Default (${EatingPresentationUtils.formatTime(_breakfastMinute)})',
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                         onTap: () async {
@@ -657,6 +730,7 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                             setState(() {
                               _breakfastMinute =
                                   picked.hour * 60 + picked.minute;
+                              _breakfastTouched = true;
                               _validationError = null;
                             });
                           }
@@ -675,9 +749,12 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                           ),
                           title: const Text('Morning Snack'),
                           trailing: Text(
-                            EatingPresentationUtils.formatTime(
-                              _extraSnackMinute,
-                            ),
+                            _extraSnackTouched ||
+                                    widget.initialExtraSnackMinute != null
+                                ? EatingPresentationUtils.formatTime(
+                                    _extraSnackMinute,
+                                  )
+                                : 'Default (${EatingPresentationUtils.formatTime(_extraSnackMinute)})',
                             style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                           onTap: () async {
@@ -692,6 +769,7 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                               setState(() {
                                 _extraSnackMinute =
                                     picked.hour * 60 + picked.minute;
+                                _extraSnackTouched = true;
                                 _validationError = null;
                               });
                             }
@@ -710,7 +788,9 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                         ),
                         title: const Text('Lunch'),
                         trailing: Text(
-                          EatingPresentationUtils.formatTime(_lunchMinute),
+                          _lunchTouched || widget.initialLunchMinute != null
+                              ? EatingPresentationUtils.formatTime(_lunchMinute)
+                              : 'Default (${EatingPresentationUtils.formatTime(_lunchMinute)})',
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                         onTap: () async {
@@ -724,6 +804,7 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                           if (picked != null) {
                             setState(() {
                               _lunchMinute = picked.hour * 60 + picked.minute;
+                              _lunchTouched = true;
                               _validationError = null;
                             });
                           }
@@ -742,7 +823,11 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                           ),
                           title: const Text('Afternoon Snack'),
                           trailing: Text(
-                            EatingPresentationUtils.formatTime(_snackMinute),
+                            _snackTouched || widget.initialSnackMinute != null
+                                ? EatingPresentationUtils.formatTime(
+                                    _snackMinute,
+                                  )
+                                : 'Default (${EatingPresentationUtils.formatTime(_snackMinute)})',
                             style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                           onTap: () async {
@@ -756,6 +841,7 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                             if (picked != null) {
                               setState(() {
                                 _snackMinute = picked.hour * 60 + picked.minute;
+                                _snackTouched = true;
                                 _validationError = null;
                               });
                             }
@@ -774,7 +860,11 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                         ),
                         title: const Text('Dinner'),
                         trailing: Text(
-                          EatingPresentationUtils.formatTime(_dinnerMinute),
+                          _dinnerTouched || widget.initialDinnerMinute != null
+                              ? EatingPresentationUtils.formatTime(
+                                  _dinnerMinute,
+                                )
+                              : 'Default (${EatingPresentationUtils.formatTime(_dinnerMinute)})',
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                         onTap: () async {
@@ -788,6 +878,7 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                           if (picked != null) {
                             setState(() {
                               _dinnerMinute = picked.hour * 60 + picked.minute;
+                              _dinnerTouched = true;
                               _validationError = null;
                             });
                           }

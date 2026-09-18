@@ -283,13 +283,19 @@ class EatingPlanSummaryCard extends StatelessWidget {
   }
 
   Widget _buildGeneratedPlanDetails() {
-    final cal = setup.targetCalories;
-    final prot = setup.targetProtein;
+    final hasOverride = setup.hasTargetOverrides;
+    final cal = setup.targetCaloriesOverride ?? setup.targetCalories;
+    final prot = setup.targetProteinOverride ?? setup.targetProtein;
     final targetStr = (cal != null && prot != null)
         ? '$cal kcal · $prot g protein'
         : (cal != null
               ? '$cal kcal/day'
               : (prot != null ? '$prot g protein/day' : 'Not set'));
+    final targetDisplay = (cal != null || prot != null)
+        ? (hasOverride
+              ? '$targetStr (Custom target)'
+              : '$targetStr (Calculated from Body Basics)')
+        : 'Not set';
 
     final goalStr =
         setup.mealPlanningGoal != null &&
@@ -320,7 +326,7 @@ class EatingPlanSummaryCard extends StatelessWidget {
       children: [
         _buildInfoRow('Goal', goalStr),
         const SizedBox(height: 6),
-        _buildInfoRow('Daily targets', targetStr),
+        _buildInfoRow('Daily targets', targetDisplay),
         const SizedBox(height: 6),
         _buildInfoRow('Meal preference', prefMeals),
         const SizedBox(height: 6),

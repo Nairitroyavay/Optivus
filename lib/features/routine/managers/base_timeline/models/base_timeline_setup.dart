@@ -46,7 +46,11 @@ class BaseTimelineSetup {
   final String? eatingMode;
   final String? foodType;
   final String? foodStyleCustomText;
+  /// Legacy/backward-compatible metadata preserved for schema fidelity.
+  /// Not passed to current nutrition worker generator.
   final String? mealBudget;
+  /// Legacy/backward-compatible metadata preserved for schema fidelity.
+  /// Not passed to current nutrition worker generator.
   final String? cookingAbility;
   final int? breakfastMinute;
   final int? lunchMinute;
@@ -55,11 +59,16 @@ class BaseTimelineSetup {
   final int? extraSnackMinute;
   final int? targetCalories;
   final int? targetProtein;
+  final int? targetCaloriesOverride;
+  final int? targetProteinOverride;
   final String? eatingPhotoAssetId;
   final String? eatingPhotoR2Key;
   final int? eatingGeneratedPlanVersion;
   final String? eatingGeneratedInputFingerprint;
   final bool eatingCustomized;
+
+  bool get hasTargetOverrides =>
+      targetCaloriesOverride != null || targetProteinOverride != null;
 
   // ── Fixed ────────────────────────────────────────────────────
   final List<TimelineBlockDraft> fixedBlocks;
@@ -120,6 +129,8 @@ class BaseTimelineSetup {
     this.extraSnackMinute,
     this.targetCalories,
     this.targetProtein,
+    this.targetCaloriesOverride,
+    this.targetProteinOverride,
     this.eatingPhotoAssetId,
     this.eatingPhotoR2Key,
     this.eatingGeneratedPlanVersion,
@@ -289,6 +300,10 @@ class BaseTimelineSetup {
         if (extraSnackMinute != null) 'extraSnackMinute': extraSnackMinute,
         if (targetCalories != null) 'targetCalories': targetCalories,
         if (targetProtein != null) 'targetProtein': targetProtein,
+        if (targetCaloriesOverride != null)
+          'targetCaloriesOverride': targetCaloriesOverride,
+        if (targetProteinOverride != null)
+          'targetProteinOverride': targetProteinOverride,
         if (eatingGeneratedPlanVersion != null)
           'planVersion': eatingGeneratedPlanVersion,
         if (eatingGeneratedInputFingerprint != null)
@@ -681,6 +696,8 @@ class BaseTimelineSetup {
     int? extraSnack,
     int? calories,
     int? protein,
+    int? caloriesOverride,
+    int? proteinOverride,
     int? planVersion,
     String? inputFingerprint,
     bool customized = false,
@@ -723,6 +740,10 @@ class BaseTimelineSetup {
       clearTargetCalories: calories == null,
       targetProtein: protein,
       clearTargetProtein: protein == null,
+      targetCaloriesOverride: caloriesOverride,
+      clearTargetCaloriesOverride: caloriesOverride == null,
+      targetProteinOverride: proteinOverride,
+      clearTargetProteinOverride: proteinOverride == null,
       eatingGeneratedPlanVersion: planVersion,
       clearEatingGeneratedPlanVersion: planVersion == null,
       eatingGeneratedInputFingerprint: inputFingerprint,
@@ -758,6 +779,8 @@ class BaseTimelineSetup {
       clearExtraSnackMinute: true,
       clearTargetCalories: true,
       clearTargetProtein: true,
+      clearTargetCaloriesOverride: true,
+      clearTargetProteinOverride: true,
       clearEatingGeneratedPlanVersion: true,
       clearEatingGeneratedInputFingerprint: true,
       eatingCustomized: false,
@@ -770,8 +793,12 @@ class BaseTimelineSetup {
     int? meals,
     int? targetCalories,
     int? targetProtein,
+    int? targetCaloriesOverride,
+    int? targetProteinOverride,
     bool clearTargetCalories = false,
     bool clearTargetProtein = false,
+    bool clearTargetCaloriesOverride = false,
+    bool clearTargetProteinOverride = false,
   }) {
     return copyWith(
       eatingSetupPath: 'manual',
@@ -797,6 +824,14 @@ class BaseTimelineSetup {
       clearTargetCalories: clearTargetCalories || targetCalories == null,
       targetProtein: clearTargetProtein ? null : targetProtein,
       clearTargetProtein: clearTargetProtein || targetProtein == null,
+      targetCaloriesOverride:
+          clearTargetCaloriesOverride ? null : targetCaloriesOverride,
+      clearTargetCaloriesOverride:
+          clearTargetCaloriesOverride || targetCaloriesOverride == null,
+      targetProteinOverride:
+          clearTargetProteinOverride ? null : targetProteinOverride,
+      clearTargetProteinOverride:
+          clearTargetProteinOverride || targetProteinOverride == null,
       eatingCustomized: false,
     );
   }
@@ -821,6 +856,8 @@ class BaseTimelineSetup {
       clearExtraSnackMinute: true,
       clearTargetCalories: true,
       clearTargetProtein: true,
+      clearTargetCaloriesOverride: true,
+      clearTargetProteinOverride: true,
       clearEatingPhotoAssetId: true,
       clearEatingPhotoR2Key: true,
       clearEatingGeneratedPlanVersion: true,
@@ -885,6 +922,10 @@ class BaseTimelineSetup {
     bool clearTargetCalories = false,
     int? targetProtein,
     bool clearTargetProtein = false,
+    int? targetCaloriesOverride,
+    bool clearTargetCaloriesOverride = false,
+    int? targetProteinOverride,
+    bool clearTargetProteinOverride = false,
     String? eatingPhotoAssetId,
     bool clearEatingPhotoAssetId = false,
     String? eatingPhotoR2Key,
@@ -986,6 +1027,12 @@ class BaseTimelineSetup {
       targetProtein: clearTargetProtein
           ? null
           : (targetProtein ?? this.targetProtein),
+      targetCaloriesOverride: clearTargetCaloriesOverride
+          ? null
+          : (targetCaloriesOverride ?? this.targetCaloriesOverride),
+      targetProteinOverride: clearTargetProteinOverride
+          ? null
+          : (targetProteinOverride ?? this.targetProteinOverride),
       eatingPhotoAssetId: clearEatingPhotoAssetId
           ? null
           : (eatingPhotoAssetId ?? this.eatingPhotoAssetId),
@@ -1156,6 +1203,16 @@ class BaseTimelineSetup {
     if (targetProtein != null && targetProtein! < 1) {
       throw ArgumentError('Base Timeline targetProtein must be positive.');
     }
+    if (targetCaloriesOverride != null && targetCaloriesOverride! < 1) {
+      throw ArgumentError(
+        'Base Timeline targetCaloriesOverride must be positive.',
+      );
+    }
+    if (targetProteinOverride != null && targetProteinOverride! < 1) {
+      throw ArgumentError(
+        'Base Timeline targetProteinOverride must be positive.',
+      );
+    }
     if (eatingSetupPath != null &&
         eatingSetupPath != 'has_routine' &&
         eatingSetupPath != 'create' &&
@@ -1213,6 +1270,8 @@ class BaseTimelineSetup {
       'extraSnackMinute': extraSnackMinute,
       'targetCalories': targetCalories,
       'targetProtein': targetProtein,
+      'targetCaloriesOverride': targetCaloriesOverride,
+      'targetProteinOverride': targetProteinOverride,
       'eatingPhotoAssetId': eatingPhotoAssetId,
       'eatingPhotoR2Key': eatingPhotoR2Key,
       'eatingGeneratedPlanVersion': eatingGeneratedPlanVersion,
@@ -1345,6 +1404,12 @@ class BaseTimelineSetup {
       extraSnackMinute: (map['extraSnackMinute'] as num?)?.toInt(),
       targetCalories: (map['targetCalories'] as num?)?.toInt(),
       targetProtein: (map['targetProtein'] as num?)?.toInt(),
+      targetCaloriesOverride:
+          (map['targetCaloriesOverride'] as num?)?.toInt() ??
+          (map['eatingTargetCaloriesOverride'] as num?)?.toInt(),
+      targetProteinOverride:
+          (map['targetProteinOverride'] as num?)?.toInt() ??
+          (map['eatingTargetProteinOverride'] as num?)?.toInt(),
       eatingPhotoAssetId: map['eatingPhotoAssetId'] as String?,
       eatingPhotoR2Key: map['eatingPhotoR2Key'] as String?,
       eatingGeneratedPlanVersion:

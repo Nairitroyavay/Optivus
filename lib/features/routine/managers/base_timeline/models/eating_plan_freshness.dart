@@ -28,7 +28,7 @@ enum EatingPlanFreshness {
     }
     final savedFingerprint = setup.eatingGeneratedInputFingerprint;
     if (savedFingerprint == null || savedFingerprint.isEmpty) {
-      return EatingPlanFreshness.current;
+      return EatingPlanFreshness.unknown;
     }
 
     try {

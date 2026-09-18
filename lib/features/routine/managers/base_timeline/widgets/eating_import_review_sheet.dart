@@ -64,7 +64,7 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
     final isValidTime =
         b.endMinute > b.startMinute &&
         b.startMinute >= 0 &&
-        b.endMinute <= 1440;
+        b.endMinute <= 1439;
     final hasTitle = b.title.trim().isNotEmpty;
     return !hasDishes || !hasDays || !isValidTime || !hasTitle;
   });
@@ -357,6 +357,16 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                   );
                   return;
                 }
+                if (startMin < 0 ||
+                    startMin > 1439 ||
+                    endMin < 0 ||
+                    endMin > 1439) {
+                  setDlgState(
+                    () => errorText =
+                        'Meal times must be within a valid day range (0:00 - 23:59).',
+                  );
+                  return;
+                }
                 if (endMin <= startMin) {
                   setDlgState(
                     () => errorText = 'End time must be after start time.',
@@ -526,7 +536,7 @@ class _EatingImportReviewSheetState extends State<EatingImportReviewSheet> {
                           final isValidTime =
                               b.endMinute > b.startMinute &&
                               b.startMinute >= 0 &&
-                              b.endMinute <= 1440;
+                              b.endMinute <= 1439;
                           final hasTitle = b.title.trim().isNotEmpty;
                           final needsAttention =
                               !hasDishes ||

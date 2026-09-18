@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -75,6 +76,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
   int? _workingExtraSnackMinute;
   int? _workingTargetCalories;
   int? _workingTargetProtein;
+  int? _workingTargetCaloriesOverride;
+  int? _workingTargetProteinOverride;
   String? _workingAssetId;
   String? _workingR2Key;
   String? _workingSetupPath;
@@ -89,41 +92,72 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
   String? _frontBlockId;
   int _requestGeneration = 0;
   String? _editorOwnerUid;
-  String? _candidateAssetId;
-  String? _candidateR2Key;
   EatingOperationSession? _currentOperation;
 
-  void _cancelAiOperation() {
+  void _applyEatingDraftState(
+    EatingDraftState state, {
+    bool markDirty = true,
+  }) {
+    setState(() {
+      _workingBlocks = List.from(state.blocks);
+      _workingSetupPath = state.setupPath;
+      _workingAssetId = state.photoAssetId;
+      _workingR2Key = state.photoR2Key;
+      _workingGeneratedPlanVersion = state.planVersion;
+      _workingGeneratedInputFingerprint = state.inputFingerprint;
+      _workingCustomized = state.customized;
+      _workingGoal = state.goal;
+      _workingMealsPerDay = state.mealsPerDay;
+      _workingEatingMode = state.eatingMode;
+      _workingFoodType = state.foodType;
+      _workingFoodStyleCustomText = state.foodStyleCustomText;
+      _workingBreakfastMinute = state.breakfastMinute;
+      _workingLunchMinute = state.lunchMinute;
+      _workingDinnerMinute = state.dinnerMinute;
+      _workingSnackMinute = state.snackMinute;
+      _workingExtraSnackMinute = state.extraSnackMinute;
+      _workingTargetCalories = state.targetCalories;
+      _workingTargetProtein = state.targetProtein;
+      _workingTargetCaloriesOverride = state.targetCaloriesOverride;
+      _workingTargetProteinOverride = state.targetProteinOverride;
+      _isEditing = true;
+      if (markDirty) {
+        _isDirty = true;
+      }
+    });
+  }
+
+  Future<void> _cancelEatingOperation() async {
     _requestGeneration++;
     final op = _currentOperation;
     _currentOperation = null;
+
+    try {
+      ref
+          .read(routineImportAiControllerProvider.notifier)
+          .cancelCurrentExtraction();
+    } catch (_) {}
+
     if (op != null && op.candidateAssetId != null) {
       try {
         final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
-        helper.retireUncommittedUpload(
+        await helper.retireUncommittedUpload(
           uid: op.ownerUid,
           assetId: op.candidateAssetId!,
           objectKey: op.candidateR2Key,
-        );
-      } catch (_) {}
-    } else if (_candidateAssetId != null) {
-      try {
-        final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
-        helper.retireUncommittedUpload(
-          uid: ref.read(userProfileProvider).uid,
-          assetId: _candidateAssetId,
-          objectKey: _candidateR2Key,
         );
       } catch (_) {}
     }
     if (mounted) {
       setState(() {
         _isExtracting = false;
-        _candidateAssetId = null;
-        _candidateR2Key = null;
         _errorMessage = null;
       });
     }
+  }
+
+  void _cancelAiOperation() {
+    unawaited(_cancelEatingOperation());
   }
 
   EatingPlanFreshness _evaluatePlanFreshness(BaseTimelineSetup setup) {
@@ -161,6 +195,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     _workingExtraSnackMinute = setup.extraSnackMinute;
     _workingTargetCalories = setup.targetCalories;
     _workingTargetProtein = setup.targetProtein;
+    _workingTargetCaloriesOverride = setup.targetCaloriesOverride;
+    _workingTargetProteinOverride = setup.targetProteinOverride;
     _workingSetupPath = setup.eatingSetupPath;
     _workingGeneratedPlanVersion = setup.eatingGeneratedPlanVersion;
     _workingGeneratedInputFingerprint = setup.eatingGeneratedInputFingerprint;
@@ -211,7 +247,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     if (confirmed) {
       if (_workingAssetId != null && _workingAssetId != _initialAssetId) {
         try {
-          final uid = ref.read(userProfileProvider).uid;
+          final uid = _editorOwnerUid ?? ref.read(userProfileProvider).uid;
           final helper = ref.read(baseTimelineUploadLifecycleHelperProvider);
           await helper.retireUncommittedUpload(
             uid: uid,
@@ -293,6 +329,12 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     String? candidateAssetId;
     String? candidateR2Key;
 
+    _currentOperation = EatingOperationSession(
+      generationId: generation,
+      ownerUid: uid,
+      type: EatingOperationType.uploading,
+    );
+
     try {
       final asset = await uploadNotifier.startUpload(
         uid: uid,
@@ -302,14 +344,26 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       );
 
       if (asset == null) {
+        if (_currentOperation?.generationId == generation) {
+          _currentOperation = null;
+        }
         if (mounted) setState(() => _isExtracting = false);
+        return;
+      }
+
+      if (_requestGeneration != generation) {
+        try {
+          await lifecycleHelper.retireUncommittedUpload(
+            uid: uid,
+            assetId: asset.assetId,
+            objectKey: asset.r2Key,
+          );
+        } catch (_) {}
         return;
       }
 
       candidateAssetId = asset.assetId;
       candidateR2Key = asset.r2Key;
-      _candidateAssetId = candidateAssetId;
-      _candidateR2Key = candidateR2Key;
       _currentOperation = EatingOperationSession(
         generationId: generation,
         ownerUid: uid,
@@ -345,8 +399,11 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       }
 
       final candidateBlocks = (result?.candidates ?? []).map((c) {
+        final blockId = c.id.trim().isNotEmpty
+            ? c.id.trim()
+            : 'meal_${DateTime.now().millisecondsSinceEpoch}_${c.startMinute}';
         return TimelineBlockDraft(
-          id: c.id,
+          id: blockId,
           title: c.title,
           startMinute: c.startMinute,
           endMinute: c.endMinute,
@@ -431,20 +488,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
           photoR2Key: candidateR2Key,
         );
 
-        setState(() {
-          _workingAssetId = transition.photoAssetId;
-          _workingR2Key = transition.photoR2Key;
-          _workingBlocks = transition.blocks;
-          _workingSetupPath = transition.setupPath;
-          _workingCustomized = transition.customized;
-          _workingGeneratedPlanVersion = transition.planVersion;
-          _workingGeneratedInputFingerprint = transition.inputFingerprint;
-          _workingTargetCalories = transition.targetCalories;
-          _workingTargetProtein = transition.targetProtein;
-          _workingMealsPerDay = transition.mealsPerDay;
-          _isEditing = true;
-          _isDirty = true;
-        });
+        _applyEatingDraftState(transition, markDirty: true);
       } else {
         // Cancelled review: retire candidate asset while preserving existing schedule intact!
         await lifecycleHelper.retireUncommittedUpload(
@@ -528,6 +572,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       initialExtraSnackMinute: _workingExtraSnackMinute,
       initialTargetCalories: _workingTargetCalories,
       initialTargetProtein: _workingTargetProtein,
+      initialTargetCaloriesOverride: _workingTargetCaloriesOverride,
+      initialTargetProteinOverride: _workingTargetProteinOverride,
       calculatedCalories: calculatedTargets?.targetCalories,
       calculatedProtein: calculatedTargets?.proteinTarget?.round(),
       showRegenerateAction: true,
@@ -548,6 +594,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       _workingExtraSnackMinute = result.extraSnackMinute;
       _workingTargetCalories = result.targetCalories;
       _workingTargetProtein = result.targetProtein;
+      _workingTargetCaloriesOverride = result.targetCaloriesOverride;
+      _workingTargetProteinOverride = result.targetProteinOverride;
       if (!result.shouldRegenerate) {
         _isDirty = true;
         _isEditing = true;
@@ -587,6 +635,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       extraSnackMinute: _workingExtraSnackMinute,
       targetCalories: _workingTargetCalories,
       targetProtein: _workingTargetProtein,
+      targetCaloriesOverride: _workingTargetCaloriesOverride,
+      targetProteinOverride: _workingTargetProteinOverride,
     );
 
     setState(() {
@@ -657,22 +707,15 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
           extraSnackMinute: _workingExtraSnackMinute,
           targetCalories: targets.targetCalories,
           targetProtein: targets.proteinTarget?.round(),
+          targetCaloriesOverride: _workingTargetCaloriesOverride,
+          targetProteinOverride: _workingTargetProteinOverride,
           planVersion: BaseTimelineDraft.currentGate2EatingPlanVersion,
           inputFingerprint: inputs.computeFingerprint(),
           customized: false,
         );
 
+        _applyEatingDraftState(transition, markDirty: true);
         setState(() {
-          _workingBlocks = transition.blocks;
-          _workingTargetCalories = transition.targetCalories;
-          _workingTargetProtein = transition.targetProtein;
-          _workingGeneratedPlanVersion = transition.planVersion;
-          _workingGeneratedInputFingerprint = transition.inputFingerprint;
-          _workingCustomized = transition.customized;
-          _workingSetupPath = transition.setupPath;
-          _workingAssetId = transition.photoAssetId;
-          _workingR2Key = transition.photoR2Key;
-          _isDirty = true;
           _isExtracting = false;
         });
       }
@@ -799,6 +842,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       extraSnackMinute: _workingExtraSnackMinute,
       targetCalories: _workingTargetCalories,
       targetProtein: _workingTargetProtein,
+      targetCaloriesOverride: _workingTargetCaloriesOverride,
+      targetProteinOverride: _workingTargetProteinOverride,
       eatingGeneratedPlanVersion: _workingGeneratedPlanVersion,
       eatingGeneratedInputFingerprint: _workingGeneratedInputFingerprint,
       eatingCustomized: _workingCustomized,
@@ -845,12 +890,17 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         newBlocks: _workingBlocks,
         expectedRevision: _editorBaseRevision,
         updateSetup: (current) {
-          if (_workingAssetId != null) {
+          if (_workingSetupPath == 'has_routine' ||
+              _workingSetupPath == 'photo') {
+            assert(
+              _workingAssetId != null && _workingR2Key != null,
+              'Eating photo setup requires valid assetId and r2Key',
+            );
             return current.asEatingPhoto(
               photoAssetId: _workingAssetId!,
               photoR2Key: _workingR2Key!,
               blocks: _workingBlocks,
-              meals: null,
+              meals: _workingMealsPerDay,
             );
           } else if (_workingSetupPath == 'manual') {
             return current.asEatingManual(
@@ -858,8 +908,10 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
               meals: _workingMealsPerDay,
               targetCalories: _workingTargetCalories,
               targetProtein: _workingTargetProtein,
+              targetCaloriesOverride: _workingTargetCaloriesOverride,
+              targetProteinOverride: _workingTargetProteinOverride,
             );
-          } else {
+          } else if (_workingSetupPath == 'create') {
             return current.replaceEatingGeneratedConfiguration(
               blocks: _workingBlocks,
               goal: _workingGoal,
@@ -874,9 +926,15 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
               extraSnack: _workingExtraSnackMinute,
               calories: _workingTargetCalories,
               protein: _workingTargetProtein,
+              caloriesOverride: _workingTargetCaloriesOverride,
+              proteinOverride: _workingTargetProteinOverride,
               planVersion: _workingGeneratedPlanVersion,
               inputFingerprint: _workingGeneratedInputFingerprint,
               customized: _workingCustomized,
+            );
+          } else {
+            throw StateError(
+              'Cannot save eating setup with unknown path: $_workingSetupPath',
             );
           }
         },
@@ -1159,19 +1217,21 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                   final manualState = EatingSourceTransitionPolicy.toManual(
                     blocks: const [],
                   );
+                  _applyEatingDraftState(manualState, markDirty: false);
                   setState(() {
-                    _workingSetupPath = manualState.setupPath;
-                    _workingBlocks = manualState.blocks;
-                    _workingAssetId = manualState.photoAssetId;
-                    _workingR2Key = manualState.photoR2Key;
-                    _workingGeneratedPlanVersion = manualState.planVersion;
-                    _workingGeneratedInputFingerprint =
-                        manualState.inputFingerprint;
-                    _workingCustomized = manualState.customized;
                     _isEditing = true;
-                    _isDirty = false;
                   });
-                  _addMealBlock();
+                  _addMealBlock(
+                    onCancel: () {
+                      if (mounted && _workingBlocks.isEmpty) {
+                        _initWorkingState(setup);
+                        setState(() {
+                          _isEditing = false;
+                          _isDirty = false;
+                        });
+                      }
+                    },
+                  );
                 },
               ),
             ],
@@ -1184,6 +1244,29 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
   @override
   void dispose() {
     _requestGeneration++;
+    final op = _currentOperation;
+    _currentOperation = null;
+    if (op != null) {
+      if (op.type == EatingOperationType.extracting) {
+        try {
+          ref
+              .read(routineImportAiControllerProvider.notifier)
+              .cancelCurrentExtraction();
+        } catch (_) {}
+      }
+      if (op.candidateAssetId != null &&
+          op.candidateAssetId != _initialAssetId) {
+        try {
+          ref
+              .read(baseTimelineUploadLifecycleHelperProvider)
+              .retireUncommittedUpload(
+                uid: op.ownerUid,
+                assetId: op.candidateAssetId,
+                objectKey: op.candidateR2Key,
+              );
+        } catch (_) {}
+      }
+    }
     super.dispose();
   }
 
@@ -1557,15 +1640,18 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                             },
                             onCreateManually: () {
                               _initWorkingState(setup);
+                              final manualState =
+                                  EatingSourceTransitionPolicy.toManual(
+                                blocks: const [],
+                              );
+                              _applyEatingDraftState(manualState, markDirty: false);
                               setState(() {
-                                _workingSetupPath = 'manual';
-                                _workingBlocks = [];
                                 _isEditing = true;
-                                _isDirty = false;
                               });
                               _addMealBlock(
                                 onCancel: () {
                                   if (mounted && _workingBlocks.isEmpty) {
+                                    _initWorkingState(setup);
                                     setState(() {
                                       _isEditing = false;
                                       _isDirty = false;

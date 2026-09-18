@@ -18,6 +18,8 @@ class EatingDraftState {
   final int? extraSnackMinute;
   final int? targetCalories;
   final int? targetProtein;
+  final int? targetCaloriesOverride;
+  final int? targetProteinOverride;
   final int? planVersion;
   final String? inputFingerprint;
   final bool customized;
@@ -39,6 +41,8 @@ class EatingDraftState {
     this.extraSnackMinute,
     this.targetCalories,
     this.targetProtein,
+    this.targetCaloriesOverride,
+    this.targetProteinOverride,
     this.planVersion,
     this.inputFingerprint,
     this.customized = false,
@@ -55,7 +59,7 @@ class EatingSourceTransitionPolicy {
   /// Transitions to Photo ('has_routine').
   ///
   /// Immediately clears all generation-only working state (calories, protein,
-  /// goal, meals preference, eating mode, food type, style text, timing,
+  /// overrides, goal, meals preference, eating mode, food type, style text, timing,
   /// fingerprint, plan version, customized flag).
   ///
   /// Meals per day is cleared to null so actual meal counts derive from schedule blocks.
@@ -81,6 +85,8 @@ class EatingSourceTransitionPolicy {
       extraSnackMinute: null,
       targetCalories: null,
       targetProtein: null,
+      targetCaloriesOverride: null,
+      targetProteinOverride: null,
       planVersion: null,
       inputFingerprint: null,
       customized: false,
@@ -95,6 +101,8 @@ class EatingSourceTransitionPolicy {
     List<TimelineBlockDraft> blocks = const [],
     int? targetCalories,
     int? targetProtein,
+    int? targetCaloriesOverride,
+    int? targetProteinOverride,
   }) {
     return EatingDraftState(
       setupPath: 'manual',
@@ -113,6 +121,8 @@ class EatingSourceTransitionPolicy {
       extraSnackMinute: null,
       targetCalories: targetCalories,
       targetProtein: targetProtein,
+      targetCaloriesOverride: targetCaloriesOverride,
+      targetProteinOverride: targetProteinOverride,
       planVersion: null,
       inputFingerprint: null,
       customized: false,
@@ -136,6 +146,8 @@ class EatingSourceTransitionPolicy {
     int? extraSnackMinute,
     int? targetCalories,
     int? targetProtein,
+    int? targetCaloriesOverride,
+    int? targetProteinOverride,
     int? planVersion,
     String? inputFingerprint,
     bool customized = false,
@@ -157,6 +169,8 @@ class EatingSourceTransitionPolicy {
       extraSnackMinute: extraSnackMinute,
       targetCalories: targetCalories,
       targetProtein: targetProtein,
+      targetCaloriesOverride: targetCaloriesOverride,
+      targetProteinOverride: targetProteinOverride,
       planVersion: planVersion,
       inputFingerprint: inputFingerprint,
       customized: customized,

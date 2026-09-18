@@ -66,15 +66,7 @@ class EatingSetupErrorMapper {
       return 'Generated meal plan did not meet weekly diversity requirements. Please try again.';
     }
 
-    // Strip common Dart exception prefixes if present
-    var clean = message
-        .replaceAll(RegExp(r'^(Exception|StateError|ArgumentError):\s*'), '')
-        .trim();
-
-    if (clean.isEmpty) {
-      return 'An unexpected error occurred. Please try again.';
-    }
-
-    return clean;
+    // Unknown errors must not expose raw internal implementation details
+    return 'Something went wrong while updating your Eating Plan. Please try again.';
   }
 }
