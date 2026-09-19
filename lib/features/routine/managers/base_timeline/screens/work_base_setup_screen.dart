@@ -17,6 +17,9 @@ import 'package:optivus/features/routine/managers/base_timeline/services/work_se
 import 'package:optivus/features/routine/managers/base_timeline/services/work_setup_error_mapper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_timeline_adapter.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_ai_thinking_view.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_load_error.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_skeleton.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_processing_scaffold.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_save_success_view.dart';
 import 'package:optivus/repositories/base_timeline_setup_repository.dart';
 import 'package:optivus/state/app_state.dart';
@@ -231,63 +234,6 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
         },
         onDelete: (toDelete) async {
           controller.deleteBlock(toDelete.id);
-          didSave = true;
-          return true;
-        },
-      );
-    } finally {
-      if (mounted) {
-        controller.stopEditingBlock();
-        if (!didSave && !ref.read(workSetupControllerProvider).isDirty) {
-          await controller.resetWorkingDraft(setup, uid: uid);
-        }
-      }
-    }
-  }
-
-  Future<void> _addBlockFromCurrentSetup(
-    BaseTimelineSetup setup,
-    int selectedDay,
-    String uid,
-  ) async {
-    final controller = ref.read(workSetupControllerProvider.notifier);
-    final profile = ref.read(userProfileProvider);
-    final lifeRole = profile.lifeRole;
-    final defaultContext = WorkPresentationUtils.defaultContextForProfile(
-      lifeRole,
-    );
-    final defaultMode = WorkPresentationUtils.defaultModeForProfile(
-      profile.workingExtra,
-    );
-    final defaultKind = WorkPresentationUtils.defaultBlockKindForProfile(
-      profile.workingExtra,
-    );
-
-    final newBlock = TimelineBlockDraft(
-      id: 'work_${DateTime.now().millisecondsSinceEpoch}',
-      section: 'work',
-      title: '',
-      startMinute: 9 * 60,
-      endMinute: 17 * 60,
-      repeatDays: [selectedDay],
-      blockType: TimelineBlockDraft.hardBlockKey,
-      workContextType: defaultContext,
-      workMode: defaultMode,
-      workBlockKind: defaultKind,
-    );
-
-    controller.editCurrentWorkSchedule(setup);
-    controller.startEditingBlock();
-    var didSave = false;
-    try {
-      await BaseTimelineWorkAdapter.showEditSheet(
-        context: context,
-        block: newBlock,
-        accent: OptivusColors.warning,
-        lifeRole: lifeRole,
-        isNew: true,
-        onSave: (updated) async {
-          controller.addBlock(updated);
           didSave = true;
           return true;
         },
@@ -546,44 +492,28 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
 
     switch (state.stage) {
       case WorkSetupStage.uploading:
-        return SafeArea(
-          child: Column(
-            children: [
-              _buildTopCancelBar(
-                onCancel: () => _handleWorkBack(setup, state, uid),
-                title: WorkPresentationUtils.uploadingTitle(lifeRole),
-              ),
-              Expanded(
-                child: BaseTimelineUploadView(
-                  localPreviewPath: state.workingLocalPreviewPath,
-                ),
-              ),
-            ],
+        return BaseTimelineProcessingScaffold(
+          title: WorkPresentationUtils.uploadingTitle(lifeRole),
+          onCancel: () => _handleWorkBack(setup, state, uid),
+          child: BaseTimelineUploadView(
+            localPreviewPath: state.workingLocalPreviewPath,
           ),
         );
 
       case WorkSetupStage.extracting:
-        return SafeArea(
-          child: Column(
-            children: [
-              _buildTopCancelBar(
-                onCancel: () => _handleWorkBack(setup, state, uid),
-                title: WorkPresentationUtils.extractionTitle(lifeRole),
-              ),
-              Expanded(
-                child: BaseTimelineAiThinkingView(
-                  initialMessage:
-                      WorkPresentationUtils.extractionInitialMessage(lifeRole),
-                  progressMessages:
-                      WorkPresentationUtils.extractionProgressMessages(
-                        lifeRole,
-                      ),
-                  localPreviewPath: state.workingLocalPreviewPath,
-                  assetId: state.candidateAssetId,
-                  r2Key: state.candidateR2Key,
+        return BaseTimelineProcessingScaffold(
+          title: WorkPresentationUtils.extractionTitle(lifeRole),
+          onCancel: () => _handleWorkBack(setup, state, uid),
+          child: BaseTimelineAiThinkingView(
+            initialMessage:
+                WorkPresentationUtils.extractionInitialMessage(lifeRole),
+            progressMessages:
+                WorkPresentationUtils.extractionProgressMessages(
+                  lifeRole,
                 ),
-              ),
-            ],
+            localPreviewPath: state.workingLocalPreviewPath,
+            assetId: state.candidateAssetId,
+            r2Key: state.candidateR2Key,
           ),
         );
 
@@ -669,8 +599,6 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
           onEditSchedule: () => controller.editCurrentWorkSchedule(setup),
           onChangeSource: () => controller.chooseSource(setup, uid: uid),
           onEditBlock: (block) => _editBlockFromCurrentSetup(setup, block, uid),
-          onAddBlock: () =>
-              _addBlockFromCurrentSetup(setup, state.selectedDay, uid),
           onRemoveSetup: () => _handleRemoveWorkSetup(setup, uid),
           routineRefreshPending: state.routineRefreshPending,
           routineRefreshMessage: state.routineRefreshMessage,
@@ -680,141 +608,16 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
     }
   }
 
-  Widget _buildTopCancelBar({required VoidCallback onCancel, String? title}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          IconButton(
-            tooltip: 'Cancel',
-            icon: const Icon(
-              Icons.close_rounded,
-              color: OptivusColors.textPrimary,
-            ),
-            onPressed: onCancel,
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.white.withValues(alpha: 0.12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(OptivusRadii.md),
-                side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-              ),
-            ),
-          ),
-          if (title != null) ...[
-            const SizedBox(width: 12),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: OptivusColors.textPrimary,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
   Widget _buildCurrentSetupSkeletonView() {
     final lifeRole = ref.watch(userProfileProvider).lifeRole;
     final headerTitle = WorkPresentationUtils.currentSetupHeaderTitle(lifeRole);
     final loadingMsg = WorkPresentationUtils.loadingScheduleMessage(lifeRole);
 
-    return SafeArea(
-      bottom: false,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(
-                    Icons.arrow_back_rounded,
-                    color: OptivusColors.textPrimary,
-                  ),
-                  onPressed: widget.onBack,
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.white.withValues(alpha: 0.1),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        headerTitle,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: OptivusColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        loadingMsg,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: OptivusColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  width: 120,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: OptivusColors.warning.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: [
-                  Container(
-                    height: 140,
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      color: Colors.white.withValues(alpha: 0.05),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.08),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: ListView.separated(
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: 4,
-                      separatorBuilder: (context, index) =>
-                          const SizedBox(height: 12),
-                      itemBuilder: (_, index) => Container(
-                        height: 64,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
-                          color: Colors.white.withValues(alpha: 0.04),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.06),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+    return BaseTimelineCurrentSetupSkeleton(
+      title: headerTitle,
+      loadingMessage: loadingMsg,
+      accent: OptivusColors.warning,
+      onBack: widget.onBack,
     );
   }
 
@@ -822,92 +625,11 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
     final lifeRole = ref.watch(userProfileProvider).lifeRole;
     final errorTitle = WorkPresentationUtils.failedToLoadTitle(lifeRole);
 
-    return SafeArea(
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: OptivusColors.danger.withValues(alpha: 0.12),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.cloud_off_rounded,
-                    color: OptivusColors.danger,
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  errorTitle,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: OptivusColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  WorkSetupErrorMapper.mapLoadError(error),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: OptivusColors.textSecondary,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        onPressed: widget.onBack,
-                        child: const Text('Back'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: OptivusColors.warning,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        onPressed: () {
-                          ref
-                              .read(baseTimelineSetupNotifierProvider.notifier)
-                              .load();
-                        },
-                        child: const Text('Retry'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return BaseTimelineCurrentSetupLoadError(
+      title: errorTitle,
+      errorMessage: WorkSetupErrorMapper.mapLoadError(error),
+      onBack: widget.onBack,
+      onRetry: () => ref.read(baseTimelineSetupNotifierProvider.notifier).load(),
     );
   }
 

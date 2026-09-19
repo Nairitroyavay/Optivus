@@ -15,6 +15,8 @@ class EatingMealEditSheet {
     required Future<bool> Function(TimelineBlockDraft updated) onSave,
     VoidCallback? onDelete,
     Color accent = OptivusColors.roseAccent,
+    bool? isNew,
+    String? saveLabel,
   }) {
     final titleController = TextEditingController(text: block.title);
     final dishesController = TextEditingController(
@@ -39,7 +41,8 @@ class EatingMealEditSheet {
       block.repeatDays.where((day) => day >= 1 && day <= 7),
     );
 
-    final isNew = block.id.startsWith('new-') || block.title.trim().isEmpty;
+    final effectiveIsNew =
+        isNew ?? (block.id.startsWith('new-') || block.title.trim().isEmpty);
 
     const availableSlots = [
       ('breakfast', 'Breakfast'),
@@ -51,11 +54,12 @@ class EatingMealEditSheet {
 
     return TimelineEditSheetShell.show<bool>(
       context: context,
-      title: isNew ? 'Add Meal' : 'Edit Meal',
-      subtitle: isNew
+      title: effectiveIsNew ? 'Add Meal' : 'Edit Meal',
+      subtitle: effectiveIsNew
           ? 'Configure dishes, timing, and days for this meal'
           : 'Update meal name, dishes, timing, and nutrition',
       accent: accent,
+      saveLabel: saveLabel ?? (effectiveIsNew ? 'Add meal' : 'Save'),
       onSave: () async {
         final title = titleController.text.trim();
         var dishes = dishesController.text
@@ -347,7 +351,7 @@ class EatingMealEditSheet {
             ),
 
             // Delete meal action
-            if (onDelete != null && !isNew) ...[
+            if (onDelete != null && !effectiveIsNew) ...[
               const SizedBox(height: 18),
               SizedBox(
                 width: double.infinity,

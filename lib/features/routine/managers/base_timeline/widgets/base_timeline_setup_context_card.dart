@@ -31,9 +31,6 @@ class BaseTimelineSetupContextCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textScaler = MediaQuery.textScalerOf(context);
-    final isLargeText = textScaler.scale(14) > 18;
-
     return Container(
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.06),
@@ -42,9 +39,9 @@ class BaseTimelineSetupContextCard extends StatelessWidget {
           color: OptivusColors.borderStandard.withValues(alpha: 0.6),
         ),
       ),
-      padding: EdgeInsets.symmetric(
+      padding: const EdgeInsets.symmetric(
         horizontal: 14,
-        vertical: isLargeText ? 8 : 10,
+        vertical: 10,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -72,7 +69,7 @@ class BaseTimelineSetupContextCard extends StatelessWidget {
                           category.toUpperCase(),
                           style: TextStyle(
                             color: accent,
-                            fontSize: isLargeText ? 9 : 10,
+                            fontSize: 10,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 0.8,
                           ),
@@ -102,9 +99,9 @@ class BaseTimelineSetupContextCard extends StatelessWidget {
                               ),
                               child: Text(
                                 badge,
-                                style: TextStyle(
+                                style: const TextStyle(
                                   color: OptivusColors.textSecondary,
-                                  fontSize: isLargeText ? 9 : 10,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -117,70 +114,104 @@ class BaseTimelineSetupContextCard extends StatelessWidget {
               );
             },
           ),
-          SizedBox(height: isLargeText ? 4 : 6),
+          const SizedBox(height: 6),
 
           // 2. Headline and Action Row
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Column(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final textScaler = MediaQuery.textScalerOf(context);
+              final hasLargeText = textScaler.scale(14) > 18;
+              final isNarrow = constraints.maxWidth < 280;
+
+              final titleSection = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: OptivusColors.textPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      height: 1.2,
+                    ),
+                  ),
+                  if (subtitle != null && subtitle!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: OptivusColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ],
+              );
+
+              final actionBtn = (actionLabel != null && onAction != null)
+                  ? TextButton.icon(
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        foregroundColor: accent,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: BorderSide(
+                            color: accent.withValues(alpha: 0.3),
+                          ),
+                        ),
+                      ),
+                      onPressed: onAction,
+                      icon: Icon(
+                        actionIcon ?? Icons.visibility_outlined,
+                        size: 14,
+                      ),
+                      label: Text(
+                        actionLabel!,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    )
+                  : null;
+
+              if (actionBtn == null) {
+                return titleSection;
+              }
+
+              if (isNarrow || hasLargeText) {
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: OptivusColors.textPrimary,
-                        fontSize: isLargeText ? 13 : 15,
-                        fontWeight: FontWeight.w700,
-                        height: 1.2,
-                      ),
+                    titleSection,
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: actionBtn,
                     ),
-                    if (subtitle != null && subtitle!.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: OptivusColors.textSecondary,
-                          fontSize: isLargeText ? 11 : 12,
-                        ),
-                      ),
-                    ],
                   ],
-                ),
-              ),
-              if (actionLabel != null && onAction != null) ...[
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    foregroundColor: accent,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: BorderSide(color: accent.withValues(alpha: 0.3)),
-                    ),
-                  ),
-                  onPressed: onAction,
-                  icon: Icon(actionIcon ?? Icons.visibility_outlined, size: 14),
-                  label: Text(
-                    actionLabel!,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ],
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(child: titleSection),
+                  const SizedBox(width: 8),
+                  actionBtn,
+                ],
+              );
+            },
           ),
         ],
       ),

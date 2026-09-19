@@ -511,7 +511,7 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                             color: OptivusColors.textPrimary,
                           ),
                         ),
-                        Text(
+                        const Text(
                           'Configure goals, cuisine, meals per day, and timing',
                           style: TextStyle(
                             fontSize: 12,
@@ -521,6 +521,14 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                         ),
                       ],
                     ),
+                  ),
+                  IconButton(
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: OptivusColors.textSecondary,
+                    ),
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.pop(context),
                   ),
                 ],
               ),
@@ -1020,95 +1028,108 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
                       ),
                       if (_showNutritionOverrides) ...[
                         const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _caloriesController,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: 'Daily Calories (kcal)',
-                                  hintText: 'e.g. 2000',
-                                ),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final isNarrow = constraints.maxWidth < 320;
+                            final calField = TextField(
+                              controller: _caloriesController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'Daily Calories (kcal)',
+                                hintText: 'e.g. 2000',
                               ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: TextField(
-                                controller: _proteinController,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: 'Daily Protein (g)',
-                                  hintText: 'e.g. 130',
-                                ),
+                            );
+                            final proteinField = TextField(
+                              controller: _proteinController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'Daily Protein (g)',
+                                hintText: 'e.g. 130',
                               ),
-                            ),
-                          ],
+                            );
+
+                            if (isNarrow) {
+                              return Column(
+                                children: [
+                                  calField,
+                                  const SizedBox(height: 10),
+                                  proteinField,
+                                ],
+                              );
+                            }
+
+                            return Row(
+                              children: [
+                                Expanded(child: calField),
+                                const SizedBox(width: 10),
+                                Expanded(child: proteinField),
+                              ],
+                            );
+                          },
                         ),
                       ],
-                      const SizedBox(height: 24),
-
-                      // Bottom Actions
-                      Row(
-                        children: [
-                          if (!widget.isNew) ...[
-                            Expanded(
-                              child: OutlinedButton(
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 14,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                onPressed: isDirty
-                                    ? () => _submit(regenerate: false)
-                                    : null,
-                                child: const Text('Save Settings'),
-                              ),
-                            ),
-                            if (widget.showRegenerateAction)
-                              const SizedBox(width: 10),
-                          ],
-                          if (widget.showRegenerateAction) ...[
-                            Expanded(
-                              flex: widget.isNew ? 1 : 2,
-                              child: FilledButton.icon(
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: OptivusColors.roseAccent,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 14,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                icon: const Icon(
-                                  Icons.auto_awesome_rounded,
-                                  size: 18,
-                                ),
-                                label: Text(
-                                  widget.regenerateActionLabel,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                onPressed: () => _submit(regenerate: true),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
                       const SizedBox(height: 16),
                     ],
                   ),
                 ),
               ),
+              const SizedBox(height: 12),
+              _buildBottomActions(isDirty),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildBottomActions(bool isDirty) {
+    return Row(
+      children: [
+        if (!widget.isNew) ...[
+          Expanded(
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: isDirty ? () => _submit(regenerate: false) : null,
+              child: const Text('Save Settings'),
+            ),
+          ),
+          if (widget.showRegenerateAction) const SizedBox(width: 10),
+        ],
+        if (widget.showRegenerateAction) ...[
+          Expanded(
+            flex: widget.isNew ? 1 : 2,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: OptivusColors.roseAccent,
+                padding: const EdgeInsets.symmetric(
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(
+                Icons.auto_awesome_rounded,
+                size: 18,
+              ),
+              label: Text(
+                widget.regenerateActionLabel,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              onPressed: () => _submit(regenerate: true),
+            ),
+          ),
+        ],
+      ],
     );
   }
 

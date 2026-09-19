@@ -100,6 +100,8 @@ class ClassTimelineAdapter
     required Future<bool> Function(ClassRoutineBlock updated) onSave,
     Future<bool> Function(ClassRoutineBlock toDelete)? onDelete,
     Color accent = OptivusColors.aquaAccent,
+    bool isNew = false,
+    String? saveLabel,
   }) {
     final titleCtrl = TextEditingController(text: block.subject);
     final roomCtrl = TextEditingController(text: block.room);
@@ -126,9 +128,12 @@ class ClassTimelineAdapter
 
     return TimelineEditSheetShell.show<bool>(
       context: context,
-      title: 'Edit Class',
-      subtitle: 'Set subject name, room, time, and days',
+      title: isNew ? 'Add Class' : 'Edit Class',
+      subtitle: isNew
+          ? 'Configure subject, room, time, and days'
+          : 'Set subject name, room, time, and days',
       accent: accent,
+      saveLabel: saveLabel ?? 'Save',
       onSave: () async {
         if (!formKey.currentState!.validate()) return false;
         final title = titleCtrl.text.trim();

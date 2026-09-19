@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_radii.dart';
-import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/class_timeline_adapter.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
-import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
-import 'package:optivus/features/routine/managers/base_timeline/services/class_setup_error_mapper.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/work_timeline_adapter.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_editor_action_row.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_editor_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_empty_draft_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/class_timeline_card.dart';
@@ -21,46 +21,49 @@ class ClassesReviewView extends StatefulWidget {
   final String? workingLocalPreviewPath;
   final int selectedDay;
   final ValueChanged<int> onDayChanged;
-  final int droppedCount;
-  final List<String> droppedExamples;
-  final String? errorMessage;
-  final VoidCallback onClearError;
-  final bool isSaving;
   final VoidCallback onCancel;
   final VoidCallback onScanAgain;
   final VoidCallback onAddClass;
-  final void Function(ClassRoutineBlock block) onEditBlock;
+  final ValueChanged<ClassRoutineBlock> onEditBlock;
   final VoidCallback onSave;
   final String? frontBlockId;
-  final ValueChanged<String>? onFrontSelected;
+  final ValueChanged<String?>? onFrontSelected;
+  final bool isSaving;
   final bool isConcurrencyConflict;
   final VoidCallback? onReloadLatestSetup;
+  final int droppedCount;
+  final List<String> droppedExamples;
+  final String? errorMessage;
+  final VoidCallback? onClearError;
   final bool isEditing;
 
   const ClassesReviewView({
     super.key,
     required this.workingBlocks,
-    required this.workingAssetId,
-    required this.workingR2Key,
-    required this.workingLocalPreviewPath,
+    this.workingAssetId,
+    this.workingR2Key,
+    this.workingLocalPreviewPath,
     required this.selectedDay,
     required this.onDayChanged,
-    required this.droppedCount,
-    required this.droppedExamples,
-    required this.errorMessage,
-    required this.onClearError,
-    required this.isSaving,
     required this.onCancel,
     required this.onScanAgain,
-    required this.onAddClass,
+    VoidCallback? onAddBlock,
+    VoidCallback? onAddClass,
     required this.onEditBlock,
     required this.onSave,
     this.frontBlockId,
     this.onFrontSelected,
+    this.isSaving = false,
     this.isConcurrencyConflict = false,
     this.onReloadLatestSetup,
+    this.droppedCount = 0,
+    this.droppedExamples = const [],
+    this.errorMessage,
+    this.onClearError,
     this.isEditing = false,
-  });
+  }) : onAddClass = onAddClass ?? onAddBlock ?? _noop;
+
+  static void _noop() {}
 
   @override
   State<ClassesReviewView> createState() => _ClassesReviewViewState();
@@ -75,276 +78,333 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
     super.dispose();
   }
 
+  static bool _hasOverlap(
+    ClassRoutineBlock block,
+    List<ClassRoutineBlock> allBlocks,
+  ) {
+    for (final other in allBlocks) {
+      if (identical(other, block) || other.id == block.id) continue;
+      final sharesDay = other.repeatDays.any(block.repeatDays.contains);
+      if (!sharesDay) continue;
+      if (other.startMinute < block.endMinute &&
+          block.startMinute < other.endMinute) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void _showPhotoViewer() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Align(
+              alignment: Alignment.topRight,
+              child: IconButton(
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+            ),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.75,
+              ),
+              child: BaseTimelinePhotoPreviewCard(
+                localPreviewPath: widget.workingLocalPreviewPath,
+                r2Key: widget.workingR2Key,
+                assetId: widget.workingAssetId,
+                title: 'Timetable Photo',
+                height: MediaQuery.sizeOf(context).height * 0.65,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     const adapter = ClassTimelineAdapter(
       accent: OptivusColors.blueAccent,
       defaultEditable: true,
     );
-
     final blockMap = {for (final b in widget.workingBlocks) b.id: b};
 
-    final sanitizedIssues = ClassSetupErrorMapper.sanitizeDroppedExamples(
-      widget.droppedExamples,
-    );
-    final droppedSummary = ClassSetupErrorMapper.formatDroppedSummary(
-      widget.droppedCount,
-      sanitizedIssues,
-    );
+    final hasPhoto =
+        widget.workingLocalPreviewPath != null ||
+        widget.workingR2Key != null ||
+        widget.workingAssetId != null;
+
+    final subtitle = widget.droppedCount > 0
+        ? '${widget.workingBlocks.length} classes scheduled · ${widget.droppedCount} ${widget.droppedCount == 1 ? 'entry was skipped' : 'entries were skipped'}'
+        : '${widget.workingBlocks.length} classes scheduled';
 
     return SafeArea(
       bottom: false,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header Bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(
-                    Icons.close_rounded,
-                    color: OptivusColors.textPrimary,
-                  ),
-                  onPressed: widget.isSaving ? null : widget.onCancel,
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.white.withValues(alpha: 0.12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(OptivusRadii.md),
-                      side: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.2),
-                      ),
-                    ),
+          // 1. Shared Header Bar
+          BaseTimelineEditorHeader(
+            title: 'Review Timetable',
+            subtitle: subtitle,
+            onCancel: widget.onCancel,
+            isSaving: widget.isSaving,
+          ),
+
+          // 2. Responsive Compact Action Buttons
+          BaseTimelineEditorActionRow(
+            primaryAction: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                backgroundColor: OptivusColors.blueAccent.withValues(
+                  alpha: 0.12,
+                ),
+                side: BorderSide(
+                  color: OptivusColors.blueAccent.withValues(alpha: 0.5),
+                  width: 1.5,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(
+                    OptivusRadii.controlCompact,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Review Timetable',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: OptivusColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        widget.droppedCount > 0
-                            ? '${widget.workingBlocks.length} classes scheduled · ${widget.droppedCount} ${widget.droppedCount == 1 ? 'entry was skipped' : 'entries were skipped'}'
-                            : '${widget.workingBlocks.length} classes scheduled',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: OptivusColors.textSecondary,
-                        ),
-                      ),
-                    ],
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+              icon: const Icon(
+                Icons.photo_library_outlined,
+                size: 18,
+                color: OptivusColors.blueAccent,
+              ),
+              label: Text(
+                hasPhoto ? 'Change photo' : 'Add photo',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: OptivusColors.blueAccent,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              onPressed: widget.isSaving ? null : widget.onScanAgain,
+            ),
+            secondaryAction: OutlinedButton.icon(
+              key: const Key('classes-review-add-class-button'),
+              style: OutlinedButton.styleFrom(
+                backgroundColor: Colors.white.withValues(alpha: 0.08),
+                side: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  width: 1.5,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(
+                    OptivusRadii.controlCompact,
                   ),
                 ),
-              ],
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+              icon: const Icon(
+                Icons.add_rounded,
+                size: 18,
+                color: OptivusColors.textPrimary,
+              ),
+              label: const Text(
+                'Add Class',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: OptivusColors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              onPressed: widget.isSaving ? null : widget.onAddClass,
             ),
           ),
 
-          // Compact Action Buttons
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: OptivusColors.blueAccent.withValues(
-                        alpha: 0.12,
-                      ),
-                      side: BorderSide(
-                        color: OptivusColors.blueAccent.withValues(alpha: 0.5),
-                        width: 1.5,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(
-                          OptivusRadii.controlCompact,
-                        ),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                    icon: const Icon(
-                      Icons.photo_library_outlined,
-                      size: 18,
-                      color: OptivusColors.blueAccent,
-                    ),
-                    label: Text(
-                      (widget.workingLocalPreviewPath != null ||
-                              widget.workingR2Key != null ||
-                              widget.workingAssetId != null)
-                          ? 'Change photo'
-                          : 'Add photo',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: OptivusColors.blueAccent,
-                      ),
-                    ),
-                    onPressed: widget.isSaving ? null : widget.onScanAgain,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: Colors.white.withValues(alpha: 0.12),
-                      side: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.45),
-                        width: 1.5,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(
-                          OptivusRadii.controlCompact,
-                        ),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                    icon: const Icon(
-                      Icons.add_rounded,
-                      size: 18,
-                      color: OptivusColors.textPrimary,
-                    ),
-                    label: const Text(
-                      'Add Class',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: OptivusColors.textPrimary,
-                      ),
-                    ),
-                    onPressed: widget.isSaving ? null : widget.onAddClass,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Sanitized attention banner for dropped entries
-          if (widget.droppedCount > 0)
+          // Error Banner
+          if (widget.errorMessage != null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: OnboardingGlassCard(
-                radius: OptivusRadii.lg,
-                tint: OptivusColors.warning.withValues(alpha: 0.14),
-                padding: const EdgeInsets.all(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: OptivusColors.danger.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: OptivusColors.danger.withValues(alpha: 0.3),
+                  ),
+                ),
                 child: Row(
                   children: [
                     const Icon(
-                      Icons.info_outline_rounded,
-                      color: OptivusColors.warning,
-                      size: 18,
+                      Icons.error_outline_rounded,
+                      size: 16,
+                      color: OptivusColors.danger,
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        droppedSummary,
+                        widget.errorMessage!,
                         style: const TextStyle(
-                          color: OptivusColors.textPrimary,
+                          color: OptivusColors.danger,
                           fontSize: 12,
-                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
+                    if (widget.onClearError != null)
+                      IconButton(
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          size: 16,
+                          color: OptivusColors.textSecondary,
+                        ),
+                        onPressed: widget.onClearError,
+                      ),
                   ],
                 ),
               ),
             ),
 
-          // Inline Error Message Banner
-          if (widget.errorMessage != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: OnboardingGlassCard(
-                radius: OptivusRadii.lg,
-                tint: OptivusColors.danger.withValues(alpha: 0.12),
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.error_outline_rounded,
-                          color: OptivusColors.danger,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            widget.errorMessage!,
-                            style: const TextStyle(
-                              color: OptivusColors.danger,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(
-                            Icons.close_rounded,
-                            size: 16,
-                            color: OptivusColors.danger,
-                          ),
-                          onPressed: widget.onClearError,
-                        ),
-                      ],
+          // Concurrency Conflict Banner
+          if (widget.isConcurrencyConflict)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: OptivusColors.danger.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: OptivusColors.danger, width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: OptivusColors.danger,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Your schedule was updated on another device.',
+                      style: TextStyle(
+                        color: OptivusColors.danger,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    if (widget.isConcurrencyConflict &&
-                        widget.onReloadLatestSetup != null) ...[
-                      const SizedBox(height: 6),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton.icon(
-                          icon: const Icon(Icons.refresh_rounded, size: 14),
-                          label: const Text('Reload latest setup'),
-                          style: TextButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            foregroundColor: OptivusColors.danger,
+                  ),
+                  if (widget.onReloadLatestSetup != null)
+                    TextButton(
+                      onPressed: widget.onReloadLatestSetup,
+                      child: const Text('Reload'),
+                    ),
+                ],
+              ),
+            ),
+
+          // Compact Photo Row
+          if (hasPhoto)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: InkWell(
+                onTap: _showPhotoViewer,
+                borderRadius: BorderRadius.circular(OptivusRadii.sm),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.04),
+                    borderRadius: BorderRadius.circular(OptivusRadii.sm),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.image_outlined,
+                        size: 16,
+                        color: OptivusColors.blueAccent,
+                      ),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Timetable Photo',
+                          style: TextStyle(
+                            color: OptivusColors.textPrimary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
                           ),
-                          onPressed: widget.onReloadLatestSetup,
                         ),
+                      ),
+                      Text(
+                        'Tap to view',
+                        style: TextStyle(
+                          color: OptivusColors.blueAccent.withValues(
+                            alpha: 0.8,
+                          ),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 16,
+                        color: OptivusColors.blueAccent.withValues(alpha: 0.8),
                       ),
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
 
-          // Timeline View (Hero)
+          // 3. Interactive Timeline / Empty Draft
           Expanded(
             child: widget.workingBlocks.isEmpty
                 ? BaseTimelineEmptyDraftView(
-                    icon: Icons.school_outlined,
-                    title: 'No classes scheduled yet',
+                    title: 'No classes in draft',
                     subtitle:
-                        'Add your weekly classes or scan a timetable to build your academic schedule.',
-                    actionLabel: 'Add your first class',
-                    onAction: widget.onAddClass,
+                        'Tap "Add class" above to manually add your subjects, or scan your timetable photo.',
+                    icon: Icons.school_outlined,
                     accent: OptivusColors.blueAccent,
+                    actionLabel: 'Add class',
+                    onAction: widget.onAddClass,
                   )
                 : LayoutBuilder(
                     builder: (context, constraints) {
                       final textScale = MediaQuery.textScalerOf(
                         context,
                       ).scale(1.0);
-                      final layoutEntries = widget.workingBlocks
-                          .expand(
-                            (b) => adapter.toEntries(
-                              b,
-                              isEditable: true,
-                              contentWidth: constraints.maxWidth,
-                              textScale: textScale,
-                            ),
-                          )
-                          .toList();
+                      final entries = widget.workingBlocks.expand((b) {
+                        final hasOverlap = _hasOverlap(b, widget.workingBlocks);
+                        final cardWidth =
+                            WorkTimelineLayoutHelper.effectiveCardWidth(
+                          availableWidth: constraints.maxWidth,
+                          hasOverlap: hasOverlap,
+                        );
+                        return adapter.toEntries(
+                          b,
+                          contentWidth: cardWidth,
+                          textScale: textScale,
+                          isEditable: !widget.isSaving,
+                        );
+                      }).toList();
+
                       return FullScreenTimelineScaffold(
-                        entries: layoutEntries,
+                        entries: entries,
                         selectedDay: widget.selectedDay,
                         onDayChanged: widget.onDayChanged,
                         scrollController: _scrollController,
@@ -352,23 +412,21 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
                         overlapPresentation:
                             TimelineOverlapPresentation.frontAndExposed,
                         frontEntryId: widget.frontBlockId,
-                        onFrontSelected: widget.onFrontSelected,
+                        onFrontSelected: (id) => widget.onFrontSelected?.call(id),
                         styleBuilder: (entry) => adapter.styleForEntry(entry),
                         blockBuilder: (context, positioned) {
                           final block = blockMap[positioned.entry.sourceId];
                           return ClassTimelineCard(
                             positioned: positioned,
                             block: block,
-                            isEditable: true,
+                            isEditable: !widget.isSaving,
                             accent: OptivusColors.blueAccent,
                             onTap: () {
                               if (positioned.hasOverlap &&
                                   !positioned.isFront) {
                                 HapticFeedback.lightImpact();
-                                widget.onFrontSelected?.call(
-                                  positioned.entry.id,
-                                );
-                              } else if (block != null) {
+                                widget.onFrontSelected?.call(positioned.entry.id);
+                              } else if (block != null && !widget.isSaving) {
                                 widget.onEditBlock(block);
                               }
                             },
@@ -377,8 +435,12 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
                         onEntryTapped: null,
                         accent: OptivusColors.blueAccent,
                         mode: TimelineMode.fullScreenEditable,
+                        geometryConfig: const TimelineGeometryConfig(
+                          bottomPadding: 100.0,
+                        ),
                         visibleRangePolicy:
                             TimelineVisibleRangePolicy.contentAdaptive,
+                        autoScrollToFirstEntry: false,
                         stretchPolicy: TimelineStretchPolicy.constraintBased,
                         emptyDayMessage: 'No classes on this day.',
                       );
@@ -386,81 +448,59 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
                   ),
           ),
 
-          // Scanned Photo Preview (Fixed-height compact row below Timeline)
-          if (widget.workingLocalPreviewPath != null ||
-              widget.workingR2Key != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
-              child: BaseTimelinePhotoPreviewCard(
-                localPreviewPath: widget.workingLocalPreviewPath,
-                r2Key: widget.workingR2Key,
-                assetId: widget.workingAssetId,
-                title: 'Scanned timetable',
-                subtitle: widget.workingBlocks.isNotEmpty
-                    ? '${widget.workingBlocks.length} weekly classes'
-                    : null,
-                isCompactRow: true,
-                height: 68,
-              ),
-            ),
-
-          // Dominant 52px Bottom CTA with Floating Tab Bar Clearance
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              10,
-              16,
-              routineBottomCtaReserve(context),
-            ),
-            child: SizedBox(
-              height: 52,
-              child: FilledButton(
-                key: const Key('classes-review-save-button'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: OptivusColors.blueAccent,
-                  disabledBackgroundColor: OptivusColors.blueAccent.withValues(
-                    alpha: 0.35,
+          // 5. Sticky Bottom Action Bar
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: SizedBox(
+                height: 52,
+                child: FilledButton(
+                  key: const Key('classes-review-use-timetable-button'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: OptivusColors.blueAccent,
+                    disabledBackgroundColor: OptivusColors.blueAccent.withValues(
+                      alpha: 0.35,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(OptivusRadii.lg),
+                    ),
+                    elevation: 0,
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(OptivusRadii.lg),
-                  ),
-                  elevation: 0,
-                ),
-                onPressed: (widget.isSaving || widget.workingBlocks.isEmpty)
-                    ? null
-                    : widget.onSave,
-                child: widget.isSaving
-                    ? const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
+                  onPressed: widget.isSaving ? null : widget.onSave,
+                  child: widget.isSaving
+                      ? const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
                             ),
-                          ),
-                          SizedBox(width: 10),
-                          Text(
-                            'Saving…',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
+                            SizedBox(width: 10),
+                            Text(
+                              'Saving…',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
                             ),
+                          ],
+                        )
+                      : const Text(
+                          'Use this timetable',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
                           ),
-                        ],
-                      )
-                    : const Text(
-                        'Use this timetable',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
                         ),
-                      ),
+                ),
               ),
             ),
           ),

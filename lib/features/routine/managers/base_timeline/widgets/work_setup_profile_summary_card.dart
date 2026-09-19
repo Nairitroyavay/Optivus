@@ -18,9 +18,6 @@ class WorkSetupProfileSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textScaler = MediaQuery.textScalerOf(context);
-    final isLargeText = textScaler.scale(14) > 18;
-
     return Container(
       key: const Key('work-setup-profile-summary-card'),
       decoration: BoxDecoration(
@@ -30,9 +27,9 @@ class WorkSetupProfileSummaryCard extends StatelessWidget {
           color: OptivusColors.borderStandard.withValues(alpha: 0.6),
         ),
       ),
-      padding: EdgeInsets.symmetric(
+      padding: const EdgeInsets.symmetric(
         horizontal: 14,
-        vertical: isLargeText ? 6 : 10,
+        vertical: 10,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -51,9 +48,9 @@ class WorkSetupProfileSummaryCard extends StatelessWidget {
                   children: [
                     Text(
                       summary.headerTitle.toUpperCase(),
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: OptivusColors.warning,
-                        fontSize: isLargeText ? 9 : 10,
+                        fontSize: 10,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.8,
                       ),
@@ -81,9 +78,9 @@ class WorkSetupProfileSummaryCard extends StatelessWidget {
                               ),
                               child: Text(
                                 badge,
-                                style: TextStyle(
+                                style: const TextStyle(
                                   color: OptivusColors.textSecondary,
-                                  fontSize: isLargeText ? 9 : 10,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -96,16 +93,16 @@ class WorkSetupProfileSummaryCard extends StatelessWidget {
               );
             },
           ),
-          SizedBox(height: isLargeText ? 4 : 6),
+          const SizedBox(height: 6),
 
           // 2. Headline & Subline
           Text(
             summary.headline,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
+            style: const TextStyle(
               color: OptivusColors.textPrimary,
-              fontSize: isLargeText ? 13 : 15,
+              fontSize: 15,
               fontWeight: FontWeight.w700,
               height: 1.2,
             ),
@@ -116,26 +113,29 @@ class WorkSetupProfileSummaryCard extends StatelessWidget {
               summary.subline!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
+              style: const TextStyle(
                 color: OptivusColors.textSecondary,
-                fontSize: isLargeText ? 10 : 12,
+                fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
             ),
           ],
 
-          SizedBox(height: isLargeText ? 4 : 6),
+          const SizedBox(height: 6),
 
           // 3. Compact Schedule & Source Row
           LayoutBuilder(
             builder: (context, constraints) {
+              final textScaler = MediaQuery.textScalerOf(context);
+              final hasLargeText = textScaler.scale(14) > 18;
               final isVeryNarrow = constraints.maxWidth < 240;
+
               final scheduleWidget = Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.event_note_rounded,
-                    size: isLargeText ? 11 : 13,
+                    size: 13,
                     color: OptivusColors.textMuted,
                   ),
                   const SizedBox(width: 4),
@@ -144,9 +144,9 @@ class WorkSetupProfileSummaryCard extends StatelessWidget {
                       summary.scheduleSummary,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: OptivusColors.textSecondary,
-                        fontSize: isLargeText ? 9 : 11,
+                        fontSize: 11,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -163,16 +163,16 @@ class WorkSetupProfileSummaryCard extends StatelessWidget {
                     summary.hasSourcePhoto
                         ? Icons.photo_library_outlined
                         : Icons.edit_note_rounded,
-                    size: isLargeText ? 11 : 13,
+                    size: 13,
                     color: OptivusColors.textMuted,
                   ),
                   Text(
                     summary.sourceLabel,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: OptivusColors.textSecondary,
-                      fontSize: isLargeText ? 9 : 11,
+                      fontSize: 11,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -188,11 +188,11 @@ class WorkSetupProfileSummaryCard extends StatelessWidget {
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      child: Text(
+                      child: const Text(
                         'View',
                         style: TextStyle(
                           color: OptivusColors.warning,
-                          fontSize: isLargeText ? 9 : 11,
+                          fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -209,11 +209,11 @@ class WorkSetupProfileSummaryCard extends StatelessWidget {
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      child: Text(
+                      child: const Text(
                         'Change',
                         style: TextStyle(
                           color: OptivusColors.textSecondary,
-                          fontSize: isLargeText ? 9 : 11,
+                          fontSize: 11,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -221,7 +221,7 @@ class WorkSetupProfileSummaryCard extends StatelessWidget {
                 ],
               );
 
-              if (isVeryNarrow || isLargeText) {
+              if (isVeryNarrow || hasLargeText) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

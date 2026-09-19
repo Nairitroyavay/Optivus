@@ -26,7 +26,6 @@ class WorkCurrentSetupView extends StatefulWidget {
   final VoidCallback? onEditSchedule;
   final VoidCallback? onChangeSource;
   final ValueChanged<TimelineBlockDraft>? onEditBlock;
-  final VoidCallback? onAddBlock;
   final VoidCallback? onRemoveSetup;
   final bool routineRefreshPending;
   final String? routineRefreshMessage;
@@ -44,7 +43,6 @@ class WorkCurrentSetupView extends StatefulWidget {
     this.onEditSchedule,
     this.onChangeSource,
     this.onEditBlock,
-    this.onAddBlock,
     this.onRemoveSetup,
     this.routineRefreshPending = false,
     this.routineRefreshMessage,
@@ -69,47 +67,51 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
   void _showPhotoDialog(BuildContext context, String? r2Key, String? assetId) {
     showDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: OptivusColors.backgroundBottom,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    WorkPresentationUtils.photoCardTitle(widget.lifeRole),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: OptivusColors.textPrimary,
+      builder: (ctx) {
+        final screenHeight = MediaQuery.sizeOf(ctx).height;
+        final previewHeight = (screenHeight * 0.45).clamp(200.0, 420.0);
+        return Dialog(
+          backgroundColor: OptivusColors.backgroundBottom,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      WorkPresentationUtils.photoCardTitle(widget.lifeRole),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: OptivusColors.textPrimary,
+                      ),
                     ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    color: OptivusColors.textSecondary,
-                    onPressed: () => Navigator.of(ctx).pop(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: BaseTimelinePhotoPreviewCard(
-                  r2Key: r2Key,
-                  assetId: assetId,
-                  title: '',
-                  height: 320,
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      color: OptivusColors.textSecondary,
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: BaseTimelinePhotoPreviewCard(
+                    r2Key: r2Key,
+                    assetId: assetId,
+                    title: '',
+                    height: previewHeight,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -240,6 +242,7 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
             primaryButtonKey: const Key(
               'base-timeline-header-edit-schedule-button',
             ),
+            iconOnly: true,
             onPrimaryAction: snapshot.isConfigured
                 ? (widget.onEditSchedule ?? widget.onChangeSetup)
                 : widget.onChangeSetup,

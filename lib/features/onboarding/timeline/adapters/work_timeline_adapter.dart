@@ -56,6 +56,8 @@ class WorkTimelineAdapter implements TimelineFeatureAdapter<ClassRoutineBlock> {
     required ClassRoutineBlock block,
     required Future<bool> Function(ClassRoutineBlock updated) onSave,
     Color accent = OptivusColors.brandAccent,
+    bool isNew = false,
+    String? saveLabel,
   }) {
     final titleCtrl = TextEditingController(text: block.subject);
     final workplaceCtrl = TextEditingController(text: block.room);
@@ -66,11 +68,17 @@ class WorkTimelineAdapter implements TimelineFeatureAdapter<ClassRoutineBlock> {
     );
     final formKey = GlobalKey<FormState>();
 
+    final effectiveTitle = isNew ? 'Add Work Block' : 'Edit Work Block';
+    final effectiveSubtitle = isNew
+        ? 'Add a job title, workplace, time, and days'
+        : 'Set job title, workplace, time, and days';
+
     return TimelineEditSheetShell.show<bool>(
       context: context,
-      title: 'Edit Work Block',
-      subtitle: 'Set job title, workplace, time, and days',
+      title: effectiveTitle,
+      subtitle: effectiveSubtitle,
       accent: accent,
+      saveLabel: saveLabel ?? (isNew ? 'Add work block' : 'Save'),
       onSave: () async {
         if (!formKey.currentState!.validate()) return false;
         final title = titleCtrl.text.trim();

@@ -22,6 +22,10 @@ class BaseTimelineCurrentSetupHeader extends StatelessWidget {
   final Key? backButtonKey;
   final Key? menuButtonKey;
 
+  /// When [iconOnly] is true the primary action is rendered as a compact
+  /// [IconButton] instead of a full-width [FilledButton.icon].
+  final bool iconOnly;
+
   const BaseTimelineCurrentSetupHeader({
     super.key,
     required this.title,
@@ -40,6 +44,7 @@ class BaseTimelineCurrentSetupHeader extends StatelessWidget {
     this.primaryButtonKey,
     this.backButtonKey,
     this.menuButtonKey,
+    this.iconOnly = false,
   });
 
   @override
@@ -55,21 +60,43 @@ class BaseTimelineCurrentSetupHeader extends StatelessWidget {
           final isVeryNarrow = constraints.maxWidth < 320;
           final hasLargeText = textScaler.scale(18) > 24;
 
-          final primaryButton = FilledButton.icon(
-            key:
-                primaryButtonKey ??
-                const Key('base-timeline-header-change-setup-button'),
-            icon: Icon(primaryButtonIcon, size: 16),
-            label: Text(primaryButtonLabel),
-            style: FilledButton.styleFrom(
-              backgroundColor: accent,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            onPressed: onPrimaryAction,
-          );
+          // Either a compact icon button or the full labelled filled button.
+          final Widget primaryButton = iconOnly
+              ? Tooltip(
+                  message: primaryButtonLabel,
+                  child: IconButton(
+                    key:
+                        primaryButtonKey ??
+                        const Key('base-timeline-header-change-setup-button'),
+                    icon: Icon(primaryButtonIcon, size: 20),
+                    color: accent,
+                    style: IconButton.styleFrom(
+                      backgroundColor: accent.withValues(alpha: 0.12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: onPrimaryAction,
+                  ),
+                )
+              : FilledButton.icon(
+                  key:
+                      primaryButtonKey ??
+                      const Key('base-timeline-header-change-setup-button'),
+                  icon: Icon(primaryButtonIcon, size: 16),
+                  label: Text(primaryButtonLabel),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: accent,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: onPrimaryAction,
+                );
 
           Widget? menuButton;
           if (hasMenu) {
@@ -187,7 +214,10 @@ class BaseTimelineCurrentSetupHeader extends StatelessWidget {
             ),
           );
 
-          if (isVeryNarrow || (constraints.maxWidth < 360 && hasLargeText)) {
+          final shouldWrap =
+              isVeryNarrow || hasLargeText || constraints.maxWidth < 360;
+
+          if (shouldWrap) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -201,6 +231,8 @@ class BaseTimelineCurrentSetupHeader extends StatelessWidget {
                         children: [
                           Text(
                             title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w800,
@@ -209,7 +241,7 @@ class BaseTimelineCurrentSetupHeader extends StatelessWidget {
                           ),
                           Text(
                             summary,
-                            maxLines: 2,
+                            maxLines: hasLargeText ? 1 : 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               fontSize: 12,
@@ -219,11 +251,21 @@ class BaseTimelineCurrentSetupHeader extends StatelessWidget {
                         ],
                       ),
                     ),
+                    // When iconOnly, keep the icon inline regardless of wrap.
+                    if (iconOnly) ...[
+                      const SizedBox(width: 4),
+                      primaryButton,
+                    ],
                     ?menuButton,
                   ],
                 ),
-                const SizedBox(height: 8),
-                Align(alignment: Alignment.centerRight, child: primaryButton),
+                if (!iconOnly) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: primaryButton,
+                  ),
+                ],
               ],
             );
           }

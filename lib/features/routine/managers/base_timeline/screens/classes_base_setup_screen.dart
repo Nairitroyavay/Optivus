@@ -17,6 +17,9 @@ import 'package:optivus/features/routine/managers/base_timeline/services/class_s
 import 'package:optivus/features/routine/managers/base_timeline/services/class_setup_error_mapper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/classes_setup_controller.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_ai_thinking_view.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_load_error.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_skeleton.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_processing_scaffold.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_save_success_view.dart';
 import 'package:optivus/repositories/base_timeline_setup_repository.dart';
 import 'package:optivus/state/app_state.dart';
@@ -161,6 +164,8 @@ class _ClassesBaseSetupScreenState
       context: context,
       block: newBlock,
       accent: OptivusColors.blueAccent,
+      isNew: true,
+      saveLabel: 'Save',
       onSave: (updated) async {
         controller.addBlock(updated);
         return true;
@@ -178,6 +183,8 @@ class _ClassesBaseSetupScreenState
       context: context,
       block: block,
       accent: OptivusColors.blueAccent,
+      isNew: false,
+      saveLabel: 'Save',
       onSave: (updated) async {
         controller.updateBlock(updated);
         return true;
@@ -189,6 +196,43 @@ class _ClassesBaseSetupScreenState
     );
     if (mounted) {
       controller.stopEditingBlock();
+    }
+  }
+
+  Future<void> _editBlockFromCurrentSetup(
+    BaseTimelineSetup setup,
+    ClassRoutineBlock block,
+    String uid,
+  ) async {
+    final controller = ref.read(classesSetupControllerProvider.notifier);
+    controller.editCurrentTimetable(setup);
+    controller.startEditingBlock();
+    var didSave = false;
+    try {
+      await ClassTimelineAdapter.showClassEditSheet(
+        context: context,
+        block: block,
+        accent: OptivusColors.blueAccent,
+        isNew: false,
+        saveLabel: 'Save',
+        onSave: (updated) async {
+          controller.updateBlock(updated);
+          didSave = true;
+          return true;
+        },
+        onDelete: (toDelete) async {
+          controller.deleteBlock(toDelete.id);
+          didSave = true;
+          return true;
+        },
+      );
+    } finally {
+      if (mounted) {
+        controller.stopEditingBlock();
+        if (!didSave && !ref.read(classesSetupControllerProvider).isDirty) {
+          await controller.resetWorkingDraft(setup, uid: uid);
+        }
+      }
     }
   }
 
@@ -400,46 +444,30 @@ class _ClassesBaseSetupScreenState
 
     switch (state.stage) {
       case ClassesSetupStage.uploading:
-        return SafeArea(
-          child: Column(
-            children: [
-              _buildTopCancelBar(
-                onCancel: () => _handleClassesBack(setup, state, uid),
-                title: 'Updating timetable',
-              ),
-              Expanded(
-                child: BaseTimelineUploadView(
-                  localPreviewPath: state.workingLocalPreviewPath,
-                ),
-              ),
-            ],
+        return BaseTimelineProcessingScaffold(
+          title: 'Updating timetable',
+          onCancel: () => _handleClassesBack(setup, state, uid),
+          child: BaseTimelineUploadView(
+            localPreviewPath: state.workingLocalPreviewPath,
           ),
         );
 
       case ClassesSetupStage.extracting:
-        return SafeArea(
-          child: Column(
-            children: [
-              _buildTopCancelBar(
-                onCancel: () => _handleClassesBack(setup, state, uid),
-                title: 'Reading timetable',
-              ),
-              Expanded(
-                child: BaseTimelineAiThinkingView(
-                  initialMessage: 'Reading your timetable',
-                  progressMessages: const [
-                    'Finding subjects',
-                    'Reading rooms and faculty',
-                    'Matching weekdays',
-                    'Checking exact times',
-                    'Building your new timetable',
-                  ],
-                  localPreviewPath: state.workingLocalPreviewPath,
-                  assetId: state.candidateAssetId,
-                  r2Key: state.candidateR2Key,
-                ),
-              ),
+        return BaseTimelineProcessingScaffold(
+          title: 'Reading timetable',
+          onCancel: () => _handleClassesBack(setup, state, uid),
+          child: BaseTimelineAiThinkingView(
+            initialMessage: 'Reading your timetable',
+            progressMessages: const [
+              'Finding subjects',
+              'Reading rooms and faculty',
+              'Matching weekdays',
+              'Checking exact times',
+              'Building your new timetable',
             ],
+            localPreviewPath: state.workingLocalPreviewPath,
+            assetId: state.candidateAssetId,
+            r2Key: state.candidateR2Key,
           ),
         );
 
@@ -522,6 +550,7 @@ class _ClassesBaseSetupScreenState
           onDayChanged: (d) => controller.selectDay(d),
           onBack: () => _handleClassesBack(setup, state, uid),
           onEditSchedule: () => controller.editCurrentTimetable(setup),
+          onEditBlock: (block) => _editBlockFromCurrentSetup(setup, block, uid),
           onChangeSource: () => controller.chooseSource(setup, uid: uid),
           onChangeSetup: () => controller.chooseSource(setup, uid: uid),
           onRemoveSetup: () => _handleRemoveSetup(setup, uid),
@@ -532,227 +561,21 @@ class _ClassesBaseSetupScreenState
     }
   }
 
-  Widget _buildTopCancelBar({required VoidCallback onCancel, String? title}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          IconButton(
-            tooltip: 'Cancel',
-            icon: const Icon(
-              Icons.close_rounded,
-              color: OptivusColors.textPrimary,
-            ),
-            onPressed: onCancel,
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.white.withValues(alpha: 0.12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(OptivusRadii.md),
-                side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-              ),
-            ),
-          ),
-          if (title != null) ...[
-            const SizedBox(width: 12),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: OptivusColors.textPrimary,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
   Widget _buildCurrentSetupSkeletonView() {
-    return SafeArea(
-      bottom: false,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(
-                    Icons.arrow_back_rounded,
-                    color: OptivusColors.textPrimary,
-                  ),
-                  onPressed: widget.onBack,
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.white.withValues(alpha: 0.1),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Classes',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: OptivusColors.textPrimary,
-                        ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        'Loading timetable...',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: OptivusColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  width: 120,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: OptivusColors.blueAccent.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: [
-                  Container(
-                    height: 140,
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      color: Colors.white.withValues(alpha: 0.05),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.08),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: ListView.separated(
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: 4,
-                      separatorBuilder: (context, index) =>
-                          const SizedBox(height: 12),
-                      itemBuilder: (_, index) => Container(
-                        height: 64,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
-                          color: Colors.white.withValues(alpha: 0.04),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.06),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+    return BaseTimelineCurrentSetupSkeleton(
+      title: 'Classes',
+      loadingMessage: 'Loading timetable...',
+      accent: OptivusColors.blueAccent,
+      onBack: widget.onBack,
     );
   }
 
   Widget _buildCurrentSetupLoadErrorView(Object? error) {
-    return SafeArea(
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: OptivusColors.danger.withValues(alpha: 0.12),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.cloud_off_rounded,
-                    color: OptivusColors.danger,
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Failed to load Classes timetable',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: OptivusColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  ClassSetupErrorMapper.mapLoadError(error),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: OptivusColors.textSecondary,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        onPressed: widget.onBack,
-                        child: const Text('Back'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: OptivusColors.blueAccent,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        onPressed: () {
-                          ref
-                              .read(baseTimelineSetupNotifierProvider.notifier)
-                              .load();
-                        },
-                        child: const Text('Retry'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return BaseTimelineCurrentSetupLoadError(
+      title: 'Failed to load Classes timetable',
+      errorMessage: ClassSetupErrorMapper.mapLoadError(error),
+      onBack: widget.onBack,
+      onRetry: () => ref.read(baseTimelineSetupNotifierProvider.notifier).load(),
     );
   }
 

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/core/theme/optivus_radii.dart';
 import 'package:optivus/core/widgets/liquid_section_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_presentation_utils.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_source_action_card.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_source_selection_scaffold.dart';
 
 /// Source selection stage for Work / Business Base Timeline setup.
 class WorkSourceSelectionView extends StatelessWidget {
@@ -35,215 +35,83 @@ class WorkSourceSelectionView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final snapshot = setup.snapshotFor(BaseTimelineSection.work);
+    final isConfigured = snapshot.isConfigured;
     final viewTitle = WorkPresentationUtils.sourceSelectionTitle(lifeRole);
     final viewSubtitle = WorkPresentationUtils.sourceSelectionSubtitle(
       lifeRole,
+      isConfigured: isConfigured,
     );
+    final hasPhoto =
+        snapshot.sourceR2Key != null || snapshot.sourceAssetId != null;
 
-    return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
+    return BaseTimelineSourceSelectionScaffold(
+      title: viewTitle,
+      subtitle: viewSubtitle,
+      onBack: onCancel,
+      preservationNotice:
+          isConfigured ? WorkPresentationUtils.sourceDraftNotice(lifeRole) : null,
+      onRemoveSetup: isConfigured ? onRemoveSetup : null,
+      removeLabel: WorkPresentationUtils.removeSetupLabel(lifeRole),
+      currentSourcePreview: hasPhoto
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                IconButton(
-                  icon: const Icon(
-                    Icons.close_rounded,
-                    color: OptivusColors.textPrimary,
-                  ),
-                  onPressed: onCancel,
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.white.withValues(alpha: 0.12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(OptivusRadii.md),
-                      side: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.2),
-                      ),
-                    ),
-                  ),
+                const LiquidSectionHeader(title: 'CURRENT PHOTO'),
+                BaseTimelinePhotoPreviewCard(
+                  r2Key: snapshot.sourceR2Key,
+                  assetId: snapshot.sourceAssetId,
+                  title: WorkPresentationUtils.photoCardTitle(lifeRole),
+                  isCompactRow: true,
+                  height: 68,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        viewTitle,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: OptivusColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        viewSubtitle,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: OptivusColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (onRemoveSetup != null && snapshot.isConfigured)
-                  PopupMenuButton<String>(
-                    icon: const Icon(
-                      Icons.more_vert_rounded,
-                      color: OptivusColors.textSecondary,
-                    ),
-                    color: OptivusColors.backgroundBottom,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: const BorderSide(
-                        color: OptivusColors.borderStandard,
-                      ),
-                    ),
-                    onSelected: (val) {
-                      if (val == 'remove') {
-                        onRemoveSetup!();
-                      }
-                    },
-                    itemBuilder: (ctx) => [
-                      PopupMenuItem(
-                        value: 'remove',
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.delete_outline_rounded,
-                              color: OptivusColors.danger,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              WorkPresentationUtils.removeSetupLabel(lifeRole),
-                              style: const TextStyle(
-                                color: OptivusColors.danger,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
               ],
+            )
+          : null,
+      children: [
+        LiquidSectionHeader(
+          title: hasPhoto ? 'USE A NEW PHOTO' : 'USE A SCHEDULE PHOTO',
+        ),
+        BaseTimelineSourceActionCard(
+          icon: Icons.camera_alt_rounded,
+          title: 'Take a Photo',
+          subtitle: WorkPresentationUtils.sourceCameraSubtitle(lifeRole),
+          accent: OptivusColors.warning,
+          onTap: () => onPickPhoto(ImageSource.camera),
+        ),
+        const SizedBox(height: 12),
+        BaseTimelineSourceActionCard(
+          icon: Icons.photo_library_rounded,
+          title: 'Choose from Gallery',
+          subtitle: 'Upload a photo or screenshot from your device',
+          accent: OptivusColors.warning,
+          onTap: () => onPickPhoto(ImageSource.gallery),
+        ),
+        const SizedBox(height: 16),
+        const LiquidSectionHeader(title: 'OR SET UP MANUALLY'),
+        if (isConfigured || setup.workBlocks.isNotEmpty)
+          BaseTimelineSourceActionCard(
+            icon: Icons.edit_calendar_rounded,
+            title: WorkPresentationUtils.sourceEditCurrentTitle(lifeRole),
+            subtitle: WorkPresentationUtils.sourceEditCurrentSubtitle(
+              hasSourcePhoto: hasPhoto,
+              lifeRole: lifeRole,
             ),
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (snapshot.isConfigured) ...[
-                    Container(
-                      key: const Key('work-source-selection-draft-notice'),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: OptivusColors.warning.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: OptivusColors.warning.withValues(alpha: 0.25),
-                        ),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(
-                            Icons.info_outline_rounded,
-                            size: 18,
-                            color: OptivusColors.warning,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              WorkPresentationUtils.sourceDraftNotice(lifeRole),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                height: 1.4,
-                                color: OptivusColors.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  if (snapshot.sourceR2Key != null ||
-                      snapshot.sourceAssetId != null) ...[
-                    const LiquidSectionHeader(title: 'CURRENT PHOTO'),
-                    BaseTimelinePhotoPreviewCard(
-                      r2Key: snapshot.sourceR2Key,
-                      assetId: snapshot.sourceAssetId,
-                      title: WorkPresentationUtils.photoCardTitle(lifeRole),
-                      isCompactRow: true,
-                      height: 68,
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  LiquidSectionHeader(
-                    title:
-                        (snapshot.sourceR2Key != null ||
-                            snapshot.sourceAssetId != null)
-                        ? 'USE A NEW PHOTO'
-                        : 'USE A SCHEDULE PHOTO',
-                  ),
-                  BaseTimelineSourceActionCard(
-                    icon: Icons.camera_alt_rounded,
-                    title: 'Take a Photo',
-                    subtitle: WorkPresentationUtils.sourceCameraSubtitle(
-                      lifeRole,
-                    ),
-                    accent: OptivusColors.warning,
-                    onTap: () => onPickPhoto(ImageSource.camera),
-                  ),
-                  const SizedBox(height: 12),
-                  BaseTimelineSourceActionCard(
-                    icon: Icons.photo_library_rounded,
-                    title: 'Choose from Gallery',
-                    subtitle: 'Upload a photo or screenshot from your device',
-                    accent: OptivusColors.aquaAccent,
-                    onTap: () => onPickPhoto(ImageSource.gallery),
-                  ),
-                  const SizedBox(height: 16),
-                  const LiquidSectionHeader(title: 'OR SET UP MANUALLY'),
-                  if (snapshot.isConfigured || setup.workBlocks.isNotEmpty)
-                    BaseTimelineSourceActionCard(
-                      icon: Icons.edit_calendar_rounded,
-                      title: WorkPresentationUtils.sourceEditCurrentTitle(
-                        lifeRole,
-                      ),
-                      subtitle: WorkPresentationUtils.sourceEditCurrentSubtitle(
-                        hasSourcePhoto:
-                            snapshot.sourceR2Key != null ||
-                            snapshot.sourceAssetId != null,
-                        lifeRole: lifeRole,
-                      ),
-                      accent: OptivusColors.routineAccent,
-                      onTap: onEditCurrent ?? onManualSetup,
-                    )
-                  else
-                    BaseTimelineSourceActionCard(
-                      icon: Icons.edit_calendar_rounded,
-                      title: WorkPresentationUtils.sourceManualTitle(lifeRole),
-                      subtitle: WorkPresentationUtils.sourceManualSubtitle(
-                        lifeRole: lifeRole,
-                        businessMode: businessMode,
-                      ),
-                      accent: OptivusColors.routineAccent,
-                      onTap: onManualSetup,
-                    ),
-                ],
-              ),
+            accent: OptivusColors.warning,
+            onTap: onEditCurrent ?? onManualSetup,
+          )
+        else
+          BaseTimelineSourceActionCard(
+            icon: Icons.edit_calendar_rounded,
+            title: WorkPresentationUtils.sourceManualTitle(lifeRole),
+            subtitle: WorkPresentationUtils.sourceManualSubtitle(
+              lifeRole: lifeRole,
+              businessMode: businessMode,
             ),
+            accent: OptivusColors.warning,
+            onTap: onManualSetup,
           ),
-        ],
-      ),
+      ],
     );
   }
 }

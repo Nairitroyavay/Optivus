@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_radii.dart';
-import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/meal_timeline_adapter.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_editor_action_row.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_editor_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_empty_draft_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
 import 'package:optivus/models/onboarding_draft.dart';
@@ -92,147 +93,26 @@ class _EatingReviewViewState extends State<EatingReviewView> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // 1. Header Bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(
-                    Icons.close_rounded,
-                    color: OptivusColors.textPrimary,
-                  ),
-                  onPressed: widget.isSaving ? null : widget.onCancel,
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.white.withValues(alpha: 0.12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(OptivusRadii.md),
-                      side: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.2),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.isNew
-                            ? 'Review Meal Plan'
-                            : 'Edit Eating Schedule',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: OptivusColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${widget.workingBlocks.length} ${widget.workingBlocks.length == 1 ? 'meal' : 'meals'} scheduled',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: OptivusColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+          BaseTimelineEditorHeader(
+            title: widget.isNew ? 'Review Meal Plan' : 'Edit Eating Schedule',
+            subtitle:
+                '${widget.workingBlocks.length} ${widget.workingBlocks.length == 1 ? 'meal' : 'meals'} scheduled',
+            onCancel: widget.onCancel,
+            isSaving: widget.isSaving,
           ),
 
           // 2. Compact Action Buttons (matching Classes and Work)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: [
-                if (isPhotoSetup)
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: OptivusColors.roseAccent.withValues(
-                          alpha: 0.12,
-                        ),
-                        side: BorderSide(
-                          color: OptivusColors.roseAccent.withValues(
-                            alpha: 0.5,
-                          ),
-                          width: 1.5,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(
-                            OptivusRadii.controlCompact,
-                          ),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                      ),
-                      icon: const Icon(
-                        Icons.photo_library_outlined,
-                        size: 18,
-                        color: OptivusColors.roseAccent,
-                      ),
-                      label: Text(
-                        (widget.workingR2Key != null ||
-                                widget.workingAssetId != null)
-                            ? 'Change photo'
-                            : 'Add photo',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: OptivusColors.roseAccent,
-                        ),
-                      ),
-                      onPressed: widget.isSaving ? null : widget.onChangePhoto,
-                    ),
-                  )
-                else if (widget.onOpenSettings != null)
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: OptivusColors.roseAccent.withValues(
-                          alpha: 0.12,
-                        ),
-                        side: BorderSide(
-                          color: OptivusColors.roseAccent.withValues(
-                            alpha: 0.5,
-                          ),
-                          width: 1.5,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(
-                            OptivusRadii.controlCompact,
-                          ),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                      ),
-                      icon: const Icon(
-                        Icons.tune_rounded,
-                        size: 18,
-                        color: OptivusColors.roseAccent,
-                      ),
-                      label: const Text(
-                        'Plan settings',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: OptivusColors.roseAccent,
-                        ),
-                      ),
-                      onPressed: widget.isSaving ? null : widget.onOpenSettings,
-                    ),
-                  ),
-                if (isPhotoSetup || widget.onOpenSettings != null)
-                  const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    key: const Key('base-timeline-edit-add-meal-button'),
+          BaseTimelineEditorActionRow(
+            primaryAction: isPhotoSetup
+                ? OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
-                      backgroundColor: Colors.white.withValues(alpha: 0.12),
+                      backgroundColor: OptivusColors.roseAccent.withValues(
+                        alpha: 0.12,
+                      ),
                       side: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.45),
+                        color: OptivusColors.roseAccent.withValues(
+                          alpha: 0.5,
+                        ),
                         width: 1.5,
                       ),
                       shape: RoundedRectangleBorder(
@@ -243,21 +123,89 @@ class _EatingReviewViewState extends State<EatingReviewView> {
                       padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                     icon: const Icon(
-                      Icons.add_rounded,
+                      Icons.photo_library_outlined,
                       size: 18,
-                      color: OptivusColors.textPrimary,
+                      color: OptivusColors.roseAccent,
                     ),
-                    label: const Text(
-                      'Add meal',
-                      style: TextStyle(
+                    label: Text(
+                      (widget.workingR2Key != null ||
+                              widget.workingAssetId != null)
+                          ? 'Change photo'
+                          : 'Add photo',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: OptivusColors.textPrimary,
+                        color: OptivusColors.roseAccent,
                       ),
                     ),
-                    onPressed: widget.isSaving ? null : widget.onAddMeal,
+                    onPressed: widget.isSaving ? null : widget.onChangePhoto,
+                  )
+                : (widget.onOpenSettings != null
+                    ? OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: OptivusColors.roseAccent.withValues(
+                            alpha: 0.12,
+                          ),
+                          side: BorderSide(
+                            color: OptivusColors.roseAccent.withValues(
+                              alpha: 0.5,
+                            ),
+                            width: 1.5,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              OptivusRadii.controlCompact,
+                            ),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                        icon: const Icon(
+                          Icons.tune_rounded,
+                          size: 18,
+                          color: OptivusColors.roseAccent,
+                        ),
+                        label: const Text(
+                          'Plan settings',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: OptivusColors.roseAccent,
+                          ),
+                        ),
+                        onPressed:
+                            widget.isSaving ? null : widget.onOpenSettings,
+                      )
+                    : null),
+            secondaryAction: OutlinedButton.icon(
+              key: const Key('base-timeline-edit-add-meal-button'),
+              style: OutlinedButton.styleFrom(
+                backgroundColor: Colors.white.withValues(alpha: 0.12),
+                side: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.45),
+                  width: 1.5,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(
+                    OptivusRadii.controlCompact,
                   ),
                 ),
-              ],
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+              icon: const Icon(
+                Icons.add_rounded,
+                size: 18,
+                color: OptivusColors.textPrimary,
+              ),
+              label: const Text(
+                'Add meal',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: OptivusColors.textPrimary,
+                ),
+              ),
+              onPressed: widget.isSaving ? null : widget.onAddMeal,
             ),
           ),
 
@@ -377,29 +325,15 @@ class _EatingReviewViewState extends State<EatingReviewView> {
                   ),
           ),
 
-          // 6. Optional compact photo preview card
-          if (isPhotoSetup && widget.workingR2Key != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: BaseTimelinePhotoPreviewCard(
-                r2Key: widget.workingR2Key,
-                assetId: widget.workingAssetId,
-                title: 'Meal plan photo',
-                isCompactRow: true,
-                height: 68,
-              ),
-            ),
+
 
           // 7. Dominant 52px Bottom CTA with Floating Tab Bar Clearance
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              10,
-              16,
-              routineBottomCtaReserve(context),
-            ),
-            child: SizedBox(
-              height: 52,
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: SizedBox(
+                height: 52,
               child: FilledButton(
                 key: const Key('base-timeline-eating-save-button'),
                 style: FilledButton.styleFrom(
@@ -448,6 +382,7 @@ class _EatingReviewViewState extends State<EatingReviewView> {
               ),
             ),
           ),
+        ),
         ],
       ),
     );

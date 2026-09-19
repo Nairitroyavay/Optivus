@@ -406,10 +406,6 @@ class WorkPresentationUtils {
     return 'Nothing scheduled for $dayName.\nChoose another day or edit your schedule.';
   }
 
-  /// Notice shown during source selection when a configured schedule already exists.
-  static String sourceDraftNotice(String? lifeRole) {
-    return 'Optivus will create a new draft from your selection. Your live schedule will not change until you review and save it.';
-  }
 
   /// Header title for Current Setup view.
   static String currentSetupHeaderTitle(String? lifeRole) {
@@ -486,7 +482,19 @@ class WorkPresentationUtils {
   }
 
   /// Title for Source Selection view.
-  static String sourceSelectionTitle(String? lifeRole) {
+  static String sourceSelectionTitle(
+    String? lifeRole, {
+    bool isConfigured = true,
+  }) {
+    if (!isConfigured) {
+      if (isBusinessProfile(lifeRole)) {
+        return 'Set up Business Hours';
+      }
+      if (isWorkProfile(lifeRole)) {
+        return 'Set up Work Schedule';
+      }
+      return 'Set up Work / Business';
+    }
     if (isBusinessProfile(lifeRole)) {
       return 'Update Business Hours';
     }
@@ -497,7 +505,19 @@ class WorkPresentationUtils {
   }
 
   /// Subtitle for Source Selection view.
-  static String sourceSelectionSubtitle(String? lifeRole) {
+  static String sourceSelectionSubtitle(
+    String? lifeRole, {
+    bool isConfigured = true,
+  }) {
+    if (!isConfigured) {
+      if (isBusinessProfile(lifeRole)) {
+        return 'Choose how you want to create your business hours.';
+      }
+      if (isWorkProfile(lifeRole)) {
+        return 'Choose how you want to create your work schedule.';
+      }
+      return 'Choose how you want to create your schedule.';
+    }
     if (isBusinessProfile(lifeRole)) {
       return 'Your current business hours stay active until you save new ones.';
     }
@@ -505,6 +525,11 @@ class WorkPresentationUtils {
       return 'Your current setup stays active until you save a new one.';
     }
     return 'Your current setup stays active until you save a new one.';
+  }
+
+  /// Draft preservation notice for Source Selection view.
+  static String sourceDraftNotice(String? lifeRole) {
+    return 'Your current setup stays active until you save the replacement.';
   }
 
   /// Subtitle for manual setup action card in Source Selection view.

@@ -8,6 +8,7 @@ import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.da
 import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
+import 'package:optivus/features/routine/managers/base_timeline/services/work_timeline_adapter.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
@@ -25,6 +26,7 @@ class ClassesCurrentSetupView extends StatefulWidget {
   final VoidCallback onChangeSetup;
   final VoidCallback? onEditSchedule;
   final VoidCallback? onChangeSource;
+  final ValueChanged<ClassRoutineBlock>? onEditBlock;
   final VoidCallback? onRemoveSetup;
   final bool routineRefreshPending;
   final String? routineRefreshMessage;
@@ -41,6 +43,7 @@ class ClassesCurrentSetupView extends StatefulWidget {
     required this.onChangeSetup,
     this.onEditSchedule,
     this.onChangeSource,
+    this.onEditBlock,
     this.onRemoveSetup,
     this.routineRefreshPending = false,
     this.routineRefreshMessage,
@@ -63,52 +66,70 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
     super.dispose();
   }
 
+  static bool _hasOverlap(
+    ClassRoutineBlock block,
+    List<ClassRoutineBlock> allBlocks,
+  ) {
+    for (final other in allBlocks) {
+      if (identical(other, block) || other.id == block.id) continue;
+      final sharesDay = other.repeatDays.any(block.repeatDays.contains);
+      if (!sharesDay) continue;
+      if (other.startMinute < block.endMinute &&
+          block.startMinute < other.endMinute) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   void _showPhotoDialog(BuildContext context, String? r2Key, String? assetId) {
     showDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: OptivusColors.backgroundBottom,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(OptivusRadii.surfaceLarge),
-        ),
-        insetPadding: const EdgeInsets.all(20),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  const Text(
-                    'Timetable Photo',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: OptivusColors.textPrimary,
+      builder: (ctx) {
+        final screenHeight = MediaQuery.sizeOf(ctx).height;
+        final previewHeight = (screenHeight * 0.45).clamp(200.0, 420.0);
+        return Dialog(
+          backgroundColor: OptivusColors.backgroundBottom,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const Text(
+                      'Timetable Photo',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: OptivusColors.textPrimary,
+                      ),
                     ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    color: OptivusColors.textSecondary,
-                    onPressed: () => Navigator.of(ctx).pop(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: BaseTimelinePhotoPreviewCard(
-                  r2Key: r2Key,
-                  assetId: assetId,
-                  title: '',
-                  height: 320,
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      color: OptivusColors.textSecondary,
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: BaseTimelinePhotoPreviewCard(
+                    r2Key: r2Key,
+                    assetId: assetId,
+                    title: '',
+                    height: previewHeight,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -120,9 +141,6 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
       accent: OptivusColors.blueAccent,
       defaultEditable: false,
     );
-    final entries = widget.routineBlocks
-        .expand((b) => adapter.toEntries(b))
-        .toList();
     final blockMap = {for (final b in widget.routineBlocks) b.id: b};
     final hasSourcePhoto =
         snapshot.sourceR2Key != null || snapshot.sourceAssetId != null;
@@ -144,6 +162,7 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
             primaryButtonKey: const Key(
               'base-timeline-header-edit-schedule-button',
             ),
+            iconOnly: true,
             onPrimaryAction: snapshot.isConfigured
                 ? (widget.onEditSchedule ?? widget.onChangeSetup)
                 : widget.onChangeSetup,
@@ -195,47 +214,70 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
 
           // 3. Timeline View
           Expanded(
-            child: FullScreenTimelineScaffold(
-              entries: entries,
-              selectedDay: widget.selectedDay,
-              onDayChanged: widget.onDayChanged,
-              scrollController: _scrollController,
-              enableHaptics: true,
-              overlapPresentation: TimelineOverlapPresentation.frontAndExposed,
-              frontEntryId: _frontBlockId,
-              onFrontSelected: (id) => setState(() => _frontBlockId = id),
-              styleBuilder: (entry) => adapter.styleForEntry(entry),
-              blockBuilder: (context, positioned) {
-                final block = blockMap[positioned.entry.sourceId];
-                return ClassTimelineCard(
-                  positioned: positioned,
-                  block: block,
-                  isEditable: false,
-                  accent: OptivusColors.blueAccent,
-                  onTap: () {
-                    if (positioned.hasOverlap && !positioned.isFront) {
-                      HapticFeedback.lightImpact();
-                      setState(() => _frontBlockId = positioned.entry.id);
-                    } else if (block != null) {
-                      ClassDetailSheet.show(
-                        context,
-                        block,
-                        onEdit: widget.onEditSchedule,
-                      );
-                    }
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final textScale = MediaQuery.textScalerOf(
+                  context,
+                ).scale(1.0);
+                final entries = widget.routineBlocks.expand((b) {
+                  final hasOverlap = _hasOverlap(b, widget.routineBlocks);
+                  final cardWidth = WorkTimelineLayoutHelper.effectiveCardWidth(
+                    availableWidth: constraints.maxWidth,
+                    hasOverlap: hasOverlap,
+                  );
+                  return adapter.toEntries(
+                    b,
+                    contentWidth: cardWidth,
+                    textScale: textScale,
+                  );
+                }).toList();
+
+                return FullScreenTimelineScaffold(
+                  entries: entries,
+                  selectedDay: widget.selectedDay,
+                  onDayChanged: widget.onDayChanged,
+                  scrollController: _scrollController,
+                  enableHaptics: true,
+                  overlapPresentation:
+                      TimelineOverlapPresentation.frontAndExposed,
+                  frontEntryId: _frontBlockId,
+                  onFrontSelected: (id) => setState(() => _frontBlockId = id),
+                  styleBuilder: (entry) => adapter.styleForEntry(entry),
+                  blockBuilder: (context, positioned) {
+                    final block = blockMap[positioned.entry.sourceId];
+                    return ClassTimelineCard(
+                      positioned: positioned,
+                      block: block,
+                      isEditable: false,
+                      accent: OptivusColors.blueAccent,
+                      onTap: () {
+                        if (positioned.hasOverlap && !positioned.isFront) {
+                          HapticFeedback.lightImpact();
+                          setState(() => _frontBlockId = positioned.entry.id);
+                        } else if (block != null) {
+                          ClassDetailSheet.show(
+                            context,
+                            block,
+                            onEdit: widget.onEditBlock != null
+                                ? () => widget.onEditBlock!(block)
+                                : widget.onEditSchedule,
+                          );
+                        }
+                      },
+                    );
                   },
+                  onEntryTapped: null,
+                  accent: OptivusColors.blueAccent,
+                  mode: TimelineMode.previewReadOnly,
+                  geometryConfig: const TimelineGeometryConfig(
+                    bottomPadding: 100.0,
+                  ),
+                  visibleRangePolicy: TimelineVisibleRangePolicy.contentAdaptive,
+                  autoScrollToFirstEntry: false,
+                  stretchPolicy: TimelineStretchPolicy.constraintBased,
+                  emptyDayMessage: 'No classes on this day.',
                 );
               },
-              onEntryTapped: null,
-              accent: OptivusColors.blueAccent,
-              mode: TimelineMode.previewReadOnly,
-              geometryConfig: const TimelineGeometryConfig(
-                bottomPadding: 100.0,
-              ),
-              visibleRangePolicy: TimelineVisibleRangePolicy.contentAdaptive,
-              autoScrollToFirstEntry: false,
-              stretchPolicy: TimelineStretchPolicy.constraintBased,
-              emptyDayMessage: 'No classes on this day.',
             ),
           ),
         ],

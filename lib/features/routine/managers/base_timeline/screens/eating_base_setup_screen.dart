@@ -14,6 +14,8 @@ import 'package:optivus/features/routine/managers/base_timeline/services/base_ti
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_domain_engine.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_setup_controller.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_ai_thinking_view.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_load_error.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_skeleton.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_save_success_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_import_review_sheet.dart';
@@ -386,6 +388,25 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     );
   }
 
+  Future<void> _editBlockFromCurrentSetup(
+    BaseTimelineSetup setup,
+    TimelineBlockDraft block,
+    String uid,
+  ) async {
+    final controller = ref.read(eatingSetupControllerProvider.notifier);
+    controller.editCurrentMealPlan(setup);
+    await EatingMealEditSheet.show(
+      context: context,
+      block: block,
+      isNew: false,
+      onSave: (updated) async {
+        controller.updateBlock(updated);
+        return true;
+      },
+      onDelete: () => controller.deleteBlock(block.id),
+    );
+  }
+
   Future<void> _handleRemoveSetup(BaseTimelineSetup setup, String uid) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -522,34 +543,45 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       },
     );
 
-    if (setupAsync.isLoading && !setupAsync.hasValue) {
-      return const Scaffold(
-        backgroundColor: Colors.transparent,
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (setupAsync.hasError && !setupAsync.hasValue) {
-      return Scaffold(
-        backgroundColor: Colors.transparent,
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Failed to load setup',
-                style: TextStyle(color: OptivusColors.textPrimary),
-              ),
-              const SizedBox(height: 8),
-              FilledButton(
-                onPressed: () =>
-                    ref.read(baseTimelineSetupNotifierProvider.notifier).load(),
-                child: const Text('Retry'),
-              ),
-            ],
+    if (state.stage == EatingSetupStage.currentSetup) {
+      if (setupAsync.isLoading && !setupAsync.hasValue) {
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (didPop) return;
+            widget.onBack();
+          },
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            body: BaseTimelineCurrentSetupSkeleton(
+              headerTitle: 'Eating',
+              accent: OptivusColors.roseAccent,
+              onBack: widget.onBack,
+            ),
           ),
-        ),
-      );
+        );
+      }
+
+      if (setupAsync.hasError && !setupAsync.hasValue) {
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (didPop) return;
+            widget.onBack();
+          },
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            body: BaseTimelineCurrentSetupLoadError(
+              title: 'Eating',
+              message: 'Failed to load meal plan',
+              accent: OptivusColors.roseAccent,
+              onBack: widget.onBack,
+              onRetry: () =>
+                  ref.read(baseTimelineSetupNotifierProvider.notifier).load(),
+            ),
+          ),
+        );
+      }
     }
 
     final setup = setupAsync.valueOrNull;

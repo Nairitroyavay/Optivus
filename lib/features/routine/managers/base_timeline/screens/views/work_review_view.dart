@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_radii.dart';
-import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
@@ -10,6 +9,8 @@ import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dar
 import 'package:optivus/features/routine/managers/base_timeline/services/work_presentation_utils.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_setup_error_mapper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_timeline_adapter.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_editor_action_row.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_editor_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_empty_draft_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/work_timeline_card.dart';
@@ -101,144 +102,89 @@ class _WorkReviewViewState extends State<WorkReviewView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 1. Header Bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(
-                    Icons.close_rounded,
-                    color: OptivusColors.textPrimary,
-                  ),
-                  onPressed: widget.isSaving ? null : widget.onCancel,
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.white.withValues(alpha: 0.12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(OptivusRadii.md),
-                      side: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.2),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        WorkPresentationUtils.reviewTitle(
-                          widget.lifeRole,
-                          isEditing: widget.isEditing,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: OptivusColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        widget.droppedCount > 0
-                            ? '${WorkPresentationUtils.scheduledCount(widget.workingBlocks.length, widget.lifeRole)} · ${widget.droppedCount} ${widget.droppedCount == 1 ? 'entry was skipped' : 'entries were skipped'}'
-                            : WorkPresentationUtils.scheduledCount(
-                                widget.workingBlocks.length,
-                                widget.lifeRole,
-                              ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: OptivusColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+          // 1. Shared Header Bar
+          BaseTimelineEditorHeader(
+            title: WorkPresentationUtils.reviewTitle(
+              widget.lifeRole,
+              isEditing: widget.isEditing,
             ),
+            subtitle: widget.droppedCount > 0
+                ? '${WorkPresentationUtils.scheduledCount(widget.workingBlocks.length, widget.lifeRole)} · ${widget.droppedCount} ${widget.droppedCount == 1 ? 'entry was skipped' : 'entries were skipped'}'
+                : WorkPresentationUtils.scheduledCount(
+                    widget.workingBlocks.length,
+                    widget.lifeRole,
+                  ),
+            onCancel: widget.onCancel,
+            isSaving: widget.isSaving,
           ),
 
-          // 2. Compact Action Buttons
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: OptivusColors.warning.withValues(
-                        alpha: 0.12,
-                      ),
-                      side: BorderSide(
-                        color: OptivusColors.warning.withValues(alpha: 0.5),
-                        width: 1.5,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(
-                          OptivusRadii.controlCompact,
-                        ),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                    icon: Icon(
-                      hasWorkingSource
-                          ? Icons.photo_library_outlined
-                          : Icons.camera_alt_outlined,
-                      size: 18,
-                      color: OptivusColors.warning,
-                    ),
-                    label: Text(
-                      hasWorkingSource ? 'Change photo' : 'Add photo',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: OptivusColors.warning,
-                      ),
-                    ),
-                    onPressed: widget.isSaving ? null : widget.onScanAgain,
+          // 2. Responsive Compact Action Buttons
+          BaseTimelineEditorActionRow(
+            primaryAction: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                backgroundColor: OptivusColors.warning.withValues(
+                  alpha: 0.12,
+                ),
+                side: BorderSide(
+                  color: OptivusColors.warning.withValues(alpha: 0.5),
+                  width: 1.5,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(
+                    OptivusRadii.controlCompact,
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: Colors.white.withValues(alpha: 0.12),
-                      side: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.45),
-                        width: 1.5,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(
-                          OptivusRadii.controlCompact,
-                        ),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                    icon: const Icon(
-                      Icons.add_rounded,
-                      size: 18,
-                      color: OptivusColors.textPrimary,
-                    ),
-                    label: Text(
-                      WorkPresentationUtils.addBlockButtonLabel(
-                        widget.lifeRole,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: OptivusColors.textPrimary,
-                      ),
-                    ),
-                    onPressed: widget.isSaving ? null : widget.onAddBlock,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+              icon: Icon(
+                hasWorkingSource
+                    ? Icons.photo_library_outlined
+                    : Icons.camera_alt_outlined,
+                size: 18,
+                color: OptivusColors.warning,
+              ),
+              label: Text(
+                hasWorkingSource ? 'Change photo' : 'Add photo',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: OptivusColors.warning,
+                ),
+              ),
+              onPressed: widget.isSaving ? null : widget.onScanAgain,
+            ),
+            secondaryAction: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                backgroundColor: Colors.white.withValues(alpha: 0.12),
+                side: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.45),
+                  width: 1.5,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(
+                    OptivusRadii.controlCompact,
                   ),
                 ),
-              ],
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+              icon: const Icon(
+                Icons.add_rounded,
+                size: 18,
+                color: OptivusColors.textPrimary,
+              ),
+              label: Text(
+                WorkPresentationUtils.addBlockButtonLabel(
+                  widget.lifeRole,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: OptivusColors.textPrimary,
+                ),
+              ),
+              onPressed: widget.isSaving ? null : widget.onAddBlock,
             ),
           ),
 
@@ -427,35 +373,13 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                   ),
           ),
 
-          // 6. Scanned Photo Preview (Fixed-height compact row below Timeline)
-          if (hasWorkingSource)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
-              child: BaseTimelinePhotoPreviewCard(
-                localPreviewPath: widget.workingLocalPreviewPath,
-                r2Key: widget.workingR2Key,
-                assetId: widget.workingAssetId,
-                title: 'Scanned schedule',
-                subtitle: widget.workingBlocks.isNotEmpty
-                    ? WorkPresentationUtils.weeklyBlockCount(
-                        widget.workingBlocks.length,
-                        widget.lifeRole,
-                      )
-                    : null,
-                isCompactRow: true,
-                height: 68,
-              ),
-            ),
 
-          // 7. Dominant 52px Bottom CTA with Floating Tab Bar Clearance
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              10,
-              16,
-              routineBottomCtaReserve(context),
-            ),
-            child: SizedBox(
+
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: SizedBox(
               height: 52,
               child: FilledButton(
                 style: FilledButton.styleFrom(
@@ -509,6 +433,7 @@ class _WorkReviewViewState extends State<WorkReviewView> {
               ),
             ),
           ),
+        ),
         ],
       ),
     );

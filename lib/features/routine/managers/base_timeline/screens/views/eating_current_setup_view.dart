@@ -6,6 +6,7 @@ import 'package:optivus/features/onboarding/timeline/adapters/meal_timeline_adap
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
 import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
+import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/eating_plan_freshness.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_domain_engine.dart';
@@ -37,6 +38,7 @@ class EatingCurrentSetupView extends ConsumerStatefulWidget {
   final String? routineRefreshMessage;
   final VoidCallback? onRetryRefresh;
   final String? primaryButtonLabel;
+  final void Function(TimelineBlockDraft block)? onEditBlock;
 
   const EatingCurrentSetupView({
     super.key,
@@ -54,6 +56,7 @@ class EatingCurrentSetupView extends ConsumerStatefulWidget {
     this.routineRefreshMessage,
     this.onRetryRefresh,
     this.primaryButtonLabel,
+    this.onEditBlock,
   });
 
   @override
@@ -102,6 +105,7 @@ class _EatingCurrentSetupViewState
             primaryButtonKey: const Key(
               'base-timeline-header-edit-schedule-button',
             ),
+            iconOnly: true,
             onPrimaryAction: widget.onEditSchedule,
             changeSourceLabel: 'Change source',
             onChangeSource: widget.onChangeSource,
@@ -175,7 +179,13 @@ class _EatingCurrentSetupViewState
                           EatingMealDetailSheet.show(
                             context,
                             block,
-                            onEdit: widget.onEditSchedule,
+                            onEdit: () {
+                              if (widget.onEditBlock != null) {
+                                widget.onEditBlock!(block);
+                              } else {
+                                widget.onEditSchedule();
+                              }
+                            },
                           );
                         }
                       },
