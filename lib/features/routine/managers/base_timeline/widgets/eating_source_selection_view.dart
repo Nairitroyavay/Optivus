@@ -67,7 +67,7 @@ class EatingSourceSelectionView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const LiquidSectionHeader(title: 'CURRENT PHOTO'),
+                const LiquidSectionHeader(title: 'Current photo'),
                 BaseTimelinePhotoPreviewCard(
                   r2Key: snapshot.sourceR2Key,
                   assetId: snapshot.sourceAssetId,
@@ -120,25 +120,25 @@ class EatingSourceSelectionView extends StatelessWidget {
             ),
           ),
 
-        const LiquidSectionHeader(title: 'RECOMMENDED'),
+        const LiquidSectionHeader(title: 'Recommended'),
         // Option 1: Build Balanced Plan
         BaseTimelineSourceActionCard(
           title: 'Build personalized plan',
           subtitle:
               'Generate a balanced weekly plan matched to your body goals, preferences, and meal schedule.',
           icon: Icons.auto_awesome_rounded,
-          badgeText: 'RECOMMENDED',
+          badgeText: 'Recommended',
           accent: OptivusColors.roseAccent,
           onTap: onBuildPersonalized,
         ),
         const SizedBox(height: 16),
 
-        const LiquidSectionHeader(title: 'OR USE EXISTING'),
+        const LiquidSectionHeader(title: 'Other options'),
         BaseTimelineSourceActionCard(
           icon: Icons.camera_alt_rounded,
           title: 'Take a photo',
           subtitle: 'Capture a printed diet chart or menu',
-          accent: OptivusColors.blueAccent,
+          accent: OptivusColors.roseAccent,
           onTap: () => onPickPhoto(ImageSource.camera),
         ),
         const SizedBox(height: 12),
@@ -146,20 +146,18 @@ class EatingSourceSelectionView extends StatelessWidget {
           icon: Icons.photo_library_rounded,
           title: 'Choose from gallery',
           subtitle: 'Upload a photo or screenshot from your device',
-          accent: OptivusColors.aquaAccent,
+          accent: OptivusColors.roseAccent,
           onTap: () => onPickPhoto(ImageSource.gallery),
         ),
         const SizedBox(height: 16),
 
-        const LiquidSectionHeader(title: 'OR SET UP MANUALLY'),
         // Option 3: Create Manually
         if (hasPhoto && onEditCurrent != null)
           BaseTimelineSourceActionCard(
             title: 'Edit current meal plan',
             subtitle: 'Keep photo and adjust meals',
             icon: Icons.edit_calendar_rounded,
-            badgeText: 'MANUAL',
-            accent: OptivusColors.routineAccent,
+            accent: OptivusColors.roseAccent,
             onTap: onEditCurrent!,
           )
         else
@@ -168,8 +166,7 @@ class EatingSourceSelectionView extends StatelessWidget {
             subtitle:
                 'Add and customize your own meals, dishes, and timings without AI generation.',
             icon: Icons.edit_calendar_rounded,
-            badgeText: 'MANUAL',
-            accent: OptivusColors.routineAccent,
+            accent: OptivusColors.roseAccent,
             onTap: onCreateManually,
           ),
       ],

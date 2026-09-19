@@ -58,21 +58,35 @@ class BaseTimelineCurrentSetupHeader extends StatelessWidget {
         builder: (context, constraints) {
           // Either a compact icon button or the full labelled filled button.
           final Widget primaryButton = iconOnly
-              ? Tooltip(
-                  message: primaryButtonLabel,
-                  child: IconButton(
-                    key:
-                        primaryButtonKey ??
-                        const Key('base-timeline-header-change-setup-button'),
-                    icon: Icon(primaryButtonIcon, size: 20),
-                    color: accent,
-                    style: IconButton.styleFrom(
-                      backgroundColor: accent.withValues(alpha: 0.12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+              ? Semantics(
+                  label: primaryButtonLabel,
+                  button: true,
+                  excludeSemantics: true,
+                  child: Tooltip(
+                    message: primaryButtonLabel,
+                    child: SizedBox.square(
+                      dimension: 48,
+                      child: IconButton(
+                        key:
+                            primaryButtonKey ??
+                            const Key(
+                              'base-timeline-header-change-setup-button',
+                            ),
+                        icon: Icon(primaryButtonIcon, size: 20),
+                        color: accent,
+                        style: IconButton.styleFrom(
+                          minimumSize: const Size.square(48),
+                          backgroundColor: accent.withValues(alpha: 0.12),
+                          focusColor: accent.withValues(alpha: 0.24),
+                          hoverColor: accent.withValues(alpha: 0.18),
+                          highlightColor: accent.withValues(alpha: 0.24),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        onPressed: onPrimaryAction,
                       ),
                     ),
-                    onPressed: onPrimaryAction,
                   ),
                 )
               : FilledButton.icon(
@@ -217,7 +231,8 @@ class BaseTimelineCurrentSetupHeader extends StatelessWidget {
 
           // Wrap if space is constrained or accessibility text scale is enlarged
           final shouldWrap =
-              isVeryNarrow || hasLargeText || constraints.maxWidth < 440;
+              !iconOnly &&
+              (isVeryNarrow || hasLargeText || constraints.maxWidth < 440);
 
           if (shouldWrap) {
             return Column(
@@ -283,6 +298,8 @@ class BaseTimelineCurrentSetupHeader extends StatelessWidget {
                   children: [
                     Text(
                       title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,

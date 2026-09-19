@@ -417,28 +417,9 @@ service cloud.firestore {
 
     function validRoutineTemplate(data, itemId) {
       return validRoutineTemplateKeys(data)
-        && data.keys().hasAll([
-          "id",
-          "ownerUid",
-          "title",
-          "category",
-          "source",
-          "blockType",
-          "priority",
-          "startMinute",
-          "endMinute",
-          "repeatRule",
-          "repeatDays",
-          "crossesMidnight",
-          "endsNextDay",
-          "isTrackerLinked",
-          "trackerType",
-          "hardBlock",
-          "allowedConflicts",
-          "createdAt",
-          "updatedAt",
-          "schemaVersion"
-        ])
+      // Every required key below is read and type-checked directly. Repeating
+      // the same list in hasAll() consumes enough rule expressions to reject
+      // otherwise-valid atomic Eating setup + Routine writes.
         && data.id == itemId
         && data.ownerUid == request.auth.uid
         && data.title is string
@@ -559,7 +540,7 @@ service cloud.firestore {
       return value == "onboardingSeed" || value == "baseTimeline";
     }
 
-    function validBaseTimelineSetup(data, uid) {
+    function validBaseTimelineSetupKeys(data) {
       return data.keys().hasOnly([
           "uid", "updatedAt", "schemaVersion", "revision",
           "classRoutineItemIds", "workRoutineItemIds",
@@ -584,16 +565,14 @@ service cloud.firestore {
           "targetCaloriesOverride", "targetProteinOverride", "foodsToAvoid",
           "eatingGeneratedPlanVersion", "eatingGeneratedInputFingerprint",
           "eatingCustomized"
-        ])
-        && data.keys().hasAll([
-          "uid", "updatedAt", "schemaVersion", "revision",
-          "classRoutineItemIds", "workRoutineItemIds",
-          "eatingRoutineItemIds", "fixedRoutineItemIds",
-          "skinCareRoutineItemIds", "classAuthority", "workAuthority",
-          "eatingAuthority", "fixedAuthority", "skinCareAuthority",
-          "classBlocks", "workBlocks", "eatingBlocks", "fixedBlocks",
-          "skinCareSkipped", "skinCareBlocks", "skinCareFacePhotoSkipped"
-        ])
+        ]);
+    }
+
+    function validBaseTimelineSetup(data, uid) {
+      return validBaseTimelineSetupKeys(data)
+        // Required keys are all read and validated directly below. Avoid a
+        // duplicate hasAll() walk so multi-document replacement transactions
+        // stay under Firestore's expression budget.
         && data.uid == uid
         && data.schemaVersion is int
         && data.schemaVersion == 3
@@ -660,6 +639,131 @@ service cloud.firestore {
         && (!data.keys().hasAny(["eatingGeneratedPlanVersion"]) || data.eatingGeneratedPlanVersion == null || (data.eatingGeneratedPlanVersion is int && data.eatingGeneratedPlanVersion >= 1))
         && (!data.keys().hasAny(["eatingGeneratedInputFingerprint"]) || validBaseTimelineNullableString(data.eatingGeneratedInputFingerprint))
         && (!data.keys().hasAny(["eatingCustomized"]) || data.eatingCustomized is bool);
+    }
+
+    function validBaseTimelineTransitionIdentity(before, after, uid) {
+      return validBaseTimelineSetupKeys(after)
+        && after.uid == uid
+        && after.uid == before.uid
+        && after.schemaVersion == 3
+        && before.schemaVersion == 3
+        && after.revision is int
+        && after.revision == before.revision + 1
+        && after.updatedAt is timestamp;
+    }
+
+    function validBaseTimelineClassTransition(before, after) {
+      return after.diff(before).affectedKeys().hasOnly([
+          "updatedAt", "revision", "classAuthority", "classRoutineItemIds",
+          "classLogicalAssetId", "classLogicalAssetR2Key", "classBlocks"
+        ])
+        && validBaseTimelineAuthority(after.classAuthority)
+        && validBaseTimelineStringList(after.classRoutineItemIds, 500)
+        && after.classBlocks is list && after.classBlocks.size() <= 500
+        && validBaseTimelineNullableString(after.classLogicalAssetId)
+        && validBaseTimelineNullableString(after.classLogicalAssetR2Key);
+    }
+
+    function validBaseTimelineWorkTransition(before, after) {
+      return after.diff(before).affectedKeys().hasOnly([
+          "updatedAt", "revision", "workAuthority", "workRoutineItemIds",
+          "workLogicalAssetId", "workLogicalAssetR2Key", "workBlocks"
+        ])
+        && validBaseTimelineAuthority(after.workAuthority)
+        && validBaseTimelineStringList(after.workRoutineItemIds, 500)
+        && after.workBlocks is list && after.workBlocks.size() <= 500
+        && validBaseTimelineNullableString(after.workLogicalAssetId)
+        && validBaseTimelineNullableString(after.workLogicalAssetR2Key);
+    }
+
+    function validBaseTimelineEatingTransition(before, after) {
+      return after.diff(before).affectedKeys().hasOnly([
+          "updatedAt", "revision", "eatingAuthority", "eatingRoutineItemIds",
+          "eatingSetupPath", "eatingBlocks", "mealPlanningGoal", "mealsPerDay",
+          "eatingMode", "foodType", "foodStyleCustomText", "mealBudget",
+          "cookingAbility", "breakfastMinute", "lunchMinute", "dinnerMinute",
+          "snackMinute", "extraSnackMinute", "targetCalories", "targetProtein",
+          "eatingPhotoAssetId", "eatingPhotoR2Key", "targetCaloriesOverride",
+          "targetProteinOverride", "foodsToAvoid", "eatingGeneratedPlanVersion",
+          "eatingGeneratedInputFingerprint", "eatingCustomized"
+        ])
+        && validBaseTimelineAuthority(after.eatingAuthority)
+        && validBaseTimelineStringList(after.eatingRoutineItemIds, 500)
+        && after.eatingBlocks is list && after.eatingBlocks.size() <= 500
+        && validBaseTimelineNullableString(after.eatingSetupPath)
+        && validBaseTimelineNullableString(after.mealPlanningGoal)
+        && (after.mealsPerDay == null || (after.mealsPerDay is int && after.mealsPerDay >= 1))
+        && validBaseTimelineNullableString(after.eatingMode)
+        && validBaseTimelineNullableString(after.foodType)
+        && validBaseTimelineNullableString(after.foodStyleCustomText)
+        && validBaseTimelineNullableString(after.mealBudget)
+        && validBaseTimelineNullableString(after.cookingAbility)
+        && validBaseTimelineNullableMinute(after.breakfastMinute)
+        && validBaseTimelineNullableMinute(after.lunchMinute)
+        && validBaseTimelineNullableMinute(after.dinnerMinute)
+        && validBaseTimelineNullableMinute(after.snackMinute)
+        && validBaseTimelineNullableMinute(after.extraSnackMinute)
+        && (after.targetCalories == null || (after.targetCalories is int && after.targetCalories >= 1))
+        && (after.targetProtein == null || (after.targetProtein is int && after.targetProtein >= 1))
+        && validBaseTimelineNullableString(after.eatingPhotoAssetId)
+        && validBaseTimelineNullableString(after.eatingPhotoR2Key)
+        && (after.targetCaloriesOverride == null || (after.targetCaloriesOverride is int && after.targetCaloriesOverride >= 1))
+        && (after.targetProteinOverride == null || (after.targetProteinOverride is int && after.targetProteinOverride >= 1))
+        && validBaseTimelineStringList(after.foodsToAvoid, 100)
+        && (after.eatingGeneratedPlanVersion == null || (after.eatingGeneratedPlanVersion is int && after.eatingGeneratedPlanVersion >= 1))
+        && validBaseTimelineNullableString(after.eatingGeneratedInputFingerprint)
+        && after.eatingCustomized is bool;
+    }
+
+    function validBaseTimelineFixedTransition(before, after) {
+      return after.diff(before).affectedKeys().hasOnly([
+          "updatedAt", "revision", "fixedAuthority", "fixedRoutineItemIds",
+          "fixedBlocks"
+        ])
+        && validBaseTimelineAuthority(after.fixedAuthority)
+        && validBaseTimelineStringList(after.fixedRoutineItemIds, 500)
+        && after.fixedBlocks is list && after.fixedBlocks.size() <= 500;
+    }
+
+    function validBaseTimelineSkinCareTransition(before, after) {
+      return after.diff(before).affectedKeys().hasOnly([
+          "updatedAt", "revision", "skinCareAuthority", "skinCareRoutineItemIds",
+          "skinCareSetupPath", "skinCareSkipped", "skinCareBlocks",
+          "skinCareProductNames", "skinCareProductPhotoAssetId",
+          "skinCareProductPhotoR2Key", "skinCareReviewedProducts",
+          "skinCareFacePhotoAssetId", "skinCareFacePhotoR2Key",
+          "skinCareFacePhotoSkipped", "skinCareSkinType", "skinCareProblems",
+          "skinCareBudget", "skinCarePreference", "skinCareSelectedProductNames",
+          "skinCareProductRecommendations", "skinCareSpecialCareNotes"
+        ])
+        && validBaseTimelineAuthority(after.skinCareAuthority)
+        && validBaseTimelineStringList(after.skinCareRoutineItemIds, 500)
+        && validBaseTimelineNullableString(after.skinCareSetupPath)
+        && after.skinCareSkipped is bool
+        && after.skinCareBlocks is list && after.skinCareBlocks.size() <= 500
+        && validBaseTimelineNullableString(after.skinCareProductNames)
+        && validBaseTimelineNullableString(after.skinCareProductPhotoAssetId)
+        && validBaseTimelineNullableString(after.skinCareProductPhotoR2Key)
+        && after.skinCareReviewedProducts is list && after.skinCareReviewedProducts.size() <= 100
+        && validBaseTimelineNullableString(after.skinCareFacePhotoAssetId)
+        && validBaseTimelineNullableString(after.skinCareFacePhotoR2Key)
+        && after.skinCareFacePhotoSkipped is bool
+        && validBaseTimelineNullableString(after.skinCareSkinType)
+        && validBaseTimelineStringList(after.skinCareProblems, 100)
+        && validBaseTimelineNullableString(after.skinCareBudget)
+        && validBaseTimelineNullableString(after.skinCarePreference)
+        && validBaseTimelineStringList(after.skinCareSelectedProductNames, 100)
+        && after.skinCareProductRecommendations is list && after.skinCareProductRecommendations.size() <= 100
+        && validBaseTimelineStringList(after.skinCareSpecialCareNotes, 100);
+    }
+
+    function validBaseTimelineSetupTransition(before, after, uid) {
+      return validBaseTimelineTransitionIdentity(before, after, uid)
+        && (validBaseTimelineClassTransition(before, after)
+          || validBaseTimelineWorkTransition(before, after)
+          || validBaseTimelineEatingTransition(before, after)
+          || validBaseTimelineFixedTransition(before, after)
+          || validBaseTimelineSkinCareTransition(before, after));
     }
 
     function validRoutineOccurrence(data, occurrenceId) {
@@ -1381,11 +1485,15 @@ service cloud.firestore {
         && request.resource.data.revision == 1;
       allow update: if setupId == "current"
         && verifiedOwner(uid)
-        && validBaseTimelineSetup(request.resource.data, uid)
         && ((resource.data.schemaVersion is int
               && resource.data.schemaVersion < 3
+              && validBaseTimelineSetup(request.resource.data, uid)
               && request.resource.data.revision == resource.data.revision)
-          || request.resource.data.revision == resource.data.revision + 1);
+          || validBaseTimelineSetupTransition(
+              resource.data,
+              request.resource.data,
+              uid
+            ));
       allow delete: if false;
     }
 

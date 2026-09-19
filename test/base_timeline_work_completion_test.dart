@@ -244,7 +244,11 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byType(BaseTimelineCurrentSetupHeader), findsOneWidget);
-        expect(find.text('Edit schedule'), findsOneWidget);
+        expect(find.text('Edit schedule'), findsNothing);
+        expect(
+          find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+          findsOneWidget,
+        );
         expect(tester.takeException(), isNull);
       },
     );
@@ -973,7 +977,9 @@ void main() {
         await tester.pumpAndSettle();
 
         // Tap Edit schedule directly opens WorkReviewView
-        await tester.tap(find.text('Edit schedule'));
+        await tester.tap(
+          find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+        );
         await tester.pumpAndSettle();
 
         expect(find.byType(WorkReviewView), findsOneWidget);
@@ -4131,7 +4137,9 @@ void main() {
         );
 
         // Tap Edit schedule to enter editor
-        await tester.tap(find.text('Edit schedule'));
+        await tester.tap(
+          find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+        );
         await tester.pumpAndSettle();
 
         // In review/edit mode, tap Add work block

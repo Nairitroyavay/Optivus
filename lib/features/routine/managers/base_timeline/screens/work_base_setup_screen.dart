@@ -590,78 +590,20 @@ class _WorkBaseSetupScreenState extends ConsumerState<WorkBaseSetupScreen> {
         }
 
         if (!setup.snapshotFor(BaseTimelineSection.work).isConfigured) {
-          return SafeArea(
+          return WorkSourceSelectionView(
             key: const ValueKey('work-unconfigured'),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(
-                          Icons.arrow_back_rounded,
-                          color: OptivusColors.textPrimary,
-                        ),
-                        onPressed: widget.onBack,
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.1),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              WorkPresentationUtils.currentSetupHeaderTitle(
-                                lifeRole,
-                              ),
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                color: OptivusColors.textPrimary,
-                              ),
-                            ),
-                            Text(
-                              WorkPresentationUtils.sourceSelectionSubtitle(
-                                lifeRole,
-                                isConfigured: false,
-                              ),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: OptivusColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: WorkSourceSelectionView(
-                    setup: setup,
-                    onCancel: () => _handleWorkBack(setup, state, uid),
-                    onPickPhoto: (source) => controller.pickAndUploadPhoto(
-                      uid: uid,
-                      source: source,
-                      setup: setup,
-                    ),
-                    onManualSetup: () => controller.startManualSetup(setup),
-                    onEditCurrent: () =>
-                        controller.editCurrentWorkSchedule(setup),
-                    onRemoveSetup: () => _handleRemoveWorkSetup(setup, uid),
-                    lifeRole: lifeRole,
-                    businessMode: profile.businessMode,
-                  ),
-                ),
-              ],
+            setup: setup,
+            onCancel: widget.onBack,
+            onPickPhoto: (source) => controller.pickAndUploadPhoto(
+              uid: uid,
+              source: source,
+              setup: setup,
             ),
+            onManualSetup: () => controller.startManualSetup(setup),
+            onEditCurrent: () => controller.editCurrentWorkSchedule(setup),
+            onRemoveSetup: () => _handleRemoveWorkSetup(setup, uid),
+            lifeRole: lifeRole,
+            businessMode: profile.businessMode,
           );
         }
 

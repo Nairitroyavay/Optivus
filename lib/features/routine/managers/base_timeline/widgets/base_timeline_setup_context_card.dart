@@ -14,7 +14,9 @@ class BaseTimelineSetupContextCard extends StatelessWidget {
   final List<String> badges;
   final String? actionLabel;
   final IconData? actionIcon;
+  final Key? actionKey;
   final VoidCallback? onAction;
+  final Widget? footer;
 
   const BaseTimelineSetupContextCard({
     super.key,
@@ -26,7 +28,9 @@ class BaseTimelineSetupContextCard extends StatelessWidget {
     this.badges = const [],
     this.actionLabel,
     this.actionIcon,
+    this.actionKey,
     this.onAction,
+    this.footer,
   });
 
   @override
@@ -55,13 +59,11 @@ class BaseTimelineSetupContextCard extends StatelessWidget {
                   spacing: 8,
                   runSpacing: 4,
                   children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 5,
                       children: [
-                        if (icon != null) ...[
-                          Icon(icon, size: 12, color: accent),
-                          const SizedBox(width: 5),
-                        ],
+                        if (icon != null) Icon(icon, size: 12, color: accent),
                         Text(
                           category.toUpperCase(),
                           style: TextStyle(
@@ -126,8 +128,7 @@ class BaseTimelineSetupContextCard extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
                     style: const TextStyle(
                       color: OptivusColors.textPrimary,
                       fontSize: 15,
@@ -139,8 +140,7 @@ class BaseTimelineSetupContextCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       subtitle!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      maxLines: 3,
                       style: const TextStyle(
                         color: OptivusColors.textSecondary,
                         fontSize: 12,
@@ -152,6 +152,7 @@ class BaseTimelineSetupContextCard extends StatelessWidget {
 
               final actionBtn = (actionLabel != null && onAction != null)
                   ? TextButton.icon(
+                      key: actionKey,
                       style: TextButton.styleFrom(
                         visualDensity: VisualDensity.compact,
                         foregroundColor: accent,
@@ -207,6 +208,7 @@ class BaseTimelineSetupContextCard extends StatelessWidget {
               );
             },
           ),
+          if (footer != null) ...[const SizedBox(height: 6), footer!],
         ],
       ),
     );

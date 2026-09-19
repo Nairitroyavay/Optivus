@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_presentation_utils.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_setup_context_card.dart';
 
 /// A compact, professional profile and source summary card displayed
 /// at the top of the Base Timeline Work / Business current setup view.
@@ -15,207 +16,75 @@ class WorkSetupProfileSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.8;
+    return KeyedSubtree(
       key: const Key('work-setup-profile-summary-card'),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: OptivusColors.borderStandard.withValues(alpha: 0.6),
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 1. Header row: Profile Category & Badges
-          LayoutBuilder(
-            builder: (context, constraints) {
-              return SizedBox(
-                width: double.infinity,
-                child: Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    Text(
-                      summary.headerTitle.toUpperCase(),
-                      style: const TextStyle(
-                        color: OptivusColors.warning,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                    if (summary.badges.isNotEmpty)
-                      ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: constraints.maxWidth,
-                        ),
-                        child: Wrap(
-                          spacing: 4,
-                          runSpacing: 4,
-                          children: summary.badges.map((badge) {
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.12),
-                                ),
-                              ),
-                              child: Text(
-                                badge,
-                                style: const TextStyle(
-                                  color: OptivusColors.textSecondary,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                  ],
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 6),
-
-          // 2. Headline & Subline
-          Text(
-            summary.headline,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: OptivusColors.textPrimary,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              height: 1.2,
-            ),
-          ),
-          if (summary.subline != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              summary.subline!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: OptivusColors.textSecondary,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-
-          const SizedBox(height: 6),
-
-          // 3. Compact Schedule & Source Row
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final textScaler = MediaQuery.textScalerOf(context);
-              final hasLargeText = textScaler.scale(14) > 18;
-              final isVeryNarrow = constraints.maxWidth < 240;
-
-              final scheduleWidget = Row(
+      child: BaseTimelineSetupContextCard(
+        category: summary.headerTitle,
+        title: summary.headline,
+        subtitle: summary.subline,
+        accent: OptivusColors.warning,
+        icon: summary.hasSourcePhoto
+            ? Icons.photo_library_outlined
+            : Icons.work_outline_rounded,
+        badges: summary.badges,
+        actionLabel: summary.hasSourcePhoto && onViewPhoto != null
+            ? 'View photo'
+            : null,
+        actionIcon: Icons.visibility_outlined,
+        actionKey: const Key('work-setup-profile-view-photo-button'),
+        onAction: summary.hasSourcePhoto ? onViewPhoto : null,
+        footer: largeText
+            ? null
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
-                    Icons.event_note_rounded,
-                    size: 13,
-                    color: OptivusColors.textMuted,
+                  _ContextLine(
+                    icon: Icons.event_note_rounded,
+                    text: summary.scheduleSummary,
                   ),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      summary.scheduleSummary,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: OptivusColors.textSecondary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              );
-
-              final sourceWidget = Wrap(
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 4,
-                runSpacing: 2,
-                children: [
-                  Icon(
-                    summary.hasSourcePhoto
+                  const SizedBox(height: 3),
+                  _ContextLine(
+                    icon: summary.hasSourcePhoto
                         ? Icons.photo_library_outlined
                         : Icons.edit_note_rounded,
-                    size: 13,
-                    color: OptivusColors.textMuted,
+                    text: summary.sourceLabel,
                   ),
-                  Text(
-                    summary.sourceLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: OptivusColors.textSecondary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  if (summary.hasSourcePhoto && onViewPhoto != null)
-                    TextButton(
-                      key: const Key('work-setup-profile-view-photo-button'),
-                      onPressed: onViewPhoto,
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 2,
-                        ),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: const Text(
-                        'View',
-                        style: TextStyle(
-                          color: OptivusColors.warning,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
                 ],
-              );
-
-              if (isVeryNarrow || hasLargeText) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    scheduleWidget,
-                    const SizedBox(height: 3),
-                    sourceWidget,
-                  ],
-                );
-              }
-
-              return Row(
-                children: [
-                  Expanded(child: scheduleWidget),
-                  const SizedBox(width: 8),
-                  sourceWidget,
-                ],
-              );
-            },
-          ),
-        ],
+              ),
       ),
+    );
+  }
+}
+
+class _ContextLine extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _ContextLine({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(icon, size: 13, color: OptivusColors.textMuted),
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: OptivusColors.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

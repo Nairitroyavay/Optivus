@@ -18,6 +18,7 @@ import 'package:optivus/features/routine/managers/base_timeline/widgets/base_tim
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_skeleton.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_save_success_view.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_processing_scaffold.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_import_review_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_meal_edit_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_plan_settings_sheet.dart';
@@ -594,12 +595,13 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     if (state.stage == EatingSetupStage.uploading ||
         state.stage == EatingSetupStage.extracting ||
         state.stage == EatingSetupStage.generating) {
-      return SafeArea(
+      return BaseTimelineProcessingScaffold(
+        title: state.aiActionTitle,
+        onCancel: () => controller.cancelCurrentOperation(setup, uid: uid),
         child: BaseTimelineAiThinkingView(
           key: const ValueKey('eating-ai-thinking'),
           initialMessage: state.aiActionTitle,
           progressMessages: state.aiProgressMessages,
-          onCancel: () => controller.cancelCurrentOperation(setup, uid: uid),
         ),
       );
     }
@@ -689,6 +691,10 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         frontBlockId: state.frontBlockId,
         onFrontSelected: (id) => controller.setFrontBlockId(id),
         isNew: isNew,
+        isConcurrencyConflict: state.isConcurrencyConflict,
+        onReloadLatestSetup: setup == null
+            ? null
+            : () => controller.reloadFromCanonical(setup),
       );
     }
 
@@ -741,6 +747,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
         _openPlanSettingsSheet(isBuildingNew: false);
       },
       onViewPhoto: _showPhotoViewer,
+      errorMessage: state.errorMessage,
+      onClearError: controller.clearError,
       routineRefreshPending: state.routineRefreshPending,
       routineRefreshMessage: state.routineRefreshMessage,
       onRetryRefresh: () async {

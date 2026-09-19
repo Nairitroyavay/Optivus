@@ -1598,7 +1598,11 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('Classes'), findsOneWidget);
-        expect(find.text('Edit schedule'), findsOneWidget);
+        expect(find.text('Edit schedule'), findsNothing);
+        expect(
+          find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+          findsOneWidget,
+        );
         expect(find.text('Operating Systems'), findsOneWidget);
 
         await tester.tap(find.byIcon(Icons.more_vert_rounded));

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/core/theme/optivus_radii.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/eating_plan_freshness.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_presentation_utils.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_setup_context_card.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 
 /// Clean, unified presentation summary for the configured Eating section.
@@ -64,362 +64,59 @@ class EatingPlanSummaryCard extends StatelessWidget {
     final actionLabel = _actionLabel(origin, hasSourcePhoto);
     final actionIcon = _actionIcon(origin, hasSourcePhoto);
     final onAction = _actionCallback(origin, hasSourcePhoto);
-    final actionKey = _actionKey(origin, hasSourcePhoto);
-
-    final scheduleDesc = EatingPresentationUtils.scheduleSummary(
-      setup.eatingBlocks,
-    );
-    final sourceLabel = _sourceLabel(origin, hasSourcePhoto);
-    final sourceIcon = _sourceIcon(origin, hasSourcePhoto);
-
-    return Container(
+    return KeyedSubtree(
       key: const Key('eating-plan-summary-card'),
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(OptivusRadii.cardStandard),
-        border: Border.all(
-          color: OptivusColors.borderStandard.withValues(alpha: 0.6),
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 1. Header row: Category tag & Badges
-          LayoutBuilder(
-            builder: (context, constraints) {
-              return SizedBox(
-                width: double.infinity,
-                child: Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          categoryIcon,
-                          size: 12,
-                          color: OptivusColors.roseAccent,
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          category.toUpperCase(),
-                          style: const TextStyle(
-                            color: OptivusColors.roseAccent,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (badges.isNotEmpty)
-                      ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: constraints.maxWidth,
-                        ),
-                        child: Wrap(
-                          spacing: 4,
-                          runSpacing: 4,
-                          children: badges.map((badge) {
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.12),
-                                ),
-                              ),
-                              child: Text(
-                                badge,
-                                style: const TextStyle(
-                                  color: OptivusColors.textSecondary,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                  ],
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 6),
-
-          // 2. Headline, Subline & Action Button
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final textScaler = MediaQuery.textScalerOf(context);
-              final hasLargeText = textScaler.scale(14) > 18;
-              final isNarrow = constraints.maxWidth < 280;
-
-              final titleSection = Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    headline,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: OptivusColors.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      height: 1.2,
-                    ),
-                  ),
-                  if (subline != null && subline.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      subline,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: OptivusColors.textSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ],
-              );
-
-              final actionBtn = (actionLabel != null && onAction != null)
-                  ? TextButton.icon(
-                      key: actionKey,
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        foregroundColor: OptivusColors.roseAccent,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          side: BorderSide(
-                            color: OptivusColors.roseAccent.withValues(
-                              alpha: 0.3,
-                            ),
-                          ),
-                        ),
-                      ),
-                      onPressed: onAction,
-                      icon: Icon(
-                        actionIcon ?? Icons.visibility_outlined,
-                        size: 14,
-                      ),
-                      label: Text(
-                        actionLabel,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    )
-                  : null;
-
-              if (actionBtn == null) {
-                return titleSection;
-              }
-
-              if (isNarrow || hasLargeText) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    titleSection,
-                    const SizedBox(height: 6),
-                    Align(alignment: Alignment.centerLeft, child: actionBtn),
-                  ],
-                );
-              }
-
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(child: titleSection),
-                  const SizedBox(width: 8),
-                  actionBtn,
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 6),
-
-          // 3. Compact Schedule & Source Row
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final textScaler = MediaQuery.textScalerOf(context);
-              final hasLargeText = textScaler.scale(14) > 18;
-              final isVeryNarrow = constraints.maxWidth < 240;
-
-              final scheduleWidget = Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.event_note_rounded,
-                    size: 13,
-                    color: OptivusColors.textMuted,
-                  ),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      scheduleDesc,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: OptivusColors.textSecondary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              );
-
-              final sourceWidget = Wrap(
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 4,
-                runSpacing: 2,
-                children: [
-                  Icon(sourceIcon, size: 13, color: OptivusColors.textMuted),
-                  Text(
-                    sourceLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: OptivusColors.textSecondary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              );
-
-              if (isVeryNarrow || hasLargeText) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    scheduleWidget,
-                    const SizedBox(height: 3),
-                    sourceWidget,
-                  ],
-                );
-              }
-
-              return Row(
-                children: [
-                  Expanded(child: scheduleWidget),
-                  const SizedBox(width: 8),
-                  sourceWidget,
-                ],
-              );
-            },
-          ),
-
-          // 4. Stale plan warning notice if freshness drifted
-          if (effectiveFreshness == EatingPlanFreshness.stale) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: OptivusColors.warning.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: OptivusColors.warning.withValues(alpha: 0.3),
-                  width: 1,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: BaseTimelineSetupContextCard(
+          category: category,
+          title: headline,
+          subtitle: subline,
+          accent: OptivusColors.roseAccent,
+          icon: categoryIcon,
+          badges: badges,
+          actionLabel: actionLabel,
+          actionIcon: actionIcon,
+          actionKey: hasSourcePhoto
+              ? const Key('eating-summary-view-photo-button')
+              : const Key('eating-summary-plan-settings-button'),
+          onAction: onAction,
+          footer: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _EatingContextLine(
+                icon: Icons.event_note_rounded,
+                text: EatingPresentationUtils.scheduleSummary(
+                  setup.eatingBlocks,
                 ),
               ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.info_outline_rounded,
-                    size: 14,
-                    color: OptivusColors.warning,
-                  ),
-                  const SizedBox(width: 6),
-                  const Expanded(
-                    child: Text(
+              const SizedBox(height: 3),
+              _EatingContextLine(
+                icon: _sourceIcon(origin, hasSourcePhoto),
+                text: _sourceLabel(origin, hasSourcePhoto),
+              ),
+              if (effectiveFreshness == EatingPlanFreshness.stale) ...[
+                const SizedBox(height: 8),
+                _FreshnessNotice(
+                  message:
                       'Your Eating Plan was generated from older preferences.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: OptivusColors.textPrimary,
-                      ),
-                    ),
+                  actionLabel: onRegenerate == null ? null : 'Regenerate plan',
+                  actionKey: const Key(
+                    'eating-summary-stale-regenerate-button',
                   ),
-                  if (onRegenerate != null)
-                    TextButton(
-                      key: const Key('eating-summary-stale-regenerate-button'),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        visualDensity: VisualDensity.compact,
-                        foregroundColor: OptivusColors.warning,
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      onPressed: onRegenerate,
-                      child: const Text(
-                        'Regenerate plan',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ] else if (effectiveFreshness == EatingPlanFreshness.unknown) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: OptivusColors.warning.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: OptivusColors.warning.withValues(alpha: 0.2),
-                  width: 1,
+                  onAction: onRegenerate,
                 ),
-              ),
-              child: const Row(
-                children: [
-                  Icon(
-                    Icons.help_outline_rounded,
-                    size: 14,
-                    color: OptivusColors.warning,
-                  ),
-                  SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
+              ] else if (effectiveFreshness == EatingPlanFreshness.unknown) ...[
+                const SizedBox(height: 8),
+                const _FreshnessNotice(
+                  message:
                       "Plan freshness couldn't be checked. Review Body Basics before regenerating.",
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: OptivusColors.textPrimary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -464,9 +161,7 @@ class EatingPlanSummaryCard extends StatelessWidget {
         list.add('$coverage macros');
       }
     } else {
-      list.add(
-        setup.eatingCustomized ? 'Customized' : 'Built for me',
-      );
+      list.add(setup.eatingCustomized ? 'Customized' : 'Built for me');
       if (setup.mealPlanningGoal != null &&
           setup.mealPlanningGoal!.trim().isNotEmpty) {
         list.add(_formatGoal(setup.mealPlanningGoal!));
@@ -510,15 +205,15 @@ class EatingPlanSummaryCard extends StatelessWidget {
       final hasOverride = setup.hasTargetOverrides;
       final cal = setup.targetCaloriesOverride ?? setup.targetCalories;
       final prot = setup.targetProteinOverride ?? setup.targetProtein;
-      final targetStr = (cal != null && prot != null)
+      final target = (cal != null && prot != null)
           ? '$cal kcal · $prot g protein'
           : (cal != null
                 ? '$cal kcal/day'
                 : (prot != null ? '$prot g protein/day' : 'Not set'));
       return (cal != null || prot != null)
           ? (hasOverride
-                ? '$targetStr (Custom target)'
-                : '$targetStr (Calculated from Body Basics)')
+                ? '$target (Custom target)'
+                : '$target (Calculated from Body Basics)')
           : 'Targets not configured';
     }
   }
@@ -565,26 +260,14 @@ class EatingPlanSummaryCard extends StatelessWidget {
     return null;
   }
 
-  Key? _actionKey(BaseSetupOrigin origin, bool hasSourcePhoto) {
-    if (hasSourcePhoto && onViewPhoto != null) {
-      return const Key('eating-summary-view-photo-button');
-    }
-    if (origin != BaseSetupOrigin.photo &&
-        origin != BaseSetupOrigin.manual &&
-        setup.eatingSetupPath != 'photo' &&
-        setup.eatingSetupPath != 'manual' &&
-        onOpenSettings != null) {
-      return const Key('eating-summary-plan-settings-button');
-    }
-    return null;
-  }
-
   String _sourceLabel(BaseSetupOrigin origin, bool hasSourcePhoto) {
     final isManual =
         origin == BaseSetupOrigin.manual || setup.eatingSetupPath == 'manual';
     if (hasSourcePhoto) return 'Meal plan photo';
     if (isManual) return 'Manual setup';
-    return setup.eatingCustomized ? 'Built for me · Customized' : 'Built for me';
+    return setup.eatingCustomized
+        ? 'Built for me · Customized'
+        : 'Built for me';
   }
 
   IconData _sourceIcon(BaseSetupOrigin origin, bool hasSourcePhoto) {
@@ -619,5 +302,101 @@ class EatingPlanSummaryCard extends StatelessWidget {
       return 'Partial';
     }
     return 'Not estimated';
+  }
+}
+
+class _EatingContextLine extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _EatingContextLine({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(icon, size: 13, color: OptivusColors.textMuted),
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: OptivusColors.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FreshnessNotice extends StatelessWidget {
+  final String message;
+  final String? actionLabel;
+  final Key? actionKey;
+  final VoidCallback? onAction;
+
+  const _FreshnessNotice({
+    required this.message,
+    this.actionLabel,
+    this.actionKey,
+    this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: OptivusColors.warning.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: OptivusColors.warning.withValues(alpha: 0.3)),
+      ),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 6,
+        runSpacing: 4,
+        children: [
+          const Icon(
+            Icons.info_outline_rounded,
+            size: 14,
+            color: OptivusColors.warning,
+          ),
+          Text(
+            message,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: OptivusColors.textPrimary,
+            ),
+          ),
+          if (actionLabel != null && onAction != null)
+            TextButton(
+              key: actionKey,
+              onPressed: onAction,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                foregroundColor: OptivusColors.warning,
+              ),
+              child: Text(
+                actionLabel!,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }

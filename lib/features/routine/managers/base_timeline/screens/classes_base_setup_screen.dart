@@ -541,70 +541,18 @@ class _ClassesBaseSetupScreenState
         }
 
         if (!setup.snapshotFor(BaseTimelineSection.classes).isConfigured) {
-          return SafeArea(
+          return ClassesSourceSelectionView(
             key: const ValueKey('classes-unconfigured'),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(
-                          Icons.arrow_back_rounded,
-                          color: OptivusColors.textPrimary,
-                        ),
-                        onPressed: widget.onBack,
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.1),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Classes',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                color: OptivusColors.textPrimary,
-                              ),
-                            ),
-                            Text(
-                              'Choose how to set up your timetable',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: OptivusColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ClassesSourceSelectionView(
-                    setup: setup,
-                    onCancel: () => _handleClassesBack(setup, state, uid),
-                    onPickPhoto: (source) => controller.pickAndUploadPhoto(
-                      uid: uid,
-                      source: source,
-                      setup: setup,
-                    ),
-                    onManualSetup: () => controller.startManualSetup(setup),
-                    onEditCurrent: () => controller.editCurrentTimetable(setup),
-                    onRemoveSetup: () => _handleRemoveSetup(setup, uid),
-                  ),
-                ),
-              ],
+            setup: setup,
+            onCancel: widget.onBack,
+            onPickPhoto: (source) => controller.pickAndUploadPhoto(
+              uid: uid,
+              source: source,
+              setup: setup,
             ),
+            onManualSetup: () => controller.startManualSetup(setup),
+            onEditCurrent: () => controller.editCurrentTimetable(setup),
+            onRemoveSetup: () => _handleRemoveSetup(setup, uid),
           );
         }
 

@@ -429,5 +429,72 @@ void main() {
       expect(controller.state.isConcurrencyConflict, true);
       expect(controller.state.errorMessage, isNotNull);
     });
+
+    test(
+      'controller AI -> Manual clears every generated-only nullable field',
+      () {
+        final generated =
+            BaseTimelineSetup(
+              uid: 'u1',
+              updatedAt: DateTime.now(),
+            ).replaceEatingGeneratedConfiguration(
+              blocks: const [],
+              goal: 'gain',
+              meals: 5,
+              mode: 'custom',
+              type: 'vegetarian',
+              styleCustomText: 'regional',
+              foodsToAvoid: const ['peanuts'],
+              breakfast: 480,
+              lunch: 780,
+              dinner: 1200,
+              snack: 1020,
+              extraSnack: 660,
+              calories: 2500,
+              protein: 150,
+              caloriesOverride: 2600,
+              proteinOverride: 160,
+              planVersion: 1,
+              inputFingerprint: 'generated-fingerprint',
+            );
+
+        controller.editCurrentMealPlan(generated);
+        controller.startManualSetup(generated);
+
+        expect(controller.state.workingSetupPath, 'manual');
+        expect(controller.state.workingAssetId, isNull);
+        expect(controller.state.workingR2Key, isNull);
+        expect(controller.state.workingGeneratedPlanVersion, isNull);
+        expect(controller.state.workingGeneratedInputFingerprint, isNull);
+        expect(controller.state.workingGoal, isNull);
+        expect(controller.state.workingMealsPerDay, isNull);
+        expect(controller.state.workingEatingMode, isNull);
+        expect(controller.state.workingFoodType, isNull);
+        expect(controller.state.workingFoodStyleCustomText, isNull);
+        expect(controller.state.workingBreakfastMinute, isNull);
+        expect(controller.state.workingLunchMinute, isNull);
+        expect(controller.state.workingDinnerMinute, isNull);
+        expect(controller.state.workingSnackMinute, isNull);
+        expect(controller.state.workingExtraSnackMinute, isNull);
+        expect(controller.state.workingTargetCalories, isNull);
+        expect(controller.state.workingTargetProtein, isNull);
+        expect(controller.state.workingTargetCaloriesOverride, isNull);
+        expect(controller.state.workingTargetProteinOverride, isNull);
+      },
+    );
+
+    test('cancel explicitly clears candidate asset metadata', () async {
+      controller.state = controller.state.copyWith(
+        candidateAssetId: 'candidate-asset',
+        candidateR2Key: 'users/u1/eating/candidate.jpg',
+        sessionGeneration: 3,
+      );
+
+      await controller.cancelCurrentOperation(null, uid: 'u1');
+
+      expect(controller.state.candidateAssetId, isNull);
+      expect(controller.state.candidateR2Key, isNull);
+      expect(controller.state.sessionGeneration, 4);
+    });
   });
 }

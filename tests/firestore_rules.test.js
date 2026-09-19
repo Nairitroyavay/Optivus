@@ -3953,6 +3953,100 @@ describe("Firestore Rules for baseTimelineSetup", () => {
     );
   });
 
+  it("accepts the actual customized generated Eating save transaction payload", async () => {
+    const db = ownerDb();
+    const setupRef = baseTimelineSetupRef(db);
+    await setupRef.set(baseTimelineSetupData());
+
+    const mealSlots = [
+      { slot: "breakfast", minute: 480 },
+      { slot: "lunch", minute: 780 },
+      { slot: "dinner", minute: 1200 },
+    ];
+    const blocks = [];
+    const routineRefs = [];
+    for (let day = 1; day <= 7; day += 1) {
+      for (const meal of mealSlots) {
+        const edited = day === 1 && meal.slot === "breakfast";
+        const id = `${meal.slot}-${day}`;
+        const routineId = `base-eating-${id}`;
+        blocks.push({
+          id, section: "eating",
+          title: edited ? "Edited breakfast" : `${meal.slot} day ${day}`,
+          startMinute: meal.minute, endMinute: meal.minute + 30,
+          repeatDays: [day], location: null, blockType: "soft_block",
+          source: "ai_generated_meal_setup", needsTimeConfirmation: false,
+          crossesMidnight: false, endsNextDay: false,
+          mealCategory: meal.slot, mealSlot: meal.slot,
+          dishes: [edited ? "New oats" : `${meal.slot} dish ${day}`],
+          calories: 550, protein: 30, skincareProducts: [], skincareSteps: [],
+          skincareMissingItems: [], skincareSlotLabel: null,
+          provenanceSourceIds: [], professor: null, courseCode: null,
+          classType: null, sectionLabel: null, notes: null,
+          workContextType: null, workRole: null, workOrganization: null,
+          workDepartmentOrProject: null, workMode: null, workBlockKind: null,
+        });
+        routineRefs.push({
+          id: routineId,
+          ref: db.collection("users").doc("user123")
+            .collection("routineItems").doc(routineId),
+          edited,
+          meal,
+          day,
+        });
+      }
+    }
+
+    await assertSucceeds(
+      db.runTransaction(async (transaction) => {
+        for (const item of routineRefs) {
+          transaction.set(item.ref, routineItemData("user123", item.id, {
+            title: item.edited ? "Edited breakfast" : `${item.meal.slot} day ${item.day}`,
+            category: "eating", source: "baseTimeline", blockType: "softBlock",
+            priority: "goodToDo", startMinute: item.meal.minute,
+            endMinute: item.meal.minute + 30, repeatDays: [item.day],
+            mealCategory: item.meal.slot, mealSlot: item.meal.slot,
+            dishes: [item.edited ? "New oats" : `${item.meal.slot} dish ${item.day}`],
+            caloriesEstimate: 550, proteinEstimate: 30,
+            baseTimelineSection: "eating",
+            onboardingVisualStyleKey: "eating:default",
+          }));
+        }
+        transaction.set(setupRef, baseTimelineSetupData("user123", {
+          revision: 2, eatingAuthority: "baseTimeline",
+          eatingRoutineItemIds: routineRefs.map((item) => item.id),
+          eatingSetupPath: "create", eatingBlocks: blocks,
+          mealPlanningGoal: "maintain", mealsPerDay: 3,
+          eatingMode: "balanced", foodType: "mixed", breakfastMinute: 480,
+          lunchMinute: 780, dinnerMinute: 1200, targetCalories: 2000,
+          targetProtein: 125, eatingGeneratedPlanVersion: 1,
+          eatingGeneratedInputFingerprint: "generated-input-fingerprint",
+          eatingCustomized: true,
+        }));
+      })
+    );
+
+    expect((await setupRef.get()).data().eatingCustomized).toBe(true);
+    expect((await routineRefs[0].ref.get()).data().dishes).toEqual(["New oats"]);
+  });
+
+  it("rejects malformed Eating updates and cross-section changes in one revision", async () => {
+    const db = ownerDb();
+    const setupRef = baseTimelineSetupRef(db);
+    await setupRef.set(baseTimelineSetupData());
+
+    await assertFails(setupRef.set(baseTimelineSetupData("user123", {
+      revision: 2,
+      eatingAuthority: "baseTimeline",
+      targetCaloriesOverride: -1,
+    })));
+    await assertFails(setupRef.set(baseTimelineSetupData("user123", {
+      revision: 2,
+      eatingAuthority: "baseTimeline",
+      classAuthority: "baseTimeline",
+    })));
+  });
+
   it("rejects invalid override types and bounds", async () => {
     const db = ownerDb();
     // Negative override

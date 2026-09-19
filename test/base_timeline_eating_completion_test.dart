@@ -296,7 +296,11 @@ void main() {
 
         expect(find.byType(BaseTimelineCurrentSetupHeader), findsOneWidget);
         expect(find.text('Eating'), findsWidgets);
-        expect(find.text('Edit schedule'), findsOneWidget);
+        expect(find.text('Edit schedule'), findsNothing);
+        expect(
+          find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+          findsOneWidget,
+        );
         final err = tester.takeException();
         if (err != null) {
           debugPrint('OVERFLOW: $err');
@@ -497,7 +501,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Enter edit mode
-      await tester.tap(find.text('Edit schedule'));
+      await tester.tap(
+        find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+      );
       await tester.pumpAndSettle();
 
       // Delete the only block via EatingMealEditSheet
@@ -1328,8 +1334,13 @@ void main() {
         );
 
         // Action button
-        expect(find.byKey(const Key('eating-summary-plan-settings-button')), findsOneWidget);
-        await tester.tap(find.byKey(const Key('eating-summary-plan-settings-button')));
+        expect(
+          find.byKey(const Key('eating-summary-plan-settings-button')),
+          findsOneWidget,
+        );
+        await tester.tap(
+          find.byKey(const Key('eating-summary-plan-settings-button')),
+        );
         expect(settingsOpened, isTrue);
 
         // Stale warning and regenerate button
@@ -1337,8 +1348,13 @@ void main() {
           find.text('Your Eating Plan was generated from older preferences.'),
           findsOneWidget,
         );
-        expect(find.byKey(const Key('eating-summary-stale-regenerate-button')), findsOneWidget);
-        await tester.tap(find.byKey(const Key('eating-summary-stale-regenerate-button')));
+        expect(
+          find.byKey(const Key('eating-summary-stale-regenerate-button')),
+          findsOneWidget,
+        );
+        await tester.tap(
+          find.byKey(const Key('eating-summary-stale-regenerate-button')),
+        );
         expect(regenerated, isTrue);
 
         // Test 2: Photo setup with view photo action
@@ -1364,8 +1380,13 @@ void main() {
         expect(find.text('MEAL PLAN PHOTO'), findsOneWidget);
         expect(find.text('Photo synced'), findsOneWidget);
         expect(find.text('Imported Meal Plan'), findsOneWidget);
-        expect(find.byKey(const Key('eating-summary-view-photo-button')), findsOneWidget);
-        await tester.tap(find.byKey(const Key('eating-summary-view-photo-button')));
+        expect(
+          find.byKey(const Key('eating-summary-view-photo-button')),
+          findsOneWidget,
+        );
+        await tester.tap(
+          find.byKey(const Key('eating-summary-view-photo-button')),
+        );
         expect(photoOpened, isTrue);
 
         // Test 3: Manual setup
@@ -1378,9 +1399,7 @@ void main() {
 
         await tester.pumpWidget(
           MaterialApp(
-            home: Scaffold(
-              body: EatingPlanSummaryCard(setup: manualSetup),
-            ),
+            home: Scaffold(body: EatingPlanSummaryCard(setup: manualSetup)),
           ),
         );
 
@@ -2003,7 +2022,11 @@ void main() {
         await tester.pumpAndSettle();
 
         // Configured view: Edit schedule button is present, Add meal is NOT present
-        expect(find.text('Edit schedule'), findsOneWidget);
+        expect(find.text('Edit schedule'), findsNothing);
+        expect(
+          find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+          findsOneWidget,
+        );
         expect(find.text('Add meal'), findsNothing);
 
         // Find the meal card
@@ -2137,15 +2160,23 @@ void main() {
         // Generation failed:
         // 1. Error snackbar is shown
         expect(
-          find.text(
-            'The meal planner is temporarily experiencing high demand. Please try again in a moment.',
+          find.textContaining('Your current plan is unchanged.'),
+          findsAtLeastNWidgets(1),
+        );
+        expect(
+          find.textContaining(
+            'The meal planner is temporarily experiencing high demand.',
           ),
-          findsOneWidget,
+          findsAtLeastNWidgets(1),
         );
         // 2. Retry button exists in snackbar
-        expect(find.text('Retry'), findsOneWidget);
+        expect(find.text('Retry'), findsAtLeastNWidgets(1));
         // 3. Screen stays in configured view (NOT in edit view)
-        expect(find.text('Edit schedule'), findsOneWidget);
+        expect(find.text('Edit schedule'), findsNothing);
+        expect(
+          find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+          findsOneWidget,
+        );
         expect(find.text('Save'), findsNothing);
         // 4. Original plan is completely intact and still displayed
         expect(find.text('Original Oatmeal'), findsWidgets);

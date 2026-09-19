@@ -78,12 +78,12 @@ void main() {
         // Header Summary uses 'classes', not 'blocks'
         expect(find.text('Timetable photo · 1 classes'), findsOneWidget);
 
-        // Top-right Edit schedule FilledButton.icon with Icons.edit_calendar_rounded
-        final editScheduleFinder = find.widgetWithText(
-          FilledButton,
-          'Edit schedule',
+        // Top-right Edit schedule remains the intentional icon-only action.
+        final editScheduleFinder = find.byKey(
+          const Key('base-timeline-header-edit-schedule-button'),
         );
         expect(editScheduleFinder, findsOneWidget);
+        expect(find.text('Edit schedule'), findsNothing);
         expect(find.byIcon(Icons.edit_calendar_rounded), findsOneWidget);
 
         // Tap Edit schedule
@@ -149,7 +149,11 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.text('Classes'), findsOneWidget);
-      expect(find.text('Edit schedule'), findsOneWidget);
+      expect(find.text('Edit schedule'), findsNothing);
+      expect(
+        find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+        findsOneWidget,
+      );
     });
   });
 

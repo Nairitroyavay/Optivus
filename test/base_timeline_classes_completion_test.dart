@@ -661,7 +661,9 @@ void main() {
         await tester.pumpAndSettle();
 
         // Tap Edit schedule
-        await tester.tap(find.text('Edit schedule'));
+        await tester.tap(
+          find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+        );
         await tester.pumpAndSettle();
 
         expect(find.text('Review Timetable'), findsOneWidget);
@@ -1214,7 +1216,9 @@ void main() {
         await tester.pumpAndSettle();
 
         // Transition to Review via Edit schedule to test editable mode
-        await tester.tap(find.text('Edit schedule'));
+        await tester.tap(
+          find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+        );
         await tester.pumpAndSettle();
 
         // Review semantics: Edit pencils ARE displayed
@@ -1288,7 +1292,9 @@ void main() {
         await tester.pumpAndSettle();
 
         // Tap Edit schedule
-        await tester.tap(find.text('Edit schedule'));
+        await tester.tap(
+          find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+        );
         await tester.pumpAndSettle();
 
         expect(find.text('6 classes scheduled'), findsOneWidget);
@@ -1579,7 +1585,9 @@ void main() {
         expect(find.text('Monday Math'), findsOneWidget);
 
         // Tap Edit schedule
-        await tester.tap(find.text('Edit schedule'));
+        await tester.tap(
+          find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+        );
         await tester.pumpAndSettle();
 
         // In review, edit Monday Math to repeat on Tuesday (2) and Thursday (4) instead of Monday
@@ -1857,7 +1865,9 @@ void main() {
         await tester.pumpAndSettle();
 
         // Enter review stage via Edit schedule so _workingBlocks has Algorithms 101
-        await tester.tap(find.text('Edit schedule'));
+        await tester.tap(
+          find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+        );
         await tester.pumpAndSettle();
 
         // In review stage with working draft
@@ -2161,7 +2171,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Go to Review via Edit schedule
-      await tester.tap(find.text('Edit schedule'));
+      await tester.tap(
+        find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+      );
       await tester.pumpAndSettle();
 
       // In Review stage: tap Save changes
@@ -2177,7 +2189,11 @@ void main() {
 
       // Transitioned to currentSetup stage without duplicate snackbar
       expect(find.text('Classes'), findsOneWidget);
-      expect(find.text('Edit schedule'), findsOneWidget);
+      expect(find.text('Edit schedule'), findsNothing);
+      expect(
+        find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+        findsOneWidget,
+      );
       expect(
         find.text('Classes updated. Your new timetable is now active.'),
         findsNothing,
@@ -2243,7 +2259,11 @@ void main() {
         await tester.pump();
         expect(find.text('Loading timetable...'), findsNothing);
         expect(find.text('Operating Systems'), findsOneWidget);
-        expect(find.text('Edit schedule'), findsOneWidget);
+        expect(find.text('Edit schedule'), findsNothing);
+        expect(
+          find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+          findsOneWidget,
+        );
       },
     );
 
@@ -2306,7 +2326,9 @@ void main() {
         );
 
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Edit schedule'));
+        await tester.tap(
+          find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+        );
         await tester.pumpAndSettle();
 
         // Tap Save changes twice rapidly
@@ -2410,7 +2432,9 @@ void main() {
 
         await tester.pumpAndSettle();
         // Go to Review via Edit schedule
-        await tester.tap(find.text('Edit schedule'));
+        await tester.tap(
+          find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+        );
         await tester.pumpAndSettle();
 
         expect(find.text('Review Timetable'), findsOneWidget);

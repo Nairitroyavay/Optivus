@@ -41,6 +41,8 @@ class EatingReviewView extends StatefulWidget {
   final ValueChanged<String>? onFrontSelected;
   final bool isNew;
   final String? primaryCtaLabel;
+  final bool isConcurrencyConflict;
+  final VoidCallback? onReloadLatestSetup;
 
   const EatingReviewView({
     super.key,
@@ -66,6 +68,8 @@ class EatingReviewView extends StatefulWidget {
     this.onFrontSelected,
     this.isNew = false,
     this.primaryCtaLabel,
+    this.isConcurrencyConflict = false,
+    this.onReloadLatestSetup,
   });
 
   @override
@@ -239,6 +243,12 @@ class _EatingReviewViewState extends State<EatingReviewView> {
                         ),
                       ),
                     ),
+                    if (widget.isConcurrencyConflict &&
+                        widget.onReloadLatestSetup != null)
+                      TextButton(
+                        onPressed: widget.onReloadLatestSetup,
+                        child: const Text('Reload latest'),
+                      ),
                     IconButton(
                       icon: const Icon(
                         Icons.close_rounded,

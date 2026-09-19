@@ -243,7 +243,11 @@ void main() {
       // Verifies Current Setup title & blocks
       expect(find.text('Classes'), findsOneWidget);
       expect(find.text('Physics 101'), findsOneWidget);
-      expect(find.text('Edit schedule'), findsOneWidget);
+      expect(find.text('Edit schedule'), findsNothing);
+      expect(
+        find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+        findsOneWidget,
+      );
 
       // Tapping back button calls onBack
       final backBtn = find.byIcon(Icons.arrow_back_rounded);
@@ -424,7 +428,6 @@ void main() {
       await tester.pumpAndSettle();
 
       // Back on currentSetup
-      expect(find.text('Classes'), findsOneWidget);
       expect(find.text('Set up Classes'), findsOneWidget);
     },
   );
@@ -499,7 +502,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap Edit schedule
-      await tester.tap(find.text('Edit schedule'));
+      await tester.tap(
+        find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+      );
       await tester.pumpAndSettle();
 
       // In review stage
@@ -598,7 +603,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Go to Review via Edit schedule
-      await tester.tap(find.text('Edit schedule'));
+      await tester.tap(
+        find.byKey(const Key('base-timeline-header-edit-schedule-button')),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Review Timetable'), findsOneWidget);
@@ -701,7 +708,6 @@ void main() {
       await tester.pumpAndSettle();
 
       // Returns to currentSetup
-      expect(find.text('Classes'), findsOneWidget);
       expect(find.text('Set up Classes'), findsOneWidget);
     },
   );

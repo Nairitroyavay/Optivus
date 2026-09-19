@@ -495,9 +495,12 @@ void main() {
           ),
         );
 
-        // Verify "Edit schedule" CTA exists
-        final ctaFinder = find.text('Edit schedule');
+        // The intentional icon-only Edit schedule action remains accessible.
+        final ctaFinder = find.byKey(
+          const Key('base-timeline-header-edit-schedule-button'),
+        );
         expect(ctaFinder, findsOneWidget);
+        expect(find.text('Edit schedule'), findsNothing);
 
         // Verify BaseTimelineSetupContextCard directly below header
         final contextCardFinder = find.byType(BaseTimelineSetupContextCard);

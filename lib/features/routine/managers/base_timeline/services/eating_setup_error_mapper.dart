@@ -61,4 +61,34 @@ class EatingSetupErrorMapper {
 
     return NutritionAiFailure.fromObject(error).safeMessage;
   }
+
+  static String mapSaveError(Object error) {
+    final lower = error.toString().toLowerCase();
+    if (lower.contains('revision mismatch') ||
+        lower.contains('concurrency') ||
+        lower.contains('conflict')) {
+      return 'This setup changed elsewhere. Reload the latest setup before saving again.';
+    }
+    if (lower.contains('permission-denied') ||
+        lower.contains('permission denied')) {
+      return "Couldn't save this Eating setup because setup permissions are unavailable. Your edits are still here.";
+    }
+    if (lower.contains('unauthenticated') ||
+        lower.contains('account mismatch') ||
+        lower.contains('auth/')) {
+      return 'Your session changed. Sign in again, then retry; your edits are still here.';
+    }
+    if (error is TimeoutException ||
+        lower.contains('network') ||
+        lower.contains('socketexception') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('connection refused') ||
+        lower.contains('unavailable')) {
+      return "Couldn't reach the server. Check your connection and retry; your edits are still here.";
+    }
+    if (lower.contains('argumenterror') || lower.contains('validation')) {
+      return 'Some meal-plan information is invalid. Review the highlighted details and try again.';
+    }
+    return "Couldn't save your meal plan. Your edits are still here; please try again.";
+  }
 }

@@ -22,6 +22,7 @@ import 'package:optivus/features/routine/managers/base_timeline/services/eating_
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_domain_engine.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_setup_error_mapper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_source_transition_policy.dart';
+import 'package:optivus/repositories/routine_transaction_repository.dart';
 
 /// Staged state machine stages for Eating Base Timeline setup.
 enum EatingSetupStage {
@@ -397,28 +398,51 @@ class EatingSetupController extends StateNotifier<EatingSetupState> {
     state = state.copyWith(
       workingBlocks: List.from(setup.eatingBlocks),
       workingGoal: setup.mealPlanningGoal,
+      clearWorkingGoal: setup.mealPlanningGoal == null,
       workingMealsPerDay: setup.mealsPerDay,
+      clearWorkingMealsPerDay: setup.mealsPerDay == null,
       workingEatingMode: setup.eatingMode,
+      clearWorkingEatingMode: setup.eatingMode == null,
       workingFoodType: setup.foodType,
+      clearWorkingFoodType: setup.foodType == null,
       workingFoodStyleCustomText: setup.foodStyleCustomText,
+      clearWorkingFoodStyleCustomText: setup.foodStyleCustomText == null,
       workingFoodsToAvoid: List<String>.from(setup.foodsToAvoid),
       workingBreakfastMinute: setup.breakfastMinute,
+      clearWorkingBreakfastMinute: setup.breakfastMinute == null,
       workingLunchMinute: setup.lunchMinute,
+      clearWorkingLunchMinute: setup.lunchMinute == null,
       workingDinnerMinute: setup.dinnerMinute,
+      clearWorkingDinnerMinute: setup.dinnerMinute == null,
       workingSnackMinute: setup.snackMinute,
+      clearWorkingSnackMinute: setup.snackMinute == null,
       workingExtraSnackMinute: setup.extraSnackMinute,
+      clearWorkingExtraSnackMinute: setup.extraSnackMinute == null,
       workingTargetCalories: setup.targetCalories,
+      clearWorkingTargetCalories: setup.targetCalories == null,
       workingTargetProtein: setup.targetProtein,
+      clearWorkingTargetProtein: setup.targetProtein == null,
       workingTargetCaloriesOverride: setup.targetCaloriesOverride,
+      clearWorkingTargetCaloriesOverride: setup.targetCaloriesOverride == null,
       workingTargetProteinOverride: setup.targetProteinOverride,
+      clearWorkingTargetProteinOverride: setup.targetProteinOverride == null,
       workingSetupPath: setup.eatingSetupPath,
+      clearWorkingSetupPath: setup.eatingSetupPath == null,
       workingGeneratedPlanVersion: setup.eatingGeneratedPlanVersion,
+      clearWorkingGeneratedPlanVersion:
+          setup.eatingGeneratedPlanVersion == null,
       workingGeneratedInputFingerprint: setup.eatingGeneratedInputFingerprint,
+      clearWorkingGeneratedInputFingerprint:
+          setup.eatingGeneratedInputFingerprint == null,
       workingCustomized: setup.eatingCustomized,
       workingAssetId: setup.eatingPhotoAssetId,
+      clearWorkingAssetId: setup.eatingPhotoAssetId == null,
       workingR2Key: setup.eatingPhotoR2Key,
+      clearWorkingR2Key: setup.eatingPhotoR2Key == null,
       baseCommittedAssetId: setup.eatingPhotoAssetId,
+      clearBaseCommittedAssetId: setup.eatingPhotoAssetId == null,
       baseCommittedR2Key: setup.eatingPhotoR2Key,
+      clearBaseCommittedR2Key: setup.eatingPhotoR2Key == null,
       editorBaseRevision: setup.revision,
       ownerUid: setup.uid,
       isDirty: false,
@@ -432,26 +456,48 @@ class EatingSetupController extends StateNotifier<EatingSetupState> {
     state = state.copyWith(
       workingBlocks: List.from(draftState.blocks),
       workingSetupPath: draftState.setupPath,
+      clearWorkingSetupPath: draftState.setupPath == null,
       workingAssetId: draftState.photoAssetId,
+      clearWorkingAssetId: draftState.photoAssetId == null,
       workingR2Key: draftState.photoR2Key,
+      clearWorkingR2Key: draftState.photoR2Key == null,
       workingGeneratedPlanVersion: draftState.planVersion,
+      clearWorkingGeneratedPlanVersion: draftState.planVersion == null,
       workingGeneratedInputFingerprint: draftState.inputFingerprint,
+      clearWorkingGeneratedInputFingerprint:
+          draftState.inputFingerprint == null,
       workingCustomized: draftState.customized,
       workingGoal: draftState.goal,
+      clearWorkingGoal: draftState.goal == null,
       workingMealsPerDay: draftState.mealsPerDay,
+      clearWorkingMealsPerDay: draftState.mealsPerDay == null,
       workingEatingMode: draftState.eatingMode,
+      clearWorkingEatingMode: draftState.eatingMode == null,
       workingFoodType: draftState.foodType,
+      clearWorkingFoodType: draftState.foodType == null,
       workingFoodStyleCustomText: draftState.foodStyleCustomText,
+      clearWorkingFoodStyleCustomText: draftState.foodStyleCustomText == null,
       workingFoodsToAvoid: List.from(draftState.foodsToAvoid),
       workingBreakfastMinute: draftState.breakfastMinute,
+      clearWorkingBreakfastMinute: draftState.breakfastMinute == null,
       workingLunchMinute: draftState.lunchMinute,
+      clearWorkingLunchMinute: draftState.lunchMinute == null,
       workingDinnerMinute: draftState.dinnerMinute,
+      clearWorkingDinnerMinute: draftState.dinnerMinute == null,
       workingSnackMinute: draftState.snackMinute,
+      clearWorkingSnackMinute: draftState.snackMinute == null,
       workingExtraSnackMinute: draftState.extraSnackMinute,
+      clearWorkingExtraSnackMinute: draftState.extraSnackMinute == null,
       workingTargetCalories: draftState.targetCalories,
+      clearWorkingTargetCalories: draftState.targetCalories == null,
       workingTargetProtein: draftState.targetProtein,
+      clearWorkingTargetProtein: draftState.targetProtein == null,
       workingTargetCaloriesOverride: draftState.targetCaloriesOverride,
+      clearWorkingTargetCaloriesOverride:
+          draftState.targetCaloriesOverride == null,
       workingTargetProteinOverride: draftState.targetProteinOverride,
+      clearWorkingTargetProteinOverride:
+          draftState.targetProteinOverride == null,
       stage: EatingSetupStage.review,
       isDirty: markDirty ? true : state.isDirty,
       clearErrorMessage: true,
@@ -658,8 +704,8 @@ class EatingSetupController extends StateNotifier<EatingSetupState> {
               ? EatingSetupStage.review
               : EatingSetupStage.chooseSource,
           errorMessage: err,
-          candidateAssetId: null,
-          candidateR2Key: null,
+          clearCandidateAssetId: true,
+          clearCandidateR2Key: true,
         );
         return null;
       }
@@ -681,8 +727,8 @@ class EatingSetupController extends StateNotifier<EatingSetupState> {
             ? EatingSetupStage.review
             : EatingSetupStage.chooseSource,
         errorMessage: errText,
-        candidateAssetId: null,
-        candidateR2Key: null,
+        clearCandidateAssetId: true,
+        clearCandidateR2Key: true,
       );
       return null;
     } finally {
@@ -722,8 +768,8 @@ class EatingSetupController extends StateNotifier<EatingSetupState> {
 
       _applyEatingDraftState(transition, markDirty: true);
       state = state.copyWith(
-        candidateAssetId: null,
-        candidateR2Key: null,
+        clearCandidateAssetId: true,
+        clearCandidateR2Key: true,
         stage: EatingSetupStage.review,
       );
     } else {
@@ -735,8 +781,8 @@ class EatingSetupController extends StateNotifier<EatingSetupState> {
         );
       }
       state = state.copyWith(
-        candidateAssetId: null,
-        candidateR2Key: null,
+        clearCandidateAssetId: true,
+        clearCandidateR2Key: true,
         stage: state.workingBlocks.isNotEmpty
             ? EatingSetupStage.review
             : EatingSetupStage.chooseSource,
@@ -866,7 +912,8 @@ class EatingSetupController extends StateNotifier<EatingSetupState> {
         _initWorkingStateFromSetup(currentSetup);
         state = state.copyWith(
           stage: EatingSetupStage.currentSetup,
-          errorMessage: errText,
+          errorMessage:
+              "Couldn't create the new plan. Your current plan is unchanged. $errText",
           isDirty: false,
         );
       } else {
@@ -1091,8 +1138,12 @@ class EatingSetupController extends StateNotifier<EatingSetupState> {
       );
       return true;
     } catch (e) {
-      final errorText = EatingSetupErrorMapper.mapError(e);
-      state = state.copyWith(isSaving: false, errorMessage: errorText);
+      final errorText = EatingSetupErrorMapper.mapSaveError(e);
+      state = state.copyWith(
+        isSaving: false,
+        errorMessage: errorText,
+        isConcurrencyConflict: e is BaseTimelineConcurrencyException,
+      );
       return false;
     }
   }
@@ -1179,8 +1230,8 @@ class EatingSetupController extends StateNotifier<EatingSetupState> {
 
     state = state.copyWith(
       sessionGeneration: nextGeneration,
-      candidateAssetId: null,
-      candidateR2Key: null,
+      clearCandidateAssetId: true,
+      clearCandidateR2Key: true,
       stage: state.workingBlocks.isNotEmpty
           ? EatingSetupStage.review
           : (setup != null && setup.eatingBlocks.isNotEmpty

@@ -12,6 +12,7 @@ import 'package:optivus/features/routine/managers/base_timeline/models/eating_pl
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_domain_engine.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_stale_plan_banner.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_meal_detail_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_plan_summary_card.dart';
 import 'package:optivus/state/app_state.dart';
@@ -39,6 +40,8 @@ class EatingCurrentSetupView extends ConsumerStatefulWidget {
   final VoidCallback? onRetryRefresh;
   final String? primaryButtonLabel;
   final void Function(TimelineBlockDraft block)? onEditBlock;
+  final String? errorMessage;
+  final VoidCallback? onClearError;
 
   const EatingCurrentSetupView({
     super.key,
@@ -57,6 +60,8 @@ class EatingCurrentSetupView extends ConsumerStatefulWidget {
     this.onRetryRefresh,
     this.primaryButtonLabel,
     this.onEditBlock,
+    this.errorMessage,
+    this.onClearError,
   });
 
   @override
@@ -134,6 +139,30 @@ class _EatingCurrentSetupViewState
                   )
                 : null,
           ),
+
+          if (widget.errorMessage != null)
+            BaseTimelineStalePlanBanner(
+              message: widget.errorMessage!,
+              actionLabel: 'Retry',
+              onAction: widget.onRegenerate,
+              secondaryActionLabel: 'Dismiss',
+              onSecondaryAction: widget.onClearError,
+            )
+          else if (freshness == EatingPlanFreshness.stale)
+            BaseTimelineStalePlanBanner(
+              message:
+                  'Your Body Basics changed after this plan was generated.',
+              actionLabel: 'Regenerate',
+              onAction: widget.onRegenerate,
+              secondaryActionLabel: 'Review settings',
+              onSecondaryAction: widget.onOpenSettings,
+            )
+          else if (freshness == EatingPlanFreshness.unknown)
+            BaseTimelineStalePlanBanner(
+              message: "Plan freshness couldn't be checked.",
+              actionLabel: 'Review settings',
+              onAction: widget.onOpenSettings,
+            ),
 
           // 4. Interactive Timeline hero
           Expanded(

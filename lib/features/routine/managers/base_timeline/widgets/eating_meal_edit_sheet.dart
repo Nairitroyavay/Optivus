@@ -198,82 +198,111 @@ class EatingMealEditSheet {
             const SizedBox(height: 14),
 
             // Nutrition estimates
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    key: const ValueKey('eating-edit-meal-calories'),
-                    controller: caloriesController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Calories (kcal)',
-                      hintText: 'Optional',
-                    ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final stack =
+                    constraints.maxWidth < 380 ||
+                    MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+                final caloriesField = TextField(
+                  key: const ValueKey('eating-edit-meal-calories'),
+                  controller: caloriesController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Calories (kcal)',
+                    hintText: 'Optional',
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextField(
-                    key: const ValueKey('eating-edit-meal-protein'),
-                    controller: proteinController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Protein (g)',
-                      hintText: 'Optional',
-                    ),
+                );
+                final proteinField = TextField(
+                  key: const ValueKey('eating-edit-meal-protein'),
+                  controller: proteinController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Protein (g)',
+                    hintText: 'Optional',
                   ),
-                ),
-              ],
+                );
+                if (stack) {
+                  return Column(
+                    children: [
+                      caloriesField,
+                      const SizedBox(height: 10),
+                      proteinField,
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: caloriesField),
+                    const SizedBox(width: 10),
+                    Expanded(child: proteinField),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 14),
 
             // Timing buttons
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () async {
-                      final picked = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay(
-                          hour: startMinute ~/ 60,
-                          minute: startMinute % 60,
-                        ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final stack =
+                    constraints.maxWidth < 380 ||
+                    MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+                final startButton = OutlinedButton(
+                  onPressed: () async {
+                    final picked = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay(
+                        hour: startMinute ~/ 60,
+                        minute: startMinute % 60,
+                      ),
+                    );
+                    if (picked != null) {
+                      setSheetState(
+                        () => startMinute = picked.hour * 60 + picked.minute,
                       );
-                      if (picked != null) {
-                        setSheetState(
-                          () => startMinute = picked.hour * 60 + picked.minute,
-                        );
-                      }
-                    },
-                    child: Text(
-                      'Start: ${EatingPresentationUtils.formatTime(startMinute)}',
-                    ),
+                    }
+                  },
+                  child: Text(
+                    'Start: ${EatingPresentationUtils.formatTime(startMinute)}',
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () async {
-                      final picked = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay(
-                          hour: endMinute ~/ 60,
-                          minute: endMinute % 60,
-                        ),
+                );
+                final endButton = OutlinedButton(
+                  onPressed: () async {
+                    final picked = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay(
+                        hour: endMinute ~/ 60,
+                        minute: endMinute % 60,
+                      ),
+                    );
+                    if (picked != null) {
+                      setSheetState(
+                        () => endMinute = picked.hour * 60 + picked.minute,
                       );
-                      if (picked != null) {
-                        setSheetState(
-                          () => endMinute = picked.hour * 60 + picked.minute,
-                        );
-                      }
-                    },
-                    child: Text(
-                      'End: ${EatingPresentationUtils.formatTime(endMinute)}',
-                    ),
+                    }
+                  },
+                  child: Text(
+                    'End: ${EatingPresentationUtils.formatTime(endMinute)}',
                   ),
-                ),
-              ],
+                );
+                if (stack) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      startButton,
+                      const SizedBox(height: 8),
+                      endButton,
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: startButton),
+                    const SizedBox(width: 8),
+                    Expanded(child: endButton),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 16),
 
@@ -290,6 +319,7 @@ class EatingMealEditSheet {
             const SizedBox(height: 8),
             Wrap(
               spacing: 6,
+              runSpacing: 6,
               children: [
                 for (var day = 1; day <= 7; day++)
                   FilterChip(

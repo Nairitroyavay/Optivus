@@ -61,7 +61,7 @@ class WorkSourceSelectionView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const LiquidSectionHeader(title: 'CURRENT PHOTO'),
+                const LiquidSectionHeader(title: 'Current photo'),
                 BaseTimelinePhotoPreviewCard(
                   r2Key: snapshot.sourceR2Key,
                   assetId: snapshot.sourceAssetId,
@@ -74,7 +74,7 @@ class WorkSourceSelectionView extends StatelessWidget {
           : null,
       children: [
         LiquidSectionHeader(
-          title: hasPhoto ? 'USE A NEW PHOTO' : 'USE A SCHEDULE PHOTO',
+          title: hasPhoto ? 'Use a new photo' : 'Photo options',
         ),
         BaseTimelineSourceActionCard(
           icon: Icons.camera_alt_rounded,
@@ -92,7 +92,7 @@ class WorkSourceSelectionView extends StatelessWidget {
           onTap: () => onPickPhoto(ImageSource.gallery),
         ),
         const SizedBox(height: 16),
-        const LiquidSectionHeader(title: 'OR SET UP MANUALLY'),
+        const LiquidSectionHeader(title: 'Other options'),
         if (isConfigured || setup.workBlocks.isNotEmpty)
           BaseTimelineSourceActionCard(
             icon: Icons.edit_calendar_rounded,

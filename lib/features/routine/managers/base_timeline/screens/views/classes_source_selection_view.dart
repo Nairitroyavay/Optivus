@@ -54,7 +54,7 @@ class ClassesSourceSelectionView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const LiquidSectionHeader(title: 'CURRENT PHOTO'),
+                const LiquidSectionHeader(title: 'Current photo'),
                 BaseTimelinePhotoPreviewCard(
                   r2Key: snapshot.sourceR2Key,
                   assetId: snapshot.sourceAssetId,
@@ -67,9 +67,7 @@ class ClassesSourceSelectionView extends StatelessWidget {
           : null,
       children: [
         LiquidSectionHeader(
-          title: hasPhoto
-              ? 'USE A NEW TIMETABLE PHOTO'
-              : 'USE A TIMETABLE PHOTO',
+          title: hasPhoto ? 'Use a new timetable photo' : 'Photo options',
         ),
         BaseTimelineSourceActionCard(
           icon: Icons.camera_alt_rounded,
@@ -83,17 +81,17 @@ class ClassesSourceSelectionView extends StatelessWidget {
           icon: Icons.photo_library_rounded,
           title: 'Choose from gallery',
           subtitle: 'Upload a photo or screenshot from your device',
-          accent: OptivusColors.aquaAccent,
+          accent: OptivusColors.blueAccent,
           onTap: () => onPickPhoto(ImageSource.gallery),
         ),
         const SizedBox(height: 16),
-        const LiquidSectionHeader(title: 'OR SET UP MANUALLY'),
+        const LiquidSectionHeader(title: 'Other options'),
         if (hasPhoto && onEditCurrent != null)
           BaseTimelineSourceActionCard(
             icon: Icons.edit_calendar_rounded,
             title: 'Edit current timetable',
             subtitle: 'Keep timetable photo and adjust classes',
-            accent: OptivusColors.routineAccent,
+            accent: OptivusColors.blueAccent,
             onTap: onEditCurrent!,
           )
         else
@@ -101,7 +99,7 @@ class ClassesSourceSelectionView extends StatelessWidget {
             icon: Icons.edit_calendar_rounded,
             title: 'Set up manually',
             subtitle: 'Add or adjust classes day by day',
-            accent: OptivusColors.routineAccent,
+            accent: OptivusColors.blueAccent,
             onTap: onManualSetup,
           ),
       ],
