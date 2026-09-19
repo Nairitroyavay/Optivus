@@ -10,6 +10,11 @@ class EatingSetupErrorMapper {
     return NutritionAiFailure.fromObject(error);
   }
 
+  /// Product-safe copy for post-commit Routine reconciliation failures.
+  static String mapRefreshError(Object? error) {
+    return "Routine couldn't refresh yet. Please try again.";
+  }
+
   static String mapError(Object error) {
     if (error is TimeoutException) {
       return 'The request timed out. Please check your connection and try again.';

@@ -16,6 +16,7 @@ import 'package:optivus/features/routine/managers/base_timeline/widgets/base_tim
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_meal_detail_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_plan_summary_card.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/region_settings_provider.dart';
 
 /// Read-only Current Setup view for Eating Base Timeline.
 ///
@@ -74,15 +75,14 @@ class _EatingCurrentSetupViewState
   String? _frontBlockId;
 
   EatingPlanFreshness _evaluatePlanFreshness(BaseTimelineSetup setup) {
+    final region = ref.watch(regionSettingsProvider);
+    final country = region.countryCode.isNotEmpty ? region.countryCode : null;
     return EatingPlanFreshness.evaluate(
       setup: setup,
-      profile: ref.read(userProfileProvider),
-      engine: ref.read(eatingDomainEngineProvider),
+      profile: ref.watch(userProfileProvider),
+      engine: ref.watch(eatingDomainEngineProvider),
+      country: country,
     );
-  }
-
-  bool _isPlanStale(BaseTimelineSetup setup) {
-    return _evaluatePlanFreshness(setup) == EatingPlanFreshness.stale;
   }
 
   @override
@@ -92,8 +92,8 @@ class _EatingCurrentSetupViewState
       for (final block in widget.setup.eatingBlocks) block.id: block,
     };
 
-    final isStale = _isPlanStale(widget.setup);
     final freshness = _evaluatePlanFreshness(widget.setup);
+    final isStale = freshness.isStale;
 
     return SafeArea(
       bottom: false,
@@ -150,8 +150,9 @@ class _EatingCurrentSetupViewState
             )
           else if (freshness == EatingPlanFreshness.stale)
             BaseTimelineStalePlanBanner(
+              title: 'Plan may need updating',
               message:
-                  'Your Body Basics changed after this plan was generated.',
+                  'Your Body Basics or meal-plan preferences changed after this plan was generated.',
               actionLabel: 'Regenerate',
               onAction: widget.onRegenerate,
               secondaryActionLabel: 'Review settings',

@@ -10,7 +10,6 @@ import 'package:optivus/features/routine/managers/base_timeline/models/base_time
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/eating_current_setup_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/eating_review_view.dart';
-import 'package:optivus/features/routine/managers/base_timeline/services/base_timeline_transaction_coordinator.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_domain_engine.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_setup_controller.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_ai_thinking_view.dart';
@@ -610,14 +609,15 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     if (state.stage == EatingSetupStage.saveSuccess) {
       return BaseTimelineSaveSuccessView(
         key: const ValueKey('eating-save-success'),
-        title: 'Eating schedule updated successfully',
+        title: 'Eating plan saved',
         subtitle: state.routineRefreshPending
             ? 'Setup saved. Routine projection update pending.'
-            : 'Your meal plan has been saved to your Base Timeline.',
+            : 'Your meal plan is now active.',
         accent: OptivusColors.roseAccent,
-        onComplete: () => controller.reloadFromCanonical(
-          setup ?? BaseTimelineSetup(uid: uid, updatedAt: DateTime.now()),
-        ),
+        onComplete: () {
+          if (!mounted) return;
+          controller.dismissSuccess();
+        },
       );
     }
 
@@ -751,17 +751,7 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       onClearError: controller.clearError,
       routineRefreshPending: state.routineRefreshPending,
       routineRefreshMessage: state.routineRefreshMessage,
-      onRetryRefresh: () async {
-        final result = await ref
-            .read(baseTimelineTransactionCoordinatorProvider)
-            .retryRoutineRefresh(
-              uid: uid,
-              targetRevision: state.committedRevision,
-            );
-        if (mounted && result.isRefreshed) {
-          controller.reloadFromCanonical(setup);
-        }
-      },
+      onRetryRefresh: () => controller.retryRoutineRefresh(uid: uid),
     );
   }
 

@@ -849,7 +849,7 @@ class EatingSetupController extends StateNotifier<EatingSetupState> {
       );
       final region = ref.read(regionSettingsProvider);
       final country = region.countryCode.isNotEmpty ? region.countryCode : null;
-      final inputs = engine.buildInputs(
+      final inputs = engine.buildCanonicalInputs(
         profile: profile,
         setup: workingSetup,
         targets: targets,
@@ -1134,7 +1134,20 @@ class EatingSetupController extends StateNotifier<EatingSetupState> {
         committedRevision: result.routineRefreshPending
             ? result.revision
             : null,
-        routineRefreshMessage: result.routineRefreshMessage,
+        clearCommittedRevision: !result.routineRefreshPending,
+        routineRefreshMessage: result.routineRefreshPending
+            ? (result.routineRefreshMessage?.isNotEmpty == true
+                  ? result.routineRefreshMessage
+                  : "Routine couldn't refresh yet. Please try again.")
+            : null,
+        clearRoutineRefreshMessage: !result.routineRefreshPending,
+        clearCandidateAssetId: true,
+        clearCandidateR2Key: true,
+        aiActionTitle: '',
+        aiProgressMessages: const [],
+        clearErrorMessage: true,
+        clearFrontBlockId: true,
+        isConcurrencyConflict: false,
       );
       return true;
     } catch (e) {
@@ -1279,6 +1292,49 @@ class EatingSetupController extends StateNotifier<EatingSetupState> {
       stage: EatingSetupStage.review,
       clearErrorMessage: true,
     );
+  }
+
+  void dismissSuccess() {
+    state = state.copyWith(
+      stage: EatingSetupStage.currentSetup,
+      isDirty: false,
+      clearErrorMessage: true,
+      isConcurrencyConflict: false,
+    );
+  }
+
+  /// Retries routine projection / reconciliation without modifying base timeline setup.
+  Future<void> retryRoutineRefresh({required String uid}) async {
+    if (state.isSaving) return;
+    final targetUid = state.ownerUid.isNotEmpty ? state.ownerUid : uid;
+    if (uid.trim().isEmpty || uid != targetUid) return;
+
+    try {
+      final coordinator = ref.read(baseTimelineTransactionCoordinatorProvider);
+      final refreshOutcome = await coordinator.retryRoutineRefresh(
+        uid: uid,
+        targetRevision: state.committedRevision,
+      );
+      if (refreshOutcome.isRefreshed) {
+        state = state.copyWith(
+          routineRefreshPending: false,
+          clearRoutineRefreshMessage: true,
+          clearCommittedRevision: true,
+        );
+      } else {
+        state = state.copyWith(
+          routineRefreshPending: true,
+          routineRefreshMessage: EatingSetupErrorMapper.mapRefreshError(
+            refreshOutcome.message,
+          ),
+        );
+      }
+    } catch (e) {
+      state = state.copyWith(
+        routineRefreshPending: true,
+        routineRefreshMessage: EatingSetupErrorMapper.mapRefreshError(e),
+      );
+    }
   }
 
   void reloadFromCanonical(BaseTimelineSetup setup) {

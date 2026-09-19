@@ -843,9 +843,9 @@ class WorkPresentationUtils {
 
   /// Success message on the save success screen.
   static String saveSuccessTitle(String? lifeRole) {
-    if (isBusinessProfile(lifeRole)) return 'Business schedule saved!';
-    if (isWorkProfile(lifeRole)) return 'Work schedule saved!';
-    return 'Schedule saved!';
+    if (isBusinessProfile(lifeRole)) return 'Business schedule saved';
+    if (isWorkProfile(lifeRole)) return 'Work schedule saved';
+    return 'Schedule saved';
   }
 
   /// Grammatically correct, role-aware summary string for Current Setup header.

@@ -4,6 +4,7 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 /// Compact warning status banner displayed below the context card when a generated
 /// plan has become stale due to changes in body basics, routine, or settings.
 class BaseTimelineStalePlanBanner extends StatelessWidget {
+  final String? title;
   final String message;
   final String? actionLabel;
   final VoidCallback? onAction;
@@ -12,6 +13,7 @@ class BaseTimelineStalePlanBanner extends StatelessWidget {
 
   const BaseTimelineStalePlanBanner({
     super.key,
+    this.title,
     required this.message,
     this.actionLabel,
     this.onAction,
@@ -37,25 +39,49 @@ class BaseTimelineStalePlanBanner extends StatelessWidget {
         builder: (context, constraints) {
           final isNarrow = constraints.maxWidth < 340;
 
-          final content = Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+          final textContent = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.info_outline_rounded,
-                size: 16,
-                color: OptivusColors.warning,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  message,
+              if (title != null) ...[
+                Text(
+                  title!,
                   style: const TextStyle(
                     fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     color: OptivusColors.textPrimary,
                   ),
                 ),
+                const SizedBox(height: 2),
+              ],
+              Text(
+                message,
+                style: TextStyle(
+                  fontSize: title != null ? 11 : 12,
+                  fontWeight: title != null ? FontWeight.w500 : FontWeight.w600,
+                  color: title != null
+                      ? OptivusColors.textSecondary
+                      : OptivusColors.textPrimary,
+                ),
               ),
+            ],
+          );
+
+          final content = Row(
+            crossAxisAlignment: title != null
+                ? CrossAxisAlignment.start
+                : CrossAxisAlignment.center,
+            children: [
+              Padding(
+                padding: EdgeInsets.only(top: title != null ? 2 : 0),
+                child: const Icon(
+                  Icons.info_outline_rounded,
+                  size: 16,
+                  color: OptivusColors.warning,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: textContent),
             ],
           );
 

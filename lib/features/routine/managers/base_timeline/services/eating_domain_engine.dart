@@ -185,6 +185,22 @@ class EatingDomainEngine {
     return null;
   }
 
+  EatingGenerationInputs buildCanonicalInputs({
+    required UserProfile profile,
+    required BaseTimelineSetup setup,
+    String? country,
+    NutritionTargets? targets,
+  }) {
+    final effectiveTargets =
+        targets ?? calculateTargets(profile: profile, setup: setup);
+    return buildInputs(
+      profile: profile,
+      setup: setup,
+      targets: effectiveTargets,
+      country: country,
+    );
+  }
+
   EatingGenerationInputs buildInputs({
     required UserProfile profile,
     required BaseTimelineSetup setup,

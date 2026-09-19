@@ -19,7 +19,7 @@ import 'package:optivus/models/onboarding_draft.dart';
 ///   (custom target vs calculated from Body Basics), and non-destructive action button
 ///   (Plan settings or View photo).
 /// - Bottom row: 11px schedule and source details with 13px muted icons.
-/// - Integrated freshness warning if preferences drifted.
+/// - Context summary only (freshness warnings are owned by [EatingCurrentSetupView]).
 class EatingPlanSummaryCard extends StatelessWidget {
   final BaseTimelineSetup setup;
   final bool isStale;
@@ -96,24 +96,6 @@ class EatingPlanSummaryCard extends StatelessWidget {
                 icon: _sourceIcon(origin, hasSourcePhoto),
                 text: _sourceLabel(origin, hasSourcePhoto),
               ),
-              if (effectiveFreshness == EatingPlanFreshness.stale) ...[
-                const SizedBox(height: 8),
-                _FreshnessNotice(
-                  message:
-                      'Your Eating Plan was generated from older preferences.',
-                  actionLabel: onRegenerate == null ? null : 'Regenerate plan',
-                  actionKey: const Key(
-                    'eating-summary-stale-regenerate-button',
-                  ),
-                  onAction: onRegenerate,
-                ),
-              ] else if (effectiveFreshness == EatingPlanFreshness.unknown) ...[
-                const SizedBox(height: 8),
-                const _FreshnessNotice(
-                  message:
-                      "Plan freshness couldn't be checked. Review Body Basics before regenerating.",
-                ),
-              ],
             ],
           ),
         ),
@@ -332,71 +314,6 @@ class _EatingContextLine extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _FreshnessNotice extends StatelessWidget {
-  final String message;
-  final String? actionLabel;
-  final Key? actionKey;
-  final VoidCallback? onAction;
-
-  const _FreshnessNotice({
-    required this.message,
-    this.actionLabel,
-    this.actionKey,
-    this.onAction,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: OptivusColors.warning.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: OptivusColors.warning.withValues(alpha: 0.3)),
-      ),
-      child: Wrap(
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 6,
-        runSpacing: 4,
-        children: [
-          const Icon(
-            Icons.info_outline_rounded,
-            size: 14,
-            color: OptivusColors.warning,
-          ),
-          Text(
-            message,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: OptivusColors.textPrimary,
-            ),
-          ),
-          if (actionLabel != null && onAction != null)
-            TextButton(
-              key: actionKey,
-              onPressed: onAction,
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                foregroundColor: OptivusColors.warning,
-              ),
-              child: Text(
-                actionLabel!,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-        ],
-      ),
     );
   }
 }

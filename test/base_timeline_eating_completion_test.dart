@@ -1297,7 +1297,6 @@ void main() {
       (tester) async {
         var settingsOpened = false;
         var photoOpened = false;
-        var regenerated = false;
 
         // Test 1: Generated setup with settings button and stale warning
         final generatedSetup = BaseTimelineSetup(
@@ -1317,7 +1316,6 @@ void main() {
                 setup: generatedSetup,
                 isStale: true,
                 onOpenSettings: () => settingsOpened = true,
-                onRegenerate: () => regenerated = true,
               ),
             ),
           ),
@@ -1343,19 +1341,15 @@ void main() {
         );
         expect(settingsOpened, isTrue);
 
-        // Stale warning and regenerate button
+        // Freshness notice is not rendered inside the context card (single banner owned by CurrentSetupView)
         expect(
           find.text('Your Eating Plan was generated from older preferences.'),
-          findsOneWidget,
+          findsNothing,
         );
         expect(
           find.byKey(const Key('eating-summary-stale-regenerate-button')),
-          findsOneWidget,
+          findsNothing,
         );
-        await tester.tap(
-          find.byKey(const Key('eating-summary-stale-regenerate-button')),
-        );
-        expect(regenerated, isTrue);
 
         // Test 2: Photo setup with view photo action
         final photoSetup = BaseTimelineSetup(

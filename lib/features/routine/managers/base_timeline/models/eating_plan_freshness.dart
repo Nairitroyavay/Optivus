@@ -22,6 +22,7 @@ enum EatingPlanFreshness {
     required BaseTimelineSetup setup,
     required UserProfile profile,
     required EatingDomainEngine engine,
+    String? country,
   }) {
     if (setup.eatingSetupPath != 'create') {
       return EatingPlanFreshness.current;
@@ -32,11 +33,10 @@ enum EatingPlanFreshness {
     }
 
     try {
-      final targets = engine.calculateTargets(profile: profile, setup: setup);
-      final currentInputs = engine.buildInputs(
+      final currentInputs = engine.buildCanonicalInputs(
         profile: profile,
         setup: setup,
-        targets: targets,
+        country: country,
       );
       final currentFingerprint = currentInputs.computeFingerprint();
       return currentFingerprint == savedFingerprint
