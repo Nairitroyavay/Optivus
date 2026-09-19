@@ -6,10 +6,22 @@ import 'package:optivus/features/routine/utils/timeline_utils.dart';
 /// Modal bottom sheet displaying all stored details for a class block.
 class ClassDetailSheet extends StatelessWidget {
   final ClassRoutineBlock block;
+  final VoidCallback? onEdit;
+  final String? editLabel;
 
-  const ClassDetailSheet({super.key, required this.block});
+  const ClassDetailSheet({
+    super.key,
+    required this.block,
+    this.onEdit,
+    this.editLabel,
+  });
 
-  static Future<void> show(BuildContext context, ClassRoutineBlock block) {
+  static Future<void> show(
+    BuildContext context,
+    ClassRoutineBlock block, {
+    VoidCallback? onEdit,
+    String? editLabel,
+  }) {
     return showModalBottomSheet(
       context: context,
       backgroundColor: OptivusColors.backgroundBottom,
@@ -17,7 +29,8 @@ class ClassDetailSheet extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) => ClassDetailSheet(block: block),
+      builder: (ctx) =>
+          ClassDetailSheet(block: block, onEdit: onEdit, editLabel: editLabel),
     );
   }
 
@@ -178,6 +191,29 @@ class ClassDetailSheet extends StatelessWidget {
                   icon: Icons.notes_rounded,
                   label: 'Notes',
                   value: block.notes,
+                ),
+              ],
+              if (onEdit != null) ...[
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    key: const Key('class-detail-sheet-edit-button'),
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: Text(editLabel ?? 'Edit this class'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: OptivusColors.blueAccent,
+                      side: const BorderSide(color: OptivusColors.blueAccent),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      onEdit?.call();
+                    },
+                  ),
                 ),
               ],
               const SizedBox(height: 8),

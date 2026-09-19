@@ -660,11 +660,8 @@ void main() {
 
         await tester.pumpAndSettle();
 
-        // Go to Change setup -> Set up manually
-        await tester.tap(find.text('Change setup'));
-        await tester.pumpAndSettle();
-
-        await tester.tap(find.text('Set up manually'));
+        // Tap Edit schedule
+        await tester.tap(find.text('Edit schedule'));
         await tester.pumpAndSettle();
 
         expect(find.text('Review Timetable'), findsOneWidget);
@@ -763,12 +760,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('Chemistry 101'), findsOneWidget);
 
-        // Tap 'Change setup' to navigate to source selection
-        expect(find.text('Change setup'), findsOneWidget);
-        await tester.tap(find.text('Change setup'));
-        await tester.pumpAndSettle();
-
-        // Open overflow menu in source selection
+        // Open overflow menu on header
         final moreBtn = find.byIcon(Icons.more_vert_rounded);
         expect(moreBtn, findsOneWidget);
         await tester.tap(moreBtn);
@@ -1221,10 +1213,8 @@ void main() {
         await tester.tap(find.byIcon(Icons.close_rounded));
         await tester.pumpAndSettle();
 
-        // Transition to Review via manual setup to test editable mode
-        await tester.tap(find.text('Change setup'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Set up manually'));
+        // Transition to Review via Edit schedule to test editable mode
+        await tester.tap(find.text('Edit schedule'));
         await tester.pumpAndSettle();
 
         // Review semantics: Edit pencils ARE displayed
@@ -1297,10 +1287,8 @@ void main() {
 
         await tester.pumpAndSettle();
 
-        // Go to Change setup -> Set up manually
-        await tester.tap(find.text('Change setup'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Set up manually'));
+        // Tap Edit schedule
+        await tester.tap(find.text('Edit schedule'));
         await tester.pumpAndSettle();
 
         expect(find.text('6 classes scheduled'), findsOneWidget);
@@ -1447,7 +1435,9 @@ void main() {
         await tester.pumpAndSettle();
 
         // Start from chooseSource
-        await tester.tap(find.text('Change setup'));
+        await tester.tap(find.byIcon(Icons.more_vert_rounded));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Change source'));
         await tester.pumpAndSettle();
 
         // Pick photo from gallery
@@ -1588,10 +1578,8 @@ void main() {
         // Initially displays Monday Math
         expect(find.text('Monday Math'), findsOneWidget);
 
-        // Tap Change setup -> Set up manually
-        await tester.tap(find.text('Change setup'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Set up manually'));
+        // Tap Edit schedule
+        await tester.tap(find.text('Edit schedule'));
         await tester.pumpAndSettle();
 
         // In review, edit Monday Math to repeat on Tuesday (2) and Thursday (4) instead of Monday
@@ -1778,6 +1766,8 @@ void main() {
         final initialSetup = BaseTimelineSetup(
           uid: uid,
           updatedAt: DateTime.now(),
+          classLogicalAssetId: 'cls-asset-orig',
+          classLogicalAssetR2Key: 'users/$uid/class.jpg',
           classBlocks: const [
             TimelineBlockDraft(
               id: 'cls-keep',
@@ -1866,10 +1856,8 @@ void main() {
 
         await tester.pumpAndSettle();
 
-        // Enter review stage via Change setup -> Set up manually so _workingBlocks has Algorithms 101
-        await tester.tap(find.text('Change setup'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Set up manually'));
+        // Enter review stage via Edit schedule so _workingBlocks has Algorithms 101
+        await tester.tap(find.text('Edit schedule'));
         await tester.pumpAndSettle();
 
         // In review stage with working draft
@@ -2030,7 +2018,9 @@ void main() {
         await tester.pumpAndSettle();
 
         // Navigate from currentSetup to chooseSource
-        await tester.tap(find.text('Change setup'));
+        await tester.tap(find.byIcon(Icons.more_vert_rounded));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Change source'));
         await tester.pumpAndSettle();
 
         // Verify Choose from Gallery passes ImageSource.gallery
@@ -2097,7 +2087,9 @@ void main() {
         await tester.pumpAndSettle();
 
         // Navigate from currentSetup to chooseSource
-        await tester.tap(find.text('Change setup'));
+        await tester.tap(find.byIcon(Icons.more_vert_rounded));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Change source'));
         await tester.pumpAndSettle();
 
         // Verify Take a Photo passes ImageSource.camera
@@ -2168,10 +2160,8 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Go to Choose Source -> Set up manually
-      await tester.tap(find.text('Change setup'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Set up manually'));
+      // Go to Review via Edit schedule
+      await tester.tap(find.text('Edit schedule'));
       await tester.pumpAndSettle();
 
       // In Review stage: tap Use this timetable
@@ -2187,7 +2177,7 @@ void main() {
 
       // Transitioned to currentSetup stage without duplicate snackbar
       expect(find.text('Classes'), findsOneWidget);
-      expect(find.text('Change setup'), findsOneWidget);
+      expect(find.text('Edit schedule'), findsOneWidget);
       expect(
         find.text('Classes updated. Your new timetable is now active.'),
         findsNothing,
@@ -2253,7 +2243,7 @@ void main() {
         await tester.pump();
         expect(find.text('Loading timetable...'), findsNothing);
         expect(find.text('Operating Systems'), findsOneWidget);
-        expect(find.text('Change setup'), findsOneWidget);
+        expect(find.text('Edit schedule'), findsOneWidget);
       },
     );
 
@@ -2316,9 +2306,7 @@ void main() {
         );
 
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Change setup'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Set up manually'));
+        await tester.tap(find.text('Edit schedule'));
         await tester.pumpAndSettle();
 
         // Tap Use this timetable twice rapidly
@@ -2342,6 +2330,8 @@ void main() {
         final initialSetup = BaseTimelineSetup(
           uid: uid,
           updatedAt: DateTime.now(),
+          classLogicalAssetId: 'cls-draft-photo-orig',
+          classLogicalAssetR2Key: 'users/$uid/orig.jpg',
           classBlocks: const [
             TimelineBlockDraft(
               id: 'cls-draft-1',
@@ -2419,10 +2409,8 @@ void main() {
         );
 
         await tester.pumpAndSettle();
-        // Go to Choose Source -> Manual -> Review
-        await tester.tap(find.text('Change setup'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Set up manually'));
+        // Go to Review via Edit schedule
+        await tester.tap(find.text('Edit schedule'));
         await tester.pumpAndSettle();
 
         expect(find.text('Review Timetable'), findsOneWidget);

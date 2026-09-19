@@ -15,12 +15,16 @@ class EatingSourceSelectionView extends StatelessWidget {
   final VoidCallback onBuildPersonalized;
   final VoidCallback onImportPhoto;
   final VoidCallback onCreateManually;
+  final String? errorMessage;
+  final VoidCallback? onClearError;
 
   const EatingSourceSelectionView({
     super.key,
     required this.onBuildPersonalized,
     required this.onImportPhoto,
     required this.onCreateManually,
+    this.errorMessage,
+    this.onClearError,
   });
 
   @override
@@ -30,6 +34,47 @@ class EatingSourceSelectionView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (errorMessage != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: OptivusColors.danger.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: OptivusColors.danger.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    size: 16,
+                    color: OptivusColors.danger,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      errorMessage!,
+                      style: const TextStyle(
+                        color: OptivusColors.danger,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  if (onClearError != null)
+                    IconButton(
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        size: 16,
+                        color: OptivusColors.textSecondary,
+                      ),
+                      onPressed: onClearError,
+                    ),
+                ],
+              ),
+            ),
+          ],
           // Option 1: Build Balanced Plan
           BaseTimelineSourceActionCard(
             title: 'Build Balanced Plan',

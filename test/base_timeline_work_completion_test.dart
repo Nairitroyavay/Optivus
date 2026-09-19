@@ -2875,9 +2875,7 @@ void main() {
           equals('Edit schedule'),
         );
         expect(
-          WorkPresentationUtils.currentSetupSourceButtonLabel(
-            lifeRole: bRole,
-          ),
+          WorkPresentationUtils.currentSetupSourceButtonLabel(lifeRole: bRole),
           equals('Change source'),
         );
         expect(
@@ -3921,22 +3919,32 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.byKey(const Key('work-setup-profile-summary-card')), findsOneWidget);
+        expect(
+          find.byKey(const Key('work-setup-profile-summary-card')),
+          findsOneWidget,
+        );
         expect(find.text('WORK PROFILE'), findsOneWidget);
         expect(find.text('Staff Software Engineer'), findsOneWidget);
         expect(find.text('Google · Cloud Infrastructure'), findsOneWidget);
         expect(find.text('Job'), findsOneWidget);
         expect(find.text('Hybrid'), findsOneWidget);
-        expect(find.text('2 work blocks scheduled each weekday (8h)'), findsOneWidget);
+        expect(
+          find.text('2 work blocks scheduled each weekday (8h)'),
+          findsOneWidget,
+        );
         expect(find.text('Schedule Photo'), findsOneWidget);
 
         // Tap View photo
-        await tester.tap(find.byKey(const Key('work-setup-profile-view-photo-button')));
+        await tester.tap(
+          find.byKey(const Key('work-setup-profile-view-photo-button')),
+        );
         await tester.pumpAndSettle();
         expect(viewCalled, isTrue);
 
         // Tap Change source
-        await tester.tap(find.byKey(const Key('work-setup-profile-change-source-button')));
+        await tester.tap(
+          find.byKey(const Key('work-setup-profile-change-source-button')),
+        );
         await tester.pumpAndSettle();
         expect(changeCalled, isTrue);
       },
@@ -4120,9 +4128,13 @@ void main() {
                     ),
                   ),
               ),
-              baseTimelineSetupRepositoryProvider.overrideWithValue(fakeSetupRepo),
+              baseTimelineSetupRepositoryProvider.overrideWithValue(
+                fakeSetupRepo,
+              ),
               routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
-              routineTransactionRepositoryProvider.overrideWithValue(fakeTxRepo),
+              routineTransactionRepositoryProvider.overrideWithValue(
+                fakeTxRepo,
+              ),
             ],
             child: MaterialApp(
               theme: ThemeData.dark(),
@@ -4133,14 +4145,21 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('Existing Shift'), findsOneWidget);
-        expect(find.byKey(const Key('work-current-setup-add-block-button')), findsOneWidget);
+        expect(
+          find.byKey(const Key('work-current-setup-add-block-button')),
+          findsNothing,
+        );
 
-        // Tap Add Work Block
-        await tester.tap(find.byKey(const Key('work-current-setup-add-block-button')));
+        // Tap Edit schedule to enter editor
+        await tester.tap(find.text('Edit schedule'));
         await tester.pumpAndSettle();
 
-        // Directly opens edit sheet for the new draft block without going to source selection!
-        expect(find.text('Add Work Block'), findsNWidgets(2));
+        // In review/edit mode, tap Add Work Block
+        expect(find.text('Edit Work Schedule'), findsOneWidget);
+        await tester.tap(find.text('Add Work Block'));
+        await tester.pumpAndSettle();
+
+        // Directly opens edit sheet for the new draft block!
         expect(find.text('ACTIVITY'), findsOneWidget);
         expect(find.text('PROFESSIONAL CONTEXT'), findsOneWidget);
         expect(find.text('SCHEDULE'), findsOneWidget);
@@ -4148,6 +4167,10 @@ void main() {
 
         // Canceling leaves canonical setup untouched
         await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+
+        // Exit review back to Current Setup
+        await tester.tap(find.byIcon(Icons.close_rounded));
         await tester.pumpAndSettle();
 
         expect(find.text('Existing Shift'), findsOneWidget);
@@ -4322,7 +4345,10 @@ void main() {
           blockType: TimelineBlockDraft.hardBlockKey,
         );
 
-        expect(legacyBlock.effectiveWorkDepartmentOrProject, equals('Engineering Platform Services'));
+        expect(
+          legacyBlock.effectiveWorkDepartmentOrProject,
+          equals('Engineering Platform Services'),
+        );
       },
     );
   });

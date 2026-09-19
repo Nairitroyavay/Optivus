@@ -8,6 +8,7 @@ import 'package:optivus/core/theme/optivus_radii.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/class_timeline_adapter.dart';
+import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/classes_current_setup_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/classes_review_view.dart';
@@ -468,7 +469,7 @@ class _ClassesBaseSetupScreenState
         return BaseTimelineSaveSuccessView(
           title: 'Classes updated',
           subtitle: 'Your new timetable is now active.',
-          accent: OptivusColors.routineAccent,
+          accent: OptivusColors.blueAccent,
           onComplete: () {
             if (!mounted) return;
             controller.dismissSuccess();
@@ -501,6 +502,9 @@ class _ClassesBaseSetupScreenState
           onReloadLatestSetup: setup == null
               ? null
               : () => controller.reloadFromCanonical(setup),
+          isEditing:
+              setup != null &&
+              setup.snapshotFor(BaseTimelineSection.classes).isConfigured,
         );
 
       case ClassesSetupStage.currentSetup:

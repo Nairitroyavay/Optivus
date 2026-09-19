@@ -237,6 +237,9 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
             accent: OptivusColors.warning,
             onBack: widget.onBack,
             primaryButtonLabel: primaryLabel,
+            primaryButtonKey: const Key(
+              'base-timeline-header-edit-schedule-button',
+            ),
             onPrimaryAction: snapshot.isConfigured
                 ? (widget.onEditSchedule ?? widget.onChangeSetup)
                 : widget.onChangeSetup,
@@ -321,48 +324,6 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
                         onFrontSelected: (id) =>
                             setState(() => _frontBlockId = id),
                         styleBuilder: (entry) => adapter.styleForEntry(entry),
-                        bottomAction:
-                            (widget.onAddBlock != null && snapshot.isConfigured)
-                            ? Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: Center(
-                                  child: FilledButton.tonalIcon(
-                                    key: const Key(
-                                      'work-current-setup-add-block-button',
-                                    ),
-                                    icon: const Icon(
-                                      Icons.add_rounded,
-                                      size: 16,
-                                    ),
-                                    label: Text(
-                                      WorkPresentationUtils.isBusinessProfile(
-                                            widget.lifeRole,
-                                          )
-                                          ? 'Add Business Block'
-                                          : 'Add Work Block',
-                                    ),
-                                    style: FilledButton.styleFrom(
-                                      backgroundColor: Colors.white.withValues(
-                                        alpha: 0.12,
-                                      ),
-                                      foregroundColor:
-                                          OptivusColors.textPrimary,
-                                      side: const BorderSide(
-                                        color: OptivusColors.borderStandard,
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                        vertical: 10,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                    ),
-                                    onPressed: widget.onAddBlock,
-                                  ),
-                                ),
-                              )
-                            : null,
                         blockBuilder: (context, positioned) {
                           final block = blockMap[positioned.entry.sourceId];
                           final canPromote =

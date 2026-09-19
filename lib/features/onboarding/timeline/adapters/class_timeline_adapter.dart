@@ -20,27 +20,35 @@ class ClassTimelineAdapter
 
   /// Translates [ClassRoutineBlock] into neutral [TimelineEntry].
   @override
-  List<TimelineEntry> toEntries(ClassRoutineBlock block, {bool? isEditable}) {
+  List<TimelineEntry> toEntries(
+    ClassRoutineBlock block, {
+    bool? isEditable,
+    double? contentWidth,
+    double textScale = 1.0,
+  }) {
     // Content-aware desired/minimum height calculation:
-    // Base title + time range: 56px
-    // + courseCode / classType: 18px
-    // + section: 16px
-    // + room / professor: 18px
-    // + notes: 20px
-    double minHeight = 56.0;
+    // Base title + time range: 56px * textScale
+    // + courseCode / classType: 18px * textScale
+    // + section: 16px * textScale
+    // + room / professor: 18px * textScale
+    // + notes: 20px * textScale
+    double minHeight = 56.0 * textScale;
     if (block.courseCode.isNotEmpty || block.classType.isNotEmpty) {
-      minHeight += 18.0;
+      minHeight += 18.0 * textScale;
     }
     if (block.section.isNotEmpty) {
-      minHeight += 16.0;
+      minHeight += 16.0 * textScale;
     }
     if (block.room.isNotEmpty || block.professor.isNotEmpty) {
-      minHeight += 18.0;
+      minHeight += 18.0 * textScale;
     }
     if (block.notes.isNotEmpty) {
-      minHeight += 20.0;
+      minHeight += 20.0 * textScale;
     }
-    minHeight = minHeight.clamp(56.0, 130.0);
+    if (contentWidth != null && contentWidth < 160) {
+      minHeight += 16.0 * textScale;
+    }
+    minHeight = minHeight.clamp(56.0, 160.0 * textScale);
 
     String? subtitle;
     if (block.room.isNotEmpty) {

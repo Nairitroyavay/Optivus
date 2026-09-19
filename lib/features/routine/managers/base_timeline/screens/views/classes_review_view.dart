@@ -9,6 +9,7 @@ import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.da
 import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/class_setup_error_mapper.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_empty_draft_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/class_timeline_card.dart';
 
@@ -34,6 +35,7 @@ class ClassesReviewView extends StatefulWidget {
   final ValueChanged<String>? onFrontSelected;
   final bool isConcurrencyConflict;
   final VoidCallback? onReloadLatestSetup;
+  final bool isEditing;
 
   const ClassesReviewView({
     super.key,
@@ -57,6 +59,7 @@ class ClassesReviewView extends StatefulWidget {
     this.onFrontSelected,
     this.isConcurrencyConflict = false,
     this.onReloadLatestSetup,
+    this.isEditing = false,
   });
 
   @override
@@ -79,9 +82,6 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
       defaultEditable: true,
     );
 
-    final entries = widget.workingBlocks
-        .expand((b) => adapter.toEntries(b))
-        .toList();
     final blockMap = {for (final b in widget.workingBlocks) b.id: b};
 
     final sanitizedIssues = ClassSetupErrorMapper.sanitizeDroppedExamples(
@@ -175,9 +175,13 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
                       size: 18,
                       color: OptivusColors.blueAccent,
                     ),
-                    label: const Text(
-                      'Change photo',
-                      style: TextStyle(
+                    label: Text(
+                      (widget.workingLocalPreviewPath != null ||
+                              widget.workingR2Key != null ||
+                              widget.workingAssetId != null)
+                          ? 'Change photo'
+                          : 'Add photo',
+                      style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         color: OptivusColors.blueAccent,
                       ),
@@ -315,76 +319,70 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
           // Timeline View (Hero)
           Expanded(
             child: widget.workingBlocks.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.calendar_today_outlined,
-                            size: 48,
-                            color: OptivusColors.textSecondary.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'No classes scheduled',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: OptivusColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            'Tap "Add Class" or scan another photo to get started.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: OptivusColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                ? BaseTimelineEmptyDraftView(
+                    icon: Icons.school_outlined,
+                    title: 'No classes scheduled yet',
+                    subtitle:
+                        'Add your weekly classes or scan a timetable to build your academic schedule.',
+                    actionLabel: 'Add your first class',
+                    onAction: widget.onAddClass,
+                    accent: OptivusColors.blueAccent,
                   )
-                : FullScreenTimelineScaffold(
-                    entries: entries,
-                    selectedDay: widget.selectedDay,
-                    onDayChanged: widget.onDayChanged,
-                    scrollController: _scrollController,
-                    enableHaptics: true,
-                    overlapPresentation:
-                        TimelineOverlapPresentation.frontAndExposed,
-                    frontEntryId: widget.frontBlockId,
-                    onFrontSelected: widget.onFrontSelected,
-                    styleBuilder: (entry) => adapter.styleForEntry(entry),
-                    blockBuilder: (context, positioned) {
-                      final block = blockMap[positioned.entry.sourceId];
-                      return ClassTimelineCard(
-                        positioned: positioned,
-                        block: block,
-                        isEditable: true,
-                        accent: OptivusColors.blueAccent,
-                        onTap: () {
-                          if (positioned.hasOverlap && !positioned.isFront) {
-                            HapticFeedback.lightImpact();
-                            widget.onFrontSelected?.call(positioned.entry.id);
-                          } else if (block != null) {
-                            widget.onEditBlock(block);
-                          }
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final textScale = MediaQuery.textScalerOf(
+                        context,
+                      ).scale(1.0);
+                      final layoutEntries = widget.workingBlocks
+                          .expand(
+                            (b) => adapter.toEntries(
+                              b,
+                              isEditable: true,
+                              contentWidth: constraints.maxWidth,
+                              textScale: textScale,
+                            ),
+                          )
+                          .toList();
+                      return FullScreenTimelineScaffold(
+                        entries: layoutEntries,
+                        selectedDay: widget.selectedDay,
+                        onDayChanged: widget.onDayChanged,
+                        scrollController: _scrollController,
+                        enableHaptics: true,
+                        overlapPresentation:
+                            TimelineOverlapPresentation.frontAndExposed,
+                        frontEntryId: widget.frontBlockId,
+                        onFrontSelected: widget.onFrontSelected,
+                        styleBuilder: (entry) => adapter.styleForEntry(entry),
+                        blockBuilder: (context, positioned) {
+                          final block = blockMap[positioned.entry.sourceId];
+                          return ClassTimelineCard(
+                            positioned: positioned,
+                            block: block,
+                            isEditable: true,
+                            accent: OptivusColors.blueAccent,
+                            onTap: () {
+                              if (positioned.hasOverlap &&
+                                  !positioned.isFront) {
+                                HapticFeedback.lightImpact();
+                                widget.onFrontSelected?.call(
+                                  positioned.entry.id,
+                                );
+                              } else if (block != null) {
+                                widget.onEditBlock(block);
+                              }
+                            },
+                          );
                         },
+                        onEntryTapped: null,
+                        accent: OptivusColors.blueAccent,
+                        mode: TimelineMode.fullScreenEditable,
+                        visibleRangePolicy:
+                            TimelineVisibleRangePolicy.contentAdaptive,
+                        stretchPolicy: TimelineStretchPolicy.constraintBased,
+                        emptyDayMessage: 'No classes on this day.',
                       );
                     },
-                    onEntryTapped: null,
-                    accent: OptivusColors.blueAccent,
-                    mode: TimelineMode.fullScreenEditable,
-                    visibleRangePolicy:
-                        TimelineVisibleRangePolicy.contentAdaptive,
-                    stretchPolicy: TimelineStretchPolicy.constraintBased,
-                    emptyDayMessage: 'No classes on this day.',
                   ),
           ),
 
@@ -417,6 +415,7 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
             child: SizedBox(
               height: 52,
               child: FilledButton(
+                key: const Key('classes-review-save-button'),
                 style: FilledButton.styleFrom(
                   backgroundColor: OptivusColors.blueAccent,
                   disabledBackgroundColor: OptivusColors.blueAccent.withValues(

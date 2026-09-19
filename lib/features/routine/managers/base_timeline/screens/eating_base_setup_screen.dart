@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_radii.dart';
+import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/eating_current_setup_view.dart';
@@ -624,6 +625,11 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       );
     }
 
+    // Error stage
+    if (state.stage == EatingSetupStage.error) {
+      return _buildErrorView(setup, state, uid);
+    }
+
     // Source selection stage
     if (state.stage == EatingSetupStage.chooseSource) {
       return SafeArea(
@@ -637,6 +643,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
             ),
             Expanded(
               child: EatingSourceSelectionView(
+                errorMessage: state.errorMessage,
+                onClearError: () => controller.clearError(),
                 onBuildPersonalized: () {
                   if (setup != null) controller.editCurrentMealPlan(setup);
                   _openPlanSettingsSheet(isBuildingNew: true);
@@ -648,7 +656,6 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                 onCreateManually: () {
                   if (setup != null) {
                     controller.startManualSetup(setup);
-                    _addMealBlock();
                   }
                 },
               ),
@@ -748,6 +755,8 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
             ),
             Expanded(
               child: EatingSourceSelectionView(
+                errorMessage: state.errorMessage,
+                onClearError: () => controller.clearError(),
                 onBuildPersonalized: () {
                   if (setup != null) controller.editCurrentMealPlan(setup);
                   _openPlanSettingsSheet(isBuildingNew: true);
@@ -761,7 +770,6 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
                       setup ??
                       BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
                   controller.startManualSetup(effectiveSetup);
-                  _addMealBlock();
                 },
               ),
             ),
@@ -801,6 +809,119 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
           controller.reloadFromCanonical(setup);
         }
       },
+    );
+  }
+
+  Widget _buildErrorView(
+    BaseTimelineSetup? setup,
+    EatingSetupState state,
+    String uid,
+  ) {
+    final controller = ref.read(eatingSetupControllerProvider.notifier);
+
+    return SafeArea(
+      key: const ValueKey('eating-error-stage'),
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: OnboardingGlassCard(
+              radius: OptivusRadii.surfaceLarge,
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: OptivusColors.danger.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(
+                        OptivusRadii.controlCompact,
+                      ),
+                      border: Border.all(
+                        color: OptivusColors.danger.withValues(alpha: 0.35),
+                        width: 1,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.warning_amber_rounded,
+                      color: OptivusColors.danger,
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Meal Plan Processing Issue',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: OptivusColors.textPrimary,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    state.errorMessage ??
+                        'An error occurred while building your meal plan.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: OptivusColors.textSecondary,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  if (state.workingBlocks.isNotEmpty) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: OptivusColors.roseAccent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              OptivusRadii.controlCompact,
+                            ),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onPressed: () =>
+                            controller.keepPreviousDraft(setup, uid: uid),
+                        child: const Text(
+                          'Review Current Draft',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: OptivusColors.textPrimary,
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.25),
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(
+                            OptivusRadii.controlCompact,
+                          ),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: () => _handleEatingBack(setup, state, uid),
+                      child: const Text('Back to Setup'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

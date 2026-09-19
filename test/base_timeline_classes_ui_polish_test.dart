@@ -11,6 +11,7 @@ import 'package:optivus/features/routine/managers/base_timeline/screens/views/cl
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/classes_review_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_ai_thinking_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_setup_context_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/class_detail_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/class_timeline_card.dart';
 import 'package:optivus/models/onboarding_draft.dart';
@@ -494,18 +495,14 @@ void main() {
           ),
         );
 
-        // Verify "Change setup" CTA exists
-        final ctaFinder = find.text('Change setup');
+        // Verify "Edit schedule" CTA exists
+        final ctaFinder = find.text('Edit schedule');
         expect(ctaFinder, findsOneWidget);
 
-        // Verify 140px large photo preview card directly below header
-        final previewFinder = find.byType(BaseTimelinePhotoPreviewCard);
-        expect(previewFinder, findsOneWidget);
-        final previewCard = tester.widget<BaseTimelinePhotoPreviewCard>(
-          previewFinder,
-        );
-        expect(previewCard.isCompactRow, isFalse);
-        expect(previewCard.height, 140.0);
+        // Verify BaseTimelineSetupContextCard directly below header
+        final contextCardFinder = find.byType(BaseTimelineSetupContextCard);
+        expect(contextCardFinder, findsOneWidget);
+        expect(find.text('View photo'), findsOneWidget);
       },
     );
 

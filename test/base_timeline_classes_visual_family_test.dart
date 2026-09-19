@@ -11,6 +11,7 @@ import 'package:optivus/features/routine/managers/base_timeline/screens/views/cl
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/classes_review_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/classes_source_selection_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_setup_context_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/class_timeline_card.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 
@@ -77,16 +78,16 @@ void main() {
         // Header Summary uses 'classes', not 'blocks'
         expect(find.text('Timetable photo · 1 classes'), findsOneWidget);
 
-        // Top-right Change setup FilledButton.icon with Icons.edit_calendar_rounded
-        final changeSetupFinder = find.widgetWithText(
+        // Top-right Edit schedule FilledButton.icon with Icons.edit_calendar_rounded
+        final editScheduleFinder = find.widgetWithText(
           FilledButton,
-          'Change setup',
+          'Edit schedule',
         );
-        expect(changeSetupFinder, findsOneWidget);
+        expect(editScheduleFinder, findsOneWidget);
         expect(find.byIcon(Icons.edit_calendar_rounded), findsOneWidget);
 
-        // Tap Change setup
-        await tester.tap(changeSetupFinder);
+        // Tap Edit schedule
+        await tester.tap(editScheduleFinder);
         expect(changedSetup, isTrue);
 
         // Tap Back button
@@ -148,7 +149,7 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.text('Classes'), findsOneWidget);
-      expect(find.text('Change setup'), findsOneWidget);
+      expect(find.text('Edit schedule'), findsOneWidget);
     });
   });
 
@@ -201,26 +202,22 @@ void main() {
           ),
         );
 
-        // 1. Photo preview card exists and has height 140
-        final photoFinder = find.byType(BaseTimelinePhotoPreviewCard);
-        expect(photoFinder, findsOneWidget);
-        final photoCard = tester.widget<BaseTimelinePhotoPreviewCard>(
-          photoFinder,
-        );
-        expect(photoCard.height, 140.0);
-        expect(photoCard.isCompactRow, isFalse);
+        // 1. Compact setup context card exists with photo action
+        final contextCardFinder = find.byType(BaseTimelineSetupContextCard);
+        expect(contextCardFinder, findsOneWidget);
+        expect(find.text('View photo'), findsOneWidget);
 
         // 2. Weekday chips exist
         final chipsFinder = find.byType(TimelineDayChips);
         expect(chipsFinder, findsOneWidget);
 
-        // 3. Vertical positions: Header top < Photo top < Chips top
+        // 3. Vertical positions: Header top < Context card top < Chips top
         final headerTop = tester.getTopLeft(find.text('Classes')).dy;
-        final photoTop = tester.getTopLeft(photoFinder).dy;
+        final cardTop = tester.getTopLeft(contextCardFinder).dy;
         final chipsTop = tester.getTopLeft(chipsFinder).dy;
 
-        expect(headerTop, lessThan(photoTop));
-        expect(photoTop, lessThan(chipsTop));
+        expect(headerTop, lessThan(cardTop));
+        expect(cardTop, lessThan(chipsTop));
       },
     );
 
@@ -440,8 +437,8 @@ void main() {
               home: Scaffold(
                 body: ClassesReviewView(
                   workingBlocks: const [],
-                  workingAssetId: null,
-                  workingR2Key: null,
+                  workingAssetId: 'test-asset-id',
+                  workingR2Key: 'test/photo.jpg',
                   workingLocalPreviewPath: null,
                   selectedDay: 1,
                   onDayChanged: (_) {},

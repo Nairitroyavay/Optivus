@@ -243,7 +243,7 @@ void main() {
       // Verifies Current Setup title & blocks
       expect(find.text('Classes'), findsOneWidget);
       expect(find.text('Physics 101'), findsOneWidget);
-      expect(find.text('Change setup'), findsOneWidget);
+      expect(find.text('Edit schedule'), findsOneWidget);
 
       // Tapping back button calls onBack
       final backBtn = find.byIcon(Icons.arrow_back_rounded);
@@ -435,6 +435,8 @@ void main() {
       final testSetup = BaseTimelineSetup(
         uid: 'user-manual-test',
         updatedAt: DateTime.now(),
+        classLogicalAssetId: 'c-asset',
+        classLogicalAssetR2Key: 'test/classes.jpg',
         classBlocks: const [
           TimelineBlockDraft(
             id: 'c-init',
@@ -486,7 +488,6 @@ void main() {
               fakeSetupRepo,
             ),
             routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
-            routineTransactionRepositoryProvider.overrideWithValue(fakeTxRepo),
             baseTimelineTransactionCoordinatorProvider.overrideWithValue(
               coordinator,
             ),
@@ -497,12 +498,8 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Tap Change setup
-      await tester.tap(find.text('Change setup'));
-      await tester.pumpAndSettle();
-
-      // Tap 'Set up manually'
-      await tester.tap(find.text('Set up manually'));
+      // Tap Edit schedule
+      await tester.tap(find.text('Edit schedule'));
       await tester.pumpAndSettle();
 
       // In review stage
@@ -600,11 +597,8 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Go to chooseSource -> Set up manually -> Review
-      await tester.tap(find.text('Change setup'));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('Set up manually'));
+      // Go to Review via Edit schedule
+      await tester.tap(find.text('Edit schedule'));
       await tester.pumpAndSettle();
 
       expect(find.text('Review Timetable'), findsOneWidget);

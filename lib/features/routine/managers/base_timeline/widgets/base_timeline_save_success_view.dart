@@ -9,7 +9,9 @@ class BaseTimelineSaveSuccessView extends StatefulWidget {
   final String title;
   final String subtitle;
   final Color accent;
-  final Duration duration;
+  final Duration entranceDuration;
+  final Duration holdDuration;
+  Duration get totalDuration => entranceDuration + holdDuration;
 
   const BaseTimelineSaveSuccessView({
     super.key,
@@ -17,7 +19,8 @@ class BaseTimelineSaveSuccessView extends StatefulWidget {
     required this.title,
     required this.subtitle,
     required this.accent,
-    this.duration = const Duration(milliseconds: 400),
+    this.entranceDuration = const Duration(milliseconds: 350),
+    this.holdDuration = const Duration(milliseconds: 650),
   });
 
   @override
@@ -31,25 +34,50 @@ class _BaseTimelineSaveSuccessViewState
   late final AnimationController _controller;
   late final Animation<double> _scaleAnimation;
   late final Animation<double> _fadeAnimation;
-  bool _didCompleteImmediately = false;
+  bool _didTriggerComplete = false;
+  bool _reducedMotion = false;
+
+  void _triggerComplete() {
+    if (_didTriggerComplete || !mounted) return;
+    _didTriggerComplete = true;
+    widget.onComplete();
+  }
 
   @override
   void initState() {
     super.initState();
     HapticFeedback.mediumImpact();
-    _controller = AnimationController(vsync: this, duration: widget.duration);
+    _controller = AnimationController(
+      vsync: this,
+      duration: widget.totalDuration,
+    );
+
+    final totalMs = widget.totalDuration.inMilliseconds;
+    final entranceMs = widget.entranceDuration.inMilliseconds;
+    final entranceEnd = totalMs > 0
+        ? (entranceMs / totalMs).clamp(0.0, 1.0)
+        : 1.0;
+
     _scaleAnimation = CurvedAnimation(
       parent: _controller,
-      curve: const Interval(0.0, 0.6, curve: Curves.easeOutBack),
+      curve: Interval(
+        0.0,
+        (entranceEnd * 0.9).clamp(0.0, 1.0),
+        curve: Curves.easeOutBack,
+      ),
     );
     _fadeAnimation = CurvedAnimation(
       parent: _controller,
-      curve: const Interval(0.0, 0.4, curve: Curves.easeIn),
+      curve: Interval(
+        0.0,
+        (entranceEnd * 0.6).clamp(0.0, 1.0),
+        curve: Curves.easeIn,
+      ),
     );
 
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        widget.onComplete();
+        _triggerComplete();
       }
     });
 
@@ -61,13 +89,13 @@ class _BaseTimelineSaveSuccessViewState
     super.didChangeDependencies();
     final disableAnimations =
         MediaQuery.maybeDisableAnimationsOf(context) ?? false;
-    if (disableAnimations && !_didCompleteImmediately) {
-      _didCompleteImmediately = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          widget.onComplete();
-        }
-      });
+    if (disableAnimations && !_reducedMotion) {
+      _reducedMotion = true;
+      if (widget.holdDuration == Duration.zero) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _triggerComplete();
+        });
+      }
     }
   }
 

@@ -11,7 +11,6 @@ import 'package:optivus/features/routine/managers/base_timeline/models/eating_pl
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_domain_engine.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
-import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_day_summary_bar.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_meal_detail_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/eating_plan_summary_card.dart';
 import 'package:optivus/state/app_state.dart';
@@ -21,7 +20,6 @@ import 'package:optivus/state/app_state.dart';
 /// Features:
 /// - Canonical responsive [BaseTimelineCurrentSetupHeader]
 /// - Compact contextual [EatingPlanSummaryCard]
-/// - Canonical [EatingDaySummaryBar]
 /// - Interactive Timeline hero with [FullScreenTimelineScaffold]
 /// - Tapping a front card opens [EatingMealDetailSheet]
 class EatingCurrentSetupView extends ConsumerStatefulWidget {
@@ -82,11 +80,6 @@ class _EatingCurrentSetupViewState
   @override
   Widget build(BuildContext context) {
     final snapshot = widget.setup.snapshotFor(BaseTimelineSection.eating);
-    const adapter = MealTimelineAdapter(accent: OptivusColors.roseAccent);
-
-    final entries = widget.setup.eatingBlocks
-        .expand((b) => adapter.toEntries(b))
-        .toList();
     final blockMap = {
       for (final block in widget.setup.eatingBlocks) block.id: block,
     };
@@ -138,48 +131,64 @@ class _EatingCurrentSetupViewState
                 : null,
           ),
 
-          // 4. Day summary bar
-          EatingDaySummaryBar(
-            blocks: widget.setup.eatingBlocks,
-            selectedDay: widget.selectedDay,
-            targetCalories: widget.setup.targetCalories,
-            targetProtein: widget.setup.targetProtein,
-          ),
-
-          // 5. Interactive Timeline hero
+          // 4. Interactive Timeline hero
           Expanded(
-            child: FullScreenTimelineScaffold(
-              entries: entries,
-              selectedDay: widget.selectedDay,
-              onDayChanged: widget.onDayChanged,
-              styleBuilder: (entry) => adapter.styleForEntry(entry),
-              overlapPresentation: TimelineOverlapPresentation.frontAndExposed,
-              frontEntryId: _frontBlockId,
-              onFrontSelected: (id) => setState(() => _frontBlockId = id),
-              blockBuilder: (context, positioned) {
-                final block = blockMap[positioned.entry.sourceId];
-                if (block == null) return const SizedBox.shrink();
-                return BaseTimelineDomainCard(
-                  positioned: positioned,
-                  block: block,
-                  domain: BaseTimelineCardDomain.eating,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final textScaler = MediaQuery.maybeTextScalerOf(context);
+                final textScale = textScaler?.scale(1.0) ?? 1.0;
+                final availableWidth = constraints.maxWidth > 72
+                    ? constraints.maxWidth - 72
+                    : constraints.maxWidth;
+                final adapter = MealTimelineAdapter(
                   accent: OptivusColors.roseAccent,
-                  isEditable: false,
-                  onTap: () {
-                    if (positioned.hasOverlap && !positioned.isFront) {
-                      HapticFeedback.lightImpact();
-                      setState(() => _frontBlockId = positioned.entry.id);
-                    } else {
-                      EatingMealDetailSheet.show(context, block);
-                    }
+                  contentWidth: availableWidth,
+                  textScale: textScale,
+                );
+                final entries = widget.setup.eatingBlocks
+                    .expand((b) => adapter.toEntries(b))
+                    .toList();
+
+                return FullScreenTimelineScaffold(
+                  entries: entries,
+                  selectedDay: widget.selectedDay,
+                  onDayChanged: widget.onDayChanged,
+                  styleBuilder: (entry) => adapter.styleForEntry(entry),
+                  overlapPresentation:
+                      TimelineOverlapPresentation.frontAndExposed,
+                  frontEntryId: _frontBlockId,
+                  onFrontSelected: (id) => setState(() => _frontBlockId = id),
+                  blockBuilder: (context, positioned) {
+                    final block = blockMap[positioned.entry.sourceId];
+                    if (block == null) return const SizedBox.shrink();
+                    return BaseTimelineDomainCard(
+                      positioned: positioned,
+                      block: block,
+                      domain: BaseTimelineCardDomain.eating,
+                      accent: OptivusColors.roseAccent,
+                      isEditable: false,
+                      onTap: () {
+                        if (positioned.hasOverlap && !positioned.isFront) {
+                          HapticFeedback.lightImpact();
+                          setState(() => _frontBlockId = positioned.entry.id);
+                        } else {
+                          EatingMealDetailSheet.show(
+                            context,
+                            block,
+                            onEdit: widget.onEditSchedule,
+                          );
+                        }
+                      },
+                    );
                   },
+                  accent: OptivusColors.roseAccent,
+                  mode: TimelineMode.previewReadOnly,
+                  visibleRangePolicy:
+                      TimelineVisibleRangePolicy.contentAdaptive,
+                  stretchPolicy: TimelineStretchPolicy.constraintBased,
+                  emptyDayMessage: 'No meals scheduled.',
                 );
               },
-              accent: OptivusColors.roseAccent,
-              mode: TimelineMode.previewReadOnly,
-              visibleRangePolicy: TimelineVisibleRangePolicy.contentAdaptive,
-              stretchPolicy: TimelineStretchPolicy.constraintBased,
-              emptyDayMessage: 'No meals scheduled.',
             ),
           ),
         ],

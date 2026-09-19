@@ -1598,10 +1598,12 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('Classes'), findsOneWidget);
-        expect(find.text('Change setup'), findsOneWidget);
+        expect(find.text('Edit schedule'), findsOneWidget);
         expect(find.text('Operating Systems'), findsOneWidget);
 
-        await tester.tap(find.text('Change setup'));
+        await tester.tap(find.byIcon(Icons.more_vert_rounded));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Change source'));
         await tester.pumpAndSettle();
 
         expect(find.text('Choose from Gallery'), findsOneWidget);

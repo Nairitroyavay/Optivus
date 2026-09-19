@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/theme/optivus_radii.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/class_timeline_adapter.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
@@ -8,7 +9,9 @@ import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timelin
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_section.dart';
 import 'package:optivus/features/routine/managers/base_timeline/models/base_timeline_setup.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_domain_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_setup_context_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/class_detail_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/class_timeline_card.dart';
 
@@ -60,49 +63,51 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
     super.dispose();
   }
 
-  Widget _buildRefreshPendingBanner(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: OptivusColors.warning.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: OptivusColors.warning.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.sync_problem_rounded,
-            size: 18,
-            color: OptivusColors.warning,
+  void _showPhotoDialog(BuildContext context, String? r2Key, String? assetId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: OptivusColors.backgroundBottom,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(OptivusRadii.surfaceLarge),
+        ),
+        insetPadding: const EdgeInsets.all(20),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  const Text(
+                    'Timetable Photo',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: OptivusColors.textPrimary,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    color: OptivusColors.textSecondary,
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: BaseTimelinePhotoPreviewCard(
+                  r2Key: r2Key,
+                  assetId: assetId,
+                  title: '',
+                  height: 320,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              widget.routineRefreshMessage ??
-                  'Setup saved. Updating your daily Routine projection is pending.',
-              style: const TextStyle(
-                fontSize: 12,
-                color: OptivusColors.textPrimary,
-              ),
-            ),
-          ),
-          if (widget.onRetryRefresh != null) ...[
-            const SizedBox(width: 8),
-            TextButton(
-              onPressed: widget.onRetryRefresh,
-              style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                foregroundColor: OptivusColors.warning,
-              ),
-              child: const Text(
-                'Retry',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -135,11 +140,13 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
             onBack: widget.onBack,
             primaryButtonLabel:
                 widget.primaryButtonLabel ??
-                (snapshot.isConfigured ? 'Change setup' : 'Set up Classes'),
+                (snapshot.isConfigured ? 'Edit schedule' : 'Set up Classes'),
             primaryButtonKey: const Key(
-              'base-timeline-header-change-setup-button',
+              'base-timeline-header-edit-schedule-button',
             ),
-            onPrimaryAction: widget.onChangeSetup,
+            onPrimaryAction: snapshot.isConfigured
+                ? (widget.onEditSchedule ?? widget.onChangeSetup)
+                : widget.onChangeSetup,
             changeSourceLabel: 'Change source',
             onChangeSource: snapshot.isConfigured
                 ? widget.onChangeSource
@@ -149,17 +156,40 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
           ),
 
           // Routine Refresh Pending Banner
-          if (widget.routineRefreshPending) _buildRefreshPendingBanner(context),
+          if (widget.routineRefreshPending && widget.onRetryRefresh != null)
+            BaseTimelineRefreshPendingBanner(
+              message: widget.routineRefreshMessage,
+              onRetry: widget.onRetryRefresh!,
+            ),
 
-          // 2. Large Timetable Photo Preview directly below header
-          if (hasSourcePhoto)
+          // 2. Compact Setup Context Card directly below header
+          if (snapshot.isConfigured || widget.routineBlocks.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: BaseTimelinePhotoPreviewCard(
-                r2Key: snapshot.sourceR2Key,
-                assetId: snapshot.sourceAssetId,
-                title: 'Timetable Photo',
-                height: 140,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: BaseTimelineSetupContextCard(
+                category: hasSourcePhoto ? 'Timetable photo' : 'Class schedule',
+                title: hasSourcePhoto
+                    ? 'Scanned Semester Timetable'
+                    : 'Manual Academic Schedule',
+                subtitle:
+                    '${widget.routineBlocks.length} classes active across your week',
+                accent: OptivusColors.blueAccent,
+                icon: hasSourcePhoto
+                    ? Icons.photo_library_outlined
+                    : Icons.school_outlined,
+                badges: [
+                  '${widget.routineBlocks.length} classes',
+                  if (hasSourcePhoto) 'Photo synced',
+                ],
+                actionLabel: hasSourcePhoto ? 'View photo' : null,
+                actionIcon: Icons.visibility_outlined,
+                onAction: hasSourcePhoto
+                    ? () => _showPhotoDialog(
+                        context,
+                        snapshot.sourceR2Key,
+                        snapshot.sourceAssetId,
+                      )
+                    : null,
               ),
             ),
 
@@ -187,7 +217,11 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
                       HapticFeedback.lightImpact();
                       setState(() => _frontBlockId = positioned.entry.id);
                     } else if (block != null) {
-                      ClassDetailSheet.show(context, block);
+                      ClassDetailSheet.show(
+                        context,
+                        block,
+                        onEdit: widget.onEditSchedule,
+                      );
                     }
                   },
                 );
@@ -198,7 +232,7 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
               geometryConfig: const TimelineGeometryConfig(
                 bottomPadding: 100.0,
               ),
-              visibleRangePolicy: TimelineVisibleRangePolicy.legacy,
+              visibleRangePolicy: TimelineVisibleRangePolicy.contentAdaptive,
               autoScrollToFirstEntry: false,
               stretchPolicy: TimelineStretchPolicy.constraintBased,
               emptyDayMessage: 'No classes on this day.',

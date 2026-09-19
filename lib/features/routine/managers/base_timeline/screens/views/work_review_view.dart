@@ -10,6 +10,7 @@ import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dar
 import 'package:optivus/features/routine/managers/base_timeline/services/work_presentation_utils.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_setup_error_mapper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_timeline_adapter.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_empty_draft_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/work_timeline_card.dart';
 
@@ -336,48 +337,27 @@ class _WorkReviewViewState extends State<WorkReviewView> {
           // 5. Timeline View (Hero)
           Expanded(
             child: widget.workingBlocks.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.work_outline_rounded,
-                            size: 48,
-                            color: OptivusColors.textSecondary.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            WorkPresentationUtils.noBlocksScheduledTitle(
-                              widget.lifeRole,
-                            ),
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: OptivusColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            widget.isEditing
-                                ? WorkPresentationUtils.emptyDraftExplanation(
-                                    widget.lifeRole,
-                                  )
-                                : WorkPresentationUtils.emptyReviewPrompt(
-                                    widget.lifeRole,
-                                  ),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: OptivusColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
+                ? BaseTimelineEmptyDraftView(
+                    icon:
+                        WorkPresentationUtils.isBusinessProfile(widget.lifeRole)
+                        ? Icons.business_center_outlined
+                        : Icons.work_outline_rounded,
+                    title: WorkPresentationUtils.noBlocksScheduledTitle(
+                      widget.lifeRole,
                     ),
+                    subtitle: widget.isEditing
+                        ? WorkPresentationUtils.emptyDraftExplanation(
+                            widget.lifeRole,
+                          )
+                        : WorkPresentationUtils.emptyReviewPrompt(
+                            widget.lifeRole,
+                          ),
+                    actionLabel:
+                        WorkPresentationUtils.isBusinessProfile(widget.lifeRole)
+                        ? 'Add your first business block'
+                        : 'Add your first work block',
+                    onAction: widget.onAddBlock,
+                    accent: OptivusColors.warning,
                   )
                 : LayoutBuilder(
                     builder: (context, constraints) {
