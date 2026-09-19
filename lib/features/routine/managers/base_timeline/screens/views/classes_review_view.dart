@@ -215,7 +215,7 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
                 color: OptivusColors.textPrimary,
               ),
               label: const Text(
-                'Add Class',
+                'Add class',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -392,9 +392,9 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
                         final hasOverlap = _hasOverlap(b, widget.workingBlocks);
                         final cardWidth =
                             WorkTimelineLayoutHelper.effectiveCardWidth(
-                          availableWidth: constraints.maxWidth,
-                          hasOverlap: hasOverlap,
-                        );
+                              availableWidth: constraints.maxWidth,
+                              hasOverlap: hasOverlap,
+                            );
                         return adapter.toEntries(
                           b,
                           contentWidth: cardWidth,
@@ -412,7 +412,8 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
                         overlapPresentation:
                             TimelineOverlapPresentation.frontAndExposed,
                         frontEntryId: widget.frontBlockId,
-                        onFrontSelected: (id) => widget.onFrontSelected?.call(id),
+                        onFrontSelected: (id) =>
+                            widget.onFrontSelected?.call(id),
                         styleBuilder: (entry) => adapter.styleForEntry(entry),
                         blockBuilder: (context, positioned) {
                           final block = blockMap[positioned.entry.sourceId];
@@ -425,7 +426,9 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
                               if (positioned.hasOverlap &&
                                   !positioned.isFront) {
                                 HapticFeedback.lightImpact();
-                                widget.onFrontSelected?.call(positioned.entry.id);
+                                widget.onFrontSelected?.call(
+                                  positioned.entry.id,
+                                );
                               } else if (block != null && !widget.isSaving) {
                                 widget.onEditBlock(block);
                               }
@@ -459,9 +462,8 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
                   key: const Key('classes-review-use-timetable-button'),
                   style: FilledButton.styleFrom(
                     backgroundColor: OptivusColors.blueAccent,
-                    disabledBackgroundColor: OptivusColors.blueAccent.withValues(
-                      alpha: 0.35,
-                    ),
+                    disabledBackgroundColor: OptivusColors.blueAccent
+                        .withValues(alpha: 0.35),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(OptivusRadii.lg),
                     ),
@@ -492,9 +494,11 @@ class _ClassesReviewViewState extends State<ClassesReviewView> {
                             ),
                           ],
                         )
-                      : const Text(
-                          'Use this timetable',
-                          style: TextStyle(
+                      : Text(
+                          widget.isEditing
+                              ? 'Save changes'
+                              : 'Use this timetable',
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                             color: Colors.white,

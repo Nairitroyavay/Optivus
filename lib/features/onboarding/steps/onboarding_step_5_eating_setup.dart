@@ -2172,8 +2172,10 @@ class _EatingTimelineBlock extends StatelessWidget {
                                 if (remaining > 0) {
                                   children.add(
                                     GestureDetector(
-                                      onTap: () =>
-                                          _showEatingBlockDetails(context, block),
+                                      onTap: () => _showEatingBlockDetails(
+                                        context,
+                                        block,
+                                      ),
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 8,
@@ -2182,7 +2184,9 @@ class _EatingTimelineBlock extends StatelessWidget {
                                         decoration: BoxDecoration(
                                           color: OptivusColors.roseAccent
                                               .withValues(alpha: 0.15),
-                                          borderRadius: BorderRadius.circular(8),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
                                           border: Border.all(
                                             color: OptivusColors.roseAccent
                                                 .withValues(alpha: 0.5),

@@ -294,13 +294,13 @@ class WorkPresentationUtils {
         case 'freelance':
           return isNew ? 'Add Freelance Block' : 'Edit Freelance Block';
         case 'job':
-          return isNew ? 'Add Work Block' : 'Edit Work Block';
+          return isNew ? 'Add work block' : 'Edit work block';
         case 'other':
           if (isBusinessProfile(lifeRole)) {
             return isNew ? 'Add Business Block' : 'Edit Business Block';
           }
           if (isWorkProfile(lifeRole)) {
-            return isNew ? 'Add Work Block' : 'Edit Work Block';
+            return isNew ? 'Add work block' : 'Edit work block';
           }
           return isNew
               ? 'Add Work / Business Block'
@@ -312,7 +312,7 @@ class WorkPresentationUtils {
       return isNew ? 'Add Business Block' : 'Edit Business Block';
     }
     if (isWorkProfile(lifeRole)) {
-      return isNew ? 'Add Work Block' : 'Edit Work Block';
+      return isNew ? 'Add work block' : 'Edit work block';
     }
     return isNew ? 'Add Work / Business Block' : 'Edit Work / Business Block';
   }
@@ -347,7 +347,7 @@ class WorkPresentationUtils {
       return 'Add Business Block';
     }
     if (isWorkProfile(lifeRole)) {
-      return 'Add Work Block';
+      return 'Add work block';
     }
     return 'Add Work / Business Block';
   }
@@ -405,7 +405,6 @@ class WorkPresentationUtils {
     final dayName = dayNames[selectedDay] ?? 'this day';
     return 'Nothing scheduled for $dayName.\nChoose another day or edit your schedule.';
   }
-
 
   /// Header title for Current Setup view.
   static String currentSetupHeaderTitle(String? lifeRole) {
@@ -496,12 +495,12 @@ class WorkPresentationUtils {
       return 'Set up Work / Business';
     }
     if (isBusinessProfile(lifeRole)) {
-      return 'Update Business Hours';
+      return 'Change Business source';
     }
     if (isWorkProfile(lifeRole)) {
-      return 'Update Work Schedule';
+      return 'Change Work source';
     }
-    return 'Update Work / Business';
+    return 'Change Work source';
   }
 
   /// Subtitle for Source Selection view.
@@ -610,7 +609,7 @@ class WorkPresentationUtils {
       return 'Tap "Add Business Block" or scan another photo to get started.';
     }
     if (isWorkProfile(lifeRole)) {
-      return 'Tap "Add Work Block" or scan another photo to get started.';
+      return 'Tap "Add work block" or scan another photo to get started.';
     }
     return 'Tap "Add Work / Business Block" or scan another photo to get started.';
   }

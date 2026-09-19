@@ -580,7 +580,10 @@ service cloud.firestore {
           "skinCareFacePhotoR2Key", "skinCareFacePhotoSkipped",
           "skinCareSkinType", "skinCareProblems", "skinCareBudget",
           "skinCarePreference", "skinCareSelectedProductNames",
-          "skinCareProductRecommendations", "skinCareSpecialCareNotes"
+          "skinCareProductRecommendations", "skinCareSpecialCareNotes",
+          "targetCaloriesOverride", "targetProteinOverride", "foodsToAvoid",
+          "eatingGeneratedPlanVersion", "eatingGeneratedInputFingerprint",
+          "eatingCustomized"
         ])
         && data.keys().hasAll([
           "uid", "updatedAt", "schemaVersion", "revision",
@@ -650,7 +653,13 @@ service cloud.firestore {
         && validBaseTimelineStringList(data.skinCareSelectedProductNames, 100)
         && data.skinCareProductRecommendations is list
         && data.skinCareProductRecommendations.size() <= 100
-        && validBaseTimelineStringList(data.skinCareSpecialCareNotes, 100);
+        && validBaseTimelineStringList(data.skinCareSpecialCareNotes, 100)
+        && (!data.keys().hasAny(["targetCaloriesOverride"]) || data.targetCaloriesOverride == null || (data.targetCaloriesOverride is int && data.targetCaloriesOverride >= 1))
+        && (!data.keys().hasAny(["targetProteinOverride"]) || data.targetProteinOverride == null || (data.targetProteinOverride is int && data.targetProteinOverride >= 1))
+        && (!data.keys().hasAny(["foodsToAvoid"]) || validBaseTimelineStringList(data.foodsToAvoid, 100))
+        && (!data.keys().hasAny(["eatingGeneratedPlanVersion"]) || data.eatingGeneratedPlanVersion == null || (data.eatingGeneratedPlanVersion is int && data.eatingGeneratedPlanVersion >= 1))
+        && (!data.keys().hasAny(["eatingGeneratedInputFingerprint"]) || validBaseTimelineNullableString(data.eatingGeneratedInputFingerprint))
+        && (!data.keys().hasAny(["eatingCustomized"]) || data.eatingCustomized is bool);
     }
 
     function validRoutineOccurrence(data, occurrenceId) {

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/core/theme/optivus_radii.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_4_schedule_models.dart';
 import 'package:optivus/features/onboarding/timeline/adapters/class_timeline_adapter.dart';
 import 'package:optivus/features/onboarding/timeline/models/timeline_geometry.dart';
@@ -90,8 +89,13 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
         final previewHeight = (screenHeight * 0.45).clamp(200.0, 420.0);
         return Dialog(
           backgroundColor: OptivusColors.backgroundBottom,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -216,9 +220,7 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final textScale = MediaQuery.textScalerOf(
-                  context,
-                ).scale(1.0);
+                final textScale = MediaQuery.textScalerOf(context).scale(1.0);
                 final entries = widget.routineBlocks.expand((b) {
                   final hasOverlap = _hasOverlap(b, widget.routineBlocks);
                   final cardWidth = WorkTimelineLayoutHelper.effectiveCardWidth(
@@ -272,10 +274,11 @@ class _ClassesCurrentSetupViewState extends State<ClassesCurrentSetupView> {
                   geometryConfig: const TimelineGeometryConfig(
                     bottomPadding: 100.0,
                   ),
-                  visibleRangePolicy: TimelineVisibleRangePolicy.contentAdaptive,
+                  visibleRangePolicy:
+                      TimelineVisibleRangePolicy.contentAdaptive,
                   autoScrollToFirstEntry: false,
                   stretchPolicy: TimelineStretchPolicy.constraintBased,
-                  emptyDayMessage: 'No classes on this day.',
+                  emptyDayMessage: 'No classes on this day',
                 );
               },
             ),

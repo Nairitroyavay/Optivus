@@ -22,7 +22,7 @@ import 'package:optivus/features/routine/managers/base_timeline/services/work_se
 import 'package:optivus/features/routine/managers/base_timeline/services/work_setup_error_mapper.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/work_timeline_adapter.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_current_setup_header.dart';
-import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
+
 import 'package:optivus/features/routine/managers/base_timeline/widgets/work_detail_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/work_setup_profile_summary_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/work_timeline_card.dart';
@@ -485,16 +485,11 @@ void main() {
 
         await tester.pumpAndSettle();
 
-        // 1. Initial screen: Tap "Set up Work" to enter Source Selection
-        expect(find.text('Set up Work'), findsWidgets);
-        await tester.tap(find.text('Set up Work').first);
-        await tester.pumpAndSettle();
-
         expect(find.byType(WorkSourceSelectionView), findsOneWidget);
-        expect(find.text('Update Work Schedule'), findsOneWidget);
+        expect(find.text('Set up Work Schedule'), findsOneWidget);
 
         // 2. Choose from Gallery
-        await tester.tap(find.text('Choose from Gallery'));
+        await tester.tap(find.text('Choose from gallery'));
         await tester.pumpAndSettle();
 
         // 3. Reaches WorkReviewView with 1 block scheduled
@@ -512,7 +507,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Returns to WorkCurrentSetupView
-        expect(find.byType(WorkCurrentSetupView), findsOneWidget);
+        expect(find.byType(WorkSourceSelectionView), findsOneWidget);
 
         // Candidate upload was retired!
         expect(
@@ -636,14 +631,15 @@ void main() {
 
         expect(find.text('Morning Shift'), findsOneWidget);
 
+        // Open overflow menu
+        await tester.tap(find.byIcon(Icons.more_vert_rounded));
+        await tester.pumpAndSettle();
         // Tap Change source -> Source Selection
-        await tester.tap(
-          find.byKey(const Key('work-setup-profile-change-source-button')),
-        );
+        await tester.tap(find.text('Change source'));
         await tester.pumpAndSettle();
 
         // Tap Choose from Gallery
-        await tester.tap(find.text('Choose from Gallery'));
+        await tester.tap(find.text('Choose from gallery'));
         await tester.pumpAndSettle();
 
         // Error message is displayed in error stage
@@ -802,8 +798,6 @@ void main() {
       await tester.pumpAndSettle();
 
       // Enter manual setup
-      await tester.tap(find.text('Set up Work').first);
-      await tester.pumpAndSettle();
 
       await tester.tap(find.text('Set up manually'));
       await tester.pumpAndSettle();
@@ -869,20 +863,17 @@ void main() {
 
         await tester.pumpAndSettle();
 
-        // 1. Enter manual setup
-        await tester.tap(find.text('Set up Work').first);
-        await tester.pumpAndSettle();
         await tester.tap(find.text('Set up manually'));
         await tester.pumpAndSettle();
 
         expect(find.byType(WorkReviewView), findsOneWidget);
 
-        // 2. Tap Add Work Block
-        await tester.tap(find.text('Add Work Block'));
+        // 2. Tap Add work block
+        await tester.tap(find.text('Add work block'));
         await tester.pumpAndSettle();
 
         // Edit sheet is shown (both the background review action button and the sheet title match)
-        expect(find.text('Add Work Block'), findsNWidgets(2));
+        expect(find.text('Add work block'), findsNWidgets(2));
 
         // Enter title
         final titleField = find.byKey(const ValueKey('base-work-title-field'));
@@ -992,7 +983,7 @@ void main() {
         await tester.tap(find.text('Morning Operations'));
         await tester.pumpAndSettle();
 
-        expect(find.text('Edit Work Block'), findsOneWidget);
+        expect(find.text('Edit work block'), findsOneWidget);
 
         // Scroll to the remove button in the sheet
         final removeButton = find.text('Remove work block');
@@ -1502,7 +1493,6 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.byType(BaseTimelinePhotoPreviewCard), findsOneWidget);
         expect(find.text('Change photo'), findsOneWidget);
         expect(find.byIcon(Icons.photo_library_outlined), findsOneWidget);
 
@@ -1551,7 +1541,6 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.byType(BaseTimelinePhotoPreviewCard), findsNothing);
         expect(find.text('Add photo'), findsOneWidget);
         expect(find.byIcon(Icons.camera_alt_outlined), findsOneWidget);
       },
@@ -1597,7 +1586,7 @@ void main() {
         await tester.tap(find.text('Open Edit Sheet'));
         await tester.pumpAndSettle();
 
-        expect(find.text('Edit Work Block'), findsOneWidget);
+        expect(find.text('Edit work block'), findsOneWidget);
 
         // Find Monday chip (Mon)
         final mondayChip = find.widgetWithText(FilterChip, 'Mon');
@@ -2210,7 +2199,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        expect(find.text('Update Work Schedule'), findsOneWidget);
+        expect(find.text('Change Work source'), findsOneWidget);
 
         // Review view
         await tester.pumpWidget(
@@ -2686,7 +2675,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Sheet is open
-        expect(find.text('Edit Work Block'), findsOneWidget);
+        expect(find.text('Edit work block'), findsOneWidget);
 
         // Enter Role and Organization, but leave Activity empty
         final roleField = find.byKey(const ValueKey('base-work-role-field'));
@@ -2705,7 +2694,7 @@ void main() {
         expect(find.text('Activity is required.'), findsOneWidget);
         expect(savedBlock, isNull);
         // Sheet remains open
-        expect(find.text('Edit Work Block'), findsOneWidget);
+        expect(find.text('Edit work block'), findsOneWidget);
 
         // Now enter Activity title
         final titleField = find.byKey(const ValueKey('base-work-title-field'));
@@ -2722,7 +2711,7 @@ void main() {
         expect(savedBlock!.workRole, equals('Lead Systems Architect'));
         expect(savedBlock!.workOrganization, equals('Optivus Technologies'));
         // Sheet dismissed
-        expect(find.text('Edit Work Block'), findsNothing);
+        expect(find.text('Edit work block'), findsNothing);
       },
     );
 
@@ -2880,7 +2869,7 @@ void main() {
         );
         expect(
           WorkPresentationUtils.sourceSelectionTitle(bRole),
-          equals('Update Business Hours'),
+          equals('Change Business source'),
         );
         expect(
           WorkPresentationUtils.sourceSelectionSubtitle(bRole),
@@ -2979,7 +2968,7 @@ void main() {
           );
           expect(
             WorkPresentationUtils.sourceSelectionTitle(wRole),
-            equals('Update Work Schedule'),
+            equals('Change Work source'),
           );
           expect(
             WorkPresentationUtils.sourceManualTitle(wRole),
@@ -2995,7 +2984,7 @@ void main() {
           );
           expect(
             WorkPresentationUtils.addBlockButtonLabel(wRole),
-            equals('Add Work Block'),
+            equals('Add work block'),
           );
           expect(
             WorkPresentationUtils.useScheduleCtaLabel(wRole),
@@ -3003,11 +2992,11 @@ void main() {
           );
           expect(
             WorkPresentationUtils.editorTitle(isNew: false, lifeRole: wRole),
-            equals('Edit Work Block'),
+            equals('Edit work block'),
           );
           expect(
             WorkPresentationUtils.editorTitle(isNew: true, lifeRole: wRole),
-            equals('Add Work Block'),
+            equals('Add work block'),
           );
           expect(
             WorkPresentationUtils.removeBlockLabel(wRole),
@@ -3071,7 +3060,7 @@ void main() {
           );
           expect(
             WorkPresentationUtils.sourceSelectionTitle(nRole),
-            equals('Update Work / Business'),
+            equals('Change Work source'),
           );
           expect(
             WorkPresentationUtils.sourceManualTitle(nRole),
@@ -3889,8 +3878,10 @@ void main() {
     testWidgets(
       'WorkSetupProfileSummaryCard renders consistent role, organization, department, badges, block count, and compact source row',
       (tester) async {
-        const summary = WorkProfileSummary(
-          headerTitle: 'Work Profile',
+        var viewCalled = false;
+
+        final summary = WorkProfileSummary(
+          headerTitle: 'WORK PROFILE',
           headline: 'Staff Software Engineer',
           subline: 'Google · Cloud Infrastructure',
           badges: ['Job', 'Hybrid'],
@@ -3898,9 +3889,6 @@ void main() {
           sourceLabel: 'Schedule Photo',
           hasSourcePhoto: true,
         );
-
-        bool viewCalled = false;
-        bool changeCalled = false;
 
         await tester.pumpWidget(
           MaterialApp(
@@ -3911,7 +3899,6 @@ void main() {
                 child: WorkSetupProfileSummaryCard(
                   summary: summary,
                   onViewPhoto: () => viewCalled = true,
-                  onChangeSource: () => changeCalled = true,
                 ),
               ),
             ),
@@ -3940,13 +3927,6 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(viewCalled, isTrue);
-
-        // Tap Change source
-        await tester.tap(
-          find.byKey(const Key('work-setup-profile-change-source-button')),
-        );
-        await tester.pumpAndSettle();
-        expect(changeCalled, isTrue);
       },
     );
 
@@ -4083,7 +4063,7 @@ void main() {
     );
 
     testWidgets(
-      'Direct block addition via + Add Work Block bottom action enters draft review/edit without starting setup from scratch',
+      'Direct block addition via + Add work block bottom action enters draft review/edit without starting setup from scratch',
       (tester) async {
         final now = DateTime.now();
         const block = TimelineBlockDraft(
@@ -4154,9 +4134,9 @@ void main() {
         await tester.tap(find.text('Edit schedule'));
         await tester.pumpAndSettle();
 
-        // In review/edit mode, tap Add Work Block
+        // In review/edit mode, tap Add work block
         expect(find.text('Edit Work Schedule'), findsOneWidget);
-        await tester.tap(find.text('Add Work Block'));
+        await tester.tap(find.text('Add work block'));
         await tester.pumpAndSettle();
 
         // Directly opens edit sheet for the new draft block!

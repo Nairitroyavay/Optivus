@@ -36,7 +36,10 @@ class WorkSourceSelectionView extends StatelessWidget {
   Widget build(BuildContext context) {
     final snapshot = setup.snapshotFor(BaseTimelineSection.work);
     final isConfigured = snapshot.isConfigured;
-    final viewTitle = WorkPresentationUtils.sourceSelectionTitle(lifeRole);
+    final viewTitle = WorkPresentationUtils.sourceSelectionTitle(
+      lifeRole,
+      isConfigured: isConfigured,
+    );
     final viewSubtitle = WorkPresentationUtils.sourceSelectionSubtitle(
       lifeRole,
       isConfigured: isConfigured,
@@ -48,8 +51,9 @@ class WorkSourceSelectionView extends StatelessWidget {
       title: viewTitle,
       subtitle: viewSubtitle,
       onBack: onCancel,
-      preservationNotice:
-          isConfigured ? WorkPresentationUtils.sourceDraftNotice(lifeRole) : null,
+      preservationNotice: isConfigured
+          ? WorkPresentationUtils.sourceDraftNotice(lifeRole)
+          : null,
       onRemoveSetup: isConfigured ? onRemoveSetup : null,
       removeLabel: WorkPresentationUtils.removeSetupLabel(lifeRole),
       currentSourcePreview: hasPhoto
@@ -74,7 +78,7 @@ class WorkSourceSelectionView extends StatelessWidget {
         ),
         BaseTimelineSourceActionCard(
           icon: Icons.camera_alt_rounded,
-          title: 'Take a Photo',
+          title: 'Take a photo',
           subtitle: WorkPresentationUtils.sourceCameraSubtitle(lifeRole),
           accent: OptivusColors.warning,
           onTap: () => onPickPhoto(ImageSource.camera),
@@ -82,7 +86,7 @@ class WorkSourceSelectionView extends StatelessWidget {
         const SizedBox(height: 12),
         BaseTimelineSourceActionCard(
           icon: Icons.photo_library_rounded,
-          title: 'Choose from Gallery',
+          title: 'Choose from gallery',
           subtitle: 'Upload a photo or screenshot from your device',
           accent: OptivusColors.warning,
           onTap: () => onPickPhoto(ImageSource.gallery),

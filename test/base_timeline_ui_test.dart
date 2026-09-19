@@ -414,9 +414,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Now on chooseSource
-      expect(find.text('Update Timetable'), findsOneWidget);
-      expect(find.text('Take a Photo'), findsOneWidget);
-      expect(find.text('Choose from Gallery'), findsOneWidget);
+      expect(find.text('Set up Classes'), findsWidgets);
+      expect(find.text('Take a photo'), findsOneWidget);
+      expect(find.text('Choose from gallery'), findsOneWidget);
       expect(find.text('Set up manually'), findsOneWidget);
 
       // Tap close button to cancel back
@@ -504,15 +504,15 @@ void main() {
 
       // In review stage
       expect(find.text('Review Timetable'), findsOneWidget);
-      expect(find.text('Use this timetable'), findsOneWidget);
+      expect(find.text('Save changes'), findsOneWidget);
       expect(find.text('Change photo'), findsOneWidget);
-      expect(find.text('Add Class'), findsOneWidget);
+      expect(find.text('Add class'), findsOneWidget);
 
       // In review mode, editable card shows edit icon
       expect(find.byIcon(Icons.edit_rounded), findsWidgets);
 
-      // Tap 'Use this timetable' to save
-      await tester.tap(find.text('Use this timetable'));
+      // Tap 'Save changes' to save
+      await tester.tap(find.text('Save changes'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
@@ -604,13 +604,13 @@ void main() {
       expect(find.text('Review Timetable'), findsOneWidget);
 
       // Attempt to save
-      await tester.tap(find.text('Use this timetable'));
+      await tester.tap(find.text('Save changes'));
       await tester.pumpAndSettle();
 
       // Should remain on Review, displaying inline error banner
       expect(find.text('Review Timetable'), findsOneWidget);
       expect(find.textContaining('Failed to save timetable'), findsOneWidget);
-      expect(find.text('Use this timetable'), findsOneWidget);
+      expect(find.text('Save changes'), findsOneWidget);
     },
   );
 
@@ -662,8 +662,8 @@ void main() {
       await tester.tap(find.text('Set up manually'));
       await tester.pumpAndSettle();
 
-      // Tap 'Add Class' to make it dirty
-      await tester.tap(find.text('Add Class'));
+      // Tap 'Add class' to make it dirty
+      await tester.tap(find.text('Add class').first);
       await tester.pumpAndSettle();
 
       // Enter a subject in the edit sheet
@@ -672,7 +672,7 @@ void main() {
         'New Class',
       );
       // Tap Save in sheet shell
-      await tester.tap(find.text('Save'));
+      await tester.tap(find.text('Apply changes'));
       await tester.pumpAndSettle();
 
       // Now dirty with 1 block. Tap close button on Review

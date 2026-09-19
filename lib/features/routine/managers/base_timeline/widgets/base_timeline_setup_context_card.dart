@@ -39,10 +39,7 @@ class BaseTimelineSetupContextCard extends StatelessWidget {
           color: OptivusColors.borderStandard.withValues(alpha: 0.6),
         ),
       ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 14,
-        vertical: 10,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -195,10 +192,7 @@ class BaseTimelineSetupContextCard extends StatelessWidget {
                   children: [
                     titleSection,
                     const SizedBox(height: 6),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: actionBtn,
-                    ),
+                    Align(alignment: Alignment.centerLeft, child: actionBtn),
                   ],
                 );
               }

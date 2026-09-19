@@ -235,7 +235,8 @@ class RoutinePreparedTimelineLayout {
         cardWidth,
         it.item,
         effectiveStatus: it.item.status,
-        canUndo: it.item.undoToPlannedAllowed ||
+        canUndo:
+            it.item.undoToPlannedAllowed ||
             it.item.status == RoutineStatus.skipped,
       );
       measuredItems.add(it.copyWith(minHeight: requiredH));

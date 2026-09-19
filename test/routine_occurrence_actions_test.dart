@@ -249,11 +249,7 @@ void main() {
         await repo.createRoutineItem(uid, entry.value);
         await historyRepo.appendHistory(
           uid,
-          onboardingOccurrence(
-            uid: uid,
-            itemId: entry.key,
-            date: date,
-          ),
+          onboardingOccurrence(uid: uid, itemId: entry.key, date: date),
         );
       }
       await notifier.loadForOwner(uid);
@@ -280,7 +276,10 @@ void main() {
       await waitForPending();
       await notifier.startRoutineItem('t_tracker', occurrenceDate: date);
       await waitForPending();
-      await notifier.recordMoneySavedAndComplete('t_money', occurrenceDate: date);
+      await notifier.recordMoneySavedAndComplete(
+        't_money',
+        occurrenceDate: date,
+      );
       await waitForPending();
       await notifier.checkIn('t_checkin', 'Avoided', occurrenceDate: date);
       await waitForPending();

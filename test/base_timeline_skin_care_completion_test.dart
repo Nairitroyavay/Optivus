@@ -565,7 +565,7 @@ void main() {
         // Tap Camera button -> Gallery
         await tester.tap(find.byIcon(Icons.camera_alt_outlined));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Choose from Gallery'));
+        await tester.tap(find.text('Choose from gallery'));
         await tester.pumpAndSettle();
 
         // Dialog to type products appears because photo had no products
@@ -792,7 +792,7 @@ void main() {
         expect(find.text('Night Skincare'), findsWidgets);
 
         // Save
-        await tester.tap(find.text('Save'));
+        await tester.tap(find.text('Apply changes'));
         await tester.pumpAndSettle();
 
         // Verify persisted setup in repository

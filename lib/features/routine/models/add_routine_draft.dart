@@ -145,7 +145,8 @@ class WorkDetailsDraft {
       workOrganization: identical(workOrganization, _draftSentinel)
           ? this.workOrganization
           : workOrganization as String?,
-      workDepartmentOrProject: identical(workDepartmentOrProject, _draftSentinel)
+      workDepartmentOrProject:
+          identical(workDepartmentOrProject, _draftSentinel)
           ? this.workDepartmentOrProject
           : workDepartmentOrProject as String?,
       workMode: identical(workMode, _draftSentinel)
@@ -292,37 +293,37 @@ class AddRoutineFixedState {
   });
 
   ClassDetailsDraft get classDetails => ClassDetailsDraft(
-        professor: professor,
-        courseCode: courseCode,
-        classType: classType,
-        sectionLabel: sectionLabel,
-        location: classLocation,
-      );
+    professor: professor,
+    courseCode: courseCode,
+    classType: classType,
+    sectionLabel: sectionLabel,
+    location: classLocation,
+  );
 
   WorkDetailsDraft get workDetails => WorkDetailsDraft(
-        workContextType: workContextType,
-        workRole: workRole,
-        workOrganization: workOrganization,
-        workDepartmentOrProject: workDepartmentOrProject,
-        workMode: workMode,
-        workBlockKind: workBlockKind,
-        location: workLocation,
-      );
+    workContextType: workContextType,
+    workRole: workRole,
+    workOrganization: workOrganization,
+    workDepartmentOrProject: workDepartmentOrProject,
+    workMode: workMode,
+    workBlockKind: workBlockKind,
+    location: workLocation,
+  );
 
   EatingDetailsDraft get eatingDetails => EatingDetailsDraft(
-        mealCategory: mealCategory,
-        mealSlot: mealSlot,
-        dishes: dishes,
-        caloriesEstimate: caloriesEstimate,
-        proteinEstimate: proteinEstimate,
-      );
+    mealCategory: mealCategory,
+    mealSlot: mealSlot,
+    dishes: dishes,
+    caloriesEstimate: caloriesEstimate,
+    proteinEstimate: proteinEstimate,
+  );
 
   SkinDetailsDraft get skinDetails => SkinDetailsDraft(
-        steps: steps,
-        skincareProducts: skincareProducts,
-        skincareMissingItems: skincareMissingItems,
-        skincareSlotLabel: skincareSlotLabel,
-      );
+    steps: steps,
+    skincareProducts: skincareProducts,
+    skincareMissingItems: skincareMissingItems,
+    skincareSlotLabel: skincareSlotLabel,
+  );
 
   AddRoutineFixedState copyWith({
     String? kind,
@@ -369,148 +370,146 @@ class AddRoutineFixedState {
       professor: isKindChange && !isClassTarget
           ? null
           : (classDetails != null
-              ? classDetails.professor
-              : (identical(professor, _draftSentinel)
-                  ? this.professor
-                  : professor as String?)),
+                ? classDetails.professor
+                : (identical(professor, _draftSentinel)
+                      ? this.professor
+                      : professor as String?)),
       courseCode: isKindChange && !isClassTarget
           ? null
           : (classDetails != null
-              ? classDetails.courseCode
-              : (identical(courseCode, _draftSentinel)
-                  ? this.courseCode
-                  : courseCode as String?)),
+                ? classDetails.courseCode
+                : (identical(courseCode, _draftSentinel)
+                      ? this.courseCode
+                      : courseCode as String?)),
       classType: isKindChange && !isClassTarget
           ? null
           : (classDetails != null
-              ? classDetails.classType
-              : (identical(classType, _draftSentinel)
-                  ? this.classType
-                  : classType as String?)),
+                ? classDetails.classType
+                : (identical(classType, _draftSentinel)
+                      ? this.classType
+                      : classType as String?)),
       sectionLabel: isKindChange && !isClassTarget
           ? null
           : (classDetails != null
-              ? classDetails.sectionLabel
-              : (identical(sectionLabel, _draftSentinel)
-                  ? this.sectionLabel
-                  : sectionLabel as String?)),
+                ? classDetails.sectionLabel
+                : (identical(sectionLabel, _draftSentinel)
+                      ? this.sectionLabel
+                      : sectionLabel as String?)),
       classLocation: isKindChange && !isClassTarget
           ? null
           : (classDetails != null
-              ? classDetails.location
-              : (identical(classLocation, _draftSentinel)
-                  ? this.classLocation
-                  : classLocation as String?)),
+                ? classDetails.location
+                : (identical(classLocation, _draftSentinel)
+                      ? this.classLocation
+                      : classLocation as String?)),
 
       // Work metadata (cleared if kind changes to non-work)
       workContextType: isKindChange && !isWorkTarget
           ? null
           : (workDetails != null
-              ? workDetails.workContextType
-              : (identical(workContextType, _draftSentinel)
-                  ? this.workContextType
-                  : workContextType as String?)),
+                ? workDetails.workContextType
+                : (identical(workContextType, _draftSentinel)
+                      ? this.workContextType
+                      : workContextType as String?)),
       workRole: isKindChange && !isWorkTarget
           ? null
           : (workDetails != null
-              ? workDetails.workRole
-              : (identical(workRole, _draftSentinel)
-                  ? this.workRole
-                  : workRole as String?)),
+                ? workDetails.workRole
+                : (identical(workRole, _draftSentinel)
+                      ? this.workRole
+                      : workRole as String?)),
       workOrganization: isKindChange && !isWorkTarget
           ? null
           : (workDetails != null
-              ? workDetails.workOrganization
-              : (identical(workOrganization, _draftSentinel)
-                  ? this.workOrganization
-                  : workOrganization as String?)),
+                ? workDetails.workOrganization
+                : (identical(workOrganization, _draftSentinel)
+                      ? this.workOrganization
+                      : workOrganization as String?)),
       workDepartmentOrProject: isKindChange && !isWorkTarget
           ? null
           : (workDetails != null
-              ? workDetails.workDepartmentOrProject
-              : (identical(workDepartmentOrProject, _draftSentinel)
-                  ? this.workDepartmentOrProject
-                  : workDepartmentOrProject as String?)),
+                ? workDetails.workDepartmentOrProject
+                : (identical(workDepartmentOrProject, _draftSentinel)
+                      ? this.workDepartmentOrProject
+                      : workDepartmentOrProject as String?)),
       workMode: isKindChange && !isWorkTarget
           ? null
           : (workDetails != null
-              ? workDetails.workMode
-              : (identical(workMode, _draftSentinel)
-                  ? this.workMode
-                  : workMode as String?)),
+                ? workDetails.workMode
+                : (identical(workMode, _draftSentinel)
+                      ? this.workMode
+                      : workMode as String?)),
       workBlockKind: isKindChange && !isWorkTarget
           ? null
           : (workDetails != null
-              ? workDetails.workBlockKind
-              : (identical(workBlockKind, _draftSentinel)
-                  ? this.workBlockKind
-                  : workBlockKind as String?)),
+                ? workDetails.workBlockKind
+                : (identical(workBlockKind, _draftSentinel)
+                      ? this.workBlockKind
+                      : workBlockKind as String?)),
       workLocation: isKindChange && !isWorkTarget
           ? null
           : (workDetails != null
-              ? workDetails.location
-              : (identical(workLocation, _draftSentinel)
-                  ? this.workLocation
-                  : workLocation as String?)),
+                ? workDetails.location
+                : (identical(workLocation, _draftSentinel)
+                      ? this.workLocation
+                      : workLocation as String?)),
 
       // Eating metadata (cleared if kind changes to non-eating)
       mealCategory: isKindChange && !isEatingTarget
           ? null
           : (eatingDetails != null
-              ? eatingDetails.mealCategory
-              : (identical(mealCategory, _draftSentinel)
-                  ? this.mealCategory
-                  : mealCategory as String?)),
+                ? eatingDetails.mealCategory
+                : (identical(mealCategory, _draftSentinel)
+                      ? this.mealCategory
+                      : mealCategory as String?)),
       mealSlot: isKindChange && !isEatingTarget
           ? null
           : (eatingDetails != null
-              ? eatingDetails.mealSlot
-              : (identical(mealSlot, _draftSentinel)
-                  ? this.mealSlot
-                  : mealSlot as String?)),
+                ? eatingDetails.mealSlot
+                : (identical(mealSlot, _draftSentinel)
+                      ? this.mealSlot
+                      : mealSlot as String?)),
       dishes: isKindChange && !isEatingTarget
           ? const []
           : (eatingDetails != null
-              ? eatingDetails.dishes
-              : (dishes ?? this.dishes)),
+                ? eatingDetails.dishes
+                : (dishes ?? this.dishes)),
       caloriesEstimate: isKindChange && !isEatingTarget
           ? null
           : (eatingDetails != null
-              ? eatingDetails.caloriesEstimate
-              : (identical(caloriesEstimate, _draftSentinel)
-                  ? this.caloriesEstimate
-                  : (caloriesEstimate as num?)?.toDouble())),
+                ? eatingDetails.caloriesEstimate
+                : (identical(caloriesEstimate, _draftSentinel)
+                      ? this.caloriesEstimate
+                      : (caloriesEstimate as num?)?.toDouble())),
       proteinEstimate: isKindChange && !isEatingTarget
           ? null
           : (eatingDetails != null
-              ? eatingDetails.proteinEstimate
-              : (identical(proteinEstimate, _draftSentinel)
-                  ? this.proteinEstimate
-                  : (proteinEstimate as num?)?.toDouble())),
+                ? eatingDetails.proteinEstimate
+                : (identical(proteinEstimate, _draftSentinel)
+                      ? this.proteinEstimate
+                      : (proteinEstimate as num?)?.toDouble())),
 
       // Skin Care metadata (cleared if kind changes to non-skin)
       steps: isKindChange && !isSkinTarget
           ? const []
-          : (skinDetails != null
-              ? skinDetails.steps
-              : (steps ?? this.steps)),
+          : (skinDetails != null ? skinDetails.steps : (steps ?? this.steps)),
       skincareProducts: isKindChange && !isSkinTarget
           ? const []
           : (skinDetails != null
-              ? skinDetails.skincareProducts
-              : (skincareProducts ?? this.skincareProducts)),
+                ? skinDetails.skincareProducts
+                : (skincareProducts ?? this.skincareProducts)),
       skincareMissingItems: isKindChange && !isSkinTarget
           ? const []
           : (skinDetails != null
-              ? skinDetails.skincareMissingItems
-              : (skincareMissingItems ?? this.skincareMissingItems)),
+                ? skinDetails.skincareMissingItems
+                : (skincareMissingItems ?? this.skincareMissingItems)),
       skincareSlotLabel: isKindChange && !isSkinTarget
           ? null
           : (skinDetails != null
-              ? skinDetails.skincareSlotLabel
-              : (identical(skincareSlotLabel, _draftSentinel)
-                  ? this.skincareSlotLabel
-                  : skincareSlotLabel as String?)),
+                ? skinDetails.skincareSlotLabel
+                : (identical(skincareSlotLabel, _draftSentinel)
+                      ? this.skincareSlotLabel
+                      : skincareSlotLabel as String?)),
     );
   }
 }
@@ -594,16 +593,10 @@ class AddRoutineTrackerState {
 class AddRoutineCheckInState {
   final String checkInType;
 
-  const AddRoutineCheckInState({
-    this.checkInType = 'Smoking',
-  });
+  const AddRoutineCheckInState({this.checkInType = 'Smoking'});
 
-  AddRoutineCheckInState copyWith({
-    String? checkInType,
-  }) {
-    return AddRoutineCheckInState(
-      checkInType: checkInType ?? this.checkInType,
-    );
+  AddRoutineCheckInState copyWith({String? checkInType}) {
+    return AddRoutineCheckInState(checkInType: checkInType ?? this.checkInType);
   }
 }
 
@@ -612,13 +605,9 @@ class AddRoutineCheckInState {
 class AddRoutineMoneyState {
   final String defaultTitle;
 
-  const AddRoutineMoneyState({
-    this.defaultTitle = 'Tiny money save',
-  });
+  const AddRoutineMoneyState({this.defaultTitle = 'Tiny money save'});
 
-  AddRoutineMoneyState copyWith({
-    String? defaultTitle,
-  }) {
+  AddRoutineMoneyState copyWith({String? defaultTitle}) {
     return AddRoutineMoneyState(
       defaultTitle: defaultTitle ?? this.defaultTitle,
     );
@@ -706,9 +695,9 @@ class AddRoutineDraft {
     final effectiveDate = initialDate ?? DateTime(now.year, now.month, now.day);
     final initialBestTime =
         (initialType == AddRoutineType.flexible ||
-         initialType == AddRoutineType.habit)
-            ? 'Morning'
-            : null;
+            initialType == AddRoutineType.habit)
+        ? 'Morning'
+        : null;
 
     return AddRoutineDraft(
       id: effectiveId,
@@ -788,8 +777,11 @@ class AddRoutineDraft {
     if (newType == type) return this;
 
     // Reset default-generated titles when leaving specialized types
-    final isDefaultCheckInTitle =
-        const ['Smoking', 'Alcohol', 'Junk food'].contains(title);
+    final isDefaultCheckInTitle = const [
+      'Smoking',
+      'Alcohol',
+      'Junk food',
+    ].contains(title);
     final isDefaultMoneyTitle = title == 'Tiny money save';
 
     String updatedTitle = title;
@@ -811,8 +803,8 @@ class AddRoutineDraft {
 
     final updatedBestTime =
         (newType == AddRoutineType.flexible || newType == AddRoutineType.habit)
-            ? (bestTime ?? 'Morning')
-            : null;
+        ? (bestTime ?? 'Morning')
+        : null;
 
     return AddRoutineDraft(
       id: id, // Stable identity preserved!

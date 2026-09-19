@@ -472,17 +472,19 @@ class EatingMealDetailSheet extends StatelessWidget {
                 const SizedBox(height: 6),
                 SizedBox(
                   width: double.infinity,
-                  child: FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: OptivusColors.roseAccent,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                  child: OutlinedButton.icon(
+                    key: const Key('eating-meal-detail-sheet-edit-button'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: OptivusColors.roseAccent,
+                      side: const BorderSide(color: OptivusColors.roseAccent),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    icon: const Icon(Icons.edit_rounded, size: 18),
+                    icon: const Icon(Icons.edit_outlined, size: 16),
                     label: Text(
-                      editLabel ?? 'Edit this Meal',
+                      editLabel ?? 'Edit this meal',
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,

@@ -499,7 +499,7 @@ class _FixedBaseSetupScreenState extends ConsumerState<FixedBaseSetupScreen> {
                                     ),
                                   )
                                 : const Text(
-                                    'Save',
+                                    'Apply changes',
                                     style: TextStyle(
                                       fontWeight: FontWeight.w700,
                                       color: Colors.white,

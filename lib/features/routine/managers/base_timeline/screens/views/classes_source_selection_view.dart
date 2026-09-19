@@ -35,7 +35,7 @@ class ClassesSourceSelectionView extends StatelessWidget {
     final hasPhoto =
         snapshot.sourceR2Key != null || snapshot.sourceAssetId != null;
 
-    const title = 'Update Timetable';
+    final title = isConfigured ? 'Change Classes source' : 'Set up Classes';
     final subtitle = isConfigured
         ? 'Your current setup stays active until you save a new one.'
         : 'Choose how to add your academic schedule';
@@ -73,7 +73,7 @@ class ClassesSourceSelectionView extends StatelessWidget {
         ),
         BaseTimelineSourceActionCard(
           icon: Icons.camera_alt_rounded,
-          title: 'Take a Photo',
+          title: 'Take a photo',
           subtitle: 'Capture a printed timetable or screen',
           accent: OptivusColors.blueAccent,
           onTap: () => onPickPhoto(ImageSource.camera),
@@ -81,7 +81,7 @@ class ClassesSourceSelectionView extends StatelessWidget {
         const SizedBox(height: 12),
         BaseTimelineSourceActionCard(
           icon: Icons.photo_library_rounded,
-          title: 'Choose from Gallery',
+          title: 'Choose from gallery',
           subtitle: 'Upload a photo or screenshot from your device',
           accent: OptivusColors.aquaAccent,
           onTap: () => onPickPhoto(ImageSource.gallery),

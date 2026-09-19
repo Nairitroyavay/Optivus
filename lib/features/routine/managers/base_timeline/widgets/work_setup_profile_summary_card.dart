@@ -7,13 +7,10 @@ import 'package:optivus/features/routine/managers/base_timeline/services/work_pr
 class WorkSetupProfileSummaryCard extends StatelessWidget {
   final WorkProfileSummary summary;
   final VoidCallback? onViewPhoto;
-  final VoidCallback? onChangeSource;
-
   const WorkSetupProfileSummaryCard({
     super.key,
     required this.summary,
     this.onViewPhoto,
-    this.onChangeSource,
   });
 
   @override
@@ -27,10 +24,7 @@ class WorkSetupProfileSummaryCard extends StatelessWidget {
           color: OptivusColors.borderStandard.withValues(alpha: 0.6),
         ),
       ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 14,
-        vertical: 10,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -194,27 +188,6 @@ class WorkSetupProfileSummaryCard extends StatelessWidget {
                           color: OptivusColors.warning,
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  if (onChangeSource != null)
-                    TextButton(
-                      key: const Key('work-setup-profile-change-source-button'),
-                      onPressed: onChangeSource,
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 2,
-                        ),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: const Text(
-                        'Change',
-                        style: TextStyle(
-                          color: OptivusColors.textSecondary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),

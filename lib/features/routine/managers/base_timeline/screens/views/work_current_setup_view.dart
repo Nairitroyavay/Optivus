@@ -72,8 +72,13 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
         final previewHeight = (screenHeight * 0.45).clamp(200.0, 420.0);
         return Dialog(
           backgroundColor: OptivusColors.backgroundBottom,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -284,7 +289,6 @@ class _WorkCurrentSetupViewState extends State<WorkCurrentSetupView> {
                         snapshot.sourceAssetId,
                       )
                     : null,
-                onChangeSource: widget.onChangeSource,
               ),
             ),
 

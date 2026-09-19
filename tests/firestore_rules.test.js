@@ -3786,6 +3786,9 @@ describe("Firestore Rules for baseTimelineSetup", () => {
       breakfastMinute: null, lunchMinute: null, dinnerMinute: null,
       snackMinute: null, extraSnackMinute: null, targetCalories: null,
       targetProtein: null, eatingPhotoAssetId: null, eatingPhotoR2Key: null,
+      targetCaloriesOverride: null, targetProteinOverride: null,
+      foodsToAvoid: [], eatingGeneratedPlanVersion: null,
+      eatingGeneratedInputFingerprint: null, eatingCustomized: false,
       fixedBlocks: [], skinCareSetupPath: null, skinCareSkipped: false,
       skinCareBlocks: [], skinCareProductNames: null,
       skinCareProductPhotoAssetId: null, skinCareProductPhotoR2Key: null,
@@ -3934,5 +3937,47 @@ describe("Firestore Rules for baseTimelineSetup", () => {
     expect(savedItem.data().workContextType).toBe("job");
     expect(savedItem.data().workMode).toBe("hybrid");
     expect(savedItem.data().workBlockKind).toBe("meeting");
+  });
+
+  it("accepts valid Eating generated metadata and overrides", async () => {
+    const db = ownerDb();
+    await assertSucceeds(
+      baseTimelineSetupRef(db).set(baseTimelineSetupData("user123", {
+        eatingGeneratedPlanVersion: 1,
+        eatingGeneratedInputFingerprint: "some-fingerprint",
+        eatingCustomized: false,
+        targetCaloriesOverride: 2000,
+        targetProteinOverride: 150,
+        foodsToAvoid: ["peanuts", "shellfish"]
+      }))
+    );
+  });
+
+  it("rejects invalid override types and bounds", async () => {
+    const db = ownerDb();
+    // Negative override
+    await assertFails(
+      baseTimelineSetupRef(db).set(baseTimelineSetupData("user123", {
+        targetCaloriesOverride: -500,
+      }))
+    );
+    // Invalid type
+    await assertFails(
+      baseTimelineSetupRef(db).set(baseTimelineSetupData("user123", {
+        targetProteinOverride: "high",
+      }))
+    );
+    // Invalid foodsToAvoid type
+    await assertFails(
+      baseTimelineSetupRef(db).set(baseTimelineSetupData("user123", {
+        foodsToAvoid: "peanuts",
+      }))
+    );
+    // Invalid eatingCustomized type
+    await assertFails(
+      baseTimelineSetupRef(db).set(baseTimelineSetupData("user123", {
+        eatingCustomized: "yes",
+      }))
+    );
   });
 });

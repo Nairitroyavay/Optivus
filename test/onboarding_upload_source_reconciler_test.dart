@@ -1048,10 +1048,7 @@ void main() {
           reconciled.stepCompleted[OnboardingStepId.todayReady.index],
           isFalse,
         );
-        expect(
-          reconciled.stepDirty[OnboardingStepId.todayReady.index],
-          isTrue,
-        );
+        expect(reconciled.stepDirty[OnboardingStepId.todayReady.index], isTrue);
         expect(reconciled.baseTimeline.validateEatingSetup(), isNotNull);
 
         final second = OnboardingUploadSourceReconciler.reconcile(

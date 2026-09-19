@@ -563,9 +563,9 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.text('Update Work Schedule'), findsOneWidget);
-      expect(find.text('Take a Photo'), findsOneWidget);
-      expect(find.text('Choose from Gallery'), findsOneWidget);
+      expect(find.text('Set up Work Schedule'), findsOneWidget);
+      expect(find.text('Take a photo'), findsOneWidget);
+      expect(find.text('Choose from gallery'), findsOneWidget);
       expect(find.text('Set up manually'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
@@ -609,7 +609,7 @@ void main() {
         expect(find.text('Review Work Schedule'), findsOneWidget);
         expect(find.text('No work blocks scheduled'), findsOneWidget);
         expect(find.text('Add photo'), findsOneWidget);
-        expect(find.text('Add Work Block'), findsOneWidget);
+        expect(find.text('Add work block'), findsOneWidget);
         expect(find.text('Use this work schedule'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },

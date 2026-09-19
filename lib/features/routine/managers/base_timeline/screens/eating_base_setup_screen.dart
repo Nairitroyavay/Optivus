@@ -172,36 +172,53 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
       ),
       builder: (ctx) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ListTile(
-                leading: const Icon(
-                  Icons.camera_alt_rounded,
-                  color: Colors.white,
+              const Text(
+                'Scan Meal Plan Photo',
+                style: TextStyle(
+                  color: OptivusColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
                 ),
-                title: const Text(
-                  'Take Photo',
-                  style: TextStyle(color: Colors.white),
-                ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _pickAndExtractPhoto(uid: uid, source: ImageSource.camera);
-                },
               ),
+              const SizedBox(height: 16),
               ListTile(
+                key: const ValueKey('eating-photo-source-gallery'),
                 leading: const Icon(
                   Icons.photo_library_rounded,
-                  color: Colors.white,
+                  color: OptivusColors.roseAccent,
                 ),
                 title: const Text(
-                  'Choose from Gallery',
-                  style: TextStyle(color: Colors.white),
+                  'Choose from gallery',
+                  style: TextStyle(
+                    color: OptivusColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
                   _pickAndExtractPhoto(uid: uid, source: ImageSource.gallery);
+                },
+              ),
+              ListTile(
+                key: const ValueKey('eating-photo-source-camera'),
+                leading: const Icon(
+                  Icons.camera_alt_rounded,
+                  color: OptivusColors.roseAccent,
+                ),
+                title: const Text(
+                  'Take a photo',
+                  style: TextStyle(
+                    color: OptivusColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickAndExtractPhoto(uid: uid, source: ImageSource.camera);
                 },
               ),
             ],
@@ -388,25 +405,6 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     );
   }
 
-  Future<void> _editBlockFromCurrentSetup(
-    BaseTimelineSetup setup,
-    TimelineBlockDraft block,
-    String uid,
-  ) async {
-    final controller = ref.read(eatingSetupControllerProvider.notifier);
-    controller.editCurrentMealPlan(setup);
-    await EatingMealEditSheet.show(
-      context: context,
-      block: block,
-      isNew: false,
-      onSave: (updated) async {
-        controller.updateBlock(updated);
-        return true;
-      },
-      onDelete: () => controller.deleteBlock(block.id),
-    );
-  }
-
   Future<void> _handleRemoveSetup(BaseTimelineSetup setup, String uid) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -485,42 +483,6 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildTopCancelBar({required VoidCallback onCancel, String? title}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          IconButton(
-            tooltip: 'Cancel',
-            icon: const Icon(
-              Icons.close_rounded,
-              color: OptivusColors.textPrimary,
-            ),
-            onPressed: onCancel,
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.white.withValues(alpha: 0.12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(OptivusRadii.md),
-                side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-              ),
-            ),
-          ),
-          if (title != null) ...[
-            const SizedBox(width: 12),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: OptivusColors.textPrimary,
-              ),
-            ),
-          ],
-        ],
       ),
     );
   }
@@ -664,35 +626,29 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
 
     // Source selection stage
     if (state.stage == EatingSetupStage.chooseSource) {
+      if (setup == null) {
+        return const SizedBox.shrink(); // Handled by canonical view if needed, but setup should be present
+      }
       return SafeArea(
         key: const ValueKey('eating-choose-source'),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildTopCancelBar(
-              onCancel: () => controller.cancelChooseSource(),
-              title: 'Change Eating Source',
-            ),
-            Expanded(
-              child: EatingSourceSelectionView(
-                errorMessage: state.errorMessage,
-                onClearError: () => controller.clearError(),
-                onBuildPersonalized: () {
-                  if (setup != null) controller.editCurrentMealPlan(setup);
-                  _openPlanSettingsSheet(isBuildingNew: true);
-                },
-                onImportPhoto: () {
-                  if (setup != null) controller.editCurrentMealPlan(setup);
-                  _showPhotoSourceSheet(uid);
-                },
-                onCreateManually: () {
-                  if (setup != null) {
-                    controller.startManualSetup(setup);
-                  }
-                },
-              ),
-            ),
-          ],
+        child: EatingSourceSelectionView(
+          setup: setup,
+          onCancel: () => controller.cancelChooseSource(),
+          errorMessage: state.errorMessage,
+          onClearError: () => controller.clearError(),
+          onBuildPersonalized: () {
+            controller.editCurrentMealPlan(setup);
+            _openPlanSettingsSheet(isBuildingNew: true);
+          },
+          onPickPhoto: (source) {
+            controller.editCurrentMealPlan(setup);
+            controller.pickAndUploadPhoto(uid: uid, source: source);
+          },
+          onCreateManually: () {
+            controller.startManualSetup(setup);
+          },
+          onEditCurrent: () => controller.editCurrentMealPlan(setup),
+          onRemoveSetup: () => _handleRemoveSetup(setup, uid),
         ),
       );
     }
@@ -739,73 +695,30 @@ class _EatingBaseSetupScreenState extends ConsumerState<EatingBaseSetupScreen> {
     // Default Current Setup stage
     if (setup == null ||
         !setup.snapshotFor(BaseTimelineSection.eating).isConfigured) {
+      if (setup == null) {
+        return const SizedBox.shrink();
+      }
       // Unconfigured state shows initial Source Selection with Back button
       return SafeArea(
         key: const ValueKey('eating-unconfigured'),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(
-                      Icons.arrow_back_rounded,
-                      color: OptivusColors.textPrimary,
-                    ),
-                    onPressed: widget.onBack,
-                    style: IconButton.styleFrom(
-                      backgroundColor: Colors.white.withValues(alpha: 0.1),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Eating',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: OptivusColors.textPrimary,
-                          ),
-                        ),
-                        Text(
-                          'Choose how to set up your meal plan',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: OptivusColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: EatingSourceSelectionView(
-                errorMessage: state.errorMessage,
-                onClearError: () => controller.clearError(),
-                onBuildPersonalized: () {
-                  if (setup != null) controller.editCurrentMealPlan(setup);
-                  _openPlanSettingsSheet(isBuildingNew: true);
-                },
-                onImportPhoto: () {
-                  if (setup != null) controller.editCurrentMealPlan(setup);
-                  _showPhotoSourceSheet(uid);
-                },
-                onCreateManually: () {
-                  final effectiveSetup =
-                      setup ??
-                      BaseTimelineSetup(uid: uid, updatedAt: DateTime.now());
-                  controller.startManualSetup(effectiveSetup);
-                },
-              ),
-            ),
-          ],
+        child: EatingSourceSelectionView(
+          setup: setup,
+          onCancel: widget.onBack,
+          errorMessage: state.errorMessage,
+          onClearError: () => controller.clearError(),
+          onBuildPersonalized: () {
+            controller.editCurrentMealPlan(setup);
+            _openPlanSettingsSheet(isBuildingNew: true);
+          },
+          onPickPhoto: (source) {
+            controller.editCurrentMealPlan(setup);
+            controller.pickAndUploadPhoto(uid: uid, source: source);
+          },
+          onCreateManually: () {
+            controller.startManualSetup(setup);
+          },
+          onEditCurrent: () => controller.editCurrentMealPlan(setup),
+          onRemoveSetup: () => _handleRemoveSetup(setup, uid),
         ),
       );
     }

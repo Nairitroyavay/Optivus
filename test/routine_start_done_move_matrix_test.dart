@@ -149,67 +149,73 @@ void main() {
       );
     });
 
-    test('Completed terminal status strictly blocks start, move, skip, miss', () {
-      final completedRecord = buildRecord(
-        status: RoutineStatus.completed,
-        lastAction: RoutineOccurrenceAction.complete,
-      );
+    test(
+      'Completed terminal status strictly blocks start, move, skip, miss',
+      () {
+        final completedRecord = buildRecord(
+          status: RoutineStatus.completed,
+          lastAction: RoutineOccurrenceAction.complete,
+        );
 
-      // Complete on completed is noOp
-      final completeDecision = RoutineTransitionPolicy.evaluate(
-        existingRecord: completedRecord,
-        requestedAction: RoutineOccurrenceAction.complete,
-        projectedStatus: RoutineStatus.completed,
-      );
-      expect(completeDecision.isNoOp, true);
-      expect(completeDecision.message, 'Already completed.');
-
-      // Start is rejected
-      final startDecision = RoutineTransitionPolicy.evaluate(
-        existingRecord: completedRecord,
-        requestedAction: RoutineOccurrenceAction.start,
-        projectedStatus: RoutineStatus.completed,
-      );
-      expect(startDecision.isRejected, true);
-      expect(startDecision.message, 'Completed routine cannot be restarted.');
-
-      // Move is rejected
-      final moveDecision = RoutineTransitionPolicy.evaluate(
-        existingRecord: completedRecord,
-        requestedAction: RoutineOccurrenceAction.move,
-        projectedStatus: RoutineStatus.completed,
-      );
-      expect(moveDecision.isRejected, true);
-      expect(moveDecision.message, 'Completed routine cannot be moved.');
-
-      // Skip is rejected (no direct completed -> skipped transition)
-      final skipDecision = RoutineTransitionPolicy.evaluate(
-        existingRecord: completedRecord,
-        requestedAction: RoutineOccurrenceAction.skip,
-        projectedStatus: RoutineStatus.completed,
-      );
-      expect(skipDecision.isRejected, true);
-      expect(skipDecision.message, 'Completed routine cannot be skipped.');
-
-      // Miss is rejected
-      final missDecision = RoutineTransitionPolicy.evaluate(
-        existingRecord: completedRecord,
-        requestedAction: RoutineOccurrenceAction.miss,
-        projectedStatus: RoutineStatus.completed,
-      );
-      expect(missDecision.isRejected, true);
-      expect(missDecision.message, 'Completed routine cannot be marked missed.');
-
-      // Undo is allowed when undoToPlannedAllowed is true
-      expect(
-        RoutineTransitionPolicy.evaluate(
+        // Complete on completed is noOp
+        final completeDecision = RoutineTransitionPolicy.evaluate(
           existingRecord: completedRecord,
-          requestedAction: RoutineOccurrenceAction.undo,
+          requestedAction: RoutineOccurrenceAction.complete,
           projectedStatus: RoutineStatus.completed,
-        ).isAllowed,
-        true,
-      );
-    });
+        );
+        expect(completeDecision.isNoOp, true);
+        expect(completeDecision.message, 'Already completed.');
+
+        // Start is rejected
+        final startDecision = RoutineTransitionPolicy.evaluate(
+          existingRecord: completedRecord,
+          requestedAction: RoutineOccurrenceAction.start,
+          projectedStatus: RoutineStatus.completed,
+        );
+        expect(startDecision.isRejected, true);
+        expect(startDecision.message, 'Completed routine cannot be restarted.');
+
+        // Move is rejected
+        final moveDecision = RoutineTransitionPolicy.evaluate(
+          existingRecord: completedRecord,
+          requestedAction: RoutineOccurrenceAction.move,
+          projectedStatus: RoutineStatus.completed,
+        );
+        expect(moveDecision.isRejected, true);
+        expect(moveDecision.message, 'Completed routine cannot be moved.');
+
+        // Skip is rejected (no direct completed -> skipped transition)
+        final skipDecision = RoutineTransitionPolicy.evaluate(
+          existingRecord: completedRecord,
+          requestedAction: RoutineOccurrenceAction.skip,
+          projectedStatus: RoutineStatus.completed,
+        );
+        expect(skipDecision.isRejected, true);
+        expect(skipDecision.message, 'Completed routine cannot be skipped.');
+
+        // Miss is rejected
+        final missDecision = RoutineTransitionPolicy.evaluate(
+          existingRecord: completedRecord,
+          requestedAction: RoutineOccurrenceAction.miss,
+          projectedStatus: RoutineStatus.completed,
+        );
+        expect(missDecision.isRejected, true);
+        expect(
+          missDecision.message,
+          'Completed routine cannot be marked missed.',
+        );
+
+        // Undo is allowed when undoToPlannedAllowed is true
+        expect(
+          RoutineTransitionPolicy.evaluate(
+            existingRecord: completedRecord,
+            requestedAction: RoutineOccurrenceAction.undo,
+            projectedStatus: RoutineStatus.completed,
+          ).isAllowed,
+          true,
+        );
+      },
+    );
 
     test('Skipped terminal status blocks forward mutations', () {
       final skippedRecord = buildRecord(
@@ -351,40 +357,43 @@ void main() {
   });
 
   group('RoutineActionAvailability Derivation', () {
-    test('Correctly computes independent action availability for completed item', () {
-      final record = RoutineOccurrenceRecord(
-        id: 'occ-1',
-        ownerUid: 'user-1',
-        routineItemId: 'avail-item',
-        occurrenceDateKey: '2026-09-20',
-        status: RoutineStatus.completed,
-        source: 'routine',
-        action: 'complete',
-        operationKey: 'op-1',
-        createdAt: DateTime.utc(2026, 9, 20),
-        updatedAt: DateTime.utc(2026, 9, 20),
-        undoToPlannedAllowed: true,
-      );
+    test(
+      'Correctly computes independent action availability for completed item',
+      () {
+        final record = RoutineOccurrenceRecord(
+          id: 'occ-1',
+          ownerUid: 'user-1',
+          routineItemId: 'avail-item',
+          occurrenceDateKey: '2026-09-20',
+          status: RoutineStatus.completed,
+          source: 'routine',
+          action: 'complete',
+          operationKey: 'op-1',
+          createdAt: DateTime.utc(2026, 9, 20),
+          updatedAt: DateTime.utc(2026, 9, 20),
+          undoToPlannedAllowed: true,
+        );
 
-      final availability = RoutineActionAvailability.forOccurrence(
-        existingRecord: record,
-        status: RoutineStatus.completed,
-        blockType: RoutineBlockType.flexibleTask,
-      );
+        final availability = RoutineActionAvailability.forOccurrence(
+          existingRecord: record,
+          status: RoutineStatus.completed,
+          blockType: RoutineBlockType.flexibleTask,
+        );
 
-      // Can NOT start, move, skip, miss
-      expect(availability.canStart, false);
-      expect(availability.canMove, false);
-      expect(availability.canSkip, false);
-      expect(availability.canMiss, false);
+        // Can NOT start, move, skip, miss
+        expect(availability.canStart, false);
+        expect(availability.canMove, false);
+        expect(availability.canSkip, false);
+        expect(availability.canMiss, false);
 
-      // Can NOT complete again (decision is noOp)
-      expect(availability.canComplete, false);
-      expect(availability.completeDecision.isNoOp, true);
+        // Can NOT complete again (decision is noOp)
+        expect(availability.canComplete, false);
+        expect(availability.completeDecision.isNoOp, true);
 
-      // CAN undo
-      expect(availability.canUndo, true);
-    });
+        // CAN undo
+        expect(availability.canUndo, true);
+      },
+    );
 
     test('Correctly computes action availability for active item', () {
       final record = RoutineOccurrenceRecord(
@@ -435,81 +444,94 @@ void main() {
 
       container = ProviderContainer(
         overrides: [
-          optivusBackendModeProvider.overrideWithValue(OptivusBackendMode.firebase),
+          optivusBackendModeProvider.overrideWithValue(
+            OptivusBackendMode.firebase,
+          ),
           routineRepositoryProvider.overrideWithValue(repo),
           routineHistoryRepositoryProvider.overrideWithValue(historyRepo),
-          routineTransactionRepositoryProvider.overrideWithValue(transactionRepo),
+          routineTransactionRepositoryProvider.overrideWithValue(
+            transactionRepo,
+          ),
         ],
       );
     });
 
     tearDown(() => container.dispose());
 
-    test('makeTinyVersion wraps across midnight and writes correct minute of day', () async {
-      final notifier = container.read(routineNotifierProvider.notifier);
-      const uid = 'user-1';
-      final lateItem = RoutineItem(
-        id: 'late-1',
-        userId: uid,
-        title: 'Night Stretch',
-        startMinute: 1438, // 23:58
-        endMinute: 1440,
-        blockType: RoutineBlockType.flexibleTask,
-      );
-      await repo.createRoutineItem(uid, lateItem);
-      await notifier.loadForOwner(uid);
+    test(
+      'makeTinyVersion wraps across midnight and writes correct minute of day',
+      () async {
+        final notifier = container.read(routineNotifierProvider.notifier);
+        const uid = 'user-1';
+        final lateItem = RoutineItem(
+          id: 'late-1',
+          userId: uid,
+          title: 'Night Stretch',
+          startMinute: 1438, // 23:58
+          endMinute: 1440,
+          blockType: RoutineBlockType.flexibleTask,
+        );
+        await repo.createRoutineItem(uid, lateItem);
+        await notifier.loadForOwner(uid);
 
-      // Tiny version of 5 min: starts at 1438, wraps past 1440 to minute 3!
-      final result = await notifier.makeTinyVersion(
-        lateItem,
-        occurrenceDate: DateTime.utc(2026, 9, 20),
-        startMinute: 1438,
-        durationMinutes: 5,
-      );
+        // Tiny version of 5 min: starts at 1438, wraps past 1440 to minute 3!
+        final result = await notifier.makeTinyVersion(
+          lateItem,
+          occurrenceDate: DateTime.utc(2026, 9, 20),
+          startMinute: 1438,
+          durationMinutes: 5,
+        );
 
-      expect(result.outcome, RoutineWriteOutcome.saved);
-      final occurrence = container.read(routineNotifierProvider).occurrences.first;
-      expect(occurrence.movedStartMinute, 1438);
-      // 1438 + 5 = 1443 -> 1443 - 1440 = 3
-      expect(occurrence.movedEndMinute, 3);
-    });
+        expect(result.outcome, RoutineWriteOutcome.saved);
+        final occurrence = container
+            .read(routineNotifierProvider)
+            .occurrences
+            .first;
+        expect(occurrence.movedStartMinute, 1438);
+        // 1438 + 5 = 1443 -> 1443 - 1440 = 3
+        expect(occurrence.movedEndMinute, 3);
+      },
+    );
 
-    test('RoutineMoveSeedResolver resolves canonical start and duration from template for continuation', () {
-      final sourceTemplate = RoutineItem(
-        id: 'overnight-item',
-        title: 'Overnight Shift',
-        startMinute: 1380, // 23:00
-        endMinute: 420, // 07:00
-        blockType: RoutineBlockType.hardBlock,
-      );
+    test(
+      'RoutineMoveSeedResolver resolves canonical start and duration from template for continuation',
+      () {
+        final sourceTemplate = RoutineItem(
+          id: 'overnight-item',
+          title: 'Overnight Shift',
+          startMinute: 1380, // 23:00
+          endMinute: 420, // 07:00
+          blockType: RoutineBlockType.hardBlock,
+        );
 
-      // The continuation fragment on the next day has startMinute: 0, endMinute: 420
-      final continuationItem = sourceTemplate.copyWith(
-        startMinute: 0,
-        endMinute: 420,
-      );
+        // The continuation fragment on the next day has startMinute: 0, endMinute: 420
+        final continuationItem = sourceTemplate.copyWith(
+          startMinute: 0,
+          endMinute: 420,
+        );
 
-      final actionContext = RoutineActionContext(
-        instanceId: 'c:overnight-item:2026-09-20',
-        templateId: 'overnight-item',
-        occurrenceDateKey: '2026-09-20',
-        displayDateKey: '2026-09-21',
-        kind: RoutineDayEntryKind.continuation,
-        item: continuationItem,
-      );
+        final actionContext = RoutineActionContext(
+          instanceId: 'c:overnight-item:2026-09-20',
+          templateId: 'overnight-item',
+          occurrenceDateKey: '2026-09-20',
+          displayDateKey: '2026-09-21',
+          kind: RoutineDayEntryKind.continuation,
+          item: continuationItem,
+        );
 
-      final seed = RoutineMoveSeedResolver.resolve(
-        actionContext: actionContext,
-        visibleItem: continuationItem,
-        templates: [sourceTemplate],
-        occurrences: const [],
-      );
+        final seed = RoutineMoveSeedResolver.resolve(
+          actionContext: actionContext,
+          visibleItem: continuationItem,
+          templates: [sourceTemplate],
+          occurrences: const [],
+        );
 
-      // Seed start MUST be the canonical 1380 (23:00) from source template, not 0!
-      expect(seed.startMinute, 1380);
-      // Duration MUST be canonical 480 (8 hours), not 420!
-      expect(seed.durationMinutes, 480);
-    });
+        // Seed start MUST be the canonical 1380 (23:00) from source template, not 0!
+        expect(seed.startMinute, 1380);
+        // Duration MUST be canonical 480 (8 hours), not 420!
+        expect(seed.durationMinutes, 480);
+      },
+    );
   });
 
   group('RoutineNotifier addItem Idempotency', () {
@@ -530,67 +552,87 @@ void main() {
 
       container = ProviderContainer(
         overrides: [
-          optivusBackendModeProvider.overrideWithValue(OptivusBackendMode.firebase),
+          optivusBackendModeProvider.overrideWithValue(
+            OptivusBackendMode.firebase,
+          ),
           routineRepositoryProvider.overrideWithValue(repo),
           routineHistoryRepositoryProvider.overrideWithValue(historyRepo),
-          routineTransactionRepositoryProvider.overrideWithValue(transactionRepo),
+          routineTransactionRepositoryProvider.overrideWithValue(
+            transactionRepo,
+          ),
         ],
       );
     });
 
     tearDown(() => container.dispose());
 
-    test('addItem updates existing item on duplicate ID tap rather than creating duplicate', () async {
-      final notifier = container.read(routineNotifierProvider.notifier);
-      const uid = 'test_user_id';
-      await notifier.loadForOwner(uid);
+    test(
+      'addItem updates existing item on duplicate ID tap rather than creating duplicate',
+      () async {
+        final notifier = container.read(routineNotifierProvider.notifier);
+        const uid = 'test_user_id';
+        await notifier.loadForOwner(uid);
 
-      final item = RoutineItem(
-        id: 'idempotent-item-1',
-        userId: uid,
-        title: 'Initial Title',
-        startMinute: 600,
-        endMinute: 660,
-        blockType: RoutineBlockType.flexibleTask,
-      );
+        final item = RoutineItem(
+          id: 'idempotent-item-1',
+          userId: uid,
+          title: 'Initial Title',
+          startMinute: 600,
+          endMinute: 660,
+          blockType: RoutineBlockType.flexibleTask,
+        );
 
-      // First add
-      await notifier.addItem(item);
-      expect(container.read(routineNotifierProvider).items.length, 1);
-      expect(container.read(routineNotifierProvider).items.first.title, 'Initial Title');
+        // First add
+        await notifier.addItem(item);
+        expect(container.read(routineNotifierProvider).items.length, 1);
+        expect(
+          container.read(routineNotifierProvider).items.first.title,
+          'Initial Title',
+        );
 
-      // Second add with same ID (e.g. rapid double tap or retry)
-      final updatedItem = item.copyWith(title: 'Updated Title');
-      await notifier.addItem(updatedItem);
+        // Second add with same ID (e.g. rapid double tap or retry)
+        final updatedItem = item.copyWith(title: 'Updated Title');
+        await notifier.addItem(updatedItem);
 
-      // MUST NOT duplicate in state.items
-      final items = container.read(routineNotifierProvider).items;
-      expect(items.length, 1);
-      expect(items.first.id, 'idempotent-item-1');
-      expect(items.first.title, 'Updated Title');
-    });
+        // MUST NOT duplicate in state.items
+        final items = container.read(routineNotifierProvider).items;
+        expect(items.length, 1);
+        expect(items.first.id, 'idempotent-item-1');
+        expect(items.first.title, 'Updated Title');
+      },
+    );
 
-    test('Rapid consecutive startFlexibleTask calls are serialized with only one occurrence', () async {
-      final notifier = container.read(routineNotifierProvider.notifier);
-      const uid = 'test_user_id';
-      final item = RoutineItem(
-        id: 'rapid-start',
-        userId: uid,
-        title: 'Rapid Task',
-        startMinute: 600,
-        endMinute: 660,
-        blockType: RoutineBlockType.flexibleTask,
-      );
-      await repo.createRoutineItem(uid, item);
-      await notifier.loadForOwner(uid);
+    test(
+      'Rapid consecutive startFlexibleTask calls are serialized with only one occurrence',
+      () async {
+        final notifier = container.read(routineNotifierProvider.notifier);
+        const uid = 'test_user_id';
+        final item = RoutineItem(
+          id: 'rapid-start',
+          userId: uid,
+          title: 'Rapid Task',
+          startMinute: 600,
+          endMinute: 660,
+          blockType: RoutineBlockType.flexibleTask,
+        );
+        await repo.createRoutineItem(uid, item);
+        await notifier.loadForOwner(uid);
 
-      // Fire twice simultaneously
-      notifier.startFlexibleTask('rapid-start');
-      notifier.startFlexibleTask('rapid-start');
-      await Future.delayed(const Duration(milliseconds: 50));
+        // Fire twice simultaneously
+        notifier.startFlexibleTask('rapid-start');
+        notifier.startFlexibleTask('rapid-start');
+        await Future.delayed(const Duration(milliseconds: 50));
 
-      final occurrences = container.read(routineNotifierProvider).occurrences;
-      expect(occurrences.where((o) => o.routineItemId == 'rapid-start' && o.action == 'start').length, 1);
-    });
+        final occurrences = container.read(routineNotifierProvider).occurrences;
+        expect(
+          occurrences
+              .where(
+                (o) => o.routineItemId == 'rapid-start' && o.action == 'start',
+              )
+              .length,
+          1,
+        );
+      },
+    );
   });
 }

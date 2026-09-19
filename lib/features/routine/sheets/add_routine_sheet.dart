@@ -183,10 +183,11 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
 
         _skinSlotController.text = _draft.fixedState.skincareSlotLabel ?? '';
         _skinStepsController.text = _draft.fixedState.steps.join('\n');
-        _skinProductsController.text =
-            _draft.fixedState.skincareProducts.join('\n');
-        _skinMissingController.text =
-            _draft.fixedState.skincareMissingItems.join('\n');
+        _skinProductsController.text = _draft.fixedState.skincareProducts.join(
+          '\n',
+        );
+        _skinMissingController.text = _draft.fixedState.skincareMissingItems
+            .join('\n');
         break;
       case AddRoutineType.checkin:
       case AddRoutineType.money:
@@ -319,7 +320,9 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
       children: [
         GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: _saveFailed ? null : () => setState(() => _typeSelected = false),
+          onTap: _saveFailed
+              ? null
+              : () => setState(() => _typeSelected = false),
           child: const Padding(
             padding: EdgeInsets.symmetric(vertical: 4),
             child: Row(
@@ -401,8 +404,9 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
                     final lines = _lines(val);
                     if (type == AddRoutineType.flexible) {
                       _draft = _draft.copyWith(
-                        flexibleState:
-                            _draft.flexibleState.copyWith(subtasks: lines),
+                        flexibleState: _draft.flexibleState.copyWith(
+                          subtasks: lines,
+                        ),
                       );
                     } else if (type == AddRoutineType.habit) {
                       _draft = _draft.copyWith(
@@ -410,8 +414,9 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
                       );
                     } else if (type == AddRoutineType.tracker) {
                       _draft = _draft.copyWith(
-                        trackerState:
-                            _draft.trackerState.copyWith(subtasks: lines),
+                        trackerState: _draft.trackerState.copyWith(
+                          subtasks: lines,
+                        ),
                       );
                     }
                   },
@@ -613,8 +618,7 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
           Expanded(
             child: _ScheduleModeButton(
               label: 'One time',
-              isSelected:
-                  _draft.scheduleMode == AddRoutineScheduleMode.once,
+              isSelected: _draft.scheduleMode == AddRoutineScheduleMode.once,
               onTap: () {
                 setState(() {
                   _draft = _draft.copyWith(
@@ -630,8 +634,7 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
           Expanded(
             child: _ScheduleModeButton(
               label: 'Weekly',
-              isSelected:
-                  _draft.scheduleMode == AddRoutineScheduleMode.weekly,
+              isSelected: _draft.scheduleMode == AddRoutineScheduleMode.weekly,
               onTap: () {
                 setState(() {
                   // Default to today's weekday if empty
@@ -664,9 +667,8 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
                 values: RoutinePriority.values,
                 labelFor: (value) =>
                     value == RoutinePriority.mustDo ? 'Must do' : 'Good to do',
-                onChanged: (value) => setState(
-                  () => _draft = _draft.copyWith(priority: value),
-                ),
+                onChanged: (value) =>
+                    setState(() => _draft = _draft.copyWith(priority: value)),
               ),
             ),
             const SizedBox(width: 10),
@@ -681,9 +683,8 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
                   'Night',
                   'Anytime',
                 ],
-                onChanged: (value) => setState(
-                  () => _draft = _draft.copyWith(bestTime: value),
-                ),
+                onChanged: (value) =>
+                    setState(() => _draft = _draft.copyWith(bestTime: value)),
               ),
             ),
           ],
@@ -743,9 +744,8 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
                 values: RoutinePriority.values,
                 labelFor: (value) =>
                     value == RoutinePriority.mustDo ? 'Must do' : 'Good to do',
-                onChanged: (value) => setState(
-                  () => _draft = _draft.copyWith(priority: value),
-                ),
+                onChanged: (value) =>
+                    setState(() => _draft = _draft.copyWith(priority: value)),
               ),
             ),
             const SizedBox(width: 10),
@@ -760,9 +760,8 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
                   'Night',
                   'Anytime',
                 ],
-                onChanged: (value) => setState(
-                  () => _draft = _draft.copyWith(bestTime: value),
-                ),
+                onChanged: (value) =>
+                    setState(() => _draft = _draft.copyWith(bestTime: value)),
               ),
             ),
           ],
@@ -985,8 +984,9 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
               label: 'Department / Project',
               hint: 'e.g. Core Infrastructure',
               onChanged: (val) => _draft = _draft.copyWith(
-                fixedState:
-                    _draft.fixedState.copyWith(workDepartmentOrProject: val),
+                fixedState: _draft.fixedState.copyWith(
+                  workDepartmentOrProject: val,
+                ),
               ),
             ),
             const SizedBox(height: 8),
@@ -1101,8 +1101,9 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
               hint: 'e.g. CeraVe Cleanser\nSunscreen SPF 50',
               maxLines: 3,
               onChanged: (val) => _draft = _draft.copyWith(
-                fixedState:
-                    _draft.fixedState.copyWith(skincareProducts: _lines(val)),
+                fixedState: _draft.fixedState.copyWith(
+                  skincareProducts: _lines(val),
+                ),
               ),
             ),
             const SizedBox(height: 8),
@@ -1445,7 +1446,8 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
   void _findFreeSlot() {
     if (_saving) return;
     final isSleep =
-        _draft.type == AddRoutineType.fixed && _draft.fixedState.kind == 'Sleep';
+        _draft.type == AddRoutineType.fixed &&
+        _draft.fixedState.kind == 'Sleep';
     if (isSleep) {
       setState(
         () => _error =
@@ -1454,22 +1456,28 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
       return;
     }
     final itemCandidate = AddRoutineMapper.toRoutineItem(_draft);
-    final slot = _draft.scheduleMode == AddRoutineScheduleMode.weekly &&
+    final slot =
+        _draft.scheduleMode == AddRoutineScheduleMode.weekly &&
             _draft.repeatDays.isNotEmpty
-        ? ref.read(routineNotifierProvider.notifier).findWeeklyFreeSlot(
-              item: itemCandidate,
-              repeatDays: _draft.repeatDays,
-              baseDate: _draft.date,
-              durationMinutes: _draft.durationMinutes,
-            )
-        : ref.read(routineNotifierProvider.notifier).findFreeSlot(
-              item: itemCandidate,
-              date: _draft.date,
-              durationMinutes: _draft.durationMinutes,
-            );
+        ? ref
+              .read(routineNotifierProvider.notifier)
+              .findWeeklyFreeSlot(
+                item: itemCandidate,
+                repeatDays: _draft.repeatDays,
+                baseDate: _draft.date,
+                durationMinutes: _draft.durationMinutes,
+              )
+        : ref
+              .read(routineNotifierProvider.notifier)
+              .findFreeSlot(
+                item: itemCandidate,
+                date: _draft.date,
+                durationMinutes: _draft.durationMinutes,
+              );
     if (slot == null) {
       setState(
-        () => _error = _draft.scheduleMode == AddRoutineScheduleMode.weekly &&
+        () => _error =
+            _draft.scheduleMode == AddRoutineScheduleMode.weekly &&
                 _draft.repeatDays.isNotEmpty
             ? 'No common free slot was found across your selected weekdays. You can still choose a time manually.'
             : 'No open slot found. You can still choose any time manually.',
@@ -1494,7 +1502,8 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
     if (result.verificationUnavailable) {
       setState(() {
         _saving = false;
-        _error = result.message ??
+        _error =
+            result.message ??
             'Could not verify save status. Draft preserved for safety.';
       });
       return;
@@ -1525,7 +1534,8 @@ class _AddRoutineSheetState extends ConsumerState<AddRoutineSheet> {
     setState(() {
       _saving = false;
       _saveFailed = true;
-      _error = result.message ?? 'Retry failed. Please adjust the form or discard.';
+      _error =
+          result.message ?? 'Retry failed. Please adjust the form or discard.';
     });
   }
 

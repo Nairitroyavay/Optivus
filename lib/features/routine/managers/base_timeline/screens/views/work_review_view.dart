@@ -12,7 +12,6 @@ import 'package:optivus/features/routine/managers/base_timeline/services/work_ti
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_editor_action_row.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_editor_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_empty_draft_view.dart';
-import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/work_timeline_card.dart';
 
 /// Review and edit stage for Work / Business Base Timeline setup.
@@ -122,9 +121,7 @@ class _WorkReviewViewState extends State<WorkReviewView> {
           BaseTimelineEditorActionRow(
             primaryAction: OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
-                backgroundColor: OptivusColors.warning.withValues(
-                  alpha: 0.12,
-                ),
+                backgroundColor: OptivusColors.warning.withValues(alpha: 0.12),
                 side: BorderSide(
                   color: OptivusColors.warning.withValues(alpha: 0.5),
                   width: 1.5,
@@ -174,9 +171,7 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                 color: OptivusColors.textPrimary,
               ),
               label: Text(
-                WorkPresentationUtils.addBlockButtonLabel(
-                  widget.lifeRole,
-                ),
+                WorkPresentationUtils.addBlockButtonLabel(widget.lifeRole),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -373,67 +368,65 @@ class _WorkReviewViewState extends State<WorkReviewView> {
                   ),
           ),
 
-
-
           SafeArea(
             top: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
               child: SizedBox(
-              height: 52,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: OptivusColors.warning,
-                  disabledBackgroundColor: OptivusColors.warning.withValues(
-                    alpha: 0.35,
+                height: 52,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: OptivusColors.warning,
+                    disabledBackgroundColor: OptivusColors.warning.withValues(
+                      alpha: 0.35,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(OptivusRadii.lg),
+                    ),
+                    elevation: 0,
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(OptivusRadii.lg),
-                  ),
-                  elevation: 0,
+                  onPressed: (widget.isSaving || widget.workingBlocks.isEmpty)
+                      ? null
+                      : widget.onSave,
+                  child: widget.isSaving
+                      ? const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            ),
+                            SizedBox(width: 10),
+                            Text(
+                              'Saving…',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Text(
+                          WorkPresentationUtils.useScheduleCtaLabel(
+                            widget.lifeRole,
+                            isEditing: widget.isEditing,
+                          ),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
                 ),
-                onPressed: (widget.isSaving || widget.workingBlocks.isEmpty)
-                    ? null
-                    : widget.onSave,
-                child: widget.isSaving
-                    ? const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          ),
-                          SizedBox(width: 10),
-                          Text(
-                            'Saving…',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      )
-                    : Text(
-                        WorkPresentationUtils.useScheduleCtaLabel(
-                          widget.lifeRole,
-                          isEditing: widget.isEditing,
-                        ),
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
               ),
             ),
           ),
-        ),
         ],
       ),
     );

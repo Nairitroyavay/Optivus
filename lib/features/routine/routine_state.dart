@@ -59,9 +59,9 @@ class RoutineDiscardResult {
 
   const RoutineDiscardResult.verificationUnavailable({
     this.message = 'Could not verify remote save status. Draft preserved.',
-  })  : wasSaved = false,
-        discarded = false,
-        verificationUnavailable = true;
+  }) : wasSaved = false,
+       discarded = false,
+       verificationUnavailable = true;
 }
 
 enum RoutineOccurrenceAction {
@@ -78,10 +78,7 @@ enum RoutineOccurrenceAction {
   undo,
 }
 
-enum RoutineOccurrenceMutationType {
-  setRecord,
-  deleteRecord,
-}
+enum RoutineOccurrenceMutationType { setRecord, deleteRecord }
 
 class RoutineOccurrenceWriteIntent {
   final RoutineOccurrenceAction action;
@@ -1806,7 +1803,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         );
         return RoutineWriteResult.saved(operationId: operationId);
       } else {
-        final intent = existingIntent ??
+        final intent =
+            existingIntent ??
             RoutineWriteIntent(
               action: RoutineWriteAction.create,
               ownerUid: uid,
@@ -2169,7 +2167,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
 
     if (intent.action == RoutineWriteAction.create &&
         intent.attemptedItem != null) {
-      final event = intent.event ??
+      final event =
+          intent.event ??
           RoutineEventRecord(
             eventId: _stableEventId(
               operationId: intent.operationId,
@@ -2620,8 +2619,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     if (state.pendingOccurrenceIds.contains(id)) {
       final queue = state.queuedOccurrenceActionsById[id] ?? const [];
       final lastAction = queue.isNotEmpty ? queue.last : null;
-      final currentPendingRecord =
-          state.occurrences.where((e) => e.id == id).lastOrNull;
+      final currentPendingRecord = state.occurrences
+          .where((e) => e.id == id)
+          .lastOrNull;
 
       if (lastAction != null) {
         if (lastAction.action == occAction &&
@@ -2682,7 +2682,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     final decision = RoutineTransitionPolicy.evaluate(
       existingRecord: existing,
       requestedAction: occAction,
-      projectedStatus: existing?.status ?? _itemFor(itemId)?.status ?? RoutineStatus.planned,
+      projectedStatus:
+          existing?.status ?? _itemFor(itemId)?.status ?? RoutineStatus.planned,
     );
     if (!decision.isAllowed) {
       if (decision.isNoOp) {
@@ -2721,8 +2722,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     final effectiveCountdownDurationSeconds = action == 'skip'
         ? null
         : (existing?.countdownDurationSeconds ??
-            countdownDurationSeconds ??
-            timerAllocation?.durationSeconds);
+              countdownDurationSeconds ??
+              timerAllocation?.durationSeconds);
 
     final operationId = _stableOperationId('occurrence', [
       uid,
@@ -2762,7 +2763,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       note: note ?? existing?.note,
       displayTitleOverride:
           displayTitleOverride ?? existing?.displayTitleOverride,
-      undoToPlannedAllowed: (action == 'skip' || action == 'start' || action == 'startTracker')
+      undoToPlannedAllowed:
+          (action == 'skip' || action == 'start' || action == 'startTracker')
           ? true
           : (existing == null),
       onboardingProjectionId: existing?.onboardingProjectionId,
@@ -2770,11 +2772,17 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       sourceFingerprint: existing?.sourceFingerprint,
       startedAt: effectiveStartedAt,
       countdownDurationSeconds: effectiveCountdownDurationSeconds,
-      previousStatus: (action == 'skip' || action == 'start' || action == 'startTracker')
-          ? (existing?.status == RoutineStatus.moved ? RoutineStatus.moved : null)
+      previousStatus:
+          (action == 'skip' || action == 'start' || action == 'startTracker')
+          ? (existing?.status == RoutineStatus.moved
+                ? RoutineStatus.moved
+                : null)
           : null,
-      previousAction: (action == 'skip' || action == 'start' || action == 'startTracker')
-          ? (existing?.status == RoutineStatus.moved ? (existing?.action ?? 'move') : null)
+      previousAction:
+          (action == 'skip' || action == 'start' || action == 'startTracker')
+          ? (existing?.status == RoutineStatus.moved
+                ? (existing?.action ?? 'move')
+                : null)
           : null,
       trackerSessionId: trackerSessionId ?? existing?.trackerSessionId,
       trackerType: trackerType ?? existing?.trackerType,
@@ -2830,7 +2838,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     final effMovedToDateKey = movedToDateKey ?? existing?.movedToDateKey;
     final effMovedStart = movedStartMinute ?? existing?.movedStartMinute;
     final effMovedEnd = movedEndMinute ?? existing?.movedEndMinute;
-    final effDisplayTitle = displayTitleOverride ?? existing?.displayTitleOverride;
+    final effDisplayTitle =
+        displayTitleOverride ?? existing?.displayTitleOverride;
     final occurrenceSnapshot = Map<String, dynamic>.from(rawOccurrenceSnapshot);
     if (effMovedToDateKey != null) {
       occurrenceSnapshot['movedToDateKey'] = effMovedToDateKey;
@@ -3054,8 +3063,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             : 'Could not update routine. Please try again.',
         operationId: operationId,
         failureCategory: failureCat,
-        resultingStatus:
-            intent.previousRecord?.status ?? RoutineStatus.planned,
+        resultingStatus: intent.previousRecord?.status ?? RoutineStatus.planned,
       );
 
       if (intent.completer != null && !intent.completer!.isCompleted) {
@@ -3089,8 +3097,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
 
     // Rebase against CURRENT effective state (after predecessor committed or rolled back)
-    final currentRecord =
-        state.occurrences.where((e) => e.id == id).firstOrNull;
+    final currentRecord = state.occurrences
+        .where((e) => e.id == id)
+        .firstOrNull;
 
     final transition = RoutineTransitionPolicy.evaluate(
       existingRecord: currentRecord,
@@ -3121,7 +3130,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       return;
     }
 
-    final date = queuedAction.occurrenceDate ??
+    final date =
+        queuedAction.occurrenceDate ??
         _occurrenceAnchorDate(queuedAction.itemId, state.selectedDay);
     final dateKey = routineLocalDateKey(date);
     final now = DateTime.now().toUtc();
@@ -3222,7 +3232,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       return;
     }
 
-    final timerAllocation = (queuedAction.actionString == 'start' ||
+    final timerAllocation =
+        (queuedAction.actionString == 'start' ||
             queuedAction.actionString == 'startTracker')
         ? _allocateCountdownForOccurrence(
             itemId: queuedAction.itemId,
@@ -3235,24 +3246,25 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     final effectiveStartedAt = queuedAction.actionString == 'skip'
         ? null
         : ((queuedAction.actionString == 'start' &&
-                currentRecord?.startedAt == null &&
-                timerAllocation != null)
-            ? timerAllocation.startedAt
-            : (queuedAction.startedAt ??
-                (currentRecord?.startedAt ??
-                    (queuedAction.actionString == 'startTracker'
-                        ? (currentRecord?.startedAt ?? now)
-                        : null))));
+                  currentRecord?.startedAt == null &&
+                  timerAllocation != null)
+              ? timerAllocation.startedAt
+              : (queuedAction.startedAt ??
+                    (currentRecord?.startedAt ??
+                        (queuedAction.actionString == 'startTracker'
+                            ? (currentRecord?.startedAt ?? now)
+                            : null))));
 
-    final effectiveCountdownDurationSeconds = queuedAction.actionString == 'skip'
+    final effectiveCountdownDurationSeconds =
+        queuedAction.actionString == 'skip'
         ? null
         : ((queuedAction.actionString == 'start' &&
-                currentRecord?.countdownDurationSeconds == null &&
-                timerAllocation != null)
-            ? timerAllocation.durationSeconds
-            : (currentRecord?.countdownDurationSeconds ??
-                queuedAction.countdownDurationSeconds ??
-                timerAllocation?.durationSeconds));
+                  currentRecord?.countdownDurationSeconds == null &&
+                  timerAllocation != null)
+              ? timerAllocation.durationSeconds
+              : (currentRecord?.countdownDurationSeconds ??
+                    queuedAction.countdownDurationSeconds ??
+                    timerAllocation?.durationSeconds));
 
     final operationId = _stableOperationId('occurrence', [
       uid,
@@ -3271,7 +3283,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       currentRecord?.operationKey ?? '',
     ]);
 
-    final occurrenceSource = queuedAction.source ??
+    final occurrenceSource =
+        queuedAction.source ??
         (currentRecord?.source ?? queuedAction.actionSource);
 
     final record = RoutineOccurrenceRecord(
@@ -3291,13 +3304,16 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           queuedAction.movedStartMinute ?? currentRecord?.movedStartMinute,
       movedEndMinute:
           queuedAction.movedEndMinute ?? currentRecord?.movedEndMinute,
-      completedSubtaskIndexes: queuedAction.completedSubtaskIndexes ??
+      completedSubtaskIndexes:
+          queuedAction.completedSubtaskIndexes ??
           currentRecord?.completedSubtaskIndexes ??
           const [],
       note: queuedAction.note ?? currentRecord?.note,
-      displayTitleOverride: queuedAction.displayTitleOverride ??
+      displayTitleOverride:
+          queuedAction.displayTitleOverride ??
           currentRecord?.displayTitleOverride,
-      undoToPlannedAllowed: (queuedAction.actionString == 'skip' ||
+      undoToPlannedAllowed:
+          (queuedAction.actionString == 'skip' ||
               queuedAction.actionString == 'start' ||
               queuedAction.actionString == 'startTracker')
           ? true
@@ -3307,19 +3323,21 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       sourceFingerprint: currentRecord?.sourceFingerprint,
       startedAt: effectiveStartedAt,
       countdownDurationSeconds: effectiveCountdownDurationSeconds,
-      previousStatus: (queuedAction.actionString == 'skip' ||
+      previousStatus:
+          (queuedAction.actionString == 'skip' ||
               queuedAction.actionString == 'start' ||
               queuedAction.actionString == 'startTracker')
           ? (currentRecord?.status == RoutineStatus.moved
-              ? RoutineStatus.moved
-              : null)
+                ? RoutineStatus.moved
+                : null)
           : null,
-      previousAction: (queuedAction.actionString == 'skip' ||
+      previousAction:
+          (queuedAction.actionString == 'skip' ||
               queuedAction.actionString == 'start' ||
               queuedAction.actionString == 'startTracker')
           ? (currentRecord?.status == RoutineStatus.moved
-              ? (currentRecord?.action ?? 'move')
-              : null)
+                ? (currentRecord?.action ?? 'move')
+                : null)
           : null,
       trackerSessionId:
           queuedAction.trackerSessionId ?? currentRecord?.trackerSessionId,
@@ -3375,7 +3393,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     final effMovedEnd =
         queuedAction.movedEndMinute ?? currentRecord?.movedEndMinute;
     final effDisplayTitle =
-        queuedAction.displayTitleOverride ?? currentRecord?.displayTitleOverride;
+        queuedAction.displayTitleOverride ??
+        currentRecord?.displayTitleOverride;
     final occurrenceSnapshot = Map<String, dynamic>.from(rawSnapshot);
     if (effMovedToDateKey != null) {
       occurrenceSnapshot['movedToDateKey'] = effMovedToDateKey;
@@ -3808,8 +3827,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
 
   bool hasConfirmedMoneySaveForRoutine(String routineTaskId, {DateTime? date}) {
     final tracker = _ref.read(mockTrackerProvider);
-    final targetDateKey =
-        routineLocalDateKey(date ?? _occurrenceAnchorDate(routineTaskId, state.selectedDay));
+    final targetDateKey = routineLocalDateKey(
+      date ?? _occurrenceAnchorDate(routineTaskId, state.selectedDay),
+    );
     return tracker.savingsEntries.any(
       (entry) =>
           entry.routineTaskId == routineTaskId &&
@@ -3850,8 +3870,10 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     final fakeAllowed = _ref.read(fakeDataAllowedProvider);
     if (fakeAllowed) {
       final moneyGoal = _ref.read(mockTrackerProvider).moneyGoal;
-      final alreadyConfirmed =
-          hasConfirmedMoneySaveForRoutine(itemId, date: occurrenceDate);
+      final alreadyConfirmed = hasConfirmedMoneySaveForRoutine(
+        itemId,
+        date: occurrenceDate,
+      );
       if (!alreadyConfirmed) {
         final targetAmount = (amount != null && amount > 0)
             ? amount
@@ -3957,17 +3979,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return result;
   }
 
-  void openTrackerSession(
-    String itemId, {
-    DateTime? occurrenceDate,
-  }) {
-    final anchor = occurrenceDate ??
-        _occurrenceAnchorDate(itemId, state.selectedDay);
+  void openTrackerSession(String itemId, {DateTime? occurrenceDate}) {
+    final anchor =
+        occurrenceDate ?? _occurrenceAnchorDate(itemId, state.selectedDay);
     final occurrenceDateKey = routineLocalDateKey(anchor);
     final existing = _occurrenceFor(itemId, anchor);
     final item = state.items.where((e) => e.id == itemId).firstOrNull;
-    final trackerType = (item?.trackerType != null &&
-            item!.trackerType != TrackerType.none)
+    final trackerType =
+        (item?.trackerType != null && item!.trackerType != TrackerType.none)
         ? item.trackerType
         : TrackerType.values.firstWhere(
             (t) => t.name == existing?.trackerType,
@@ -4033,7 +4052,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     bool allowUntracked = false,
   }) async {
     final links = _ref.read(trackerSessionLinksProvider);
-    final anchor = occurrenceDate ??
+    final anchor =
+        occurrenceDate ??
         _occurrenceAnchorDate(routineTaskId, state.selectedDay);
     final occurrenceDateKey = routineLocalDateKey(anchor);
     TrackerSessionLink? link;
@@ -4127,8 +4147,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     final reqAction = action == 'makeTiny'
         ? RoutineOccurrenceAction.makeTiny
         : (action == 'reschedule'
-            ? RoutineOccurrenceAction.reschedule
-            : RoutineOccurrenceAction.move);
+              ? RoutineOccurrenceAction.reschedule
+              : RoutineOccurrenceAction.move);
     final policyDecision = RoutineTransitionPolicy.evaluate(
       existingRecord: existingOcc,
       requestedAction: reqAction,
@@ -4148,8 +4168,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     }
 
     final rawEndMinute = startMinute + durationMinutes;
-    final endMinute =
-        rawEndMinute <= 1440 ? rawEndMinute : rawEndMinute % 1440;
+    final endMinute = rawEndMinute <= 1440 ? rawEndMinute : rawEndMinute % 1440;
     if (endMinute == startMinute) {
       return RoutineWriteResult.validationFailed(
         const RoutineValidationResult.invalid(
@@ -4265,7 +4284,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     RoutineActionContext? actionContext,
   }) async {
     final effectiveOccDate = actionContext?.occurrenceDate ?? occurrenceDate;
-    final effectiveDispDate = actionContext?.displayDate ??
+    final effectiveDispDate =
+        actionContext?.displayDate ??
         displayDate ??
         effectiveOccDate ??
         state.selectedDay;
@@ -4273,8 +4293,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     int seedStart = startMinute ?? targetItem.startMinute;
     int seedDur = durationMinutes ?? targetItem.durationMinutes;
     if (startMinute == null && targetItem.isContinuation) {
-      final template =
-          state.items.where((i) => i.id == targetItem.id).firstOrNull;
+      final template = state.items
+          .where((i) => i.id == targetItem.id)
+          .firstOrNull;
       if (template != null) {
         seedStart = template.startMinute;
         seedDur = template.durationMinutes;
@@ -4321,18 +4342,24 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       testDates.add(testDate);
     }
 
-    final availabilities = testDates.map((d) {
-      final dayEntries = RoutineOccurrenceProjector.entriesForDay(
-        state.items,
-        state.occurrences,
-        d,
-      ).where((c) => c.templateId != item.id).toList(growable: false);
-      return RoutineDayAvailability.computeFromEntries(dayEntries);
-    }).toList(growable: false);
+    final availabilities = testDates
+        .map((d) {
+          final dayEntries = RoutineOccurrenceProjector.entriesForDay(
+            state.items,
+            state.occurrences,
+            d,
+          ).where((c) => c.templateId != item.id).toList(growable: false);
+          return RoutineDayAvailability.computeFromEntries(dayEntries);
+        })
+        .toList(growable: false);
 
     const windowStart = kRoutinePlanningWindowStartMinute;
     const windowEnd = kRoutinePlanningWindowEndMinute;
-    for (int minute = windowStart; minute + duration <= windowEnd; minute += snap) {
+    for (
+      int minute = windowStart;
+      minute + duration <= windowEnd;
+      minute += snap
+    ) {
       final end = minute + duration;
       final fitsAll = availabilities.every(
         (avail) => avail.isRangeFree(minute, end),

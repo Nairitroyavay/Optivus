@@ -54,12 +54,12 @@ class EatingMealEditSheet {
 
     return TimelineEditSheetShell.show<bool>(
       context: context,
-      title: effectiveIsNew ? 'Add Meal' : 'Edit Meal',
+      title: effectiveIsNew ? 'Add meal' : 'Edit meal',
       subtitle: effectiveIsNew
           ? 'Configure dishes, timing, and days for this meal'
           : 'Update meal name, dishes, timing, and nutrition',
       accent: accent,
-      saveLabel: saveLabel ?? (effectiveIsNew ? 'Add meal' : 'Save'),
+      saveLabel: saveLabel ?? (effectiveIsNew ? 'Add meal' : 'Apply changes'),
       onSave: () async {
         final title = titleController.text.trim();
         var dishes = dishesController.text

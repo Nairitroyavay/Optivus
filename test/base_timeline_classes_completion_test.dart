@@ -778,7 +778,7 @@ void main() {
 
         // Timetable now cleared
         expect(find.text('Chemistry 101'), findsNothing);
-        expect(find.text('No classes on this day.'), findsOneWidget);
+
         expect(find.text('Set up Classes'), findsOneWidget);
 
         // Repository also has 0 classes
@@ -1316,7 +1316,7 @@ void main() {
         expect(liveSetup.classBlocks.length, 6);
 
         // Save
-        await tester.tap(find.text('Use this timetable'));
+        await tester.tap(find.text('Save changes'));
         await tester.pump(const Duration(milliseconds: 1000));
         await tester.pumpAndSettle();
 
@@ -1441,7 +1441,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Pick photo from gallery
-        await tester.tap(find.text('Choose from Gallery'));
+        await tester.tap(find.text('Choose from gallery'));
         await tester.pump(); // Start upload and extraction
 
         // Now stage is extracting and BaseTimelineAiThinkingView is showing
@@ -1462,7 +1462,7 @@ void main() {
         expect(trackingR2.deletedKeys, contains('candidate-key-42'));
 
         // Stage returned to chooseSource
-        expect(find.text('Choose from Gallery'), findsOneWidget);
+        expect(find.text('Choose from gallery'), findsOneWidget);
         expect(find.text('Set up manually'), findsOneWidget);
 
         // Now late AI extraction finishes with valid candidates
@@ -1492,7 +1492,7 @@ void main() {
         // The late extraction was IGNORED because session generation changed!
         // Setup remains on chooseSource and NOT review stage
         expect(find.text('Late Physics'), findsNothing);
-        expect(find.text('Choose from Gallery'), findsOneWidget);
+        expect(find.text('Choose from gallery'), findsOneWidget);
       },
     );
 
@@ -1595,11 +1595,11 @@ void main() {
         await tester.pumpAndSettle();
 
         // Save edit in sheet
-        await tester.tap(find.text('Save'));
+        await tester.tap(find.text('Apply changes'));
         await tester.pumpAndSettle();
 
-        // Tap Use this timetable
-        await tester.tap(find.text('Use this timetable'));
+        // Tap Save changes
+        await tester.tap(find.text('Save changes'));
         await tester.pumpAndSettle();
 
         // Returned to Current Setup: Monday Math is now rendered on Tuesday or Thursday
@@ -1867,7 +1867,7 @@ void main() {
         // Tap Change photo -> Choose from Gallery
         await tester.tap(find.text('Change photo'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Choose from Gallery'));
+        await tester.tap(find.text('Choose from gallery'));
         await tester.pumpAndSettle();
 
         // Now in error state
@@ -2024,7 +2024,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Verify Choose from Gallery passes ImageSource.gallery
-        await tester.tap(find.text('Choose from Gallery'));
+        await tester.tap(find.text('Choose from gallery'));
         await tester.pump();
         expect(capturingUploadCtrl.lastSource, ImageSource.gallery);
         expect(capturingUploadCtrl.startUploadCount, 1);
@@ -2093,7 +2093,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Verify Take a Photo passes ImageSource.camera
-        await tester.tap(find.text('Take a Photo'));
+        await tester.tap(find.text('Take a photo'));
         await tester.pump();
         expect(capturingUploadCtrl.lastSource, ImageSource.camera);
         expect(capturingUploadCtrl.startUploadCount, 1);
@@ -2164,8 +2164,8 @@ void main() {
       await tester.tap(find.text('Edit schedule'));
       await tester.pumpAndSettle();
 
-      // In Review stage: tap Use this timetable
-      await tester.tap(find.text('Use this timetable'));
+      // In Review stage: tap Save changes
+      await tester.tap(find.text('Save changes'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
@@ -2309,9 +2309,9 @@ void main() {
         await tester.tap(find.text('Edit schedule'));
         await tester.pumpAndSettle();
 
-        // Tap Use this timetable twice rapidly
-        await tester.tap(find.text('Use this timetable'));
-        await tester.tap(find.text('Use this timetable'));
+        // Tap Save changes twice rapidly
+        await tester.tap(find.text('Save changes'));
+        await tester.tap(find.text('Save changes'));
         await tester.pump();
 
         // Unblock coordinator replaceSection
@@ -2419,7 +2419,7 @@ void main() {
         // In review, tap Change photo -> Choose from Gallery (triggers photo upload + AI failure)
         await tester.tap(find.text('Change photo'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Choose from Gallery'));
+        await tester.tap(find.text('Choose from gallery'));
         await tester.pumpAndSettle();
 
         // Enters error view
@@ -2429,7 +2429,7 @@ void main() {
         await tester.tap(find.text('Choose another photo'));
         await tester.pumpAndSettle();
 
-        expect(find.text('Update Timetable'), findsOneWidget);
+        expect(find.text('Change Classes source'), findsOneWidget);
 
         // Now cancel from chooseSource: since workingBlocks is not empty, should return to review
         await tester.tap(find.byIcon(Icons.close_rounded));

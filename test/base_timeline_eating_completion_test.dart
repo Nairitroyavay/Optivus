@@ -652,10 +652,7 @@ void main() {
         await tester.tap(find.text('Change source'));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Import from Photo'));
-        await tester.pumpAndSettle();
-
-        await tester.tap(find.text('Choose from Gallery'));
+        await tester.tap(find.text('Choose from gallery'));
         await tester.pumpAndSettle();
 
         // Error message shown
@@ -734,7 +731,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Tap Build Balanced Plan directly from empty source selection view
-        await tester.tap(find.text('Build Balanced Plan'));
+        await tester.tap(find.text('Build personalized plan'));
         await tester.pumpAndSettle();
 
         // Sheet opens
@@ -1290,6 +1287,111 @@ void main() {
     );
 
     testWidgets(
+      'EatingPlanSummaryCard matches BaseTimeline context card style and handles interactions',
+      (tester) async {
+        var settingsOpened = false;
+        var photoOpened = false;
+        var regenerated = false;
+
+        // Test 1: Generated setup with settings button and stale warning
+        final generatedSetup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          eatingSetupPath: 'create',
+          eatingCustomized: true,
+          mealPlanningGoal: 'maintain',
+          targetCalories: 2000,
+          targetProtein: 140,
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: EatingPlanSummaryCard(
+                setup: generatedSetup,
+                isStale: true,
+                onOpenSettings: () => settingsOpened = true,
+                onRegenerate: () => regenerated = true,
+              ),
+            ),
+          ),
+        );
+
+        // Header and badges
+        expect(find.text('NUTRITION PLAN'), findsOneWidget);
+        expect(find.text('Customized'), findsOneWidget);
+        expect(find.text('Maintain weight'), findsOneWidget);
+        expect(find.text('Maintain Weight Plan'), findsOneWidget);
+        expect(
+          find.text('2000 kcal · 140 g protein (Calculated from Body Basics)'),
+          findsOneWidget,
+        );
+
+        // Action button
+        expect(find.byKey(const Key('eating-summary-plan-settings-button')), findsOneWidget);
+        await tester.tap(find.byKey(const Key('eating-summary-plan-settings-button')));
+        expect(settingsOpened, isTrue);
+
+        // Stale warning and regenerate button
+        expect(
+          find.text('Your Eating Plan was generated from older preferences.'),
+          findsOneWidget,
+        );
+        expect(find.byKey(const Key('eating-summary-stale-regenerate-button')), findsOneWidget);
+        await tester.tap(find.byKey(const Key('eating-summary-stale-regenerate-button')));
+        expect(regenerated, isTrue);
+
+        // Test 2: Photo setup with view photo action
+        final photoSetup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          eatingSetupPath: 'photo',
+          eatingCustomized: false,
+          eatingPhotoR2Key: 'photos/meal_plan.jpg',
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: EatingPlanSummaryCard(
+                setup: photoSetup,
+                onViewPhoto: () => photoOpened = true,
+              ),
+            ),
+          ),
+        );
+
+        expect(find.text('MEAL PLAN PHOTO'), findsOneWidget);
+        expect(find.text('Photo synced'), findsOneWidget);
+        expect(find.text('Imported Meal Plan'), findsOneWidget);
+        expect(find.byKey(const Key('eating-summary-view-photo-button')), findsOneWidget);
+        await tester.tap(find.byKey(const Key('eating-summary-view-photo-button')));
+        expect(photoOpened, isTrue);
+
+        // Test 3: Manual setup
+        final manualSetup = BaseTimelineSetup(
+          uid: uid,
+          updatedAt: DateTime.now(),
+          eatingSetupPath: 'manual',
+          eatingCustomized: false,
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: EatingPlanSummaryCard(setup: manualSetup),
+            ),
+          ),
+        );
+
+        expect(find.text('MANUAL MEAL PLAN'), findsOneWidget);
+        expect(find.text('Custom plan'), findsOneWidget);
+        expect(find.text('Manual setup'), findsOneWidget);
+        expect(find.text('Manual Eating Plan'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
       'EatingPlanSettingsSheet preserves null preferred times when untouched and requires explicit selections on regenerate',
       (tester) async {
         tester.view.physicalSize = const Size(400, 900);
@@ -1340,11 +1442,11 @@ void main() {
 
         // Scroll down to make Save Settings button visible and tap it
         await tester.scrollUntilVisible(
-          find.text('Save Settings'),
+          find.text('Save settings'),
           100.0,
           scrollable: find.byType(Scrollable).first,
         );
-        await tester.tap(find.text('Save Settings'));
+        await tester.tap(find.text('Save settings'));
         await tester.pumpAndSettle();
 
         expect(savedResult, isNotNull);

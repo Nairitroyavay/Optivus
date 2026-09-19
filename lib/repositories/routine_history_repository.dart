@@ -129,8 +129,7 @@ class RoutineOccurrenceFirestoreCodec {
         'previousAction': record.previousAction,
       if (record.trackerSessionId != null)
         'trackerSessionId': record.trackerSessionId,
-      if (record.trackerType != null)
-        'trackerType': record.trackerType,
+      if (record.trackerType != null) 'trackerType': record.trackerType,
       'createdAt': Timestamp.fromDate(record.createdAt.toUtc()),
       'updatedAt': Timestamp.fromDate(record.updatedAt.toUtc()),
       'schemaVersion': record.schemaVersion,

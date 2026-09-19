@@ -18,6 +18,32 @@ class EatingSetupErrorMapper {
     final message = error.toString();
     final lower = message.toLowerCase();
 
+    // Validation failures
+    if (lower.contains('validation') || lower.contains('invalid argument')) {
+      return 'Some information is incomplete or invalid. Please check your inputs and try again.';
+    }
+
+    // Permission denied / backend configuration
+    if (lower.contains('permission-denied') ||
+        lower.contains('permission denied')) {
+      return 'You do not have permission to perform this action. Check your account permissions.';
+    }
+
+    // Network unavailable
+    if (lower.contains('socketexception') ||
+        lower.contains('network') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('connection refused')) {
+      return 'Network unavailable. Please check your internet connection and try again.';
+    }
+
+    // Authentication / account mismatch
+    if (lower.contains('unauthenticated') ||
+        lower.contains('auth/user-not-found') ||
+        lower.contains('auth/')) {
+      return 'Authentication failed or account mismatch. Please sign in again.';
+    }
+
     if (lower.contains('concurrency') ||
         lower.contains('conflict') ||
         lower.contains('revision mismatch')) {

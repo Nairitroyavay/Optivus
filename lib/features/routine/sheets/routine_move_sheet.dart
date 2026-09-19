@@ -143,8 +143,10 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                   final currentEnd = (_seedStartMinute + _seedDuration) > 1440
                       ? (_seedStartMinute + _seedDuration - 1440)
                       : (_seedStartMinute + _seedDuration);
-                  final currentRange =
-                      TimelineUtils.formatTimeRange(_seedStartMinute, currentEnd);
+                  final currentRange = TimelineUtils.formatTimeRange(
+                    _seedStartMinute,
+                    currentEnd,
+                  );
                   return Text(
                     'Current: $currentRange',
                     style: const TextStyle(

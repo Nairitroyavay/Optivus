@@ -165,7 +165,7 @@ class _ClassesBaseSetupScreenState
       block: newBlock,
       accent: OptivusColors.blueAccent,
       isNew: true,
-      saveLabel: 'Save',
+      saveLabel: 'Apply changes',
       onSave: (updated) async {
         controller.addBlock(updated);
         return true;
@@ -184,7 +184,7 @@ class _ClassesBaseSetupScreenState
       block: block,
       accent: OptivusColors.blueAccent,
       isNew: false,
-      saveLabel: 'Save',
+      saveLabel: 'Apply changes',
       onSave: (updated) async {
         controller.updateBlock(updated);
         return true;
@@ -214,7 +214,7 @@ class _ClassesBaseSetupScreenState
         block: block,
         accent: OptivusColors.blueAccent,
         isNew: false,
-        saveLabel: 'Save',
+        saveLabel: 'Apply changes',
         onSave: (updated) async {
           controller.updateBlock(updated);
           didSave = true;
@@ -265,7 +265,7 @@ class _ClassesBaseSetupScreenState
                   color: OptivusColors.aquaAccent,
                 ),
                 title: const Text(
-                  'Choose from Gallery',
+                  'Choose from gallery',
                   style: TextStyle(color: OptivusColors.textPrimary),
                 ),
                 onTap: () {
@@ -282,7 +282,7 @@ class _ClassesBaseSetupScreenState
                   color: OptivusColors.aquaAccent,
                 ),
                 title: const Text(
-                  'Take a Photo',
+                  'Take a photo',
                   style: TextStyle(color: OptivusColors.textPrimary),
                 ),
                 onTap: () {
@@ -539,6 +539,75 @@ class _ClassesBaseSetupScreenState
         if (setup == null) {
           return _buildCanonicalUnavailableView(onBack: widget.onBack);
         }
+
+        if (!setup.snapshotFor(BaseTimelineSection.classes).isConfigured) {
+          return SafeArea(
+            key: const ValueKey('classes-unconfigured'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: OptivusColors.textPrimary,
+                        ),
+                        onPressed: widget.onBack,
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.1),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Classes',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: OptivusColors.textPrimary,
+                              ),
+                            ),
+                            Text(
+                              'Choose how to set up your timetable',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: OptivusColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ClassesSourceSelectionView(
+                    setup: setup,
+                    onCancel: () => _handleClassesBack(setup, state, uid),
+                    onPickPhoto: (source) => controller.pickAndUploadPhoto(
+                      uid: uid,
+                      source: source,
+                      setup: setup,
+                    ),
+                    onManualSetup: () => controller.startManualSetup(setup),
+                    onEditCurrent: () => controller.editCurrentTimetable(setup),
+                    onRemoveSetup: () => _handleRemoveSetup(setup, uid),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
         final routineBlocks = ClassScheduleDraftMapper.toClassRoutineBlocks(
           setup.classBlocks,
         );
@@ -575,7 +644,8 @@ class _ClassesBaseSetupScreenState
       title: 'Failed to load Classes timetable',
       errorMessage: ClassSetupErrorMapper.mapLoadError(error),
       onBack: widget.onBack,
-      onRetry: () => ref.read(baseTimelineSetupNotifierProvider.notifier).load(),
+      onRetry: () =>
+          ref.read(baseTimelineSetupNotifierProvider.notifier).load(),
     );
   }
 

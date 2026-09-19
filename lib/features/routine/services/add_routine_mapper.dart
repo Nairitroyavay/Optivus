@@ -104,8 +104,9 @@ class AddRoutineMapper {
           workContextType = _clean(fixedState.workDetails.workContextType);
           workRole = _clean(fixedState.workDetails.workRole);
           workOrganization = _clean(fixedState.workDetails.workOrganization);
-          workDepartmentOrProject =
-              _clean(fixedState.workDetails.workDepartmentOrProject);
+          workDepartmentOrProject = _clean(
+            fixedState.workDetails.workDepartmentOrProject,
+          );
           workMode = _clean(fixedState.workDetails.workMode);
           workBlockKind = _clean(fixedState.workDetails.workBlockKind);
         } else if (fixedState.kind == 'Eating' || fixedState.kind == 'Meal') {
@@ -141,7 +142,8 @@ class AddRoutineMapper {
           source: RoutineSource.manual,
           status: RoutineStatus.planned,
           priority: draft.priority,
-          bestTime: null, // Gate D: fixed blocks do not choose or persist bestTime
+          bestTime:
+              null, // Gate D: fixed blocks do not choose or persist bestTime
           isTrackerLinked: false,
           trackerType: TrackerType.none,
           hardBlock: fixedState.hardBlock,

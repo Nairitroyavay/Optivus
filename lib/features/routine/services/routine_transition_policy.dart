@@ -94,13 +94,15 @@ class RoutineTransitionPolicy {
       case RoutineOccurrenceAction.move:
       case RoutineOccurrenceAction.reschedule:
       case RoutineOccurrenceAction.makeTiny:
-        final isActiveTask = status == RoutineStatus.active &&
+        final isActiveTask =
+            status == RoutineStatus.active &&
             (existingRecord == null ||
                 existingRecord.action != 'project' ||
                 existingRecord.startedAt != null);
         if (isActiveTask) {
           return const RoutineTransitionDecision.reject(
-            message: 'Active routine cannot be moved. Stop or undo start first.',
+            message:
+                'Active routine cannot be moved. Stop or undo start first.',
           );
         }
         if (status == RoutineStatus.inTracker) {

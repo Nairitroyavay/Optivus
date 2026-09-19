@@ -28,7 +28,9 @@ class _AmbiguousRoutineRepository extends FakeRoutineRepository {
     if (shouldThrowOnCreateAfterPersisting) {
       // Item reached Firestore, but connection dropped before response arrived
       await super.createRoutineItem(uid, item);
-      throw TimeoutException('Network timed out waiting for server ack _SKIP_ROLLBACK');
+      throw TimeoutException(
+        'Network timed out waiting for server ack _SKIP_ROLLBACK',
+      );
     }
     return await super.createRoutineItem(uid, item);
   }
@@ -38,10 +40,8 @@ class _AmbiguousTransactionRepository extends FakeRoutineTransactionRepository {
   final RoutineHistoryRepository historyRepo;
   bool shouldThrowOnRecordAfterPersisting = false;
 
-  _AmbiguousTransactionRepository(
-    this.historyRepo, {
-    super.routineRepository,
-  }) : super(historyRepository: historyRepo);
+  _AmbiguousTransactionRepository(this.historyRepo, {super.routineRepository})
+    : super(historyRepository: historyRepo);
 
   @override
   Future<void> commitWrite({
@@ -61,7 +61,9 @@ class _AmbiguousTransactionRepository extends FakeRoutineTransactionRepository {
       if (setOccurrence != null) {
         await historyRepo.appendHistory(uid, setOccurrence);
       }
-      throw TimeoutException('Network timed out waiting for transaction ack _SKIP_ROLLBACK');
+      throw TimeoutException(
+        'Network timed out waiting for transaction ack _SKIP_ROLLBACK',
+      );
     }
     return await super.commitWrite(
       uid: uid,
@@ -113,174 +115,226 @@ void main() {
       container.dispose();
     });
 
-    test('Gate A: Ambiguity recovery on addItem succeeds when item reached remote repository', () async {
-      routineRepo.shouldThrowOnCreateAfterPersisting = true;
+    test(
+      'Gate A: Ambiguity recovery on addItem succeeds when item reached remote repository',
+      () async {
+        routineRepo.shouldThrowOnCreateAfterPersisting = true;
 
-      final newItem = RoutineItem(
-        id: 'ambig_item_1',
-        userId: testUid,
-        title: 'Morning Yoga',
-        startMinute: 420,
-        endMinute: 450,
-        repeatDays: const [1, 2, 3],
-        repeatRule: 'weekly',
-        blockType: RoutineBlockType.flexibleTask,
-      );
+        final newItem = RoutineItem(
+          id: 'ambig_item_1',
+          userId: testUid,
+          title: 'Morning Yoga',
+          startMinute: 420,
+          endMinute: 450,
+          repeatDays: const [1, 2, 3],
+          repeatRule: 'weekly',
+          blockType: RoutineBlockType.flexibleTask,
+        );
 
-      final result = await notifier.addItem(newItem);
+        final result = await notifier.addItem(newItem);
 
-      // Ambiguity recovery should have detected the item in fetchRoutineItems
-      expect(result.closesUserFlow, isTrue);
-      expect(result.outcome, RoutineWriteOutcome.saved);
-      expect(notifier.state.items.any((i) => i.id == 'ambig_item_1'), isTrue);
-      expect(notifier.state.failedIntentsByItemId.containsKey('ambig_item_1'), isFalse);
-    });
+        // Ambiguity recovery should have detected the item in fetchRoutineItems
+        expect(result.closesUserFlow, isTrue);
+        expect(result.outcome, RoutineWriteOutcome.saved);
+        expect(notifier.state.items.any((i) => i.id == 'ambig_item_1'), isTrue);
+        expect(
+          notifier.state.failedIntentsByItemId.containsKey('ambig_item_1'),
+          isFalse,
+        );
+      },
+    );
 
-    test('Gate A & B: Unambiguous network error flags failed intent for retry', () async {
-      routineRepo.shouldThrowOnCreateWithoutPersisting = true;
+    test(
+      'Gate A & B: Unambiguous network error flags failed intent for retry',
+      () async {
+        routineRepo.shouldThrowOnCreateWithoutPersisting = true;
 
-      final newItem = RoutineItem(
-        id: 'fail_item_1',
-        userId: testUid,
-        title: 'Evening Walk',
-        date: DateTime(2026, 9, 15),
-        startMinute: 1100,
-        endMinute: 1130,
-        repeatDays: const [],
-        repeatRule: 'once',
-        blockType: RoutineBlockType.flexibleTask,
-      );
+        final newItem = RoutineItem(
+          id: 'fail_item_1',
+          userId: testUid,
+          title: 'Evening Walk',
+          date: DateTime(2026, 9, 15),
+          startMinute: 1100,
+          endMinute: 1130,
+          repeatDays: const [],
+          repeatRule: 'once',
+          blockType: RoutineBlockType.flexibleTask,
+        );
 
-      final result = await notifier.addItem(newItem);
+        final result = await notifier.addItem(newItem);
 
-      expect(result.closesUserFlow, isFalse);
-      expect(result.outcome, RoutineWriteOutcome.retryRequired);
-      expect(notifier.state.failedIntentsByItemId.containsKey('fail_item_1'), isTrue);
+        expect(result.closesUserFlow, isFalse);
+        expect(result.outcome, RoutineWriteOutcome.retryRequired);
+        expect(
+          notifier.state.failedIntentsByItemId.containsKey('fail_item_1'),
+          isTrue,
+        );
 
-      // Retry when network is restored succeeds
-      routineRepo.shouldThrowOnCreateWithoutPersisting = false;
-      final retryResult = await notifier.retryFailedOperation('fail_item_1');
-      expect(retryResult.closesUserFlow, isTrue);
-      expect(notifier.state.failedIntentsByItemId.containsKey('fail_item_1'), isFalse);
-      expect(notifier.state.items.any((i) => i.id == 'fail_item_1'), isTrue);
-    });
+        // Retry when network is restored succeeds
+        routineRepo.shouldThrowOnCreateWithoutPersisting = false;
+        final retryResult = await notifier.retryFailedOperation('fail_item_1');
+        expect(retryResult.closesUserFlow, isTrue);
+        expect(
+          notifier.state.failedIntentsByItemId.containsKey('fail_item_1'),
+          isFalse,
+        );
+        expect(notifier.state.items.any((i) => i.id == 'fail_item_1'), isTrue);
+      },
+    );
 
-    test('Gate C: discardFailedCreate clears failed intent and safely cleans up remote item if existed', () async {
-      routineRepo.shouldThrowOnCreateWithoutPersisting = true;
+    test(
+      'Gate C: discardFailedCreate clears failed intent and safely cleans up remote item if existed',
+      () async {
+        routineRepo.shouldThrowOnCreateWithoutPersisting = true;
 
-      final newItem = RoutineItem(
-        id: 'discard_item_1',
-        userId: testUid,
-        title: 'Read Magazine',
-        date: DateTime(2026, 9, 15),
-        startMinute: 800,
-        endMinute: 830,
-        repeatDays: const [],
-        repeatRule: 'once',
-        blockType: RoutineBlockType.flexibleTask,
-      );
+        final newItem = RoutineItem(
+          id: 'discard_item_1',
+          userId: testUid,
+          title: 'Read Magazine',
+          date: DateTime(2026, 9, 15),
+          startMinute: 800,
+          endMinute: 830,
+          repeatDays: const [],
+          repeatRule: 'once',
+          blockType: RoutineBlockType.flexibleTask,
+        );
 
-      await notifier.addItem(newItem);
-      expect(notifier.state.failedIntentsByItemId.containsKey('discard_item_1'), isTrue);
+        await notifier.addItem(newItem);
+        expect(
+          notifier.state.failedIntentsByItemId.containsKey('discard_item_1'),
+          isTrue,
+        );
 
-      await notifier.discardFailedCreate('discard_item_1');
-      expect(notifier.state.failedIntentsByItemId.containsKey('discard_item_1'), isFalse);
-      expect(notifier.state.items.any((i) => i.id == 'discard_item_1'), isFalse);
-    });
+        await notifier.discardFailedCreate('discard_item_1');
+        expect(
+          notifier.state.failedIntentsByItemId.containsKey('discard_item_1'),
+          isFalse,
+        );
+        expect(
+          notifier.state.items.any((i) => i.id == 'discard_item_1'),
+          isFalse,
+        );
+      },
+    );
 
-    test('Gate O & Q: Ambiguity recovery on occurrence action succeeds when record reached history', () async {
-      final existingItem = RoutineItem(
-        id: 'active_item_1',
-        userId: testUid,
-        title: 'Coding Sprint',
-        startMinute: 600,
-        endMinute: 660,
-        repeatDays: const [1, 2, 3, 4, 5],
-        repeatRule: 'weekly',
-        blockType: RoutineBlockType.flexibleTask,
-      );
-      await routineRepo.createRoutineItem(testUid, existingItem);
-      notifier.state = notifier.state.copyWith(items: [existingItem]);
+    test(
+      'Gate O & Q: Ambiguity recovery on occurrence action succeeds when record reached history',
+      () async {
+        final existingItem = RoutineItem(
+          id: 'active_item_1',
+          userId: testUid,
+          title: 'Coding Sprint',
+          startMinute: 600,
+          endMinute: 660,
+          repeatDays: const [1, 2, 3, 4, 5],
+          repeatRule: 'weekly',
+          blockType: RoutineBlockType.flexibleTask,
+        );
+        await routineRepo.createRoutineItem(testUid, existingItem);
+        notifier.state = notifier.state.copyWith(items: [existingItem]);
 
-      txRepo.shouldThrowOnRecordAfterPersisting = true;
+        txRepo.shouldThrowOnRecordAfterPersisting = true;
 
-      final startResult = await notifier.startRoutineItem(
-        existingItem.id,
-        occurrenceDate: DateTime(2026, 9, 15),
-      );
+        final startResult = await notifier.startRoutineItem(
+          existingItem.id,
+          occurrenceDate: DateTime(2026, 9, 15),
+        );
 
-      // Ambiguity recovery detects record in fetchHistory
-      expect(startResult.closesUserFlow, isTrue);
-      expect(startResult.outcome, RoutineWriteOutcome.saved);
-      expect(notifier.state.failedOccurrenceIntentsById.isEmpty, isTrue);
-    });
+        // Ambiguity recovery detects record in fetchHistory
+        expect(startResult.closesUserFlow, isTrue);
+        expect(startResult.outcome, RoutineWriteOutcome.saved);
+        expect(notifier.state.failedOccurrenceIntentsById.isEmpty, isTrue);
+      },
+    );
 
-    testWidgets('Gate B (UI): Add Routine Sheet freezes inputs and displays warning banner when save fails', (tester) async {
-      tester.view.physicalSize = const Size(800, 1600);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() => tester.view.resetPhysicalSize());
+    testWidgets(
+      'Gate B (UI): Add Routine Sheet freezes inputs and displays warning banner when save fails',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
 
-      routineRepo.shouldThrowOnCreateWithoutPersisting = true;
+        routineRepo.shouldThrowOnCreateWithoutPersisting = true;
 
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: MaterialApp(
-            home: Scaffold(
-              body: Consumer(
-                builder: (ctx, ref, _) => ElevatedButton(
-                  onPressed: () => showAddRoutineSheet(ctx, ref),
-                  child: const Text('Open Sheet'),
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              home: Scaffold(
+                body: Consumer(
+                  builder: (ctx, ref, _) => ElevatedButton(
+                    onPressed: () => showAddRoutineSheet(ctx, ref),
+                    child: const Text('Open Sheet'),
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      );
+        );
 
-      await tester.tap(find.text('Open Sheet'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Open Sheet'));
+        await tester.pumpAndSettle();
 
-      // Tap 'Flexible Task' in type grid
-      await tester.tap(find.text('Flexible Task'));
-      await tester.pumpAndSettle();
+        // Tap 'Flexible Task' in type grid
+        await tester.tap(find.text('Flexible Task'));
+        await tester.pumpAndSettle();
 
-      // Enter title
-      await tester.enterText(find.byType(TextField).first, 'Save-Failed Task');
-      FocusManager.instance.primaryFocus?.unfocus();
-      await tester.pump(const Duration(milliseconds: 100));
+        // Enter title
+        await tester.enterText(
+          find.byType(TextField).first,
+          'Save-Failed Task',
+        );
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pump(const Duration(milliseconds: 100));
 
-      // Tap 'Save at this time' (will fail due to shouldThrowOnCreateWithoutPersisting)
-      final saveBtn = find.text('Save at this time');
-      await tester.ensureVisible(saveBtn);
-      await tester.tap(saveBtn);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 200));
+        // Tap 'Save at this time' (will fail due to shouldThrowOnCreateWithoutPersisting)
+        final saveBtn = find.text('Save at this time');
+        await tester.ensureVisible(saveBtn);
+        await tester.tap(saveBtn);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
 
-      // 1. Verify warning banner appears
-      expect(find.byKey(const ValueKey('add-routine-failed-warning')), findsOneWidget);
+        // 1. Verify warning banner appears
+        expect(
+          find.byKey(const ValueKey('add-routine-failed-warning')),
+          findsOneWidget,
+        );
 
-      // 2. Verify Retry button is visible
-      expect(find.byKey(const ValueKey('add-routine-retry-button')), findsOneWidget);
+        // 2. Verify Retry button is visible
+        expect(
+          find.byKey(const ValueKey('add-routine-retry-button')),
+          findsOneWidget,
+        );
 
-      // 3. Verify Discard button is visible
-      expect(find.byKey(const ValueKey('add-routine-discard-button')), findsOneWidget);
+        // 3. Verify Discard button is visible
+        expect(
+          find.byKey(const ValueKey('add-routine-discard-button')),
+          findsOneWidget,
+        );
 
-      // 4. Verify form is protected with AbsorbPointer
-      final absorbPointer = tester.widget<AbsorbPointer>(
-        find.ancestor(
-          of: find.byType(TextField).first,
-          matching: find.byType(AbsorbPointer),
-        ).first,
-      );
-      expect(absorbPointer.absorbing, isTrue);
+        // 4. Verify form is protected with AbsorbPointer
+        final absorbPointer = tester.widget<AbsorbPointer>(
+          find
+              .ancestor(
+                of: find.byType(TextField).first,
+                matching: find.byType(AbsorbPointer),
+              )
+              .first,
+        );
+        expect(absorbPointer.absorbing, isTrue);
 
-      // 5. Tap Discard button -> sheet closes and failed intent is discarded
-      await tester.tap(find.byKey(const ValueKey('add-routine-discard-button')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 200));
+        // 5. Tap Discard button -> sheet closes and failed intent is discarded
+        await tester.tap(
+          find.byKey(const ValueKey('add-routine-discard-button')),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.byKey(const ValueKey('add-routine-failed-warning')), findsNothing);
-    });
+        expect(
+          find.byKey(const ValueKey('add-routine-failed-warning')),
+          findsNothing,
+        );
+      },
+    );
   });
 }

@@ -9,7 +9,6 @@ import 'package:optivus/features/routine/managers/base_timeline/widgets/base_tim
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_editor_action_row.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_editor_header.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_empty_draft_view.dart';
-import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 
 /// Review and edit stage for Eating Base Timeline setup.
@@ -110,9 +109,7 @@ class _EatingReviewViewState extends State<EatingReviewView> {
                         alpha: 0.12,
                       ),
                       side: BorderSide(
-                        color: OptivusColors.roseAccent.withValues(
-                          alpha: 0.5,
-                        ),
+                        color: OptivusColors.roseAccent.withValues(alpha: 0.5),
                         width: 1.5,
                       ),
                       shape: RoundedRectangleBorder(
@@ -142,42 +139,42 @@ class _EatingReviewViewState extends State<EatingReviewView> {
                     onPressed: widget.isSaving ? null : widget.onChangePhoto,
                   )
                 : (widget.onOpenSettings != null
-                    ? OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          backgroundColor: OptivusColors.roseAccent.withValues(
-                            alpha: 0.12,
-                          ),
-                          side: BorderSide(
-                            color: OptivusColors.roseAccent.withValues(
-                              alpha: 0.5,
+                      ? OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: OptivusColors.roseAccent
+                                .withValues(alpha: 0.12),
+                            side: BorderSide(
+                              color: OptivusColors.roseAccent.withValues(
+                                alpha: 0.5,
+                              ),
+                              width: 1.5,
                             ),
-                            width: 1.5,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(
-                              OptivusRadii.controlCompact,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
+                                OptivusRadii.controlCompact,
+                              ),
                             ),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
                           ),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
-                        icon: const Icon(
-                          Icons.tune_rounded,
-                          size: 18,
-                          color: OptivusColors.roseAccent,
-                        ),
-                        label: const Text(
-                          'Plan settings',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
+                          icon: const Icon(
+                            Icons.tune_rounded,
+                            size: 18,
                             color: OptivusColors.roseAccent,
                           ),
-                        ),
-                        onPressed:
-                            widget.isSaving ? null : widget.onOpenSettings,
-                      )
-                    : null),
+                          label: const Text(
+                            'Plan settings',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: OptivusColors.roseAccent,
+                            ),
+                          ),
+                          onPressed: widget.isSaving
+                              ? null
+                              : widget.onOpenSettings,
+                        )
+                      : null),
             secondaryAction: OutlinedButton.icon(
               key: const Key('base-timeline-edit-add-meal-button'),
               style: OutlinedButton.styleFrom(
@@ -325,8 +322,6 @@ class _EatingReviewViewState extends State<EatingReviewView> {
                   ),
           ),
 
-
-
           // 7. Dominant 52px Bottom CTA with Floating Tab Bar Clearance
           SafeArea(
             top: false,
@@ -334,55 +329,54 @@ class _EatingReviewViewState extends State<EatingReviewView> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
               child: SizedBox(
                 height: 52,
-              child: FilledButton(
-                key: const Key('base-timeline-eating-save-button'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: OptivusColors.roseAccent,
-                  disabledBackgroundColor: OptivusColors.roseAccent.withValues(
-                    alpha: 0.35,
+                child: FilledButton(
+                  key: const Key('base-timeline-eating-save-button'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: OptivusColors.roseAccent,
+                    disabledBackgroundColor: OptivusColors.roseAccent
+                        .withValues(alpha: 0.35),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(OptivusRadii.lg),
+                    ),
+                    elevation: 0,
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(OptivusRadii.lg),
-                  ),
-                  elevation: 0,
-                ),
-                onPressed: widget.isSaving ? null : widget.onSave,
-                child: widget.isSaving
-                    ? const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
+                  onPressed: widget.isSaving ? null : widget.onSave,
+                  child: widget.isSaving
+                      ? const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
                             ),
-                          ),
-                          SizedBox(width: 10),
-                          Text(
-                            'Saving…',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
+                            SizedBox(width: 10),
+                            Text(
+                              'Saving…',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
                             ),
+                          ],
+                        )
+                      : Text(
+                          ctaText,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
                           ),
-                        ],
-                      )
-                    : Text(
-                        ctaText,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
                         ),
-                      ),
+                ),
               ),
             ),
           ),
-        ),
         ],
       ),
     );

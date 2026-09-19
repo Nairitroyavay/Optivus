@@ -146,7 +146,9 @@ class BaseTimelineSourceSelectionScaffold extends StatelessWidget {
                   // Preservation notice (only shown when changing an existing configured source)
                   if (preservationNotice != null) ...[
                     Container(
-                      key: const Key('base-timeline-source-preservation-notice'),
+                      key: const Key(
+                        'base-timeline-source-preservation-notice',
+                      ),
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: OptivusColors.warning.withValues(alpha: 0.08),

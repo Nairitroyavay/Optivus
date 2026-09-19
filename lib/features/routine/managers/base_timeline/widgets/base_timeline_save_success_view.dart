@@ -149,11 +149,7 @@ class _BaseTimelineSaveSuccessViewState
                 width: 2,
               ),
             ),
-            child: Icon(
-              Icons.check_rounded,
-              color: widget.accent,
-              size: 32,
-            ),
+            child: Icon(Icons.check_rounded, color: widget.accent, size: 32),
           ),
           const SizedBox(height: 16),
           Text(
@@ -184,10 +180,7 @@ class _BaseTimelineSaveSuccessViewState
             ? card
             : FadeTransition(
                 opacity: _fadeAnimation,
-                child: ScaleTransition(
-                  scale: _scaleAnimation,
-                  child: card,
-                ),
+                child: ScaleTransition(scale: _scaleAnimation, child: card),
               ),
       ),
     );

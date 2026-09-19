@@ -135,28 +135,49 @@ class EatingSetupState {
     EatingSetupStage? stage,
     List<TimelineBlockDraft>? workingBlocks,
     String? workingGoal,
+    bool clearWorkingGoal = false,
     int? workingMealsPerDay,
+    bool clearWorkingMealsPerDay = false,
     String? workingEatingMode,
+    bool clearWorkingEatingMode = false,
     String? workingFoodType,
+    bool clearWorkingFoodType = false,
     String? workingFoodStyleCustomText,
+    bool clearWorkingFoodStyleCustomText = false,
     List<String>? workingFoodsToAvoid,
     int? workingBreakfastMinute,
+    bool clearWorkingBreakfastMinute = false,
     int? workingLunchMinute,
+    bool clearWorkingLunchMinute = false,
     int? workingDinnerMinute,
+    bool clearWorkingDinnerMinute = false,
     int? workingSnackMinute,
+    bool clearWorkingSnackMinute = false,
     int? workingExtraSnackMinute,
+    bool clearWorkingExtraSnackMinute = false,
     int? workingTargetCalories,
+    bool clearWorkingTargetCalories = false,
     int? workingTargetProtein,
+    bool clearWorkingTargetProtein = false,
     int? workingTargetCaloriesOverride,
+    bool clearWorkingTargetCaloriesOverride = false,
     int? workingTargetProteinOverride,
+    bool clearWorkingTargetProteinOverride = false,
     String? workingAssetId,
+    bool clearWorkingAssetId = false,
     String? workingR2Key,
+    bool clearWorkingR2Key = false,
     String? workingSetupPath,
+    bool clearWorkingSetupPath = false,
     int? workingGeneratedPlanVersion,
+    bool clearWorkingGeneratedPlanVersion = false,
     String? workingGeneratedInputFingerprint,
+    bool clearWorkingGeneratedInputFingerprint = false,
     bool? workingCustomized,
     String? candidateAssetId,
+    bool clearCandidateAssetId = false,
     String? candidateR2Key,
+    bool clearCandidateR2Key = false,
     int? selectedDay,
     bool? isDirty,
     bool? isSaving,
@@ -168,11 +189,16 @@ class EatingSetupState {
     bool? hasRunStartupCleanup,
     String? ownerUid,
     int? editorBaseRevision,
+    bool clearEditorBaseRevision = false,
     String? baseCommittedAssetId,
+    bool clearBaseCommittedAssetId = false,
     String? baseCommittedR2Key,
+    bool clearBaseCommittedR2Key = false,
     bool? routineRefreshPending,
     int? committedRevision,
+    bool clearCommittedRevision = false,
     String? routineRefreshMessage,
+    bool clearRoutineRefreshMessage = false,
     bool? isConcurrencyConflict,
     String? aiActionTitle,
     List<String>? aiProgressMessages,
@@ -180,38 +206,71 @@ class EatingSetupState {
     return EatingSetupState(
       stage: stage ?? this.stage,
       workingBlocks: workingBlocks ?? this.workingBlocks,
-      workingGoal: workingGoal ?? this.workingGoal,
-      workingMealsPerDay: workingMealsPerDay ?? this.workingMealsPerDay,
-      workingEatingMode: workingEatingMode ?? this.workingEatingMode,
-      workingFoodType: workingFoodType ?? this.workingFoodType,
-      workingFoodStyleCustomText:
-          workingFoodStyleCustomText ?? this.workingFoodStyleCustomText,
+      workingGoal: clearWorkingGoal ? null : (workingGoal ?? this.workingGoal),
+      workingMealsPerDay: clearWorkingMealsPerDay
+          ? null
+          : (workingMealsPerDay ?? this.workingMealsPerDay),
+      workingEatingMode: clearWorkingEatingMode
+          ? null
+          : (workingEatingMode ?? this.workingEatingMode),
+      workingFoodType: clearWorkingFoodType
+          ? null
+          : (workingFoodType ?? this.workingFoodType),
+      workingFoodStyleCustomText: clearWorkingFoodStyleCustomText
+          ? null
+          : (workingFoodStyleCustomText ?? this.workingFoodStyleCustomText),
       workingFoodsToAvoid: workingFoodsToAvoid ?? this.workingFoodsToAvoid,
-      workingBreakfastMinute:
-          workingBreakfastMinute ?? this.workingBreakfastMinute,
-      workingLunchMinute: workingLunchMinute ?? this.workingLunchMinute,
-      workingDinnerMinute: workingDinnerMinute ?? this.workingDinnerMinute,
-      workingSnackMinute: workingSnackMinute ?? this.workingSnackMinute,
-      workingExtraSnackMinute:
-          workingExtraSnackMinute ?? this.workingExtraSnackMinute,
-      workingTargetCalories:
-          workingTargetCalories ?? this.workingTargetCalories,
-      workingTargetProtein: workingTargetProtein ?? this.workingTargetProtein,
-      workingTargetCaloriesOverride:
-          workingTargetCaloriesOverride ?? this.workingTargetCaloriesOverride,
-      workingTargetProteinOverride:
-          workingTargetProteinOverride ?? this.workingTargetProteinOverride,
-      workingAssetId: workingAssetId ?? this.workingAssetId,
-      workingR2Key: workingR2Key ?? this.workingR2Key,
-      workingSetupPath: workingSetupPath ?? this.workingSetupPath,
-      workingGeneratedPlanVersion:
-          workingGeneratedPlanVersion ?? this.workingGeneratedPlanVersion,
-      workingGeneratedInputFingerprint:
-          workingGeneratedInputFingerprint ??
-          this.workingGeneratedInputFingerprint,
+      workingBreakfastMinute: clearWorkingBreakfastMinute
+          ? null
+          : (workingBreakfastMinute ?? this.workingBreakfastMinute),
+      workingLunchMinute: clearWorkingLunchMinute
+          ? null
+          : (workingLunchMinute ?? this.workingLunchMinute),
+      workingDinnerMinute: clearWorkingDinnerMinute
+          ? null
+          : (workingDinnerMinute ?? this.workingDinnerMinute),
+      workingSnackMinute: clearWorkingSnackMinute
+          ? null
+          : (workingSnackMinute ?? this.workingSnackMinute),
+      workingExtraSnackMinute: clearWorkingExtraSnackMinute
+          ? null
+          : (workingExtraSnackMinute ?? this.workingExtraSnackMinute),
+      workingTargetCalories: clearWorkingTargetCalories
+          ? null
+          : (workingTargetCalories ?? this.workingTargetCalories),
+      workingTargetProtein: clearWorkingTargetProtein
+          ? null
+          : (workingTargetProtein ?? this.workingTargetProtein),
+      workingTargetCaloriesOverride: clearWorkingTargetCaloriesOverride
+          ? null
+          : (workingTargetCaloriesOverride ??
+                this.workingTargetCaloriesOverride),
+      workingTargetProteinOverride: clearWorkingTargetProteinOverride
+          ? null
+          : (workingTargetProteinOverride ?? this.workingTargetProteinOverride),
+      workingAssetId: clearWorkingAssetId
+          ? null
+          : (workingAssetId ?? this.workingAssetId),
+      workingR2Key: clearWorkingR2Key
+          ? null
+          : (workingR2Key ?? this.workingR2Key),
+      workingSetupPath: clearWorkingSetupPath
+          ? null
+          : (workingSetupPath ?? this.workingSetupPath),
+      workingGeneratedPlanVersion: clearWorkingGeneratedPlanVersion
+          ? null
+          : (workingGeneratedPlanVersion ?? this.workingGeneratedPlanVersion),
+      workingGeneratedInputFingerprint: clearWorkingGeneratedInputFingerprint
+          ? null
+          : (workingGeneratedInputFingerprint ??
+                this.workingGeneratedInputFingerprint),
       workingCustomized: workingCustomized ?? this.workingCustomized,
-      candidateAssetId: candidateAssetId ?? this.candidateAssetId,
-      candidateR2Key: candidateR2Key ?? this.candidateR2Key,
+      candidateAssetId: clearCandidateAssetId
+          ? null
+          : (candidateAssetId ?? this.candidateAssetId),
+      candidateR2Key: clearCandidateR2Key
+          ? null
+          : (candidateR2Key ?? this.candidateR2Key),
       selectedDay: selectedDay ?? this.selectedDay,
       isDirty: isDirty ?? this.isDirty,
       isSaving: isSaving ?? this.isSaving,
@@ -224,14 +283,23 @@ class EatingSetupState {
       sessionGeneration: sessionGeneration ?? this.sessionGeneration,
       hasRunStartupCleanup: hasRunStartupCleanup ?? this.hasRunStartupCleanup,
       ownerUid: ownerUid ?? this.ownerUid,
-      editorBaseRevision: editorBaseRevision ?? this.editorBaseRevision,
-      baseCommittedAssetId: baseCommittedAssetId ?? this.baseCommittedAssetId,
-      baseCommittedR2Key: baseCommittedR2Key ?? this.baseCommittedR2Key,
+      editorBaseRevision: clearEditorBaseRevision
+          ? null
+          : (editorBaseRevision ?? this.editorBaseRevision),
+      baseCommittedAssetId: clearBaseCommittedAssetId
+          ? null
+          : (baseCommittedAssetId ?? this.baseCommittedAssetId),
+      baseCommittedR2Key: clearBaseCommittedR2Key
+          ? null
+          : (baseCommittedR2Key ?? this.baseCommittedR2Key),
       routineRefreshPending:
           routineRefreshPending ?? this.routineRefreshPending,
-      committedRevision: committedRevision ?? this.committedRevision,
-      routineRefreshMessage:
-          routineRefreshMessage ?? this.routineRefreshMessage,
+      committedRevision: clearCommittedRevision
+          ? null
+          : (committedRevision ?? this.committedRevision),
+      routineRefreshMessage: clearRoutineRefreshMessage
+          ? null
+          : (routineRefreshMessage ?? this.routineRefreshMessage),
       isConcurrencyConflict:
           isConcurrencyConflict ?? this.isConcurrencyConflict,
       aiActionTitle: aiActionTitle ?? this.aiActionTitle,
@@ -407,25 +475,40 @@ class EatingSetupController extends StateNotifier<EatingSetupState> {
     required int? targetCaloriesOverride,
     required int? targetProteinOverride,
   }) {
-    state = state.copyWith(
-      workingGoal: goal,
-      workingMealsPerDay: mealsPerDay,
-      workingEatingMode: eatingMode,
-      workingFoodType: foodType,
-      workingFoodStyleCustomText: foodStyleCustomText,
-      workingFoodsToAvoid: List.from(foodsToAvoid),
-      workingBreakfastMinute: breakfastMinute,
-      workingLunchMinute: lunchMinute,
-      workingDinnerMinute: dinnerMinute,
-      workingSnackMinute: snackMinute,
-      workingExtraSnackMinute: extraSnackMinute,
-      workingTargetCalories: targetCalories,
-      workingTargetProtein: targetProtein,
-      workingTargetCaloriesOverride: targetCaloriesOverride,
-      workingTargetProteinOverride: targetProteinOverride,
-      isDirty: true,
-      stage: EatingSetupStage.review,
-    );
+    _applyUserMutation((s) {
+      return s.copyWith(
+        workingGoal: goal,
+        clearWorkingGoal: goal == null,
+        workingMealsPerDay: mealsPerDay,
+        clearWorkingMealsPerDay: mealsPerDay == null,
+        workingEatingMode: eatingMode,
+        clearWorkingEatingMode: eatingMode == null,
+        workingFoodType: foodType,
+        clearWorkingFoodType: foodType == null,
+        workingFoodStyleCustomText: foodStyleCustomText,
+        clearWorkingFoodStyleCustomText: foodStyleCustomText == null,
+        workingFoodsToAvoid: List.from(foodsToAvoid),
+        workingBreakfastMinute: breakfastMinute,
+        clearWorkingBreakfastMinute: breakfastMinute == null,
+        workingLunchMinute: lunchMinute,
+        clearWorkingLunchMinute: lunchMinute == null,
+        workingDinnerMinute: dinnerMinute,
+        clearWorkingDinnerMinute: dinnerMinute == null,
+        workingSnackMinute: snackMinute,
+        clearWorkingSnackMinute: snackMinute == null,
+        workingExtraSnackMinute: extraSnackMinute,
+        clearWorkingExtraSnackMinute: extraSnackMinute == null,
+        workingTargetCalories: targetCalories,
+        clearWorkingTargetCalories: targetCalories == null,
+        workingTargetProtein: targetProtein,
+        clearWorkingTargetProtein: targetProtein == null,
+        workingTargetCaloriesOverride: targetCaloriesOverride,
+        clearWorkingTargetCaloriesOverride: targetCaloriesOverride == null,
+        workingTargetProteinOverride: targetProteinOverride,
+        clearWorkingTargetProteinOverride: targetProteinOverride == null,
+        stage: EatingSetupStage.review,
+      );
+    });
   }
 
   Future<List<TimelineBlockDraft>?> pickAndUploadPhoto({
@@ -803,47 +886,53 @@ class EatingSetupController extends StateNotifier<EatingSetupState> {
     }
   }
 
-  void addBlock(TimelineBlockDraft block) {
-    final updated = List<TimelineBlockDraft>.from(state.workingBlocks)
-      ..add(block);
-    final nextPath = state.workingSetupPath ?? 'manual';
-    final customized = nextPath == 'create' ? true : state.workingCustomized;
-    state = state.copyWith(
-      workingBlocks: updated,
-      workingSetupPath: nextPath,
-      workingCustomized: customized,
+  void _applyUserMutation(
+    EatingSetupState Function(EatingSetupState) mutation,
+  ) {
+    var newState = mutation(state);
+    final isGenerated =
+        newState.workingSetupPath == 'create' ||
+        newState.workingGeneratedPlanVersion != null ||
+        newState.workingGeneratedInputFingerprint != null;
+    if (isGenerated) {
+      newState = newState.copyWith(workingCustomized: true);
+    }
+    state = newState.copyWith(
       isDirty: true,
-      stage: EatingSetupStage.review,
+      workingSetupPath: newState.workingSetupPath ?? 'manual',
     );
+  }
+
+  void addBlock(TimelineBlockDraft block) {
+    _applyUserMutation((s) {
+      final updated = List<TimelineBlockDraft>.from(s.workingBlocks)
+        ..add(block);
+      return s.copyWith(workingBlocks: updated, stage: EatingSetupStage.review);
+    });
   }
 
   void updateBlock(TimelineBlockDraft block) {
-    final updated = List<TimelineBlockDraft>.from(state.workingBlocks);
-    final idx = updated.indexWhere((b) => b.id == block.id);
-    if (idx != -1) {
-      updated[idx] = block;
-      final customized = state.workingSetupPath == 'create'
-          ? true
-          : state.workingCustomized;
-      state = state.copyWith(
-        workingBlocks: updated,
-        workingCustomized: customized,
-        isDirty: true,
-        stage: EatingSetupStage.review,
-      );
-    }
+    _applyUserMutation((s) {
+      final updated = List<TimelineBlockDraft>.from(s.workingBlocks);
+      final idx = updated.indexWhere((b) => b.id == block.id);
+      if (idx != -1) {
+        updated[idx] = block;
+      }
+      return s.copyWith(workingBlocks: updated, stage: EatingSetupStage.review);
+    });
   }
 
   void deleteBlock(String id) {
-    final updated = List<TimelineBlockDraft>.from(state.workingBlocks)
-      ..removeWhere((b) => b.id == id);
-    state = state.copyWith(
-      workingBlocks: updated,
-      frontBlockId: state.frontBlockId == id ? null : state.frontBlockId,
-      clearFrontBlockId: state.frontBlockId == id,
-      isDirty: true,
-      stage: EatingSetupStage.review,
-    );
+    _applyUserMutation((s) {
+      final updated = List<TimelineBlockDraft>.from(s.workingBlocks)
+        ..removeWhere((b) => b.id == id);
+      return s.copyWith(
+        workingBlocks: updated,
+        frontBlockId: s.frontBlockId == id ? null : s.frontBlockId,
+        clearFrontBlockId: s.frontBlockId == id,
+        stage: EatingSetupStage.review,
+      );
+    });
   }
 
   Future<bool> saveWorkingSetup({

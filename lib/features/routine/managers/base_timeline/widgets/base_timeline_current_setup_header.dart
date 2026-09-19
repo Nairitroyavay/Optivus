@@ -56,10 +56,6 @@ class BaseTimelineCurrentSetupHeader extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final textScaler = MediaQuery.textScalerOf(context);
-          final isVeryNarrow = constraints.maxWidth < 320;
-          final hasLargeText = textScaler.scale(18) > 24;
-
           // Either a compact icon button or the full labelled filled button.
           final Widget primaryButton = iconOnly
               ? Tooltip(
@@ -214,8 +210,14 @@ class BaseTimelineCurrentSetupHeader extends StatelessWidget {
             ),
           );
 
+          final textScaler = MediaQuery.textScalerOf(context);
+          final scale = textScaler.scale(1.0);
+          final isVeryNarrow = constraints.maxWidth < 320;
+          final hasLargeText = scale > 1.15;
+
+          // Wrap if space is constrained or accessibility text scale is enlarged
           final shouldWrap =
-              isVeryNarrow || hasLargeText || constraints.maxWidth < 360;
+              isVeryNarrow || hasLargeText || constraints.maxWidth < 440;
 
           if (shouldWrap) {
             return Column(
@@ -231,7 +233,7 @@ class BaseTimelineCurrentSetupHeader extends StatelessWidget {
                         children: [
                           Text(
                             title,
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               fontSize: 18,
@@ -241,7 +243,7 @@ class BaseTimelineCurrentSetupHeader extends StatelessWidget {
                           ),
                           Text(
                             summary,
-                            maxLines: hasLargeText ? 1 : 2,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               fontSize: 12,
@@ -251,19 +253,20 @@ class BaseTimelineCurrentSetupHeader extends StatelessWidget {
                         ],
                       ),
                     ),
-                    // When iconOnly, keep the icon inline regardless of wrap.
-                    if (iconOnly) ...[
+                    if (iconOnly) ...[const SizedBox(width: 4), primaryButton],
+                    if (menuButton != null) ...[
                       const SizedBox(width: 4),
-                      primaryButton,
+                      menuButton,
                     ],
-                    ?menuButton,
                   ],
                 ),
                 if (!iconOnly) ...[
                   const SizedBox(height: 8),
                   Align(
                     alignment: Alignment.centerRight,
-                    child: primaryButton,
+                    child: isVeryNarrow
+                        ? SizedBox(width: double.infinity, child: primaryButton)
+                        : primaryButton,
                   ),
                 ],
               ],

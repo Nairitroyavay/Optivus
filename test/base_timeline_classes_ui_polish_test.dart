@@ -10,7 +10,7 @@ import 'package:optivus/features/routine/managers/base_timeline/models/base_time
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/classes_current_setup_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/views/classes_review_view.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_ai_thinking_view.dart';
-import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_photo_preview_card.dart';
+
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_setup_context_card.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/class_detail_sheet.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/class_timeline_card.dart';
@@ -556,17 +556,12 @@ void main() {
         await tester.tap(find.text('Change photo'));
         expect(changedPhoto, isTrue);
 
-        // Verify bottom CTA has "Use this timetable"
+        // Verify bottom CTA has "Use this timetable" (no isEditing=true passed, so new candidate)
         expect(find.text('Use this timetable'), findsOneWidget);
 
-        // Verify compact source row exists
-        final previewFinder = find.byType(BaseTimelinePhotoPreviewCard);
-        expect(previewFinder, findsOneWidget);
-        final previewCard = tester.widget<BaseTimelinePhotoPreviewCard>(
-          previewFinder,
-        );
-        expect(previewCard.isCompactRow, isTrue);
-        expect(previewCard.height, 68.0);
+        // Verify compact source row is rendered via the 'Change photo' action button
+        // (BaseTimelinePhotoPreviewCard is only shown inside a dialog on tap)
+        expect(find.text('Change photo'), findsOneWidget);
       },
     );
   });

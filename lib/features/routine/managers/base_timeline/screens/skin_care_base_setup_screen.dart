@@ -213,7 +213,7 @@ class _SkinCareBaseSetupScreenState
                   color: Colors.white,
                 ),
                 title: const Text(
-                  'Choose from Gallery',
+                  'Choose from gallery',
                   style: TextStyle(color: Colors.white),
                 ),
                 onTap: () {
@@ -1603,7 +1603,7 @@ class _SkinCareBaseSetupScreenState
                                     ),
                                   )
                                 : const Text(
-                                    'Save',
+                                    'Apply changes',
                                     style: TextStyle(
                                       fontWeight: FontWeight.w700,
                                       color: Colors.white,

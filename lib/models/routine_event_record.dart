@@ -297,8 +297,11 @@ class RoutineEventFirestoreCodec {
 
     final displayTitleOverride = snapshot['displayTitleOverride'];
     if (displayTitleOverride != null &&
-        (displayTitleOverride is! String || displayTitleOverride.length > 200)) {
-      throw const FormatException('itemSnapshot displayTitleOverride is invalid');
+        (displayTitleOverride is! String ||
+            displayTitleOverride.length > 200)) {
+      throw const FormatException(
+        'itemSnapshot displayTitleOverride is invalid',
+      );
     }
   }
 

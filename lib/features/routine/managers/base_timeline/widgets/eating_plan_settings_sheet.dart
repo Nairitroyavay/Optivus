@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/onboarding/widgets/onboarding_bottom_sheet_scaffold.dart';
 import 'package:optivus/features/routine/managers/base_timeline/services/eating_presentation_utils.dart';
 
 class EatingPlanSettingsResult {
@@ -453,631 +454,520 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final maxHeight = MediaQuery.sizeOf(context).height * 0.90;
-
-    return SafeArea(
-      bottom: true,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxHeight),
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            16,
-            20,
-            16 + MediaQuery.viewInsetsOf(context).bottom,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Drag handle
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: OptivusColors.textSecondary.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+    return OnboardingBottomSheetScaffold(
+      title: widget.title,
+      subtitle: 'Configure goals, cuisine, meals per day, and timing',
+      onCancel: () => Navigator.pop(context),
+      bottomActions: _buildBottomActions(isDirty),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_validationError != null) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: OptivusColors.danger.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: OptivusColors.danger.withValues(alpha: 0.3),
+                  width: 1,
                 ),
               ),
-              const SizedBox(height: 16),
-
-              // Title
-              Row(
+              child: Row(
                 children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: OptivusColors.roseAccent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.tune_rounded,
-                      color: OptivusColors.roseAccent,
-                      size: 20,
-                    ),
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    color: OptivusColors.danger,
+                    size: 18,
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.title,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: OptivusColors.textPrimary,
-                          ),
-                        ),
-                        const Text(
-                          'Configure goals, cuisine, meals per day, and timing',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: OptivusColors.textSecondary,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      _validationError!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: OptivusColors.danger,
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.close_rounded,
-                      color: OptivusColors.textSecondary,
-                    ),
-                    tooltip: 'Close',
-                    onPressed: () => Navigator.pop(context),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+            ),
+            const SizedBox(height: 12),
+          ],
 
-              if (_validationError != null) ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: OptivusColors.danger.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: OptivusColors.danger.withValues(alpha: 0.3),
-                      width: 1,
+          // Goal
+          _buildHeader('Goal'),
+          const SizedBox(height: 6),
+          SegmentedButton<String>(
+            emptySelectionAllowed: true,
+            segments: const [
+              ButtonSegment(value: 'lose', label: Text('Lose')),
+              ButtonSegment(value: 'maintain', label: Text('Maintain')),
+              ButtonSegment(value: 'gain', label: Text('Gain')),
+            ],
+            selected: _goal != null ? {_goal!} : const <String>{},
+            onSelectionChanged: (s) {
+              setState(() {
+                _goal = s.isEmpty ? null : s.first;
+                _validationError = null;
+              });
+            },
+          ),
+          const SizedBox(height: 16),
+
+          // Meals per day
+          _buildHeader('Meals per Day'),
+          const SizedBox(height: 6),
+          SegmentedButton<int>(
+            emptySelectionAllowed: true,
+            segments: const [
+              ButtonSegment(value: 3, label: Text('3 meals')),
+              ButtonSegment(value: 4, label: Text('4 meals')),
+              ButtonSegment(value: 5, label: Text('5 meals')),
+            ],
+            selected: _mealsPerDay != null ? {_mealsPerDay!} : const <int>{},
+            onSelectionChanged: (s) {
+              setState(() {
+                _mealsPerDay = s.isEmpty ? null : s.first;
+                _validationError = null;
+              });
+            },
+          ),
+          const SizedBox(height: 16),
+
+          // Food Culture / Eating Mode
+          _buildHeader('Food Culture & Style'),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children:
+                [
+                  ('balanced', 'Balanced'),
+                  ('mediterranean', 'Mediterranean'),
+                  ('india', 'Indian Cuisine'),
+                  ('high_protein', 'High Protein'),
+                  ('custom', 'Custom Style'),
+                ].map((item) {
+                  final isSel = _eatingMode == item.$1;
+                  return ChoiceChip(
+                    label: Text(item.$2),
+                    selected: isSel,
+                    selectedColor: OptivusColors.roseAccent.withValues(
+                      alpha: 0.18,
+                    ),
+                    labelStyle: TextStyle(
+                      fontSize: 12,
+                      fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
+                      color: isSel
+                          ? OptivusColors.roseAccent
+                          : OptivusColors.textSecondary,
+                    ),
+                    onSelected: (sel) {
+                      if (sel) {
+                        setState(() {
+                          _eatingMode = item.$1;
+                          _validationError = null;
+                        });
+                      }
+                    },
+                  );
+                }).toList(),
+          ),
+
+          if (_eatingMode == 'custom') ...[
+            const SizedBox(height: 10),
+            TextField(
+              controller: _customStyleController,
+              decoration: const InputDecoration(
+                labelText: 'Describe Custom Food Style',
+                hintText: 'e.g. Keto-friendly, Asian stir-fries, plant-forward',
+              ),
+              onChanged: (_) {
+                if (_validationError != null) {
+                  setState(() => _validationError = null);
+                }
+              },
+            ),
+          ],
+          const SizedBox(height: 16),
+
+          // Dietary Preference
+          _buildHeader('Dietary Preference'),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children:
+                [
+                  ('mixed', 'Mixed / Any'),
+                  ('veg', 'Vegetarian'),
+                  ('vegan', 'Vegan'),
+                  ('eggetarian', 'Eggetarian'),
+                  ('non_veg', 'Non-Vegetarian'),
+                ].map((item) {
+                  final isSel = _foodType == item.$1;
+                  return ChoiceChip(
+                    label: Text(item.$2),
+                    selected: isSel,
+                    selectedColor: OptivusColors.roseAccent.withValues(
+                      alpha: 0.18,
+                    ),
+                    labelStyle: TextStyle(
+                      fontSize: 12,
+                      fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
+                      color: isSel
+                          ? OptivusColors.roseAccent
+                          : OptivusColors.textSecondary,
+                    ),
+                    onSelected: (sel) {
+                      if (sel) {
+                        setState(() {
+                          _foodType = item.$1;
+                          _validationError = null;
+                        });
+                      }
+                    },
+                  );
+                }).toList(),
+          ),
+          const SizedBox(height: 16),
+
+          // Foods to Avoid / Allergies
+          _buildHeader('Foods to Avoid / Allergies (Optional)'),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children:
+                [
+                  'Peanuts',
+                  'Tree Nuts',
+                  'Dairy',
+                  'Gluten',
+                  'Shellfish',
+                  'Soy',
+                  'Pork',
+                  'Beef',
+                ].map((food) {
+                  final key = food.toLowerCase();
+                  final isAvoided = _foodsToAvoid.contains(key);
+                  return FilterChip(
+                    label: Text(food),
+                    selected: isAvoided,
+                    selectedColor: OptivusColors.roseAccent.withValues(
+                      alpha: 0.18,
+                    ),
+                    labelStyle: TextStyle(
+                      fontSize: 12,
+                      fontWeight: isAvoided ? FontWeight.w700 : FontWeight.w500,
+                      color: isAvoided
+                          ? OptivusColors.roseAccent
+                          : OptivusColors.textSecondary,
+                    ),
+                    onSelected: (selected) {
+                      setState(() {
+                        if (selected) {
+                          _foodsToAvoid.add(key);
+                        } else {
+                          _foodsToAvoid.remove(key);
+                        }
+                      });
+                    },
+                  );
+                }).toList(),
+          ),
+          const SizedBox(height: 16),
+
+          // Preferred Meal Times
+          _buildHeader('Preferred Meal Times (Spacing ≥ 2h)'),
+          const SizedBox(height: 8),
+          ListTile(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: BorderSide(color: OptivusColors.borderSubtle),
+            ),
+            leading: const Icon(
+              Icons.wb_sunny_rounded,
+              color: OptivusColors.roseAccent,
+            ),
+            title: const Text('Breakfast'),
+            trailing: Text(
+              _breakfastTouched || widget.initialBreakfastMinute != null
+                  ? EatingPresentationUtils.formatTime(_breakfastMinute)
+                  : 'Default (${EatingPresentationUtils.formatTime(_breakfastMinute)})',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            onTap: () async {
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: TimeOfDay(
+                  hour: _breakfastMinute ~/ 60,
+                  minute: _breakfastMinute % 60,
+                ),
+              );
+              if (picked != null) {
+                setState(() {
+                  _breakfastMinute = picked.hour * 60 + picked.minute;
+                  _breakfastTouched = true;
+                  _validationError = null;
+                });
+              }
+            },
+          ),
+          if (_mealsPerDay == 5) ...[
+            const SizedBox(height: 8),
+            ListTile(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: BorderSide(color: OptivusColors.borderSubtle),
+              ),
+              leading: const Icon(
+                Icons.cookie_rounded,
+                color: OptivusColors.roseAccent,
+              ),
+              title: const Text('Morning Snack'),
+              trailing: Text(
+                _extraSnackTouched || widget.initialExtraSnackMinute != null
+                    ? EatingPresentationUtils.formatTime(_extraSnackMinute)
+                    : 'Default (${EatingPresentationUtils.formatTime(_extraSnackMinute)})',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              onTap: () async {
+                final picked = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay(
+                    hour: _extraSnackMinute ~/ 60,
+                    minute: _extraSnackMinute % 60,
+                  ),
+                );
+                if (picked != null) {
+                  setState(() {
+                    _extraSnackMinute = picked.hour * 60 + picked.minute;
+                    _extraSnackTouched = true;
+                    _validationError = null;
+                  });
+                }
+              },
+            ),
+          ],
+          const SizedBox(height: 8),
+          ListTile(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: BorderSide(color: OptivusColors.borderSubtle),
+            ),
+            leading: const Icon(
+              Icons.lunch_dining_rounded,
+              color: OptivusColors.roseAccent,
+            ),
+            title: const Text('Lunch'),
+            trailing: Text(
+              _lunchTouched || widget.initialLunchMinute != null
+                  ? EatingPresentationUtils.formatTime(_lunchMinute)
+                  : 'Default (${EatingPresentationUtils.formatTime(_lunchMinute)})',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            onTap: () async {
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: TimeOfDay(
+                  hour: _lunchMinute ~/ 60,
+                  minute: _lunchMinute % 60,
+                ),
+              );
+              if (picked != null) {
+                setState(() {
+                  _lunchMinute = picked.hour * 60 + picked.minute;
+                  _lunchTouched = true;
+                  _validationError = null;
+                });
+              }
+            },
+          ),
+          if (_mealsPerDay == 4 || _mealsPerDay == 5) ...[
+            const SizedBox(height: 8),
+            ListTile(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: BorderSide(color: OptivusColors.borderSubtle),
+              ),
+              leading: const Icon(
+                Icons.cookie_rounded,
+                color: OptivusColors.roseAccent,
+              ),
+              title: const Text('Afternoon Snack'),
+              trailing: Text(
+                _snackTouched || widget.initialSnackMinute != null
+                    ? EatingPresentationUtils.formatTime(_snackMinute)
+                    : 'Default (${EatingPresentationUtils.formatTime(_snackMinute)})',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              onTap: () async {
+                final picked = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay(
+                    hour: _snackMinute ~/ 60,
+                    minute: _snackMinute % 60,
+                  ),
+                );
+                if (picked != null) {
+                  setState(() {
+                    _snackMinute = picked.hour * 60 + picked.minute;
+                    _snackTouched = true;
+                    _validationError = null;
+                  });
+                }
+              },
+            ),
+          ],
+          const SizedBox(height: 8),
+          ListTile(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: BorderSide(color: OptivusColors.borderSubtle),
+            ),
+            leading: const Icon(
+              Icons.dinner_dining_rounded,
+              color: OptivusColors.roseAccent,
+            ),
+            title: const Text('Dinner'),
+            trailing: Text(
+              _dinnerTouched || widget.initialDinnerMinute != null
+                  ? EatingPresentationUtils.formatTime(_dinnerMinute)
+                  : 'Default (${EatingPresentationUtils.formatTime(_dinnerMinute)})',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            onTap: () async {
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: TimeOfDay(
+                  hour: _dinnerMinute ~/ 60,
+                  minute: _dinnerMinute % 60,
+                ),
+              );
+              if (picked != null) {
+                setState(() {
+                  _dinnerMinute = picked.hour * 60 + picked.minute;
+                  _dinnerTouched = true;
+                  _validationError = null;
+                });
+              }
+            },
+          ),
+          const SizedBox(height: 16),
+
+          // Optional Nutrition Targets
+          _buildHeader('Target Nutrition (Optional Overrides)'),
+          const SizedBox(height: 8),
+          if (widget.calculatedCalories != null ||
+              widget.calculatedProtein != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.calculate_outlined,
+                    size: 16,
+                    color: OptivusColors.textSecondary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Calculated targets: ${widget.calculatedCalories ?? '—'} kcal · ${widget.calculatedProtein ?? '—'} g protein',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: OptivusColors.textSecondary,
+                      ),
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.error_outline_rounded,
-                        color: OptivusColors.danger,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _validationError!,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: OptivusColors.danger,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              // Settings body
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Goal
-                      _buildHeader('Goal'),
-                      const SizedBox(height: 6),
-                      SegmentedButton<String>(
-                        emptySelectionAllowed: true,
-                        segments: const [
-                          ButtonSegment(value: 'lose', label: Text('Lose')),
-                          ButtonSegment(
-                            value: 'maintain',
-                            label: Text('Maintain'),
-                          ),
-                          ButtonSegment(value: 'gain', label: Text('Gain')),
-                        ],
-                        selected: _goal != null ? {_goal!} : const <String>{},
-                        onSelectionChanged: (s) {
-                          setState(() {
-                            _goal = s.isEmpty ? null : s.first;
-                            _validationError = null;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Meals per day
-                      _buildHeader('Meals per Day'),
-                      const SizedBox(height: 6),
-                      SegmentedButton<int>(
-                        emptySelectionAllowed: true,
-                        segments: const [
-                          ButtonSegment(value: 3, label: Text('3 meals')),
-                          ButtonSegment(value: 4, label: Text('4 meals')),
-                          ButtonSegment(value: 5, label: Text('5 meals')),
-                        ],
-                        selected: _mealsPerDay != null
-                            ? {_mealsPerDay!}
-                            : const <int>{},
-                        onSelectionChanged: (s) {
-                          setState(() {
-                            _mealsPerDay = s.isEmpty ? null : s.first;
-                            _validationError = null;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Food Culture / Eating Mode
-                      _buildHeader('Food Culture & Style'),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children:
-                            [
-                              ('balanced', 'Balanced'),
-                              ('mediterranean', 'Mediterranean'),
-                              ('india', 'Indian Cuisine'),
-                              ('high_protein', 'High Protein'),
-                              ('custom', 'Custom Style'),
-                            ].map((item) {
-                              final isSel = _eatingMode == item.$1;
-                              return ChoiceChip(
-                                label: Text(item.$2),
-                                selected: isSel,
-                                selectedColor: OptivusColors.roseAccent
-                                    .withValues(alpha: 0.18),
-                                labelStyle: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: isSel
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                  color: isSel
-                                      ? OptivusColors.roseAccent
-                                      : OptivusColors.textSecondary,
-                                ),
-                                onSelected: (sel) {
-                                  if (sel) {
-                                    setState(() {
-                                      _eatingMode = item.$1;
-                                      _validationError = null;
-                                    });
-                                  }
-                                },
-                              );
-                            }).toList(),
-                      ),
-
-                      if (_eatingMode == 'custom') ...[
-                        const SizedBox(height: 10),
-                        TextField(
-                          controller: _customStyleController,
-                          decoration: const InputDecoration(
-                            labelText: 'Describe Custom Food Style',
-                            hintText:
-                                'e.g. Keto-friendly, Asian stir-fries, plant-forward',
-                          ),
-                          onChanged: (_) {
-                            if (_validationError != null) {
-                              setState(() => _validationError = null);
-                            }
-                          },
-                        ),
-                      ],
-                      const SizedBox(height: 16),
-
-                      // Dietary Preference
-                      _buildHeader('Dietary Preference'),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children:
-                            [
-                              ('mixed', 'Mixed / Any'),
-                              ('veg', 'Vegetarian'),
-                              ('vegan', 'Vegan'),
-                              ('eggetarian', 'Eggetarian'),
-                              ('non_veg', 'Non-Vegetarian'),
-                            ].map((item) {
-                              final isSel = _foodType == item.$1;
-                              return ChoiceChip(
-                                label: Text(item.$2),
-                                selected: isSel,
-                                selectedColor: OptivusColors.roseAccent
-                                    .withValues(alpha: 0.18),
-                                labelStyle: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: isSel
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                  color: isSel
-                                      ? OptivusColors.roseAccent
-                                      : OptivusColors.textSecondary,
-                                ),
-                                onSelected: (sel) {
-                                  if (sel) {
-                                    setState(() {
-                                      _foodType = item.$1;
-                                      _validationError = null;
-                                    });
-                                  }
-                                },
-                              );
-                            }).toList(),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Foods to Avoid / Allergies
-                      _buildHeader('Foods to Avoid / Allergies (Optional)'),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children:
-                            [
-                              'Peanuts',
-                              'Tree Nuts',
-                              'Dairy',
-                              'Gluten',
-                              'Shellfish',
-                              'Soy',
-                              'Pork',
-                              'Beef',
-                            ].map((food) {
-                              final key = food.toLowerCase();
-                              final isAvoided = _foodsToAvoid.contains(key);
-                              return FilterChip(
-                                label: Text(food),
-                                selected: isAvoided,
-                                selectedColor: OptivusColors.roseAccent
-                                    .withValues(alpha: 0.18),
-                                labelStyle: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: isAvoided
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                  color: isAvoided
-                                      ? OptivusColors.roseAccent
-                                      : OptivusColors.textSecondary,
-                                ),
-                                onSelected: (selected) {
-                                  setState(() {
-                                    if (selected) {
-                                      _foodsToAvoid.add(key);
-                                    } else {
-                                      _foodsToAvoid.remove(key);
-                                    }
-                                  });
-                                },
-                              );
-                            }).toList(),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Preferred Meal Times
-                      _buildHeader('Preferred Meal Times (Spacing ≥ 2h)'),
-                      const SizedBox(height: 8),
-                      ListTile(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          side: BorderSide(color: OptivusColors.borderSubtle),
-                        ),
-                        leading: const Icon(
-                          Icons.wb_sunny_rounded,
-                          color: OptivusColors.roseAccent,
-                        ),
-                        title: const Text('Breakfast'),
-                        trailing: Text(
-                          _breakfastTouched ||
-                                  widget.initialBreakfastMinute != null
-                              ? EatingPresentationUtils.formatTime(
-                                  _breakfastMinute,
-                                )
-                              : 'Default (${EatingPresentationUtils.formatTime(_breakfastMinute)})',
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        onTap: () async {
-                          final picked = await showTimePicker(
-                            context: context,
-                            initialTime: TimeOfDay(
-                              hour: _breakfastMinute ~/ 60,
-                              minute: _breakfastMinute % 60,
-                            ),
-                          );
-                          if (picked != null) {
-                            setState(() {
-                              _breakfastMinute =
-                                  picked.hour * 60 + picked.minute;
-                              _breakfastTouched = true;
-                              _validationError = null;
-                            });
-                          }
-                        },
-                      ),
-                      if (_mealsPerDay == 5) ...[
-                        const SizedBox(height: 8),
-                        ListTile(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            side: BorderSide(color: OptivusColors.borderSubtle),
-                          ),
-                          leading: const Icon(
-                            Icons.cookie_rounded,
-                            color: OptivusColors.roseAccent,
-                          ),
-                          title: const Text('Morning Snack'),
-                          trailing: Text(
-                            _extraSnackTouched ||
-                                    widget.initialExtraSnackMinute != null
-                                ? EatingPresentationUtils.formatTime(
-                                    _extraSnackMinute,
-                                  )
-                                : 'Default (${EatingPresentationUtils.formatTime(_extraSnackMinute)})',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          onTap: () async {
-                            final picked = await showTimePicker(
-                              context: context,
-                              initialTime: TimeOfDay(
-                                hour: _extraSnackMinute ~/ 60,
-                                minute: _extraSnackMinute % 60,
-                              ),
-                            );
-                            if (picked != null) {
-                              setState(() {
-                                _extraSnackMinute =
-                                    picked.hour * 60 + picked.minute;
-                                _extraSnackTouched = true;
-                                _validationError = null;
-                              });
-                            }
-                          },
-                        ),
-                      ],
-                      const SizedBox(height: 8),
-                      ListTile(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          side: BorderSide(color: OptivusColors.borderSubtle),
-                        ),
-                        leading: const Icon(
-                          Icons.lunch_dining_rounded,
-                          color: OptivusColors.roseAccent,
-                        ),
-                        title: const Text('Lunch'),
-                        trailing: Text(
-                          _lunchTouched || widget.initialLunchMinute != null
-                              ? EatingPresentationUtils.formatTime(_lunchMinute)
-                              : 'Default (${EatingPresentationUtils.formatTime(_lunchMinute)})',
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        onTap: () async {
-                          final picked = await showTimePicker(
-                            context: context,
-                            initialTime: TimeOfDay(
-                              hour: _lunchMinute ~/ 60,
-                              minute: _lunchMinute % 60,
-                            ),
-                          );
-                          if (picked != null) {
-                            setState(() {
-                              _lunchMinute = picked.hour * 60 + picked.minute;
-                              _lunchTouched = true;
-                              _validationError = null;
-                            });
-                          }
-                        },
-                      ),
-                      if (_mealsPerDay == 4 || _mealsPerDay == 5) ...[
-                        const SizedBox(height: 8),
-                        ListTile(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            side: BorderSide(color: OptivusColors.borderSubtle),
-                          ),
-                          leading: const Icon(
-                            Icons.cookie_rounded,
-                            color: OptivusColors.roseAccent,
-                          ),
-                          title: const Text('Afternoon Snack'),
-                          trailing: Text(
-                            _snackTouched || widget.initialSnackMinute != null
-                                ? EatingPresentationUtils.formatTime(
-                                    _snackMinute,
-                                  )
-                                : 'Default (${EatingPresentationUtils.formatTime(_snackMinute)})',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          onTap: () async {
-                            final picked = await showTimePicker(
-                              context: context,
-                              initialTime: TimeOfDay(
-                                hour: _snackMinute ~/ 60,
-                                minute: _snackMinute % 60,
-                              ),
-                            );
-                            if (picked != null) {
-                              setState(() {
-                                _snackMinute = picked.hour * 60 + picked.minute;
-                                _snackTouched = true;
-                                _validationError = null;
-                              });
-                            }
-                          },
-                        ),
-                      ],
-                      const SizedBox(height: 8),
-                      ListTile(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          side: BorderSide(color: OptivusColors.borderSubtle),
-                        ),
-                        leading: const Icon(
-                          Icons.dinner_dining_rounded,
-                          color: OptivusColors.roseAccent,
-                        ),
-                        title: const Text('Dinner'),
-                        trailing: Text(
-                          _dinnerTouched || widget.initialDinnerMinute != null
-                              ? EatingPresentationUtils.formatTime(
-                                  _dinnerMinute,
-                                )
-                              : 'Default (${EatingPresentationUtils.formatTime(_dinnerMinute)})',
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        onTap: () async {
-                          final picked = await showTimePicker(
-                            context: context,
-                            initialTime: TimeOfDay(
-                              hour: _dinnerMinute ~/ 60,
-                              minute: _dinnerMinute % 60,
-                            ),
-                          );
-                          if (picked != null) {
-                            setState(() {
-                              _dinnerMinute = picked.hour * 60 + picked.minute;
-                              _dinnerTouched = true;
-                              _validationError = null;
-                            });
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Optional Nutrition Targets
-                      _buildHeader('Target Nutrition (Optional Overrides)'),
-                      const SizedBox(height: 8),
-                      if (widget.calculatedCalories != null ||
-                          widget.calculatedProtein != null) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.white10),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.calculate_outlined,
-                                size: 16,
-                                color: OptivusColors.textSecondary,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Calculated targets: ${widget.calculatedCalories ?? '—'} kcal · ${widget.calculatedProtein ?? '—'} g protein',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: OptivusColors.textSecondary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      SwitchListTile.adaptive(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text(
-                          'Override calculated targets',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: OptivusColors.textPrimary,
-                          ),
-                        ),
-                        subtitle: const Text(
-                          'Manually set your own daily calories and protein',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: OptivusColors.textSecondary,
-                          ),
-                        ),
-                        value: _showNutritionOverrides,
-                        activeTrackColor: OptivusColors.roseAccent,
-                        onChanged: (val) {
-                          setState(() {
-                            _showNutritionOverrides = val;
-                            if (!val) {
-                              _caloriesController.clear();
-                              _proteinController.clear();
-                            }
-                          });
-                        },
-                      ),
-                      if (_showNutritionOverrides) ...[
-                        const SizedBox(height: 8),
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final isNarrow = constraints.maxWidth < 320;
-                            final calField = TextField(
-                              controller: _caloriesController,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'Daily Calories (kcal)',
-                                hintText: 'e.g. 2000',
-                              ),
-                            );
-                            final proteinField = TextField(
-                              controller: _proteinController,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'Daily Protein (g)',
-                                hintText: 'e.g. 130',
-                              ),
-                            );
-
-                            if (isNarrow) {
-                              return Column(
-                                children: [
-                                  calField,
-                                  const SizedBox(height: 10),
-                                  proteinField,
-                                ],
-                              );
-                            }
-
-                            return Row(
-                              children: [
-                                Expanded(child: calField),
-                                const SizedBox(width: 10),
-                                Expanded(child: proteinField),
-                              ],
-                            );
-                          },
-                        ),
-                      ],
-                      const SizedBox(height: 16),
-                    ],
-                  ),
-                ),
+                ],
               ),
-              const SizedBox(height: 12),
-              _buildBottomActions(isDirty),
-            ],
+            ),
+            const SizedBox(height: 8),
+          ],
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'Override calculated targets',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: OptivusColors.textPrimary,
+              ),
+            ),
+            subtitle: const Text(
+              'Manually set your own daily calories and protein',
+              style: TextStyle(
+                fontSize: 11,
+                color: OptivusColors.textSecondary,
+              ),
+            ),
+            value: _showNutritionOverrides,
+            activeTrackColor: OptivusColors.roseAccent,
+            onChanged: (val) {
+              setState(() {
+                _showNutritionOverrides = val;
+                if (!val) {
+                  _caloriesController.clear();
+                  _proteinController.clear();
+                }
+              });
+            },
           ),
-        ),
+          if (_showNutritionOverrides) ...[
+            const SizedBox(height: 8),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = constraints.maxWidth < 320;
+                final calField = TextField(
+                  controller: _caloriesController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Daily Calories (kcal)',
+                    hintText: 'e.g. 2000',
+                  ),
+                );
+                final proteinField = TextField(
+                  controller: _proteinController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Daily Protein (g)',
+                    hintText: 'e.g. 130',
+                  ),
+                );
+
+                if (isNarrow) {
+                  return Column(
+                    children: [
+                      calField,
+                      const SizedBox(height: 10),
+                      proteinField,
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    Expanded(child: calField),
+                    const SizedBox(width: 10),
+                    Expanded(child: proteinField),
+                  ],
+                );
+              },
+            ),
+          ],
+          const SizedBox(height: 16),
+        ],
       ),
     );
   }
@@ -1089,15 +979,13 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
           Expanded(
             child: OutlinedButton(
               style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 14,
-                ),
+                padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
               onPressed: isDirty ? () => _submit(regenerate: false) : null,
-              child: const Text('Save Settings'),
+              child: const Text('Save settings'),
             ),
           ),
           if (widget.showRegenerateAction) const SizedBox(width: 10),
@@ -1108,22 +996,15 @@ class _EatingPlanSettingsSheetState extends State<EatingPlanSettingsSheet> {
             child: FilledButton.icon(
               style: FilledButton.styleFrom(
                 backgroundColor: OptivusColors.roseAccent,
-                padding: const EdgeInsets.symmetric(
-                  vertical: 14,
-                ),
+                padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              icon: const Icon(
-                Icons.auto_awesome_rounded,
-                size: 18,
-              ),
+              icon: const Icon(Icons.auto_awesome_rounded, size: 18),
               label: Text(
                 widget.regenerateActionLabel,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               onPressed: () => _submit(regenerate: true),
             ),

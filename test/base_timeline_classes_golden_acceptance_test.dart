@@ -1606,15 +1606,16 @@ void main() {
         await tester.tap(find.text('Change source'));
         await tester.pumpAndSettle();
 
-        expect(find.text('Choose from Gallery'), findsOneWidget);
-        expect(find.text('Take a Photo'), findsOneWidget);
+        expect(find.text('Choose from gallery'), findsOneWidget);
+        expect(find.text('Take a photo'), findsOneWidget);
         expect(find.text('Edit current timetable'), findsOneWidget);
 
         await tester.tap(find.text('Edit current timetable'));
         await tester.pumpAndSettle();
 
         expect(find.text('Review Timetable'), findsOneWidget);
-        expect(find.text('Use this timetable'), findsOneWidget);
+        // Editing an existing configured timetable shows 'Save changes'
+        expect(find.text('Save changes'), findsOneWidget);
       },
     );
   });
